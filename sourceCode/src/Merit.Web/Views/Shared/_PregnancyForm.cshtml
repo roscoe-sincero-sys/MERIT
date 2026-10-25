@@ -1,0 +1,26 @@
+@model PregnancyFormModel
+<div class="merit-inline-form" id="pregnancy-form-body">
+    <h3>@(Model.PregnancyEpisodeId is null ? "Add a pregnancy episode" : "Edit pregnancy episode")</h3>
+    @if (!ViewData.ModelState.IsValid)
+    {
+        <div class="usa-alert usa-alert--error usa-alert--slim" role="alert"><div class="usa-alert__body"><p class="usa-alert__text">@string.Join(" ", ViewData.ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage))</p></div></div>
+    }
+    <form class="usa-form" hx-post="/people/@Model.PersonId/pregnancies" hx-target="#pregnancy-form-body" hx-swap="outerHTML">
+        <input type="hidden" name="PregnancyEpisodeId" value="@Model.PregnancyEpisodeId" />
+        <input type="hidden" name="RowVersion" value="@Model.RowVersion" />
+        <div class="merit-form-row">
+            <div class="usa-form-group"><label class="usa-label" for="StartDate">Start (estimated conception or first known pregnant date)</label><input class="usa-input" id="StartDate" name="StartDate" type="date" value="@Options.Iso(Model.StartDate)" required /></div>
+            <div class="usa-form-group"><label class="usa-label" for="ExpectedEndDate">Expected delivery</label><input class="usa-input" id="ExpectedEndDate" name="ExpectedEndDate" type="date" value="@Options.Iso(Model.ExpectedEndDate)" /></div>
+            <div class="usa-form-group"><label class="usa-label" for="ActualEndDate">Actual end</label><input class="usa-input" id="ActualEndDate" name="ActualEndDate" type="date" value="@Options.Iso(Model.ActualEndDate)" /></div>
+        </div>
+        <div class="merit-form-row">
+            <div class="usa-form-group"><label class="usa-label" for="Outcome">Outcome</label>
+                <select class="usa-select" id="Outcome" name="Outcome"><option value="">- Not yet -</option>@foreach (var o in Options.Fixed(Model.Outcome, Options.Outcomes)) { <option value="@o.Value" selected="@o.Selected">@o.Label</option> }</select></div>
+            <div class="usa-form-group"><label class="usa-label" for="Source">Source</label>
+                <select class="usa-select" id="Source" name="Source"><option value="provider">Provider</option><option value="interview">Interview</option><option value="labReport">Lab report</option><option value="eicr">eICR</option></select></div>
+        </div>
+        <p class="merit-meta">Saving reruns classification: results collected during the episode take the pregnant population.</p>
+        <button class="usa-button" type="submit">Save episode</button>
+        <button class="usa-button usa-button--unstyled" type="button" data-clear-target="#pregnancy-form">Cancel</button>
+    </form>
+</div>

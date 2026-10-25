@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Integration tests against a real SQL Server: MVC actions (full page and htmx partial) and API actions through
+    WebApplicationFactory, the runtime endpoint inventory, and the cross-tenant suite, which calls every stored procedure
+    as one tenant and checks nothing of another tenant comes back or changes.
+
+    The suite deploys its own database (MERIT_IT by default) with Deploy-MeritDatabase.ps1 -IncludeDemoData. Settings:
+      MERIT_IT_SERVER        SQL Server instance (default localhost\PORTAL); a SQL Server container works the same way
+      MERIT_IT_DATABASE      database name (default MERIT_IT)
+      MERIT_IT_WEB_PASSWORD  meritWeb login password (default: read from src/Merit.Web/appsettings.Development.json)
+      MERIT_IT_SKIP_DEPLOY   1 to reuse an already deployed database
+    When the server cannot be reached, every test is reported as skipped rather than failed.
+  -->
+  <PropertyGroup>
+    <RootNamespace>Merit.IntegrationTests</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+    <PackageReference Include="Microsoft.Data.SqlClient" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Merit.Web\Merit.Web.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

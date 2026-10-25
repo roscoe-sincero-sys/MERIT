@@ -1,0 +1,28 @@
+@model EnrollModel
+@{
+    ViewData["Title"] = "Set up multi-factor authentication";
+}
+<h1>Set up your authenticator app</h1>
+<p>Every MERIT account uses a second factor. Scan this code with an authenticator app (for example Microsoft Authenticator, Google Authenticator or a password manager), then enter the six-digit code it shows.</p>
+@if (Model.IsAdministrator)
+{
+    <div class="usa-alert usa-alert--info usa-alert--slim"><div class="usa-alert__body"><p class="usa-alert__text">Administrator accounts should move to a security key or passkey (FIDO2) when the agency enables them.</p></div></div>
+}
+@if (Model.Message is not null)
+{
+    <div class="usa-alert usa-alert--error usa-alert--slim" role="alert"><div class="usa-alert__body"><p class="usa-alert__text">@Model.Message</p></div></div>
+}
+<div class="merit-grid-2">
+    <div>
+        @* Server-generated QR markup for a server-generated URI; no user, file or lab value reaches Html.Raw. *@
+        <div class="merit-qr" role="img" aria-label="QR code for your authenticator app">@Html.Raw(Model.QrSvg)</div>
+        <p class="merit-meta">Can't scan? Enter this key in the app: <code>@Model.SecretBase32</code></p>
+    </div>
+    <form class="usa-form" method="post" asp-action="Enroll">
+        <div class="usa-form-group">
+            <label class="usa-label" asp-for="Code">Code from the app</label>
+            <input class="usa-input usa-input--medium" asp-for="Code" autocomplete="one-time-code" inputmode="numeric" />
+        </div>
+        <button class="usa-button" type="submit">Turn on and sign in</button>
+    </form>
+</div>

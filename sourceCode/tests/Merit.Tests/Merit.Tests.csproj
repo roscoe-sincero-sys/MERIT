@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Unit tests for the domain rules and security helpers, architecture tests for the layering, and an endpoint
+    inventory test that fails when an action is added without a permission policy. No database is needed.
+  -->
+  <PropertyGroup>
+    <RootNamespace>Merit.Tests</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="NetArchTest.Rules" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Merit.Domain\Merit.Domain.csproj" />
+    <ProjectReference Include="..\..\src\Merit.Application\Merit.Application.csproj" />
+    <ProjectReference Include="..\..\src\Merit.Data.SqlServer\Merit.Data.SqlServer.csproj" />
+    <ProjectReference Include="..\..\src\Merit.Web\Merit.Web.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+</Project>

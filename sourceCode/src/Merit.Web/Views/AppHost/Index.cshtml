@@ -1,0 +1,28 @@
+@model AngularHostModel
+@inject CspNonce Nonce
+@{
+    ViewData["Title"] = "MERIT";
+}
+@section Head {
+    @foreach (var s in Model.Styles)
+    {
+        <link rel="stylesheet" href="@s" merit-nonce />
+    }
+}
+@if (!Model.IsBuilt)
+{
+    <div class="usa-alert usa-alert--warning">
+        <div class="usa-alert__body">
+            <h2 class="usa-alert__heading">The Angular screens are not built</h2>
+            <p class="usa-alert__text">Install Node.js 20 or later and rebuild the solution (the build runs <code>npm install</code> and <code>ng build</code> in src/Merit.Web/ClientApp). The server-rendered screens work without it.</p>
+        </div>
+    </div>
+}
+@* Angular bootstraps into this element. ngCspNonce lets component styles load under the Content Security Policy. *@
+<app-root ngCspNonce="@Nonce.Value"><p class="merit-indicator">Loading&hellip;</p></app-root>
+@section Scripts {
+    @foreach (var s in Model.Scripts)
+    {
+        <script type="module" src="@s" merit-nonce></script>
+    }
+}

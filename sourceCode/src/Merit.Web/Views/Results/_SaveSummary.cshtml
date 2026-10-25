@@ -1,0 +1,43 @@
+@model ResultSavedModel
+@{
+    var s = Model.Summary;
+}
+<div id="result-saved">
+    <div class="usa-alert usa-alert--success" role="status">
+        <div class="usa-alert__body">
+            <h2 class="usa-alert__heading" tabindex="-1">Result saved</h2>
+            <p class="usa-alert__text">@s.AnalyteName @s.ValueDisplay &rarr; canonical <strong>@s.CanonicalDisplay</strong> &middot; population @s.Population</p>
+        </div>
+    </div>
+    <div class="usa-summary-box" role="region" aria-labelledby="threshold-heading">
+        <div class="usa-summary-box__body">
+            <h3 class="usa-summary-box__heading" id="threshold-heading">Thresholds and case outcome</h3>
+            <p><strong>@s.CaseOutcome</strong></p>
+            @if (s.Thresholds.Count > 0)
+            {
+                <table class="usa-table usa-table--borderless usa-table--compact">
+                    <thead><tr><th scope="col">Level</th><th scope="col">Type</th><th scope="col">Value</th><th scope="col">This result</th></tr></thead>
+                    <tbody>
+                        @foreach (var t in s.Thresholds)
+                        {
+                            <tr><td>@t.Label</td><td>@t.Type</td><td>@t.Level.ToString("0.##") @t.Unit</td><td>@t.Outcome</td></tr>
+                        }
+                    </tbody>
+                </table>
+            }
+            @if (s.Explanation.Count > 0)
+            {
+                <ul class="usa-list">@foreach (var e in s.Explanation) { <li>@e</li> }</ul>
+            }
+            @if (s.TasksCreated.Count > 0)
+            {
+                <p>Tasks created: @string.Join("; ", s.TasksCreated)</p>
+            }
+        </div>
+    </div>
+    <p>
+        @if (s.ExposureCaseId is Guid cid) { <a class="usa-button" href="/cases/@cid">Open the case</a> }
+        <a class="usa-button usa-button--outline" href="/people/@Model.PersonId/results/new">Enter another result</a>
+        <a class="usa-button usa-button--unstyled" href="/people/@Model.PersonId">Back to the person</a>
+    </p>
+</div>

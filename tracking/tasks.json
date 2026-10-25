@@ -1,0 +1,939 @@
+{
+  "tasks": [
+    {
+      "id": "T001",
+      "phase": "0 Project setup",
+      "task": "Claude Code usage journal spreadsheet and refresh script",
+      "ref": "prompt.txt step 1",
+      "where": "journal/MERIT_ClaudeCode_Usage.xlsx",
+      "status": "Done",
+      "started": "2026-10-24",
+      "finished": "2026-10-24"
+    },
+    {
+      "id": "T002",
+      "phase": "0 Project setup",
+      "task": "Task tracker spreadsheet (this file) generated from tasks.json",
+      "ref": "prompt.txt step 2",
+      "where": "tracking/MERIT_Task_Tracker.xlsx",
+      "status": "Done",
+      "started": "2026-10-24",
+      "finished": "2026-10-24"
+    },
+    {
+      "id": "T003",
+      "phase": "0 Project setup",
+      "task": "Adapt SQL convention gate (validate-sql.py) to camelCase names and the renamed audit block (isDeleted, deletedBy, deletedDateUtc, createdBy, createdDateUtc, modifiedBy, modifiedDateUtc)",
+      "ref": "prompt.txt naming change",
+      "where": ".claude/hooks/validate-sql.py",
+      "status": "Done",
+      "started": "2026-10-24",
+      "finished": "2026-10-24"
+    },
+    {
+      "id": "T004",
+      "phase": "0 Project setup",
+      "task": "Solution skeleton: Merit.sln, Directory.Build.props (net9.0, nullable, warnings as errors, analyzers), Domain/Contracts/Application/Data.SqlServer/Web/Worker/Tests projects with layer references",
+      "ref": "Arch: Solution layout, R3, R5",
+      "where": "sourceCode/Merit.sln",
+      "status": "Done",
+      "started": "2026-10-24",
+      "finished": "2026-10-25",
+      "notes": "Merit.sln: Domain, Contracts, Application, Data.SqlServer, Web, Worker. Tests project not yet added."
+    },
+    {
+      "id": "T005",
+      "phase": "0 Project setup",
+      "task": "README with build, deploy and run instructions",
+      "ref": "Adoption: project basics",
+      "where": "sourceCode/README.md",
+      "status": "Done",
+      "started": "2026-10-25",
+      "finished": "2026-10-25",
+      "notes": "sourceCode/README.md: prerequisites, deploy, configure, build, run, demo users"
+    },
+    {
+      "id": "T010",
+      "phase": "1 Database foundation",
+      "task": "Database bootstrap: create database, schemas (dbo, auth, config, logs, util, logsData, history), util.uspSetObjectDescription",
+      "ref": "Skill: schema placement, rule 4",
+      "where": "sourceCode/database/000-009",
+      "status": "Done",
+      "started": "2026-10-24",
+      "finished": "2026-10-24"
+    },
+    {
+      "id": "T011",
+      "phase": "1 Database foundation",
+      "task": "Execution logging subsystem (logs.executionLog + four logging procedures) adapted to camelCase audit columns",
+      "ref": "Skill rule 8",
+      "where": "sourceCode/database",
+      "status": "Done",
+      "started": "2026-10-24",
+      "finished": "2026-10-24"
+    },
+    {
+      "id": "T012",
+      "phase": "1 Database foundation",
+      "task": "DDL change logging subsystem (record_db_changes trigger, history tables) adapted to camelCase audit columns",
+      "ref": "Skill rule 10",
+      "where": "sourceCode/database",
+      "status": "Done",
+      "started": "2026-10-24",
+      "finished": "2026-10-24"
+    },
+    {
+      "id": "T013",
+      "phase": "1 Database foundation",
+      "task": "Roles and schema permissions: applicationRole, workerRole, readOnlyRole; EXECUTE per procedure only",
+      "ref": "Spec: Stack (EXECUTE only); Arch: least privilege",
+      "where": "sourceCode/database",
+      "status": "Done",
+      "started": "2026-10-24",
+      "finished": "2026-10-24",
+      "notes": "meritWebRole and meritWorkerRole hold EXECUTE per procedure only; the skill's applicationRole/readOnlyRole are deliberately not created so no schema-level table grants reach the app logins."
+    },
+    {
+      "id": "T014",
+      "phase": "1 Database foundation",
+      "task": "Re-runnable PowerShell deployment script (Deploy-MeritDatabase.ps1): creates DB if missing, runs scripts in order with sqlcmd -I -C -b, creates app/worker logins optionally, reports results",
+      "ref": "Deliverable 1",
+      "where": "sourceCode/database/Deploy-MeritDatabase.ps1",
+      "status": "Done",
+      "started": "2026-10-24",
+      "finished": "2026-10-24",
+      "notes": "Deploy-MeritDatabase.ps1: -ServerInstance, -DatabaseName, -SqlCredential, -CreateLogins, -IncludeDemoData."
+    },
+    {
+      "id": "T020",
+      "phase": "2 Data model",
+      "task": "Tenant tree: auth.tenant, auth.tenantClosure, auth.tenantJurisdiction; config.subJurisdiction (counties)",
+      "ref": "Spec: Tenant tree",
+      "where": "sourceCode/database",
+      "status": "Done",
+      "started": "2026-10-24",
+      "finished": "2026-10-24"
+    },
+    {
+      "id": "T021",
+      "phase": "2 Data model",
+      "task": "Security tables: auth.appUser, auth.permission, auth.profile, auth.profilePermission, auth.userAssignment, auth.sessionScope, auth.sessionScopeTenant, auth.mfaRecoveryCode",
+      "ref": "Spec: Profiles and permissions; Authentication",
+      "where": "sourceCode/database",
+      "status": "Done",
+      "started": "2026-10-24",
+      "finished": "2026-10-24"
+    },
+    {
+      "id": "T022",
+      "phase": "2 Data model",
+      "task": "Configuration: config.jurisdictionSetting (effective-dated), config.lookupValue (administrator lookups with extract codes)",
+      "ref": "Spec: Jurisdiction configuration; Entity definitions (enumerations)",
+      "where": "sourceCode/database",
+      "status": "Done",
+      "started": "2026-10-24",
+      "finished": "2026-10-24"
+    },
+    {
+      "id": "T023",
+      "phase": "2 Data model",
+      "task": "Analytes: config.analyte, config.analyteSpecimen, config.acceptedUnit, config.loincCode, config.actionCode, config.threshold, config.confirmingMethod",
+      "ref": "Spec: Analytes, thresholds and result normalization",
+      "where": "sourceCode/database",
+      "status": "Done",
+      "started": "2026-10-24",
+      "finished": "2026-10-24"
+    },
+    {
+      "id": "T024",
+      "phase": "2 Data model",
+      "task": "Person: dbo.person, personAlias, personRace, personContactMethod, personIdentifier, pregnancyEpisode, personRelationship, personAccess, personMatchKey",
+      "ref": "Spec: Person, Person alias, Pregnancy episode, Person relationship; Shared database",
+      "where": "sourceCode/database",
+      "status": "Done",
+      "started": "2026-10-24",
+      "finished": "2026-10-24"
+    },
+    {
+      "id": "T025",
+      "phase": "2 Data model",
+      "task": "Places and organizations: dbo.organization, organizationType, location, organizationSite, locationOwner, personLocation, employment, employmentAnalyte, exposureSource, product, provider",
+      "ref": "Spec: Organization, Location, Person location, Employment, Exposure source, Provider",
+      "where": "sourceCode/database",
+      "status": "Done",
+      "started": "2026-10-24",
+      "finished": "2026-10-24"
+    },
+    {
+      "id": "T026",
+      "phase": "2 Data model",
+      "task": "Results and intake: dbo.intakeBatch, intakeProfile, stagingRow, stagingHoldReason, labResult",
+      "ref": "Spec: Lab result; Intake pipeline; Held records",
+      "where": "sourceCode/database",
+      "status": "Done",
+      "started": "2026-10-24",
+      "finished": "2026-10-24"
+    },
+    {
+      "id": "T027",
+      "phase": "2 Data model",
+      "task": "Cases and investigations: dbo.merCase, caseActivity, investigation, investigationCase, environmentalSample, config.environmentalStandard",
+      "ref": "Spec: Case, Investigation",
+      "where": "sourceCode/database",
+      "status": "Done",
+      "started": "2026-10-24",
+      "finished": "2026-10-24"
+    },
+    {
+      "id": "T028",
+      "phase": "2 Data model",
+      "task": "Work: dbo.workTask (queues and cross-link tasks), cluster, caseCluster, dbo.jobQueue (per-tenant, row-lock claim)",
+      "ref": "Spec: Work queues, Cross-links, Cluster detection; Arch: Deployment shape",
+      "where": "sourceCode/database",
+      "status": "Done",
+      "started": "2026-10-24",
+      "finished": "2026-10-24"
+    },
+    {
+      "id": "T029",
+      "phase": "2 Data model",
+      "task": "Audit: logs.auditEvent as append-only ledger table holding only IDs, actions, users and times",
+      "ref": "Spec: Security and audit; Shared database (ledger)",
+      "where": "sourceCode/database",
+      "status": "Done",
+      "started": "2026-10-24",
+      "finished": "2026-10-24"
+    },
+    {
+      "id": "T030",
+      "phase": "2 Data model",
+      "task": "Federal extracts: config.extractLayout, config.extractLayoutField, dbo.extractRun",
+      "ref": "Spec: Federal extracts",
+      "where": "sourceCode/database",
+      "status": "Done",
+      "started": "2026-10-24",
+      "finished": "2026-10-24"
+    },
+    {
+      "id": "T031",
+      "phase": "2 Data model",
+      "task": "Row-level security: predicate functions and security policies (filter + block) on tenant-owned tables; person predicate via personAccess; fail closed without session context",
+      "ref": "Spec: Row-level security",
+      "where": "sourceCode/database",
+      "status": "Done",
+      "started": "2026-10-24",
+      "finished": "2026-10-24",
+      "notes": "37 tables under auth.tenantIsolationPolicy (filter + block after insert/update); predicates fail closed."
+    },
+    {
+      "id": "T032",
+      "phase": "2 Data model",
+      "task": "Reference and demo seed data: permissions, shipped profiles, demo tenant tree (state, occupational program, two counties), analytes PB/HG/CD/AS, specimens, units, LOINC, CDC 3.5 child row, inactive federal rows, settings defaults, lookups, synthetic demo people",
+      "ref": "Spec: Adoption (reference data shipped, synthetic data)",
+      "where": "sourceCode/database",
+      "status": "Done",
+      "started": "2026-10-24",
+      "finished": "2026-10-24",
+      "notes": "500_seed reference data + config.uspCreateRootTenant; 900_demo synthetic Maryland jurisdiction."
+    },
+    {
+      "id": "T040",
+      "phase": "3 Stored procedures",
+      "task": "Session and security procs: sign-in lookup, resolve effective permissions and session scope, set session context, MFA enrollment, lockout",
+      "ref": "Spec: Row-level security 1, 5; Authentication",
+      "where": "sourceCode/database",
+      "status": "Done",
+      "started": "2026-10-24",
+      "finished": "2026-10-24"
+    },
+    {
+      "id": "T041",
+      "phase": "3 Stored procedures",
+      "task": "Person procs: search, get page sections, save person, aliases, relationships, pregnancy episodes, contact methods, race",
+      "ref": "Spec: Person; UI Person page",
+      "where": "sourceCode/database",
+      "status": "Done",
+      "started": "2026-10-24",
+      "finished": "2026-10-24"
+    },
+    {
+      "id": "T042",
+      "phase": "3 Stored procedures",
+      "task": "Place procs: save location (find existing), save person location with one-primary rule under row locks, set primary residence with row split, maintain personAccess",
+      "ref": "Spec: Address rules 1-3, 12; Person access table",
+      "where": "sourceCode/database",
+      "status": "Done",
+      "started": "2026-10-24",
+      "finished": "2026-10-24"
+    },
+    {
+      "id": "T043",
+      "phase": "3 Stored procedures",
+      "task": "Organization, employment, exposure source and provider procs",
+      "ref": "Spec: Organization, Employment, Exposure source, Provider",
+      "where": "sourceCode/database",
+      "status": "Done",
+      "started": "2026-10-24",
+      "finished": "2026-10-24"
+    },
+    {
+      "id": "T044",
+      "phase": "3 Stored procedures",
+      "task": "Lab result procs: lookups for cascading form, save result, duplicate/supersede detection, results by person",
+      "ref": "Spec: Lab result; Result entry form",
+      "where": "sourceCode/database",
+      "status": "Done",
+      "started": "2026-10-24",
+      "finished": "2026-10-24"
+    },
+    {
+      "id": "T045",
+      "phase": "3 Stored procedures",
+      "task": "Case procs: open/attach case, classification update with override reason, activities, close with reason",
+      "ref": "Spec: Case; Case classification",
+      "where": "sourceCode/database",
+      "status": "Done",
+      "started": "2026-10-24",
+      "finished": "2026-10-24"
+    },
+    {
+      "id": "T046",
+      "phase": "3 Stored procedures",
+      "task": "Investigation procs: find open investigation for target, create, link cases, status, environmental samples with computed exceedance",
+      "ref": "Spec: Investigation",
+      "where": "sourceCode/database",
+      "status": "Done",
+      "started": "2026-10-24",
+      "finished": "2026-10-24"
+    },
+    {
+      "id": "T047",
+      "phase": "3 Stored procedures",
+      "task": "Work queue and task procs: queue counts, paged queue lists, assign, complete",
+      "ref": "Spec: Work queues",
+      "where": "sourceCode/database",
+      "status": "Done",
+      "started": "2026-10-24",
+      "finished": "2026-10-24"
+    },
+    {
+      "id": "T048",
+      "phase": "3 Stored procedures",
+      "task": "Intake procs: create batch, staging rows, hold reasons, release/reject, held queue grouped by cause",
+      "ref": "Spec: Intake pipeline; Held records",
+      "where": "sourceCode/database",
+      "status": "Done",
+      "started": "2026-10-24",
+      "finished": "2026-10-24"
+    },
+    {
+      "id": "T049",
+      "phase": "3 Stored procedures",
+      "task": "Job queue procs: enqueue, claim with UPDLOCK/READPAST, complete, fail with back-off, queue depth per tenant",
+      "ref": "Arch: Deployment shape rules 1-2, 8",
+      "where": "sourceCode/database",
+      "status": "Done",
+      "started": "2026-10-24",
+      "finished": "2026-10-24"
+    },
+    {
+      "id": "T050",
+      "phase": "3 Stored procedures",
+      "task": "Configuration procs: thresholds, settings, analytes (admin screens)",
+      "ref": "Spec: Jurisdiction configuration",
+      "where": "sourceCode/database",
+      "status": "Done",
+      "started": "2026-10-24",
+      "finished": "2026-10-24"
+    },
+    {
+      "id": "T051",
+      "phase": "3 Stored procedures",
+      "task": "Audit proc: record view/change/export events",
+      "ref": "Spec: Security and audit",
+      "where": "sourceCode/database",
+      "status": "Done",
+      "started": "2026-10-24",
+      "finished": "2026-10-24"
+    },
+    {
+      "id": "T052",
+      "phase": "3 Stored procedures",
+      "task": "Extract procs: CBLS and ABLES source rows, extract run status",
+      "ref": "Spec: Federal extracts",
+      "where": "sourceCode/database",
+      "status": "Done",
+      "started": "2026-10-24",
+      "finished": "2026-10-24"
+    },
+    {
+      "id": "T060",
+      "phase": "4 Domain and application",
+      "task": "Domain: population derivation (DOB, pregnancy episodes, adult cutoff, 42-week default)",
+      "ref": "Spec: Population derivation",
+      "where": "src/Merit.Domain",
+      "status": "Done",
+      "started": "2026-10-25",
+      "finished": "2026-10-25"
+    },
+    {
+      "id": "T061",
+      "phase": "4 Domain and application",
+      "task": "Domain: result normalization (operator parse, unit multiplier, below-detection indeterminate rule, creatinine adjustment)",
+      "ref": "Spec: Intake normalization",
+      "where": "src/Merit.Domain",
+      "status": "Done",
+      "started": "2026-10-25",
+      "finished": "2026-10-25"
+    },
+    {
+      "id": "T062",
+      "phase": "4 Domain and application",
+      "task": "Domain: threshold evaluation and child/adult/other-metal classification (venous/capillary, confirming methods, 12-week rule, arsenic speciation task)",
+      "ref": "Spec: Case classification",
+      "where": "src/Merit.Domain",
+      "status": "Done",
+      "started": "2026-10-25",
+      "finished": "2026-10-25"
+    },
+    {
+      "id": "T063",
+      "phase": "4 Domain and application",
+      "task": "Domain: primary residence rules (overlap check, row split plan, county change preview)",
+      "ref": "Spec: Address rules 1-3, 6, 12",
+      "where": "src/Merit.Domain",
+      "status": "Done",
+      "started": "2026-10-25",
+      "finished": "2026-10-25"
+    },
+    {
+      "id": "T064",
+      "phase": "4 Domain and application",
+      "task": "Domain: identifier checks (NPI Luhn with 80840 prefix, CLIA format), time-ordered UUID generator",
+      "ref": "Spec: Provider; Shared database keys",
+      "where": "src/Merit.Domain",
+      "status": "Done",
+      "started": "2026-10-25",
+      "finished": "2026-10-25"
+    },
+    {
+      "id": "T065",
+      "phase": "4 Domain and application",
+      "task": "Application services: people, places, results (save + classify), cases, investigations, queues, intake, config, extracts, accounts; permission checks",
+      "ref": "Arch: MVC rules 1, 4",
+      "where": "src/Merit.Application",
+      "status": "Done",
+      "started": "2026-10-25",
+      "finished": "2026-10-25"
+    },
+    {
+      "id": "T066",
+      "phase": "4 Domain and application",
+      "task": "Data access: Dapper repositories calling stored procedures; per-connection sp_set_session_context (read-only) for RLS",
+      "ref": "Spec: Stack; RLS 1, 5",
+      "where": "src/Merit.Data.SqlServer",
+      "status": "Done",
+      "started": "2026-10-25",
+      "finished": "2026-10-25"
+    },
+    {
+      "id": "T070",
+      "phase": "5 Web (Razor + htmx)",
+      "task": "Host: AddControllersWithViews, cookie auth (Secure, HttpOnly, SameSite=Strict), fallback auth policy, permission policies, antiforgery X-XSRF-TOKEN, CSP with nonce, request-context middleware, health endpoint",
+      "ref": "Arch: ASP.NET Core host; Security across both front ends",
+      "where": "src/Merit.Web",
+      "status": "Done",
+      "started": "2026-10-25",
+      "finished": "2026-10-25"
+    },
+    {
+      "id": "T071",
+      "phase": "5 Web (Razor + htmx)",
+      "task": "Static assets: USWDS 3 CSS/fonts/icons (no USWDS JS), htmx 4.0.0 served from origin, merit.js (antiforgery header, focus/aria-live handling)",
+      "ref": "Arch: htmx requirements (Delivery, Scripts and CSP, Accessibility)",
+      "where": "src/Merit.Web/wwwroot",
+      "status": "Done",
+      "started": "2026-10-25",
+      "finished": "2026-10-25"
+    },
+    {
+      "id": "T072",
+      "phase": "5 Web (Razor + htmx)",
+      "task": "Shared layout, header/navigation, alert region, HtmxResult helper (HX-Request-Type partial vs full), 422 validation partials, HX-Retarget/HX-Redirect handling",
+      "ref": "Arch: One action, two shapes; Inheritance, swaps and errors",
+      "where": "src/Merit.Web",
+      "status": "Done",
+      "started": "2026-10-25",
+      "finished": "2026-10-25"
+    },
+    {
+      "id": "T073",
+      "phase": "5 Web (Razor + htmx)",
+      "task": "Sign-in and account pages: password sign-in with lockout, TOTP MFA enrollment and verification, recovery codes, sign-out",
+      "ref": "Spec: Authentication (built-in accounts)",
+      "where": "src/Merit.Web",
+      "status": "Done",
+      "started": "2026-10-25",
+      "finished": "2026-10-25"
+    },
+    {
+      "id": "T074",
+      "phase": "5 Web (Razor + htmx)",
+      "task": "Home dashboard with queue count tiles that poll a partial",
+      "ref": "Arch: Screen assignments",
+      "where": "src/Merit.Web",
+      "status": "Done",
+      "started": "2026-10-25",
+      "finished": "2026-10-25"
+    },
+    {
+      "id": "T075",
+      "phase": "5 Web (Razor + htmx)",
+      "task": "Global search (name, DOB, accession, case number)",
+      "ref": "Spec: UI General",
+      "where": "src/Merit.Web",
+      "status": "Done",
+      "started": "2026-10-25",
+      "finished": "2026-10-25"
+    },
+    {
+      "id": "T076",
+      "phase": "5 Web (Razor + htmx)",
+      "task": "Person page: header, sections ordered by population, each section a partial that reloads after its own edit, empty states, server-rendered SVG trend chart",
+      "ref": "Spec: Person page; Arch: Screen assignments",
+      "where": "src/Merit.Web",
+      "status": "Done",
+      "started": "2026-10-25",
+      "finished": "2026-10-25"
+    },
+    {
+      "id": "T077",
+      "phase": "5 Web (Razor + htmx)",
+      "task": "Places: add residence/other place, overlapping residence requires primary choice, Set as primary dialog with row split and county change preview",
+      "ref": "Spec: Places behavior",
+      "where": "src/Merit.Web",
+      "status": "Done",
+      "started": "2026-10-25",
+      "finished": "2026-10-25"
+    },
+    {
+      "id": "T078",
+      "phase": "5 Web (Razor + htmx)",
+      "task": "Relationships, employment, exposure sources, pregnancy episodes editors on the person page",
+      "ref": "Spec: Person page sections",
+      "where": "src/Merit.Web",
+      "status": "Done",
+      "started": "2026-10-25",
+      "finished": "2026-10-25"
+    },
+    {
+      "id": "T079",
+      "phase": "5 Web (Razor + htmx)",
+      "task": "Result entry form with cascading drop-downs and save summary (canonical value, thresholds crossed, case outcome)",
+      "ref": "Spec: Result entry form",
+      "where": "src/Merit.Web",
+      "status": "Done",
+      "started": "2026-10-25",
+      "finished": "2026-10-25"
+    },
+    {
+      "id": "T080",
+      "phase": "5 Web (Razor + htmx)",
+      "task": "Case page: classification, override with reason, activities log, close with reason, linked investigations",
+      "ref": "Spec: Case; workflows",
+      "where": "src/Merit.Web",
+      "status": "Done",
+      "started": "2026-10-25",
+      "finished": "2026-10-25"
+    },
+    {
+      "id": "T081",
+      "phase": "5 Web (Razor + htmx)",
+      "task": "Investigation page: target, status, dates, findings, regulatory action, environmental samples",
+      "ref": "Spec: Investigation",
+      "where": "src/Merit.Web",
+      "status": "Done",
+      "started": "2026-10-25",
+      "finished": "2026-10-25"
+    },
+    {
+      "id": "T082",
+      "phase": "5 Web (Razor + htmx)",
+      "task": "Configuration screens: thresholds, jurisdiction settings, analytes",
+      "ref": "Spec: Jurisdiction configuration",
+      "where": "src/Merit.Web",
+      "status": "Done",
+      "started": "2026-10-25",
+      "finished": "2026-10-25"
+    },
+    {
+      "id": "T083",
+      "phase": "5 Web (Razor + htmx)",
+      "task": "Intake upload (CSV) creating a job; batch status card polls a partial",
+      "ref": "Spec: Intake formats; Arch: Long work runs in the worker",
+      "where": "src/Merit.Web",
+      "status": "Done",
+      "started": "2026-10-25",
+      "finished": "2026-10-25"
+    },
+    {
+      "id": "T084",
+      "phase": "5 Web (Razor + htmx)",
+      "task": "Federal extracts screen: request run, status cards poll, download file",
+      "ref": "Arch: Screen assignments (Federal extracts)",
+      "where": "src/Merit.Web",
+      "status": "Done",
+      "started": "2026-10-25",
+      "finished": "2026-10-25"
+    },
+    {
+      "id": "T085",
+      "phase": "5 Web (Razor + htmx)",
+      "task": "Server-side type-ahead (organization, provider) following ARIA combobox pattern",
+      "ref": "Arch: Dates and type-ahead",
+      "where": "src/Merit.Web",
+      "status": "Done",
+      "started": "2026-10-25",
+      "finished": "2026-10-25"
+    },
+    {
+      "id": "T090",
+      "phase": "6 JSON API",
+      "task": "API controllers under /api/v1 ([ApiController]) for queues, held records, results, persons; RFC 9457 problem details; OpenAPI document",
+      "ref": "Arch: ASP.NET Core host",
+      "where": "src/Merit.Web/Controllers/Api",
+      "status": "Done",
+      "started": "2026-10-25",
+      "finished": "2026-10-25"
+    },
+    {
+      "id": "T100",
+      "phase": "7 Angular client",
+      "task": "Angular 22 workspace under /app/: strict TS, strictTemplates, standalone components, signals, OnPush, lazy routes, bundle budgets, XSRF config, CSP nonce",
+      "ref": "Arch: Angular requirements",
+      "where": "src/Merit.Web/ClientApp",
+      "status": "Done",
+      "started": "2026-10-25",
+      "finished": "2026-10-25",
+      "notes": "Angular 22.2.3 zoneless workspace, strict, lazy routes, budgets, XSRF, ngCspNonce; builds clean"
+    },
+    {
+      "id": "T101",
+      "phase": "7 Angular client",
+      "task": "Razor host view for /app/ routes with shared header, antiforgery cookie and ngCspNonce",
+      "ref": "Arch: Angular requirements (Hosting)",
+      "where": "src/Merit.Web",
+      "status": "Done",
+      "started": "2026-10-25",
+      "finished": "2026-10-25",
+      "notes": "Views/AppHost/Index.cshtml; APP_BASE_HREF /app/; verified in headless Edge"
+    },
+    {
+      "id": "T102",
+      "phase": "7 Angular client",
+      "task": "API client and contract types for the endpoints the Angular screens use",
+      "ref": "Arch: API client",
+      "where": "ClientApp/src/app/api",
+      "status": "Done",
+      "started": "2026-10-25",
+      "finished": "2026-10-25",
+      "notes": "api/contracts.ts + api-client.ts; all 13 endpoints smoke-tested"
+    },
+    {
+      "id": "T103",
+      "phase": "7 Angular client",
+      "task": "Shared CDK data grid: server-side paging, sorting, filtering, bulk selection, column chooser",
+      "ref": "Spec: Front end (data-heavy screens)",
+      "where": "ClientApp/src/app/shared/grid",
+      "status": "Done",
+      "started": "2026-10-25",
+      "finished": "2026-10-25",
+      "notes": "shared/grid/data-grid.component.ts (CDK table)"
+    },
+    {
+      "id": "T104",
+      "phase": "7 Angular client",
+      "task": "Work queues screen (tasks by queue, assign/complete in bulk)",
+      "ref": "Spec: Work queues",
+      "where": "ClientApp/src/app/features/queues",
+      "status": "Done",
+      "started": "2026-10-25",
+      "finished": "2026-10-25",
+      "notes": "features/queues; renders live data in headless Edge"
+    },
+    {
+      "id": "T105",
+      "phase": "7 Angular client",
+      "task": "Held records screen grouped by reason; release / reject with reason",
+      "ref": "Spec: Held records",
+      "where": "ClientApp/src/app/features/held",
+      "status": "Done",
+      "started": "2026-10-25",
+      "finished": "2026-10-25",
+      "notes": "features/held; groups by cause, release/reject, corrections"
+    },
+    {
+      "id": "T106",
+      "phase": "7 Angular client",
+      "task": "Results list (line list) with filters",
+      "ref": "Arch: Screen assignments",
+      "where": "ClientApp/src/app/features/results",
+      "status": "Done",
+      "started": "2026-10-25",
+      "finished": "2026-10-25",
+      "notes": "features/results; server-side filters, sort, paging"
+    },
+    {
+      "id": "T107",
+      "phase": "7 Angular client",
+      "task": "MSBuild integration: npm ci + ng build on Release/first build, output to wwwroot/app",
+      "ref": "Deliverable 2",
+      "where": "src/Merit.Web/Merit.Web.csproj",
+      "status": "Done",
+      "started": "2026-10-25",
+      "finished": "2026-10-25",
+      "notes": "BuildAngularClient target: npm install + ng build on first/Release build"
+    },
+    {
+      "id": "T108",
+      "phase": "7 Angular client",
+      "task": "Person matching review screen (side by side, keyboard-driven)",
+      "ref": "Spec: Person matching review",
+      "where": "ClientApp",
+      "status": "Done",
+      "started": "2026-10-25",
+      "finished": "2026-10-25",
+      "notes": "Angular /app/match-review: queue, side-by-side field comparison (agree/close/different/missing), ranked candidates, one-line reasons, twin/placeholder safeguards, history panel, keys 1-5 S D N C H J K; remembered Different person (dbo.matchExclusion); Not sure -> matchReview queue"
+    },
+    {
+      "id": "T109",
+      "phase": "7 Angular client",
+      "task": "Person timeline, maps and cluster review",
+      "ref": "Arch: Screen assignments",
+      "where": "ClientApp",
+      "status": "Done",
+      "started": "2026-10-25",
+      "notes": "Timeline plus /app/map (SVG zoom/pan case map, no tiles) and /app/clusters review (status, notes, join/leave, member map)",
+      "finished": "2026-10-25"
+    },
+    {
+      "id": "T110",
+      "phase": "7 Angular client",
+      "task": "Reports and analytics with interactive charts",
+      "ref": "Spec: Reports and analytics",
+      "where": "ClientApp",
+      "status": "Done",
+      "started": "2026-10-25",
+      "finished": "2026-10-25",
+      "notes": "/app/reports: 5 standard reports (testing counts, elevated cases, case timeliness, investigation outcomes, reporter timeliness), measure picker charts, table view, CSV/Excel export (data.export, audited). Query builder and analytics DB remain T146"
+    },
+    {
+      "id": "T120",
+      "phase": "8 Worker",
+      "task": "Merit.Worker: job claim loop, per-job session context for tenant/user, retry with back-off, health endpoint, queue depth",
+      "ref": "Arch: Deployment shape",
+      "where": "src/Merit.Worker",
+      "status": "Done",
+      "started": "2026-10-25",
+      "finished": "2026-10-25"
+    },
+    {
+      "id": "T121",
+      "phase": "8 Worker",
+      "task": "Intake job: parse CSV with an intake profile, validate, normalize, match (exact match key), commit or hold with reasons, classify",
+      "ref": "Spec: Intake pipeline",
+      "where": "src/Merit.Worker",
+      "status": "Done",
+      "started": "2026-10-25",
+      "finished": "2026-10-25"
+    },
+    {
+      "id": "T122",
+      "phase": "8 Worker",
+      "task": "Extract job: CBLS and ABLES files from configured layout, validation report",
+      "ref": "Spec: Federal extracts",
+      "where": "src/Merit.Worker",
+      "status": "Done",
+      "started": "2026-10-25",
+      "finished": "2026-10-25"
+    },
+    {
+      "id": "T123",
+      "phase": "8 Worker",
+      "task": "Cluster detection job (shared location / worksite within window)",
+      "ref": "Spec: Cluster detection",
+      "where": "src/Merit.Worker",
+      "status": "Done",
+      "started": "2026-10-25",
+      "finished": "2026-10-25"
+    },
+    {
+      "id": "T130",
+      "phase": "9 Tests",
+      "task": "Unit tests: population, normalization, classification, residence rules, NPI/CLIA",
+      "ref": "Arch: Testing (unit)",
+      "where": "tests/Merit.Tests",
+      "status": "Done",
+      "started": "2026-10-25",
+      "finished": "2026-10-25",
+      "notes": "tests/Merit.Tests: population, normalization, keys, NPI/CLIA, ids, classification, residence, TOTP RFC vectors"
+    },
+    {
+      "id": "T131",
+      "phase": "9 Tests",
+      "task": "Architecture tests: layer rules (controllers do not reference data project, domain references nothing, view models free of domain types)",
+      "ref": "Arch: MVC rule 6",
+      "where": "tests/Merit.Tests",
+      "status": "Done",
+      "started": "2026-10-25",
+      "finished": "2026-10-25",
+      "notes": "NetArchTest: domain pure, application no data/web, web no SQL, controllers no I*Data"
+    },
+    {
+      "id": "T132",
+      "phase": "9 Tests",
+      "task": "Endpoint inventory test: every action has a permission policy",
+      "ref": "Arch: Testing (endpoint inventory)",
+      "where": "tests/Merit.Tests",
+      "status": "Done",
+      "started": "2026-10-25",
+      "finished": "2026-10-25",
+      "notes": "EndpointInventoryTests: every action has HTTP method and a known policy; anonymous allow-list"
+    },
+    {
+      "id": "T133",
+      "phase": "9 Tests",
+      "task": "Database deployment verified twice against SQL Server 2022 (re-runnable) and convention gate passes",
+      "ref": "Deliverable 1; Skill rule 7",
+      "where": "sourceCode/database",
+      "status": "Done",
+      "started": "2026-10-25",
+      "finished": "2026-10-25",
+      "notes": "Deployed from scratch and re-run cleanly on localhost\\PORTAL; validate-sql gate passes"
+    },
+    {
+      "id": "T134",
+      "phase": "9 Tests",
+      "task": "Integration tests with WebApplicationFactory + SQL Server container; cross-tenant RLS suite; Playwright + axe end-to-end",
+      "ref": "Arch: Testing and quality gates",
+      "where": "tests",
+      "status": "Done",
+      "started": "2026-10-25",
+      "finished": "2026-10-25",
+      "notes": "tests/Merit.IntegrationTests (WebApplicationFactory, real SQL Server MERIT_IT deployed by the suite; no Docker on this machine, MERIT_IT_SERVER points at a container): pages full+partial, API reads, anonymous inventory, cross-tenant HTTP + every-procedure suite with leak self-check (12 pass). tests/e2e Playwright 1.64 + axe 4.13, Edge, tablet, WCAG 2.1 AA + keyboard flows (22 pass). Found and fixed: search duplicate-row error, intake Apt/unit field collision, table-wrap and SVG ARIA issues"
+    },
+    {
+      "id": "T140",
+      "phase": "10 Later releases",
+      "task": "HL7 v2.5.1 / v2.3.1 ORU^R01 parsers with acknowledgments; eICR parser",
+      "ref": "Spec: Intake formats",
+      "where": "",
+      "status": "Deferred",
+      "notes": "Parser plug-in interface exists; parsers not built in this release."
+    },
+    {
+      "id": "T141",
+      "phase": "10 Later releases",
+      "task": "Intake profile builder screen (sample upload, mapping suggestions, preview, header-signature drift pause, versioning)",
+      "ref": "Spec: Intake profiles",
+      "where": "",
+      "status": "Deferred"
+    },
+    {
+      "id": "T142",
+      "phase": "10 Later releases",
+      "task": "Probabilistic matching with presets, plain-language rules and test-before-save; merge with preview and undo",
+      "ref": "Spec: Person matching; Matching configuration",
+      "where": "",
+      "status": "Deferred",
+      "notes": "This release links on exact normalized name + DOB and sends others to review."
+    },
+    {
+      "id": "T143",
+      "phase": "10 Later releases",
+      "task": "NPPES NPI Registry and CMS CLIA lookups, cache and refresh job",
+      "ref": "Spec: Provider and laboratory reference data",
+      "where": "",
+      "status": "Deferred"
+    },
+    {
+      "id": "T144",
+      "phase": "10 Later releases",
+      "task": "Microsoft Entra ID (OpenID Connect) sign-in and SCIM provisioning; FIDO2/passkeys for administrators",
+      "ref": "Spec: Authentication",
+      "where": "",
+      "status": "Deferred"
+    },
+    {
+      "id": "T145",
+      "phase": "10 Later releases",
+      "task": "Geocoding, census tract, map views, distance-based clusters",
+      "ref": "Spec: Location; Cluster detection",
+      "where": "",
+      "status": "Deferred"
+    },
+    {
+      "id": "T146",
+      "phase": "10 Later releases",
+      "task": "Per-root-tenant analytics database, de-identified views, query builder, report library",
+      "ref": "Spec: Reports and analytics",
+      "where": "",
+      "status": "Deferred"
+    },
+    {
+      "id": "T147",
+      "phase": "10 Later releases",
+      "task": "Custom fields, letters and templates, reporter registry cadence alerts, completeness dashboard, product registry screens",
+      "ref": "Spec: Problems other jurisdictions report",
+      "where": "",
+      "status": "Deferred"
+    },
+    {
+      "id": "T148",
+      "phase": "10 Later releases",
+      "task": "Workflow templates engine with configurable steps and closure criteria; cross-link task generation for all trigger types",
+      "ref": "Spec: Investigation workflows",
+      "where": "",
+      "status": "Deferred",
+      "notes": "This release creates the default workflow tasks in code."
+    },
+    {
+      "id": "T149",
+      "phase": "10 Later releases",
+      "task": "Per-tenant export and purge procedures; temporal history tables with their own RLS policies",
+      "ref": "Spec: Shared database",
+      "where": "",
+      "status": "Deferred"
+    },
+    {
+      "id": "T150",
+      "phase": "10 Later releases",
+      "task": "Container images and deployment manifests for web and worker",
+      "ref": "Arch: Deployment shape rule 6",
+      "where": "",
+      "status": "Deferred"
+    },
+    {
+      "id": "T160",
+      "phase": "10 Access model",
+      "task": "Hierarchical tenant authorization: platform/region/state/tribe/jurisdiction tree, roles (renamed from profiles), master profile + user-made profiles with switching, per-tenant read/write/full via RLS write predicates, tree-scoped administration, view-as, platform administrator with no record access",
+      "ref": "Request 2026-10-25",
+      "where": "database, Merit.Application, Merit.Web, tests",
+      "status": "Done",
+      "started": "2026-10-25",
+      "finished": "2026-10-25",
+      "notes": "Migration 060 (profile->role rename, tenant types, policy v2), RLS write predicates, uspCreateSessionScope v2 (profiles, view-as, acting tenant), scoped admin procs, uspSaveMyProfile/ListMyProfiles/ListViewAsUsers/FindUserForGrant, platform tenant + first platform admin (deploy param), /account/profiles UI, admin UI home tenant/access level/view-as; AuthorizationScenarioTests (10) on EPA Region 3; all 108 .NET + 24 e2e tests pass"
+    },
+    {
+      "id": "T161",
+      "phase": "10 Access model",
+      "task": "User guide (PDF): who sees what, profiles and switching, with mock-up screens (EPA Region 3 example)",
+      "ref": "Request 2026-10-25",
+      "where": "docs",
+      "status": "Done",
+      "started": "2026-10-25",
+      "finished": "2026-10-25",
+      "notes": "docs/MERIT User Guide - Access and Profiles.pdf (12 pages; source docs/guides/access-guide.html)"
+    }
+  ]
+}

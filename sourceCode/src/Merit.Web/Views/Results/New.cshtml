@@ -1,0 +1,10 @@
+@model ResultFormModel
+@{
+    ViewData["Title"] = "Enter a result";
+}
+<p><a class="usa-link" href="/people/@Model.PersonId">Back to @Model.PersonName</a></p>
+<h1>Enter a result for @Model.PersonName</h1>
+<p class="merit-meta">For fax and paper reports. Fields follow the analyte you choose; on save MERIT shows the canonical value and whether any threshold was crossed.</p>
+<div id="result-entry">
+    <partial name="_ResultForm" model="Model" />
+</div>

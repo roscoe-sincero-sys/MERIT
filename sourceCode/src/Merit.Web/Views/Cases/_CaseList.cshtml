@@ -1,0 +1,35 @@
+@model CaseListModel
+<div id="case-list-body">
+    <p class="merit-meta">@Model.TotalCount case(s)</p>
+    @if (Model.Rows.Count == 0)
+    {
+        <p class="merit-empty">No cases match.</p>
+    }
+    else
+    {
+        <div class="merit-table-wrap" tabindex="0" role="region" aria-label="Table; scroll sideways for more columns">
+            <table class="usa-table usa-table--borderless">
+                <thead><tr><th scope="col">Case</th><th scope="col">Person</th><th scope="col">Analyte</th><th scope="col">Classification</th><th scope="col">Status</th><th scope="col">Opened</th><th scope="col">Assigned</th><th scope="col">Owner</th></tr></thead>
+                <tbody>
+                    @foreach (var c in Model.Rows)
+                    {
+                        <tr id="case-@c.ExposureCaseId">
+                            <td><a class="usa-link" href="/cases/@c.ExposureCaseId">@c.CaseNumber</a></td>
+                            <td><a class="usa-link" href="/people/@c.PersonId">@c.LastName, @c.FirstName</a></td>
+                            <td>@c.AnalyteCode</td>
+                            <td><span class="merit-badge merit-badge--@c.Classification">@Options.Humanize(c.Classification)</span> <span class="merit-badge merit-badge--@c.Population">@Options.Population(c.Population)</span></td>
+                            <td>@Options.Humanize(c.CaseStatus)</td>
+                            <td>@Options.Date(c.OpenedDate)</td>
+                            <td>@c.AssignedToName</td>
+                            <td>@c.OwningTenantName</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        <nav class="merit-form-row" aria-label="Pages">
+            @if (Model.PageNumber > 1) { <a class="usa-link" href="/cases?page=@(Model.PageNumber - 1)&openOnly=@Model.OpenOnly&mine=@Model.AssignedToMe">Previous page</a> }
+            @if (Model.PageNumber * 25 < Model.TotalCount) { <a class="usa-link" href="/cases?page=@(Model.PageNumber + 1)&openOnly=@Model.OpenOnly&mine=@Model.AssignedToMe">Next page</a> }
+        </nav>
+    }
+</div>

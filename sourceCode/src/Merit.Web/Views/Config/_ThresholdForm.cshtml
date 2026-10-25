@@ -1,0 +1,45 @@
+@model ThresholdFormModel
+<div id="threshold-form">
+    @if (!ViewData.ModelState.IsValid)
+    {
+        <div class="usa-alert usa-alert--error usa-alert--slim" role="alert"><div class="usa-alert__body"><p class="usa-alert__text">@string.Join(" ", ViewData.ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage))</p></div></div>
+    }
+    <form class="usa-form usa-form--large" hx-post="/config/thresholds" hx-target="#threshold-form" hx-swap="outerHTML">
+        <input type="hidden" name="ThresholdId" value="@Model.ThresholdId" />
+        <input type="hidden" name="RowVersion" value="@Model.RowVersion" />
+        <div class="usa-form-group"><label class="usa-label" for="AnalyteSpecimenId">Analyte and specimen</label>
+            <select class="usa-select" id="AnalyteSpecimenId" name="AnalyteSpecimenId">@foreach (var o in Model.Specimens) { <option value="@o.Value" selected="@o.Selected">@o.Label</option> }</select></div>
+        <div class="merit-form-row">
+            <div class="usa-form-group"><label class="usa-label" for="Population">Population</label>
+                <select class="usa-select" id="Population" name="Population">@foreach (var o in Options.Fixed(Model.Population, Options.Populations)) { <option value="@o.Value" selected="@o.Selected">@o.Label</option> }</select></div>
+            <div class="usa-form-group"><label class="usa-label" for="ThresholdType">Type</label>
+                <select class="usa-select" id="ThresholdType" name="ThresholdType">@foreach (var o in Options.Fixed(Model.ThresholdType, Options.ThresholdTypes)) { <option value="@o.Value" selected="@o.Selected">@o.Label</option> }</select></div>
+            <div class="usa-form-group"><label class="usa-label" for="Comparator">Comparator</label>
+                <select class="usa-select" id="Comparator" name="Comparator"><option value=">=" selected="@(Model.Comparator == ">=")">&ge;</option><option value=">" selected="@(Model.Comparator == ">")">&gt;</option></select></div>
+        </div>
+        <div class="merit-form-row">
+            <div class="usa-form-group"><label class="usa-label" for="LowerValue">Level (canonical unit)</label><input class="usa-input" id="LowerValue" name="LowerValue" value="@Model.LowerValue" inputmode="decimal" required /></div>
+            <div class="usa-form-group"><label class="usa-label" for="UpperValue">Upper bound for a tier (optional, exclusive)</label><input class="usa-input" id="UpperValue" name="UpperValue" value="@Model.UpperValue" inputmode="decimal" /></div>
+        </div>
+        <div class="merit-form-row">
+            <div class="usa-form-group"><label class="usa-label" for="SampleType">Sample type</label>
+                <select class="usa-select" id="SampleType" name="SampleType"><option value="">Any</option><option value="venous" selected="@(Model.SampleType == "venous")">Venous</option><option value="capillary" selected="@(Model.SampleType == "capillary")">Capillary</option></select></div>
+            <div class="usa-form-group"><label class="usa-label" for="Speciation">Speciation</label><input class="usa-input" id="Speciation" name="Speciation" value="@Model.Speciation" /></div>
+            <div class="usa-form-group"><label class="usa-label" for="AgeMinMonths">Age from (months)</label><input class="usa-input usa-input--small" id="AgeMinMonths" name="AgeMinMonths" value="@Model.AgeMinMonths" /></div>
+            <div class="usa-form-group"><label class="usa-label" for="AgeMaxMonths">Age below (months)</label><input class="usa-input usa-input--small" id="AgeMaxMonths" name="AgeMaxMonths" value="@Model.AgeMaxMonths" /></div>
+        </div>
+        <div class="merit-form-row">
+            <div class="usa-form-group"><label class="usa-label" for="ActionCodeId">Action it triggers</label>
+                <select class="usa-select" id="ActionCodeId" name="ActionCodeId">@foreach (var o in Model.ActionCodes) { <option value="@o.Value" selected="@o.Selected">@o.Label</option> }</select></div>
+            <div class="usa-form-group"><label class="usa-label" for="DueIntervalDays">Due within (days)</label><input class="usa-input usa-input--small" id="DueIntervalDays" name="DueIntervalDays" value="@Model.DueIntervalDays" /></div>
+        </div>
+        <div class="merit-form-row">
+            <div class="usa-form-group"><label class="usa-label" for="EffectiveFrom">Effective from</label><input class="usa-input" id="EffectiveFrom" name="EffectiveFrom" type="date" value="@Options.Iso(Model.EffectiveFrom)" required /></div>
+            <div class="usa-form-group"><label class="usa-label" for="EffectiveTo">Effective to</label><input class="usa-input" id="EffectiveTo" name="EffectiveTo" type="date" value="@Options.Iso(Model.EffectiveTo)" /></div>
+        </div>
+        <div class="usa-form-group"><label class="usa-label" for="Authority">Authority (regulation or guidance)</label><input class="usa-input" id="Authority" name="Authority" value="@Model.Authority" /></div>
+        <div class="usa-checkbox"><input class="usa-checkbox__input" id="IsActive" type="checkbox" name="IsActive" value="true" @(Model.IsActive ? "checked" : "") /><label class="usa-checkbox__label" for="IsActive">Active</label></div>
+        <input type="hidden" name="IsActive" value="false" />
+        <button class="usa-button" type="submit">Save level</button>
+    </form>
+</div>

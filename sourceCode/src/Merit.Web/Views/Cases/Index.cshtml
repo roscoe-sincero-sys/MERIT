@@ -1,0 +1,13 @@
+@model CaseListModel
+@{
+    ViewData["Title"] = "Cases";
+}
+<h1>Cases</h1>
+<form class="usa-form merit-form-row" method="get" action="/cases" hx-get="/cases" hx-target="#case-list" hx-swap="innerMorph" hx-trigger="change" hx-push-url="true">
+    <div class="usa-checkbox"><input class="usa-checkbox__input" id="openOnly" type="checkbox" name="openOnly" value="true" @(Model.OpenOnly ? "checked" : "") /><label class="usa-checkbox__label" for="openOnly">Open only</label></div>
+    <input type="hidden" name="openOnly" value="false" />
+    <div class="usa-checkbox"><input class="usa-checkbox__input" id="mine" type="checkbox" name="mine" value="true" @(Model.AssignedToMe ? "checked" : "") /><label class="usa-checkbox__label" for="mine">Assigned to me</label></div>
+</form>
+<div id="case-list">
+    <partial name="_CaseList" model="Model" />
+</div>

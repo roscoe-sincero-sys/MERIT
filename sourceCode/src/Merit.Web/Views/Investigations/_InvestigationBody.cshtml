@@ -1,0 +1,118 @@
+@model InvestigationPageModel
+@{
+    var i = Model.Detail.Investigation;
+    string target = i.InvestigationType switch
+    {
+        "workplace" => $"{i.OrganizationName} {(i.WorksiteAddress is null ? "" : "- " + i.WorksiteAddress + ", " + i.WorksiteCity)}",
+        _ when i.ExposureSourceId is not null && i.LocationId is null => $"{Options.Humanize(i.SourceType)}: {i.SourceDescription}",
+        _ => $"{i.AddressLine1} {i.Unit}, {i.City}, {i.State} {i.Zip5}",
+    };
+}
+<div id="investigation-body">
+    <div class="merit-page-header">
+        <h1>Investigation @i.InvestigationNumber</h1>
+        <span class="merit-badge">@Options.Humanize(i.InvestigationStatus)</span>
+    </div>
+    @if (!ViewData.ModelState.IsValid)
+    {
+        <div class="usa-alert usa-alert--error usa-alert--slim" role="alert"><div class="usa-alert__body"><p class="usa-alert__text">@string.Join(" ", ViewData.ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage))</p></div></div>
+    }
+    <p><strong>@Options.Humanize(i.InvestigationType)</strong> &middot; @target
+        @if (i.YearBuilt is int y && y < 1978) { <span class="merit-badge merit-badge--suspect">Built @y (pre-1978)</span> }
+        &middot; <span class="merit-meta">@i.OwningTenantName</span></p>
+
+    <div class="merit-grid-2">
+        <section class="merit-section" aria-labelledby="inv-cases">
+            <h2 id="inv-cases">Cases served</h2>
+            @if (Model.Detail.Cases.Count == 0) { <p class="merit-empty">Started from a place or cluster; no case linked.</p> }
+            else
+            {
+                <ul class="usa-list">
+                    @foreach (var c in Model.Detail.Cases)
+                    {
+                        <li>@if (c.ExposureCaseId is Guid cid) { <a class="usa-link" href="/cases/@cid">@c.CaseNumber</a> }
+                            @c.LastName, @c.FirstName &middot; @c.AnalyteCode @Options.Humanize(c.Classification) @(c.JobTitle is null ? "" : "· " + c.JobTitle)</li>
+                    }
+                </ul>
+            }
+        </section>
+        <section class="merit-section" aria-labelledby="inv-details">
+            <h2 id="inv-details">Status and findings</h2>
+            @if (Model.CanEdit)
+            {
+                <form class="usa-form" hx-post="/investigations/@i.InvestigationId" hx-target="#investigation-body" hx-swap="outerHTML">
+                    <input type="hidden" name="rowVersion" value="@Options.Hex(i.RowVersion)" />
+                    <div class="merit-form-row">
+                        <div class="usa-form-group"><label class="usa-label" for="investigationStatus">Status</label>
+                            <select class="usa-select" id="investigationStatus" name="investigationStatus">@foreach (var o in Model.Statuses) { <option value="@o.Value" selected="@o.Selected">@o.Label</option> }</select></div>
+                        <div class="usa-form-group"><label class="usa-label" for="assignedToUserId">Investigator</label>
+                            <select class="usa-select" id="assignedToUserId" name="assignedToUserId">@foreach (var o in Model.Users) { <option value="@o.Value" selected="@o.Selected">@o.Label</option> }</select></div>
+                    </div>
+                    <div class="merit-form-row">
+                        <div class="usa-form-group"><label class="usa-label">Requested</label><p>@Options.Date(i.RequestedDate)</p></div>
+                        <div class="usa-form-group"><label class="usa-label" for="scheduledDate">Scheduled</label><input class="usa-input" id="scheduledDate" name="scheduledDate" type="date" value="@Options.Iso(i.ScheduledDate)" /></div>
+                        <div class="usa-form-group"><label class="usa-label" for="completedDate">Completed</label><input class="usa-input" id="completedDate" name="completedDate" type="date" value="@Options.Iso(i.CompletedDate)" /></div>
+                    </div>
+                    <div class="usa-form-group"><label class="usa-label" for="findings">Findings</label><textarea class="usa-textarea" id="findings" name="findings" rows="3">@i.Findings</textarea></div>
+                    <div class="merit-form-row">
+                        <div class="usa-form-group"><label class="usa-label" for="regulatoryAction">Regulatory action</label>
+                            <select class="usa-select" id="regulatoryAction" name="regulatoryAction">@foreach (var o in Model.RegulatoryActions) { <option value="@o.Value" selected="@o.Selected">@o.Label</option> }</select></div>
+                        <div class="usa-form-group"><label class="usa-label" for="referralDate">Referral date</label><input class="usa-input" id="referralDate" name="referralDate" type="date" value="@Options.Iso(i.ReferralDate)" /></div>
+                    </div>
+                    <div class="usa-form-group"><label class="usa-label" for="referralOutcome">Referral outcome</label><input class="usa-input" id="referralOutcome" name="referralOutcome" value="@i.ReferralOutcome" /></div>
+                    <button class="usa-button" type="submit">Save</button>
+                </form>
+            }
+            else
+            {
+                <p>@i.Findings</p>
+            }
+        </section>
+    </div>
+
+    <section class="merit-section" aria-labelledby="inv-samples">
+        <h2 id="inv-samples">Environmental samples</h2>
+        <p class="merit-meta">Exceedance is computed from the environmental standard in force on the sample date, never typed.</p>
+        @if (Model.Detail.Samples.Count == 0) { <p class="merit-empty">No samples recorded.</p> }
+        else
+        {
+            <div class="merit-table-wrap" tabindex="0" role="region" aria-label="Table; scroll sideways for more columns">
+                <table class="usa-table usa-table--borderless usa-table--compact">
+                    <thead><tr><th scope="col">Date</th><th scope="col">Type</th><th scope="col">Room or component</th><th scope="col">Surface</th><th scope="col">Value</th><th scope="col">Standard</th><th scope="col">Result</th></tr></thead>
+                    <tbody>
+                        @foreach (var s in Model.Detail.Samples)
+                        {
+                            <tr>
+                                <td>@Options.Date(s.SampleDate)</td><td>@Options.Humanize(s.SampleType)</td><td>@s.RoomOrComponent</td><td>@Options.Humanize(s.Surface)</td>
+                                <td>@s.SampleValue.ToString("0.###") @s.Unit</td>
+                                <td>@(s.StandardValue is null ? "none" : $"{s.StandardValue:0.###} {s.StandardUnit}")<div class="merit-meta">@s.Authority</div></td>
+                                <td>@(s.ExceedsStandard switch { true => "Exceeds", false => "Below", _ => "n/a" })
+                                    @if (s.ExceedsStandard == true) { <span class="merit-badge merit-badge--urgent">Hazard</span> }</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+        @if (Model.CanEdit)
+        {
+            <form class="usa-form merit-inline-form" hx-post="/investigations/@i.InvestigationId/samples" hx-target="#investigation-body" hx-swap="outerHTML">
+                <div class="merit-form-row">
+                    <div class="usa-form-group"><label class="usa-label" for="sampleType">Sample type</label>
+                        <select class="usa-select" id="sampleType" name="sampleType">@foreach (var o in Model.SampleTypes) { <option value="@o.Value" selected="@o.Selected">@o.Label</option> }</select></div>
+                    <div class="usa-form-group"><label class="usa-label" for="roomOrComponent">Room or component</label><input class="usa-input" id="roomOrComponent" name="roomOrComponent" /></div>
+                    <div class="usa-form-group"><label class="usa-label" for="surface">Surface</label>
+                        <select class="usa-select" id="surface" name="surface"><option value="">- None -</option><option value="floor">Floor</option><option value="windowSill">Window sill</option><option value="windowTrough">Window trough</option></select></div>
+                </div>
+                <div class="merit-form-row">
+                    <div class="usa-form-group"><label class="usa-label" for="sampleValue">Value</label><input class="usa-input" id="sampleValue" name="sampleValue" inputmode="decimal" required /></div>
+                    <div class="usa-form-group"><label class="usa-label" for="unit">Unit</label>
+                        <select class="usa-select" id="unit" name="unit"><option value="ug/ft2">ug/ft2</option><option value="mg/cm2">mg/cm2</option><option value="ppm">ppm</option><option value="ug/L">ug/L</option></select></div>
+                    <div class="usa-form-group"><label class="usa-label" for="sampleDate">Sample date</label><input class="usa-input" id="sampleDate" name="sampleDate" type="date" value="@Options.Iso(DateOnly.FromDateTime(DateTime.UtcNow))" required /></div>
+                </div>
+                <div class="usa-form-group"><label class="usa-label" for="notes">Notes</label><input class="usa-input" id="notes" name="notes" /></div>
+                <button class="usa-button usa-button--outline" type="submit">Add sample</button>
+            </form>
+        }
+    </section>
+</div>

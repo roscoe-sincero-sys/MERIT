@@ -1,0 +1,24 @@
+@model SourceFormModel
+<div class="merit-inline-form" id="source-form-body">
+    <h3>Add an exposure source</h3>
+    <form class="usa-form" hx-post="/people/@Model.PersonId/sources" hx-target="#section-sources" hx-swap="outerHTML"
+          hx-status:422="target:#source-form-body swap:outerHTML">
+        <div class="merit-form-row">
+            <div class="usa-form-group"><label class="usa-label" for="SourceType">Source type</label>
+                <select class="usa-select" id="SourceType" name="SourceType">@foreach (var o in Model.SourceTypes) { <option value="@o.Value" selected="@o.Selected">@o.Label</option> }</select></div>
+            <div class="usa-form-group"><label class="usa-label" for="StartDate">Since</label><input class="usa-input" id="StartDate" name="StartDate" type="date" value="@Options.Iso(Model.StartDate)" /></div>
+        </div>
+        <div class="usa-form-group"><label class="usa-label" for="Description">Description (product, brand, country of origin; sent as the ABLES Process narrative)</label>
+            <textarea class="usa-textarea" id="Description" name="Description" rows="2">@Model.Description</textarea></div>
+        <fieldset class="usa-fieldset"><legend class="usa-legend">Product (for the product registry)</legend>
+            <div class="merit-form-row">
+                <div class="usa-form-group"><label class="usa-label" for="ProductName">Product name</label><input class="usa-input" id="ProductName" name="ProductName" value="@Model.ProductName" /></div>
+                <div class="usa-form-group"><label class="usa-label" for="ProductBrand">Brand</label><input class="usa-input" id="ProductBrand" name="ProductBrand" value="@Model.ProductBrand" /></div>
+                <div class="usa-form-group"><label class="usa-label" for="ProductCountry">Country (2 letters)</label><input class="usa-input usa-input--small" id="ProductCountry" name="ProductCountry" value="@Model.ProductCountry" maxlength="2" /></div>
+            </div>
+        </fieldset>
+        <div class="usa-checkbox"><input class="usa-checkbox__input" id="IsConfirmed" type="checkbox" name="IsConfirmed" value="true" /><label class="usa-checkbox__label" for="IsConfirmed">Confirmed by a sample</label></div>
+        <button class="usa-button" type="submit">Save source</button>
+        <button class="usa-button usa-button--unstyled" type="button" data-clear-target="#sources-form">Cancel</button>
+    </form>
+</div>

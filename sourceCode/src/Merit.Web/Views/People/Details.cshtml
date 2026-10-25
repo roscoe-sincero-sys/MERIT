@@ -1,0 +1,41 @@
+@model PersonPageModel
+@{
+    ViewData["Title"] = Model.FullName;
+}
+<partial name="_Header" model="Model" />
+
+@* Sections in the order the person's population gives them; every section stays visible with an empty state. *@
+@foreach (var s in Model.Sections)
+{
+    switch (s.Key)
+    {
+        case "relationships":
+            <partial name="_Relationships" model="Model.Relationships" />
+            break;
+        case "places":
+            <partial name="_Places" model="Model.Places" />
+            break;
+        case "results":
+            <partial name="_Results" model="Model.Results" />
+            break;
+        case "cases":
+            <partial name="_Cases" model="Model.Cases" />
+            break;
+        case "employment":
+            <partial name="_Employment" model="Model.Employment" />
+            break;
+        case "sources":
+            <partial name="_Sources" model="Model.Sources" />
+            break;
+        case "pregnancy":
+            <partial name="_Pregnancy" model="Model.Pregnancy" />
+            break;
+        case "timeline":
+            <section class="merit-section" id="section-timeline" aria-labelledby="timeline-heading">
+                <h2 id="timeline-heading">Timeline</h2>
+                <p>Results, address changes, job changes and case events on one time axis.
+                    <a class="usa-link" href="/app/people/@Model.Person.PersonId/timeline">Open the interactive timeline</a>.</p>
+            </section>
+            break;
+    }
+}

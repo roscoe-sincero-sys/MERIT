@@ -1,0 +1,37 @@
+# .NET build output
+bin/
+obj/
+*.user
+*.suo
+.vs/
+TestResults/
+
+# ASP.NET Core data-protection keys (real key material; generated per machine)
+**/App_Data/keys/
+
+# Angular: dependencies and build output (rebuilt by the BuildAngularClient MSBuild target)
+node_modules/
+sourceCode/src/Merit.Web/wwwroot/app/
+.angular/
+
+# Playwright end-to-end output and saved sign-in sessions
+sourceCode/tests/e2e/test-results/
+sourceCode/tests/e2e/playwright-report/
+sourceCode/tests/e2e/.auth/
+
+# Python caches
+__pycache__/
+*.pyc
+
+# Archify: keep the diagram candidates, not the per-run receipts and browser evidence
+.archify/**/*
+!.archify/**/
+!.archify/**/candidate.json
+
+# Claude Code local-only settings
+.claude/settings.local.json
+
+# OS and editor noise
+Thumbs.db
+.DS_Store
+*.swp

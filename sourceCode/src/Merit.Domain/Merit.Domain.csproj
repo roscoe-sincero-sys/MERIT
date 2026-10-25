@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Domain models and rules. References nothing (architecture rule 6). -->
+  <PropertyGroup>
+    <RootNamespace>Merit.Domain</RootNamespace>
+  </PropertyGroup>
+</Project>

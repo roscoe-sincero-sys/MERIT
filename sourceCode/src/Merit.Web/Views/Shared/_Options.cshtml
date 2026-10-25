@@ -1,0 +1,14 @@
+@model LookupOptionsModel
+@* The listbox of a server-side type-ahead (ARIA combobox pattern; keyboard handling in merit.js). *@
+@for (int i = 0; i < Model.Options.Count; i++)
+{
+    var o = Model.Options[i];
+    <li role="option" id="@(Model.FieldId)-opt-@i" aria-selected="false" data-value="@o.Id" data-label="@o.Label">
+        @o.Label
+        @if (!string.IsNullOrEmpty(o.Detail)) { <small>@o.Detail</small> }
+    </li>
+}
+@if (Model.Options.Count == 0)
+{
+    <li class="merit-empty" aria-disabled="true">No matches</li>
+}

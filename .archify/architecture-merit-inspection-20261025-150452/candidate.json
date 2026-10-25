@@ -1,0 +1,59 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "MERIT codebase inspection: project references and runtime paths",
+    "output": "docs/codebase_inspection.html",
+    "quality_profile": "showcase",
+    "legend": {
+      "entries": {
+        "external": { "label": "Caller outside the solution" },
+        "frontend": { "label": "Host process (entry point)" },
+        "cloud": { "label": "Shared contracts assembly" },
+        "backend": { "label": "Application assembly" },
+        "messagebus": { "label": "Domain assembly" },
+        "database": { "label": "Persistence (assembly, database, queue table)" }
+      }
+    },
+    "views": [
+      { "id": "view-refs", "label": "Project references only", "focus": ["web", "worker", "contracts", "application", "domain", "data"], "note": "Seven ProjectReference edges from the .csproj files; Domain and Contracts reference no other project." },
+      { "id": "view-sync", "label": "Synchronous web traffic", "focus": ["browser", "web", "application", "data", "sqlserver"], "note": "One HTTP request: controller, Application service, Data repository, stored procedure, response, all inside the request." },
+      { "id": "view-async", "label": "Asynchronous background work", "focus": ["worker", "jobqueue", "application", "data"], "note": "Web enqueues a job row; JobWorker polls, claims it with READPAST, rebuilds the user's session scope and runs JobDispatcher." }
+    ]
+  },
+  "components": [
+    { "id": "browser", "type": "external", "label": "Browser", "sublabel": "htmx + Angular client", "pos": [40, 64], "size": [150, 64] },
+    { "id": "web", "type": "frontend", "label": "Merit.Web", "sublabel": "Controllers, Api, Infrastructure", "tag": "ASP.NET Core 9 host", "pos": [250, 56], "size": [210, 80] },
+    { "id": "contracts", "type": "cloud", "label": "Merit.Contracts", "sublabel": "ApiContracts: DTO records", "tag": "0 references", "pos": [620, 60], "size": [210, 72] },
+    { "id": "application", "type": "backend", "label": "Merit.Application", "sublabel": "Services, Data ports, Jobs", "tag": "refs Domain", "pos": [620, 252], "size": [210, 80] },
+    { "id": "domain", "type": "messagebus", "label": "Merit.Domain", "sublabel": "Classification, Matching", "tag": "0 references", "pos": [930, 252], "size": [200, 80] },
+    { "id": "worker", "type": "frontend", "label": "Merit.Worker", "sublabel": "JobWorker, ClusterScheduler", "tag": "generic host", "pos": [930, 452], "size": [210, 80] },
+    { "id": "data", "type": "database", "label": "Merit.Data.SqlServer", "sublabel": "Db + 6 repository classes", "tag": "Dapper, SqlClient", "pos": [620, 452], "size": [210, 80] },
+    { "id": "sqlserver", "type": "database", "label": "MERIT database", "sublabel": "stored procedures + RLS", "pos": [520, 652], "size": [200, 72] },
+    { "id": "jobqueue", "type": "database", "label": "dbo.jobQueue", "sublabel": "queued, claimed, done", "pos": [780, 652], "size": [190, 72] }
+  ],
+  "boundaries": [
+    { "kind": "region", "label": "Merit.sln (6 projects, net9.0)", "wraps": ["web", "contracts", "application", "domain", "worker", "data"] },
+    { "kind": "security-group", "label": "SQL Server 2022: EXECUTE-only logins", "wraps": ["sqlserver", "jobqueue"] }
+  ],
+  "connections": [
+    { "id": "http-request", "from": "browser", "to": "web", "label": "sync HTTPS", "variant": "emphasis" },
+    { "id": "ref-web-contracts", "from": "web", "to": "contracts", "label": "ProjectReference" },
+    { "id": "ref-web-app", "from": "web", "to": "application", "label": "ProjectReference", "variant": "emphasis" },
+    { "id": "ref-web-data", "from": "web", "to": "data", "label": "ProjectReference (DI)" },
+    { "id": "ref-app-domain", "from": "application", "to": "domain", "label": "references", "variant": "emphasis" },
+    { "id": "ref-data-app", "from": "data", "to": "application", "label": "ProjectReference" },
+    { "id": "ref-worker-app", "from": "worker", "to": "application", "label": "ProjectReference", "variant": "dashed" },
+    { "id": "ref-worker-data", "from": "worker", "to": "data", "label": "ProjectReference (DI)", "variant": "dashed" },
+    { "id": "sql-calls", "from": "data", "to": "sqlserver", "label": "EXEC procedures" },
+    { "id": "queue-claim", "from": "data", "to": "jobqueue", "label": "enqueue / claim", "variant": "dashed" }
+  ],
+  "cards": [
+    { "dot": "cyan", "title": "Merit.Web (src/Merit.Web/Program.cs)", "items": ["Namespaces: Merit.Web.Controllers, .Controllers.Api, .Infrastructure, .Mapping, .Models", "Cookie auth with TOTP MFA, a permission policy per action, antiforgery, CSP nonce, rate limiting", "Hosts the Angular build under /app/ and the JSON API under /api/v1", "Synchronous: every database call happens inside the HTTP request that caused it"] },
+    { "dot": "orange", "title": "Merit.Worker (src/Merit.Worker/JobWorker.cs)", "items": ["JobWorker: poll, uspClaimNextJob (UPDLOCK, READPAST), rebuild the requesting user's session scope, JobDispatcher.RunAsync", "ClusterScheduler runs clusterDetection on an interval; QueueHealthCheck reports /health/queues", "Asynchronous: work is decoupled from the request that queued it"] },
+    { "dot": "emerald", "title": "Merit.Application", "items": ["Ports: IAccountData, IConfigData, IPersonData, IPlaceData, IResultData, ICaseData, IWorkData, IIntakeData, IExtractData, IReviewData, ICurrentSession", "Services: Account, Admin, Audit, Case, Classification, Cluster, Config, Extract, Intake, Investigation, Lookup, MatchReview, Person, Place, Profile, Queue, Report, Result, Search", "IntakeProcessor, ExtractBuilder, JobDispatcher; packages: Microsoft.Extensions abstractions only"] },
+    { "dot": "violet", "title": "Merit.Domain", "items": ["Namespaces: Classification, Extracts, Identifiers, Ids, Matching, Population, Residence, Results, Text, Thresholds", "CaseClassifier, MatchComparer, PrimaryResidencePlanner, ResultNormalizer, ThresholdEvaluator, TimeOrderedId", "No project or package references"] },
+    { "dot": "amber", "title": "Merit.Data.SqlServer and the database", "items": ["Db opens a connection, sets read-only SESSION_CONTEXT (scopeKey, appUserId, actingTenantId) and runs stored procedures", "Repositories: AccountAndConfigData, PersonAndPlaceData, ResultAndCaseData, WorkIntakeExtractData, ReviewData", "Web enqueues jobs (for example uspCreateIntakeBatch) and Worker claims them, so the queue table is the only hand-off between the two processes"] },
+    { "dot": "slate", "title": "Merit.Contracts", "items": ["ApiContracts.cs: request and response records for /api/v1 (PagedResult, WorkTaskDto, MatchReviewDto, ReportDto ...)", "No references; used only by Merit.Web, mirrored by the Angular contracts.ts"] }
+  ]
+}

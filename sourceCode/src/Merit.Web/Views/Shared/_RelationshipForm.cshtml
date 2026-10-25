@@ -1,0 +1,36 @@
+@model RelationshipFormModel
+<div class="merit-inline-form" id="relationship-form-body">
+    <h3>Add a relationship</h3>
+    @if (!ViewData.ModelState.IsValid)
+    {
+        <div class="usa-alert usa-alert--error usa-alert--slim" role="alert"><div class="usa-alert__body"><p class="usa-alert__text">@string.Join(" ", ViewData.ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage))</p></div></div>
+    }
+    <form class="usa-form" hx-post="/people/@Model.PersonId/relationships" hx-target="#section-relationships" hx-swap="outerHTML"
+          hx-status:422="target:#relationship-form-body swap:outerHTML">
+        <partial name="_Combobox" model='("RelatedPersonId", "RelatedPersonId", "Existing person", "/lookup/people", Model.RelatedPersonId?.ToString(), Model.RelatedPersonLabel, (string?)"Type a last name to pick someone already in the registry, or enter a new contact-only person below.")' />
+        <fieldset class="usa-fieldset">
+            <legend class="usa-legend">Or a new contact-only person</legend>
+            <div class="merit-form-row">
+                <div class="usa-form-group"><label class="usa-label" for="NewLastName">Last name</label><input class="usa-input" id="NewLastName" name="NewLastName" value="@Model.NewLastName" /></div>
+                <div class="usa-form-group"><label class="usa-label" for="NewFirstName">First name</label><input class="usa-input" id="NewFirstName" name="NewFirstName" value="@Model.NewFirstName" /></div>
+                <div class="usa-form-group"><label class="usa-label" for="NewDob">Date of birth</label><input class="usa-input" id="NewDob" name="NewDob" type="date" value="@Options.Iso(Model.NewDob)" /></div>
+            </div>
+        </fieldset>
+        <div class="merit-form-row">
+            <div class="usa-form-group">
+                <label class="usa-label" for="Role">The other person is this person's</label>
+                <select class="usa-select" id="Role" name="Role">@foreach (var o in Model.Roles) { <option value="@o.Value" selected="@o.Selected">@o.Label</option> }</select>
+            </div>
+            <div class="usa-form-group">
+                <label class="usa-label" for="Source">Source</label>
+                <select class="usa-select" id="Source" name="Source">
+                    <option value="interview">Interview</option><option value="caseManager">Case manager</option><option value="labReport">Lab report</option><option value="otherAgency">Other agency</option>
+                </select>
+            </div>
+        </div>
+        <div class="usa-checkbox"><input class="usa-checkbox__input" id="IsPrimaryContact" type="checkbox" name="IsPrimaryContact" value="true" @(Model.IsPrimaryContact ? "checked" : "") /><label class="usa-checkbox__label" for="IsPrimaryContact">Primary contact</label></div>
+        <div class="usa-checkbox"><input class="usa-checkbox__input" id="HasLegalCustody" type="checkbox" name="HasLegalCustody" value="true" @(Model.HasLegalCustody ? "checked" : "") /><label class="usa-checkbox__label" for="HasLegalCustody">Has legal custody</label></div>
+        <button class="usa-button" type="submit">Add relationship</button>
+        <button class="usa-button usa-button--unstyled" type="button" data-clear-target="#relationships-form">Cancel</button>
+    </form>
+</div>

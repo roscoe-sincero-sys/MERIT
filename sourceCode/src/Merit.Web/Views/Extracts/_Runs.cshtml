@@ -1,0 +1,26 @@
+@model ExtractsModel
+@* Status cards poll this partial while a job runs. *@
+<div id="extract-runs" hx-get="/extracts" hx-trigger="@(Model.AnyRunning ? "every 3s" : "never")" hx-swap="outerHTML">
+    @if (Model.Runs.Count == 0)
+    {
+        <p class="merit-empty">No extracts generated yet.</p>
+    }
+    else
+    {
+        <div class="merit-grid-2">
+            @foreach (var r in Model.Runs)
+            {
+                <div class="usa-card__container" id="run-@r.ExtractRunId">
+                    <div class="usa-card__header"><h3 class="usa-card__heading">@r.ExtractType @Options.Date(r.PeriodStart) &ndash; @Options.Date(r.PeriodEnd)</h3></div>
+                    <div class="usa-card__body">
+                        <p><span class="merit-badge @(r.RunStatus == "ready" ? "merit-badge--ok" : r.RunStatus == "failed" ? "merit-badge--urgent" : "")">@Options.Humanize(r.RunStatus)</span>
+                            <span class="merit-meta">layout @r.LayoutVersion &middot; @r.RequestedBy &middot; @Options.Date(r.CreatedDateUtc)</span></p>
+                        @if (r.RecordCount is not null) { <p>@r.RecordCount record(s) &middot; @r.ErrorCount validation finding(s)</p> }
+                        @if (r.LastError is not null && r.RunStatus != "ready") { <p class="merit-meta">@r.LastError</p> }
+                        @if (r.RunStatus == "ready") { <a class="usa-button usa-button--outline" href="/extracts/@r.ExtractRunId/download">Download @r.FileName</a> }
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>

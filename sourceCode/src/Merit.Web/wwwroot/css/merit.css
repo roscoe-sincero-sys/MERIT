@@ -1,0 +1,119 @@
+/* MERIT additions to USWDS 3 (USWDS JavaScript is not loaded; these rules cover what its JS would otherwise do). */
+
+:root {
+    --merit-primary: #1a4480;
+    --merit-urgent: #b50909;
+    --merit-ok: #00a91c;
+    --merit-warn: #ffbe2e;
+    --merit-ink: #1b1b1b;
+    --merit-muted: #565c65;
+    --merit-line: #dfe1e2;
+    --merit-bg-soft: #f0f0f0;
+}
+
+body { background: #fff; color: var(--merit-ink); }
+
+.merit-skip { position: absolute; left: -999em; }
+.merit-skip:focus { left: 1rem; top: 1rem; z-index: 1000; background: #fff; padding: .5rem 1rem; }
+
+/* ---------------------------------------------------------------------------------------------- header and nav */
+.merit-header { background: var(--merit-primary); color: #fff; }
+.merit-header__inner { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem 1.5rem; padding: .75rem 1rem; max-width: 80rem; margin: 0 auto; }
+.merit-header a { color: #fff; }
+.merit-brand { font-weight: 700; font-size: 1.35rem; text-decoration: none; letter-spacing: .02em; }
+.merit-brand small { display: block; font-weight: 400; font-size: .8rem; opacity: .85; }
+.merit-nav { display: flex; flex-wrap: wrap; gap: .25rem 1rem; list-style: none; margin: 0; padding: 0; }
+.merit-nav a { text-decoration: none; padding: .25rem 0; border-bottom: 2px solid transparent; }
+.merit-nav a:hover, .merit-nav a:focus, .merit-nav a[aria-current="page"] { border-bottom-color: #fff; }
+.merit-header__search { margin-left: auto; display: flex; gap: .25rem; }
+.merit-header__search input { min-width: 14rem; margin: 0; }
+.merit-header__user { font-size: .9rem; display: flex; align-items: center; gap: .75rem; }
+.merit-header__user form { margin: 0; }
+.merit-header .usa-button--unstyled { color: #fff; }
+
+main.merit-main { max-width: 80rem; margin: 0 auto; padding: 1rem 1rem 3rem; }
+.merit-footer { border-top: 1px solid var(--merit-line); color: var(--merit-muted); font-size: .85rem; padding: 1rem; text-align: center; }
+
+/* ---------------------------------------------------------------------------------------------- page parts */
+.merit-page-header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: .5rem 1rem; }
+.merit-section { border: 1px solid var(--merit-line); border-radius: .25rem; padding: 1rem; margin-top: 1.25rem; }
+.merit-section > h2 { margin-top: 0; font-size: 1.25rem; display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
+.merit-section__actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+.merit-empty { color: var(--merit-muted); font-style: italic; }
+.merit-meta { color: var(--merit-muted); font-size: .9rem; }
+.merit-grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr)); gap: 1rem; }
+.merit-inline-form { background: var(--merit-bg-soft); padding: 1rem; border-radius: .25rem; margin-top: .75rem; }
+.merit-inline-form .usa-form { max-width: none; }
+.merit-form-row { display: flex; flex-wrap: wrap; gap: 0 1rem; }
+.merit-form-row > .usa-form-group { flex: 1 1 12rem; margin-top: .75rem; }
+.merit-form-row .usa-input, .merit-form-row .usa-select, .merit-form-row .usa-textarea { max-width: none; }
+.usa-table { width: 100%; }
+.merit-table-wrap { overflow-x: auto; }
+
+/* ---------------------------------------------------------------------------------------------- tags and badges */
+.merit-badge { display: inline-block; padding: .1rem .5rem; border-radius: 1rem; font-size: .8rem; font-weight: 700; background: var(--merit-bg-soft); }
+.merit-badge--child { background: #d9e8f6; }
+.merit-badge--adult { background: #e1e7f1; }
+.merit-badge--pregnant { background: #f8dfe2; }
+.merit-badge--confirmed { background: #f4e3db; color: #6f3331; }
+.merit-badge--suspect { background: #faf3d1; color: #5c4809; }
+.merit-badge--urgent { background: var(--merit-urgent); color: #fff; }
+.merit-badge--ok { background: #ecf3ec; color: #154c21; }
+.merit-star { color: #c2850c; }
+
+/* ---------------------------------------------------------------------------------------------- dashboard tiles */
+.merit-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr)); gap: .75rem; list-style: none; padding: 0; }
+.merit-tile { display: block; border: 1px solid var(--merit-line); border-left: 6px solid var(--merit-primary); border-radius: .25rem; padding: .75rem; text-decoration: none; color: inherit; }
+.merit-tile:hover, .merit-tile:focus { background: var(--merit-bg-soft); }
+.merit-tile--urgent { border-left-color: var(--merit-urgent); }
+.merit-tile__count { font-size: 2rem; font-weight: 700; line-height: 1; }
+.merit-tile__label { display: block; margin-top: .25rem; }
+.merit-tile__detail { font-size: .85rem; color: var(--merit-muted); }
+
+/* ---------------------------------------------------------------------------------------------- dialog (native <dialog>) */
+dialog.merit-dialog { border: 0; border-radius: .5rem; padding: 0; width: min(44rem, calc(100vw - 2rem)); max-height: calc(100vh - 2rem); box-shadow: 0 8px 32px rgba(0,0,0,.3); }
+dialog.merit-dialog::backdrop { background: rgba(0,0,0,.5); }
+.merit-dialog__content { padding: 1.5rem; }
+.merit-dialog__close { position: absolute; right: .75rem; top: .5rem; }
+
+/* ---------------------------------------------------------------------------------------------- combobox */
+.merit-combobox { position: relative; }
+.merit-listbox { position: absolute; z-index: 20; left: 0; right: 0; margin: 0; padding: 0; list-style: none; background: #fff; border: 1px solid #565c65; max-height: 16rem; overflow-y: auto; }
+.merit-listbox:empty { display: none; }
+.merit-listbox [role=option] { padding: .5rem; cursor: pointer; }
+.merit-listbox [role=option][aria-selected=true], .merit-listbox [role=option]:hover { background: #d9e8f6; }
+.merit-listbox small { display: block; color: var(--merit-muted); }
+
+/* ---------------------------------------------------------------------------------------------- trend chart (server SVG) */
+.merit-chart { width: 100%; max-width: 48rem; height: auto; }
+.merit-chart .axis { stroke: #71767a; stroke-width: 1; }
+.merit-chart .grid { stroke: var(--merit-line); stroke-width: 1; }
+.merit-chart .level { stroke: var(--merit-urgent); stroke-width: 1.5; stroke-dasharray: 6 4; }
+.merit-chart .line { fill: none; stroke: var(--merit-primary); stroke-width: 2; }
+.merit-chart .venous { fill: var(--merit-primary); }
+.merit-chart .capillary { fill: #fff; stroke: var(--merit-primary); stroke-width: 2; }
+.merit-chart text { font-size: 11px; fill: #3d4551; }
+.merit-legend { display: flex; flex-wrap: wrap; gap: 1rem; font-size: .85rem; color: var(--merit-muted); }
+
+/* ---------------------------------------------------------------------------------------------- request indicator */
+.merit-indicator { font-size: .85rem; color: var(--merit-muted); }
+[aria-busy=true] { opacity: .75; transition: opacity 200ms ease-in 200ms; }
+
+/* ---------------------------------------------------------------------------------------------- tablet and phone */
+@media (max-width: 40em) {
+    .merit-header__search { margin-left: 0; width: 100%; }
+    .merit-header__search input { min-width: 0; flex: 1; }
+}
+
+@media print {
+    .merit-header, .merit-footer, .merit-section__actions, form button { display: none; }
+}
+.merit-mono { font-family: "Roboto Mono", monospace; }
+.merit-qr svg { width: 12rem; height: 12rem; }
+
+/* Profiles */
+.merit-header__profile { color: #fff; font-size: .85rem; text-decoration: underline; }
+.merit-viewas .usa-alert__body { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1rem; }
+.merit-grant-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: .25rem 1rem; align-items: end;
+                   border-bottom: 1px solid #dfe1e2; padding-bottom: .75rem; margin-bottom: .75rem; }
+.merit-grant-row .usa-select { max-width: none; }

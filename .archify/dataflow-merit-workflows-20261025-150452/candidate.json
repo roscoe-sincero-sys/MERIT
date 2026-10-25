@@ -1,0 +1,59 @@
+{
+  "schema_version": 1,
+  "diagram_type": "dataflow",
+  "meta": {
+    "title": "MERIT data flow: web request and background job pathways",
+    "output": "docs/data-flow_workflows.html",
+    "quality_profile": "showcase",
+    "legend": {
+      "entries": {
+        "emphasis": { "label": "Synchronous HTTP request pathway" },
+        "dashed": { "label": "Asynchronous background job pathway" },
+        "default": { "label": "Shared persistence step" }
+      }
+    },
+    "views": [
+      { "id": "view-web-contracts", "label": "Web to Contracts", "focus": ["web", "dto"], "note": "Controller checks its permission policy and antiforgery token; JSON binds into a Merit.Contracts record, never a domain type." },
+      { "id": "view-contracts-app", "label": "Contracts to Application", "focus": ["dto", "service"], "note": "Controller maps the DTO to one service call. The service validates input and calls session.Require(permission) again." },
+      { "id": "view-app-domain", "label": "Application to Domain", "focus": ["service", "rules-web", "dispatcher", "rules-job"], "note": "Services pass plain values to pure Domain rules (normalize, population, classify, match) and get decisions back. No I/O crosses." },
+      { "id": "view-domain-data", "label": "Domain to Data", "focus": ["rules-web", "rules-job", "data", "sqlserver"], "note": "Application saves the decision through an I*Data port; Data.SqlServer sets SESSION_CONTEXT and runs stored procedures under RLS." },
+      { "id": "view-worker", "label": "Worker to Application", "focus": ["worker", "claimed", "dispatcher"], "note": "JobWorker claims a queued row (READPAST), rebuilds the requesting user's session scope, then JobDispatcher runs the job by type." }
+    ]
+  },
+  "stages": [
+    { "label": "Entry point" },
+    { "label": "Message shape" },
+    { "label": "Use case (Application)" },
+    { "label": "Rules (Domain)" },
+    { "label": "Persistence (Data)" }
+  ],
+  "nodes": [
+    { "id": "web", "type": "frontend", "label": "Merit.Web", "sublabel": "controller action", "tag": "HTTP request", "stage": 0, "row": 0 },
+    { "id": "dto", "type": "cloud", "label": "Merit.Contracts", "sublabel": "request DTO", "tag": "record", "stage": 1, "row": 0 },
+    { "id": "service", "type": "backend", "label": "Application service", "sublabel": "e.g. ResultService", "tag": "validate + permit", "stage": 2, "row": 0 },
+    { "id": "rules-web", "type": "messagebus", "label": "Domain rules", "sublabel": "normalize, classify", "tag": "pure", "stage": 3, "row": 0 },
+    { "id": "data", "type": "database", "label": "Merit.Data.SqlServer", "sublabel": "Db + repositories", "tag": "Dapper", "stage": 4, "row": 1, "width": 140 },
+    { "id": "sqlserver", "type": "database", "label": "SQL Server", "sublabel": "procedures + RLS", "stage": 4, "row": 2 },
+    { "id": "worker", "type": "frontend", "label": "Merit.Worker", "sublabel": "JobWorker poll", "tag": "background", "stage": 0, "row": 3 },
+    { "id": "claimed", "type": "database", "label": "dbo.jobQueue row", "sublabel": "payloadJson", "tag": "claimed", "stage": 1, "row": 3 },
+    { "id": "dispatcher", "type": "backend", "label": "JobDispatcher", "sublabel": "IntakeProcessor ...", "tag": "by job type", "stage": 2, "row": 3 },
+    { "id": "rules-job", "type": "messagebus", "label": "Domain rules", "sublabel": "match, classify", "tag": "pure", "stage": 3, "row": 3 }
+  ],
+  "flows": [
+    { "id": "bind-dto", "from": "web", "to": "dto", "label": "binds JSON", "variant": "emphasis" },
+    { "id": "call-service", "from": "dto", "to": "service", "label": "mapped call", "variant": "emphasis" },
+    { "id": "apply-web-rules", "from": "service", "to": "rules-web", "label": "plain values", "variant": "emphasis" },
+    { "id": "persist-web", "from": "rules-web", "to": "data", "label": "decision to save", "variant": "emphasis" },
+    { "id": "run-procedures", "from": "data", "to": "sqlserver", "label": "EXEC procedure", "labelDy": 25 },
+    { "id": "claim-job", "from": "worker", "to": "claimed", "label": "claims job", "variant": "dashed" },
+    { "id": "dispatch-job", "from": "claimed", "to": "dispatcher", "label": "job type + payload", "variant": "dashed" },
+    { "id": "apply-job-rules", "from": "dispatcher", "to": "rules-job", "label": "staged rows", "variant": "dashed" },
+    { "id": "persist-job", "from": "rules-job", "to": "data", "label": "decision to save", "variant": "dashed" }
+  ],
+  "cards": [
+    { "dot": "cyan", "title": "Synchronous pathway (one HTTP request)", "items": ["Merit.Web: authentication, permission policy and antiforgery run before the action; the action binds a Merit.Contracts DTO (API) or a view model (htmx)", "Application service validates, checks the permission again, and calls pure Domain rules", "The service persists through its I*Data port; the response is mapped back to a Contracts DTO or a partial view"] },
+    { "dot": "orange", "title": "Asynchronous pathway (background job)", "items": ["A web action enqueues the job in the same request, for example an intake upload writes the batch and its dbo.jobQueue row", "JobWorker polls, claims one row with UPDLOCK + READPAST, and creates a session scope for the user who requested it", "JobDispatcher runs intakeBatch (IntakeProcessor), extractRun (ExtractBuilder) or clusterDetection, then completes or fails the job"] },
+    { "dot": "violet", "title": "At each folder boundary", "items": ["Web to Contracts: transport types only; controllers never expose Domain types", "Contracts to Application: one service call per action; the service owns validation and permission checks", "Application to Domain: values in, decisions out; Domain has no dependencies and no I/O", "Domain to Data: drawn for the chain; the Application service makes the call through a port that Data implements"] },
+    { "dot": "amber", "title": "Persistence (shared by both pathways)", "items": ["Every connection sets read-only SESSION_CONTEXT (scope key, user, acting tenant)", "Only stored procedures run; row-level security filters reads and blocks writes outside the session's tenants and access level"] }
+  ]
+}

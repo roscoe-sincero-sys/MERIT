@@ -1,0 +1,93 @@
+@inject ICurrentSession CurrentSession
+@{
+    string path = Context.Request.Path.Value ?? "/";
+    string Current(string prefix) => (prefix == "/" ? path == "/" : path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) ? "page" : "false";
+    bool signedIn = CurrentSession.IsAuthenticated;
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="htmx-config" content='{"extensions":"hx-csp","defaultTimeout":60000}' />
+    <title>@(ViewData["Title"] is string t ? t + " - " : string.Empty)MERIT</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="~/lib/uswds-3.14.0/css/uswds.min.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/merit.css" asp-append-version="true" />
+    @await RenderSectionAsync("Head", required: false)
+</head>
+<body>
+    <a class="merit-skip" href="#main-content">Skip to main content</a>
+    <header class="merit-header" role="banner">
+        <div class="merit-header__inner">
+            <a class="merit-brand" href="/">MERIT<small>Metals Exposure Registry and Investigation Tracking</small></a>
+            @if (signedIn)
+            {
+                <nav aria-label="Primary">
+                    <ul class="merit-nav">
+                        @if (CurrentSession.Has(Permissions.TaskView)) { <li><a href="/" aria-current="@Current("/")">Home</a></li> }
+                        @if (CurrentSession.Has(Permissions.TaskView)) { <li><a href="/app/queues" aria-current="@Current("/app/queues")">Work queues</a></li> }
+                        @if (CurrentSession.Has(Permissions.ResultReleaseHold)) { <li><a href="/app/held" aria-current="@Current("/app/held")">Held records</a></li> }
+                        @if (CurrentSession.Has(Permissions.ResultReleaseHold)) { <li><a href="/app/match-review" aria-current="@Current("/app/match-review")">Match review</a></li> }
+                        @if (CurrentSession.Has(Permissions.ResultView)) { <li><a href="/app/results" aria-current="@Current("/app/results")">Results</a></li> }
+                        @if (CurrentSession.Has(Permissions.CaseView)) { <li><a href="/cases" aria-current="@Current("/cases")">Cases</a></li> }
+                        @if (CurrentSession.Has(Permissions.CaseView)) { <li><a href="/app/clusters" aria-current="@Current("/app/clusters")">Clusters</a></li> }
+                        @if (CurrentSession.Has(Permissions.CaseView)) { <li><a href="/app/map" aria-current="@Current("/app/map")">Map</a></li> }
+                        @if (CurrentSession.Has(Permissions.ResultView) || CurrentSession.Has(Permissions.CaseView)) { <li><a href="/app/reports" aria-current="@Current("/app/reports")">Reports</a></li> }
+                        @if (CurrentSession.Has(Permissions.CaseView)) { <li><a href="/investigations" aria-current="@Current("/investigations")">Investigations</a></li> }
+                        @if (CurrentSession.Has(Permissions.IntakeUpload)) { <li><a href="/intake" aria-current="@Current("/intake")">Intake</a></li> }
+                        @if (CurrentSession.Has(Permissions.ExtractRun)) { <li><a href="/extracts" aria-current="@Current("/extracts")">Extracts</a></li> }
+                        <li><a href="/config/thresholds" aria-current="@Current("/config")">Configuration</a></li>
+                        @if (CurrentSession.Has(Permissions.TenantAdminister)) { <li><a href="/admin/users" aria-current="@Current("/admin")">Users</a></li> }
+                    </ul>
+                </nav>
+                @if (CurrentSession.Has(Permissions.PersonView))
+                {
+                    <form class="merit-header__search" role="search" method="get" action="/search">
+                        <label class="usa-sr-only" for="header-search">Search people, cases and accession numbers</label>
+                        <input class="usa-input" id="header-search" name="q" type="search" placeholder="Name, DOB, address, case or accession number" />
+                        <button class="usa-button usa-button--accent-cool" type="submit">Search</button>
+                    </form>
+                }
+                <div class="merit-header__user">
+                    <span>@CurrentSession.DisplayName<br /><small>@CurrentSession.ActingTenantName</small><br />
+                        <a class="merit-header__profile" href="/account/profiles">Profile: @(CurrentSession.ProfileName ?? "Master profile")<span class="usa-sr-only"> (switch profile)</span></a></span>
+                    <form method="post" action="/account/signout">
+                        @Html.AntiForgeryToken()
+                        <button class="usa-button usa-button--unstyled" type="submit">Sign out</button>
+                    </form>
+                </div>
+            }
+        </div>
+    </header>
+
+    @if (signedIn && CurrentSession.ViewAsDisplayName is string viewingAs)
+    {
+        <section class="usa-site-alert usa-site-alert--info merit-viewas" aria-label="Viewing as another user">
+            <div class="usa-alert"><div class="usa-alert__body">
+                <p class="usa-alert__text">You are viewing MERIT as <strong>@viewingAs</strong>, limited to what you manage. Everything you do is recorded under your own name.</p>
+                <form method="post" action="/account/view-as/end">@Html.AntiForgeryToken()<button class="usa-button usa-button--small" type="submit">Return to my profile</button></form>
+            </div></div>
+        </section>
+    }
+
+    <main class="merit-main" id="main-content" tabindex="-1">
+        <div id="alert-region" role="region" aria-label="Alerts"></div>
+        @RenderBody()
+    </main>
+
+    <div id="live-region" class="usa-sr-only" aria-live="polite" aria-atomic="true"></div>
+
+    <dialog id="dialog" class="merit-dialog" aria-labelledby="dialog-title">
+        <button type="button" class="usa-button usa-button--unstyled merit-dialog__close" data-close-dialog aria-label="Close dialog">Close</button>
+        <div id="dialog-body" class="merit-dialog__content"></div>
+    </dialog>
+
+    <footer class="merit-footer">MERIT &middot; Synthetic demonstration data only &middot; Every view, change and export of a person, result or case is audited.</footer>
+
+    <script src="~/lib/htmx-4.0.0/htmx.min.js" asp-append-version="true" merit-nonce></script>
+    <script src="~/lib/htmx-4.0.0/hx-csp.min.js" asp-append-version="true" merit-nonce></script>
+    <script src="~/js/merit.js" asp-append-version="true" merit-nonce></script>
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

@@ -1,0 +1,35 @@
+@model CasesSectionModel
+<section class="merit-section" id="section-cases" aria-labelledby="cases-heading">
+    <h2 id="cases-heading">Cases and investigations</h2>
+    @if (Model.Rows.Count == 0)
+    {
+        <p class="merit-empty">No cases. A case opens automatically when a result meets a case level.</p>
+    }
+    else
+    {
+        <div class="merit-grid-2">
+            @foreach (var c in Model.Rows)
+            {
+                <div class="usa-card__container">
+                    <div class="usa-card__header">
+                        <h3 class="usa-card__heading"><a class="usa-link" href="/cases/@c.ExposureCaseId">@c.CaseNumber</a> &middot; @c.AnalyteName</h3>
+                    </div>
+                    <div class="usa-card__body">
+                        <p>
+                            <span class="merit-badge merit-badge--@c.Classification">@Options.Humanize(c.Classification)</span>
+                            <span class="merit-badge">@Options.Humanize(c.CaseStatus)</span>
+                            <span class="merit-badge merit-badge--@c.Population">@Options.Population(c.Population)</span>
+                            @if (c.Classification != c.ComputedClassification) { <span class="merit-meta">(computed: @c.ComputedClassification)</span> }
+                        </p>
+                        <p class="merit-meta">
+                            Opened @Options.Date(c.OpenedDate)@(c.ClosedDate is null ? "" : ", closed " + Options.Date(c.ClosedDate) + " (" + Options.Humanize(c.ClosureReason) + ")")
+                            &middot; @Options.Humanize(c.WorkflowTemplate) workflow &middot; @c.OwningTenantName
+                        </p>
+                        <p>Highest: @Options.Value("=", c.HighestValue, c.HighestUnit ?? "") &middot; Assigned: @(c.AssignedToName ?? "unassigned")</p>
+                        <p>@c.OpenTasks open task(s) &middot; @c.Investigations investigation(s) &middot; exposure @Options.Humanize(c.ExposureCategory)</p>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</section>

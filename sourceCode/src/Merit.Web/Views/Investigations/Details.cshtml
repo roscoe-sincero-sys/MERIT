@@ -1,0 +1,6 @@
+@model InvestigationPageModel
+@{
+    ViewData["Title"] = "Investigation " + Model.Detail.Investigation.InvestigationNumber;
+}
+<p><a class="usa-link" href="/investigations">All investigations</a></p>
+<partial name="_InvestigationBody" model="Model" />

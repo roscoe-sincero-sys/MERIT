@@ -1,0 +1,41 @@
+@model SettingsModel
+<div class="merit-table-wrap" id="settings-table-body">
+    <table class="usa-table usa-table--borderless usa-table--compact">
+        <thead><tr><th scope="col">Setting</th><th scope="col">Value</th><th scope="col">Since</th><th scope="col">What it decides</th></tr></thead>
+        <tbody>
+            @foreach (var s in Model.Current)
+            {
+                <tr id="setting-@s.SettingKey">
+                    <th scope="row">@Options.Humanize(s.SettingKey)</th>
+                    <td>
+                        @if (Model.CanEdit)
+                        {
+                            <form class="merit-form-row" hx-post="/config/settings/@s.SettingKey" hx-target="#settings-table" hx-swap="innerHTML">
+                                <label class="usa-sr-only" for="v-@s.SettingKey">Value of @s.SettingKey</label>
+                                <input class="usa-input @(s.SettingValue == "NOTSET" ? "usa-input--error" : "")" id="v-@s.SettingKey" name="settingValue" value="@s.SettingValue" />
+                                <label class="usa-sr-only" for="d-@s.SettingKey">Effective from</label>
+                                <input class="usa-input" id="d-@s.SettingKey" name="effectiveFrom" type="date" value="@Options.Iso(DateOnly.FromDateTime(DateTime.UtcNow))" />
+                                <button class="usa-button usa-button--outline usa-button--small" type="submit">Change</button>
+                            </form>
+                        }
+                        else
+                        {
+                            @s.SettingValue
+                        }
+                    </td>
+                    <td>@Options.Date(s.EffectiveFrom)<div class="merit-meta">@s.ModifiedBy</div></td>
+                    <td class="merit-meta">@s.SettingDescription</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+    <details>
+        <summary>History (@Model.History.Count rows)</summary>
+        <ul class="usa-list">
+            @foreach (var h in Model.History.OrderBy(h => h.SettingKey).ThenByDescending(h => h.EffectiveFrom))
+            {
+                <li>@h.SettingKey = @h.SettingValue, @Options.Date(h.EffectiveFrom) &ndash; @(h.EffectiveTo is null ? "current" : Options.Date(h.EffectiveTo)) <span class="merit-meta">@h.ModifiedBy</span></li>
+            }
+        </ul>
+    </details>
+</div>

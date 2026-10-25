@@ -1,0 +1,26 @@
+@model IntakeModel
+@{
+    ViewData["Title"] = "Intake";
+}
+<h1>Intake</h1>
+@if (Model.Message is not null)
+{
+    <div class="usa-alert usa-alert--info usa-alert--slim" role="status"><div class="usa-alert__body"><p class="usa-alert__text">@Model.Message</p></div></div>
+}
+<section class="merit-section" aria-labelledby="upload-heading">
+    <h2 id="upload-heading">Upload a file</h2>
+    <p class="merit-meta">The file is stored unchanged and processed in the background with the sender's intake profile: parsed, validated, normalized, matched, then loaded or held with named reasons. A sample file for the demo laboratory is in sourceCode/samples.</p>
+    <form class="usa-form" method="post" action="/intake/upload" enctype="multipart/form-data">
+        @Html.AntiForgeryToken()
+        <div class="usa-form-group"><label class="usa-label" for="intakeProfileId">Sender and intake profile</label>
+            <select class="usa-select" id="intakeProfileId" name="intakeProfileId">
+                @foreach (var p in Model.Profiles) { <option value="@p.IntakeProfileId">@p.SenderName &mdash; @p.ProfileName (v@p.ProfileVersion, @p.FileType)</option> }
+            </select></div>
+        <div class="usa-form-group"><label class="usa-label" for="file">File</label><input class="usa-file-input" id="file" name="file" type="file" accept=".csv,.txt,.tsv" required /></div>
+        <button class="usa-button" type="submit">Upload</button>
+    </form>
+</section>
+<section class="merit-section" aria-labelledby="batches-heading">
+    <h2 id="batches-heading">Recent batches</h2>
+    <partial name="_Batches" model="Model" />
+</section>

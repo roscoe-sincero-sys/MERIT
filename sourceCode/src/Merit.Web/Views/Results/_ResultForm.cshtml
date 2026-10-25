@@ -1,0 +1,92 @@
+@model ResultFormModel
+@{
+    string Err(string key) => ViewData.ModelState.FirstError(key);
+    string Group(string key) => Err(key).Length > 0 ? "usa-form-group usa-form-group--error" : "usa-form-group";
+}
+<div id="result-form">
+    @if (!ViewData.ModelState.IsValid)
+    {
+        <div class="usa-alert usa-alert--error usa-alert--slim" role="alert"><div class="usa-alert__body"><p class="usa-alert__text">Some fields need attention.</p></div></div>
+    }
+    <form class="usa-form usa-form--large" method="post" action="/people/@Model.PersonId/results"
+          hx-post="/people/@Model.PersonId/results" hx-target="#result-entry" hx-swap="innerHTML"
+          hx-status:422="target:#result-form swap:outerHTML">
+        @Html.AntiForgeryToken()
+        <div class="merit-form-row">
+            <div class="@Group("AnalyteId")">
+                <label class="usa-label" for="AnalyteId">Analyte</label>
+                <span class="usa-error-message">@Err("AnalyteId")</span>
+                @* Cascading drop-downs: each change re-renders the dependent fields from the server. *@
+                <select class="usa-select" id="AnalyteId" name="AnalyteId" required
+                        hx-get="/results/fields" hx-target="#result-fields" hx-swap="innerHTML" hx-include="#result-fields">
+                    @foreach (var o in Model.Analytes) { <option value="@o.Value" selected="@o.Selected">@o.Label</option> }
+                </select>
+            </div>
+            <div class="@Group("ResultStatus")">
+                <label class="usa-label" for="ResultStatus">Status</label>
+                <select class="usa-select" id="ResultStatus" name="ResultStatus">
+                    @foreach (var o in Options.Fixed(Model.ResultStatus, Options.ResultStatuses)) { <option value="@o.Value" selected="@o.Selected">@o.Label</option> }
+                </select>
+            </div>
+        </div>
+
+        <div id="result-fields" aria-live="polite">
+            <partial name="_ResultFields" model="Model.Fields" />
+        </div>
+
+        <div class="merit-form-row">
+            <div class="@Group("ValueText")">
+                <label class="usa-label" for="ValueText">Result value</label>
+                <div class="usa-hint" id="value-hint">A number, with &lt; or &gt; for a detection limit: 4.2, &lt;1.0, &gt;65</div>
+                <span class="usa-error-message">@Err("ValueText")</span>
+                <input class="usa-input" id="ValueText" name="ValueText" value="@Model.ValueText" required aria-describedby="value-hint" />
+            </div>
+            <div class="@Group("CollectedDate")">
+                <label class="usa-label" for="CollectedDate">Collected</label>
+                <span class="usa-error-message">@Err("CollectedDate")</span>
+                <input class="usa-input" id="CollectedDate" name="CollectedDate" type="date" value="@Options.Iso(Model.CollectedDate)" required />
+            </div>
+            <div class="@Group("AnalyzedDate")">
+                <label class="usa-label" for="AnalyzedDate">Analyzed</label>
+                <span class="usa-error-message">@Err("AnalyzedDate")</span>
+                <input class="usa-input" id="AnalyzedDate" name="AnalyzedDate" type="date" value="@Options.Iso(Model.AnalyzedDate)" />
+            </div>
+            <div class="@Group("ReportedDate")">
+                <label class="usa-label" for="ReportedDate">Reported</label>
+                <span class="usa-error-message">@Err("ReportedDate")</span>
+                <input class="usa-input" id="ReportedDate" name="ReportedDate" type="date" value="@Options.Iso(Model.ReportedDate)" />
+            </div>
+        </div>
+
+        <div class="merit-form-row">
+            <div class="usa-form-group">
+                <label class="usa-label" for="TestMethod">Test method</label>
+                <select class="usa-select" id="TestMethod" name="TestMethod">@foreach (var o in Model.Methods) { <option value="@o.Value" selected="@o.Selected">@o.Label</option> }</select>
+            </div>
+            <div class="usa-form-group">
+                <label class="usa-label" for="AccessionNumber">Accession number</label>
+                <input class="usa-input" id="AccessionNumber" name="AccessionNumber" value="@Model.AccessionNumber" />
+            </div>
+            <div class="usa-form-group">
+                <label class="usa-label" for="ReasonForTest">Reason for test</label>
+                <select class="usa-select" id="ReasonForTest" name="ReasonForTest">@foreach (var o in Model.Reasons) { <option value="@o.Value" selected="@o.Selected">@o.Label</option> }</select>
+            </div>
+            <div class="usa-form-group">
+                <label class="usa-label" for="PayerType">Payer</label>
+                <select class="usa-select" id="PayerType" name="PayerType">@foreach (var o in Model.Payers) { <option value="@o.Value" selected="@o.Selected">@o.Label</option> }</select>
+            </div>
+        </div>
+
+        <div class="merit-form-row">
+            <div class="@Group("LabOrganizationId")">
+                <span class="usa-error-message">@Err("LabOrganizationId")</span>
+                <partial name="_Combobox" model='("LabOrganizationId", "LabOrganizationId", "Laboratory", "/lookup/organizations?type=laboratory", Model.LabOrganizationId?.ToString(), Model.LabLabel, (string?)"Type part of the lab name or its CLIA number.")' />
+            </div>
+            <div class="usa-form-group">
+                <partial name="_Combobox" model='("OrderingProviderId", "OrderingProviderId", "Ordering provider", "/lookup/providers", Model.OrderingProviderId?.ToString(), Model.ProviderLabel, (string?)"Last name or NPI.")' />
+            </div>
+        </div>
+        <button class="usa-button" type="submit">Save result</button>
+        <a class="usa-button usa-button--unstyled" href="/people/@Model.PersonId">Cancel</a>
+    </form>
+</div>

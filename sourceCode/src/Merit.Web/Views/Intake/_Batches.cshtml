@@ -1,0 +1,30 @@
+@model IntakeModel
+@{
+    bool running = Model.Batches.Any(b => b.BatchStatus is "received" or "parsing");
+}
+@* While any batch is still processing, the cards poll this partial. *@
+<div id="batches" hx-get="/intake" hx-trigger="@(running ? "every 3s" : "never")" hx-swap="outerHTML">
+    @if (Model.Batches.Count == 0)
+    {
+        <p class="merit-empty">No files received yet.</p>
+    }
+    else
+    {
+        <div class="merit-grid-2">
+            @foreach (var b in Model.Batches)
+            {
+                <div class="usa-card__container" id="batch-@b.IntakeBatchId">
+                    <div class="usa-card__header"><h3 class="usa-card__heading">@b.FileName</h3></div>
+                    <div class="usa-card__body">
+                        <p><span class="merit-badge @(b.BatchStatus == "paused" ? "merit-badge--urgent" : b.BatchStatus == "loaded" ? "merit-badge--ok" : "")">@Options.Humanize(b.BatchStatus)</span>
+                            <span class="merit-meta">@b.SenderName &middot; @Options.Date(b.ReceivedUtc) &middot; @b.SubmittedBy</span></p>
+                        @if (b.PauseReason is not null) { <p>@b.PauseReason</p> }
+                        <p>Received @b.ReceivedCount &middot; loaded @b.LoadedCount &middot;
+                            @if (b.HeldCount > 0) { <a class="usa-link" href="/app/held?batch=@b.IntakeBatchId">held @b.HeldCount</a> } else { <span>held 0</span> }
+                            &middot; rejected @b.RejectedCount</p>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>

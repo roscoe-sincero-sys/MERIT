@@ -1,0 +1,28 @@
+@model SignInModel
+@{
+    ViewData["Title"] = "Sign in";
+}
+<div class="grid-row">
+    <div class="grid-col-12 tablet:grid-col-8 desktop:grid-col-6">
+        <h1>Sign in to MERIT</h1>
+        @if (Model.Message is not null)
+        {
+            <div class="usa-alert usa-alert--error usa-alert--slim" role="alert"><div class="usa-alert__body"><p class="usa-alert__text">@Model.Message</p></div></div>
+        }
+        <form class="usa-form" method="post" asp-action="SignIn">
+            <input type="hidden" asp-for="ReturnUrl" />
+            <div class="usa-form-group">
+                <label class="usa-label" asp-for="UserName">User name</label>
+                <span class="usa-error-message" asp-validation-for="UserName"></span>
+                <input class="usa-input" asp-for="UserName" autocomplete="username" autocapitalize="off" spellcheck="false" />
+            </div>
+            <div class="usa-form-group">
+                <label class="usa-label" asp-for="Password">Password</label>
+                <span class="usa-error-message" asp-validation-for="Password"></span>
+                <input class="usa-input" asp-for="Password" autocomplete="current-password" />
+            </div>
+            <button class="usa-button" type="submit">Continue</button>
+        </form>
+        <p class="merit-meta">After your password you will be asked for a code from your authenticator app. Multi-factor authentication is required for every account.</p>
+    </div>
+</div>

@@ -1,0 +1,8 @@
+@model ThresholdFormModel
+@{
+    ViewData["Title"] = Model.ThresholdId is null ? "Add a level" : "Edit a level";
+}
+<partial name="_ConfigNav" model='"thresholds"' />
+<p><a class="usa-link" href="/config/thresholds">Back to thresholds</a></p>
+<h1>@ViewData["Title"]</h1>
+<partial name="_ThresholdForm" model="Model" />

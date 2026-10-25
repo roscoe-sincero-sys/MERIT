@@ -1,0 +1,19 @@
+<Project>
+  <!--
+    Settings every MERIT project shares (architecture requirements, "C# settings"): nullable reference types on,
+    warnings treated as errors, analyzers on. The target is net9.0 because the build machine has the .NET 9 SDK and
+    Visual Studio 2022; the specification names .NET 10, which is a one-line change here once its SDK is installed.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <AnalysisLevel>latest</AnalysisLevel>
+    <EnforceCodeStyleInBuild>false</EnforceCodeStyleInBuild>
+    <InvariantGlobalization>false</InvariantGlobalization>
+    <Deterministic>true</Deterministic>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+</Project>

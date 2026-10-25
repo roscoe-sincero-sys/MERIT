@@ -1,0 +1,10 @@
+PatientLast,PatientFirst,DOB,Sex,Street,Apt,City,State,Zip,LOINC,Result,Units,SampleType,Method,Collected,Reported,Accession,Status,OrderingNPI,Guardian
+Rivera,Mia,05/14/2023,F,1214 W Lombard St,2F,Baltimore,MD,21223,77307-7,5.2,ug/dL,V,ICPMS,10/01/2026,10/04/2026,CRL-26-1001,F,1234567893,"Rivera, Ana"
+Nguyen,Tran,02/11/2022,M,410 N Milton Ave,,Baltimore,MD,21205,10368-9,12.0,ug/dL,C,LEADCARE,10/02/2026,10/03/2026,CRL-26-1002,F,1234567893,Thi Nguyen
+Nguyen,Tran,02/11/2022,M,410 N Milton Ave,,Baltimore,MD,21205,10368-9,12.0,ug/dL,C,LEADCARE,10/02/2026,10/03/2026,CRL-26-1002,F,1234567893,Thi Nguyen
+Baker,Baby Boy,09/30/2026,M,77 Harbor Ct,,Baltimore,MD,21230,77307-7,4.1,ug/dL,V,ICPMS,10/05/2026,10/06/2026,CRL-26-1003,F,,
+Okafor,Grace,03/03/1994,F,9 Calverton Ct,B,Hyattsville,MD,20782,77307-7,7.5,ug/dL,V,ICPMS,10/06/2026,10/08/2026,CRL-26-1004,F,,
+Smith,John,,M,1 Main St,,Towson,MD,21204,77307-7,48.0,ug/dL,V,GFAA,10/07/2026,10/08/2026,CRL-26-1005,F,,
+Diaz,Lucia,07/19/2019,F,880 Washington Blvd,,Baltimore,MD,21230,99999-9,3.0,ug/dL,V,ICPMS,10/07/2026,10/08/2026,CRL-26-1006,F,,ACME Plating LLC
+Cole,Ray,12/01/1975,M,12 Pier Rd,,Baltimore,MD,21224,5671-3,31.0,mg/L,U,GFAA,10/08/2026,10/09/2026,CRL-26-1007,F,,
+Cole,Ray,12/01/1975,M,12 Pier Rd,,Baltimore,MD,21224,5671-3,<1.0,ug/dL,U,GFAA,10/08/2026,10/09/2026,CRL-26-1008,F,,

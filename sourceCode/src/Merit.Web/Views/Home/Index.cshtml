@@ -1,0 +1,91 @@
+@model DashboardModel
+@{
+    ViewData["Title"] = "Home";
+    var c = Model.Data.Counts;
+}
+<div class="merit-page-header">
+    <h1>Welcome, @Model.DisplayName</h1>
+    <span class="merit-meta">@Model.TenantName</span>
+</div>
+
+<ul class="merit-tiles" aria-label="Your work">
+    <li><a class="merit-tile" href="/cases?mine=true"><span class="merit-tile__count">@c.MyOpenCases</span><span class="merit-tile__label">My open cases</span></a></li>
+    <li><a class="merit-tile" href="/app/queues?mine=true"><span class="merit-tile__count">@c.MyOpenTasks</span><span class="merit-tile__label">My open tasks</span></a></li>
+    <li><a class="merit-tile @(c.OverdueTasks > 0 ? "merit-tile--urgent" : "")" href="/app/queues"><span class="merit-tile__count">@c.OverdueTasks</span><span class="merit-tile__label">Overdue tasks</span></a></li>
+    <li><a class="merit-tile @(c.UrgentHeld > 0 ? "merit-tile--urgent" : "")" href="/app/held"><span class="merit-tile__count">@c.UrgentHeld</span><span class="merit-tile__label">Elevated results held at intake</span></a></li>
+    <li><a class="merit-tile" href="/cases"><span class="merit-tile__count">@c.OpenCasesInScope</span><span class="merit-tile__label">Open cases in your scope</span></a></li>
+</ul>
+
+<section class="merit-section" aria-labelledby="urgent-heading">
+    <h2 id="urgent-heading">Needs attention</h2>
+    @if (Model.Data.UrgentItems.Count == 0)
+    {
+        <p class="merit-empty">Nothing urgent or overdue.</p>
+    }
+    else
+    {
+        <div class="merit-table-wrap" tabindex="0" role="region" aria-label="Table; scroll sideways for more columns">
+            <table class="usa-table usa-table--borderless">
+                <thead><tr><th scope="col">Item</th><th scope="col">Detail</th><th scope="col">Due</th><th scope="col">Waiting since</th></tr></thead>
+                <tbody>
+                    @foreach (var i in Model.Data.UrgentItems)
+                    {
+                        <tr>
+                            <td>
+                                @if (i.ExposureCaseId is Guid cid)
+                                {
+                                    <a class="usa-link" href="/cases/@cid">@i.Title</a>
+                                }
+                                else if (i.PersonId is Guid pid)
+                                {
+                                    <a class="usa-link" href="/people/@pid">@i.Title</a>
+                                }
+                                else if (i.ItemType == "heldRecord")
+                                {
+                                    <a class="usa-link" href="/app/held">@i.Title</a> <span class="merit-badge merit-badge--urgent">Urgent</span>
+                                }
+                                else
+                                {
+                                    @i.Title
+                                }
+                            </td>
+                            <td>@i.Detail</td>
+                            <td>@Options.Date(i.DueDate)</td>
+                            <td>@Options.Date(i.WaitingSinceUtc)</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</section>
+
+<section class="merit-section" aria-labelledby="queues-heading">
+    <h2 id="queues-heading">Work queues <span class="merit-indicator htmx-indicator" id="queues-indicator">Refreshing&hellip;</span></h2>
+    @* Counts refresh by polling this partial every 30 seconds; innerMorph keeps focus and scroll position. *@
+    <div id="queue-tiles" hx-get="/home/queues" hx-trigger="every 30s" hx-swap="innerMorph" hx-indicator="#queues-indicator">
+        <partial name="_QueueTiles" model="Model.Tiles" />
+    </div>
+</section>
+
+<section class="merit-section" aria-labelledby="cases-heading">
+    <h2 id="cases-heading">My recent cases</h2>
+    @if (Model.Data.MyCases.Count == 0)
+    {
+        <p class="merit-empty">No open cases are assigned to you.</p>
+    }
+    else
+    {
+        <ul class="usa-list usa-list--unstyled">
+            @foreach (var k in Model.Data.MyCases)
+            {
+                <li>
+                    <a class="usa-link" href="/cases/@k.ExposureCaseId">@k.CaseNumber</a> &middot;
+                    <a class="usa-link" href="/people/@k.PersonId">@k.LastName, @k.FirstName</a>
+                    <span class="merit-badge merit-badge--@k.Classification">@Options.Humanize(k.Classification)</span>
+                    <span class="merit-meta">opened @Options.Date(k.OpenedDate)</span>
+                </li>
+            }
+        </ul>
+    }
+</section>

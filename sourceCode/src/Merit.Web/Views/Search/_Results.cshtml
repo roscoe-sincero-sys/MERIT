@@ -1,0 +1,61 @@
+@model SearchModel
+<div id="search-results-body">
+    @if (Model.Results is { } r)
+    {
+        if (r.Persons.Count == 0 && r.Cases.Count == 0 && r.Organizations.Count == 0)
+        {
+            <p class="merit-empty">No matches in your access scope.</p>
+            if (r.ExistsElsewhere)
+            {
+                <div class="usa-alert usa-alert--info usa-alert--slim">
+                    <div class="usa-alert__body"><p class="usa-alert__text">A record with this exact name and date of birth exists in another jurisdiction. Ask the state program if you need access.</p></div>
+                </div>
+            }
+        }
+
+        if (r.Cases.Count > 0)
+        {
+            <h2>Cases</h2>
+            <ul class="usa-list">
+                @foreach (var c in r.Cases)
+                {
+                    <li><a class="usa-link" href="/cases/@c.ExposureCaseId">@c.CaseNumber</a> &mdash; @c.LastName, @c.FirstName (@c.AnalyteCode, @c.Classification, @c.CaseStatus)</li>
+                }
+            </ul>
+        }
+
+        if (r.Persons.Count > 0)
+        {
+            <h2>People</h2>
+            <div class="merit-table-wrap" tabindex="0" role="region" aria-label="Table; scroll sideways for more columns">
+                <table class="usa-table usa-table--borderless">
+                    <thead><tr><th scope="col">Name</th><th scope="col">Date of birth</th><th scope="col">Sex</th><th scope="col">County</th><th scope="col">Open cases</th><th scope="col">Matched on</th></tr></thead>
+                    <tbody>
+                        @foreach (var p in r.Persons)
+                        {
+                            <tr>
+                                <td><a class="usa-link" href="/people/@p.PersonId">@p.LastName, @p.FirstName @p.MiddleName</a></td>
+                                <td>@Options.Date(p.Dob)</td>
+                                <td>@Options.Humanize(p.Sex)</td>
+                                <td>@p.CurrentCounty</td>
+                                <td>@p.OpenCases</td>
+                                <td>@p.MatchedOn</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+
+        if (r.Organizations.Count > 0)
+        {
+            <h2>Organizations</h2>
+            <ul class="usa-list">
+                @foreach (var o in r.Organizations)
+                {
+                    <li>@o.OrganizationName <span class="merit-meta">@o.OrganizationTypes @(o.CliaNumber is null ? "" : "CLIA " + o.CliaNumber)</span></li>
+                }
+            </ul>
+        }
+    }
+</div>

@@ -1,0 +1,82 @@
+@model PlaceFormModel
+@{
+    bool siteRole = Model.Role is "childCare" or "school";
+}
+<div class="merit-inline-form" id="place-form-body">
+    <h3>Add a place</h3>
+    @if (Model.OverlapMessage is not null)
+    {
+        <div class="usa-alert usa-alert--warning usa-alert--slim" role="alert"><div class="usa-alert__body"><p class="usa-alert__text">@Model.OverlapMessage</p></div></div>
+    }
+    else if (!ViewData.ModelState.IsValid)
+    {
+        <div class="usa-alert usa-alert--error usa-alert--slim" role="alert"><div class="usa-alert__body"><p class="usa-alert__text">@string.Join(" ", ViewData.ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage))</p></div></div>
+    }
+    <form class="usa-form" hx-post="/people/@Model.PersonId/places/add" hx-target="#section-places" hx-swap="outerHTML"
+          hx-status:422="target:#place-form-body swap:outerHTML">
+        <div class="merit-form-row">
+            <div class="usa-form-group">
+                <label class="usa-label" for="Role">Role</label>
+                <select class="usa-select" id="Role" name="Role">@foreach (var o in Model.Roles) { <option value="@o.Value" selected="@o.Selected">@o.Label</option> }</select>
+            </div>
+            <div class="usa-form-group">
+                <label class="usa-label" for="StartDate">Start date</label>
+                <input class="usa-input" id="StartDate" name="StartDate" type="date" value="@Options.Iso(Model.StartDate)" required />
+            </div>
+            <div class="usa-form-group">
+                <label class="usa-label" for="EndDate">End date (blank if current)</label>
+                <input class="usa-input" id="EndDate" name="EndDate" type="date" value="@Options.Iso(Model.EndDate)" />
+            </div>
+        </div>
+
+        @* A child-care or school entry is picked from organizations first; the site address fills in. *@
+        <div data-show-when="Role=childCare|school" hidden="@(!siteRole)">
+            <partial name="_Combobox" model='("OrganizationSite", "OrganizationSite", "Child-care provider or school", "/lookup/sites?type=" + (Model.Role == "school" ? "school" : "childCare"), Model.OrganizationSite, Model.OrganizationLabel, (string?)"Pick the provider; its site address is used.")' />
+        </div>
+
+        <div data-show-when="Role=residence|relativeHome|otherSite" hidden="@siteRole">
+            @* Address entry offers matching existing locations before creating a new one. *@
+            <partial name="_Combobox" model='("LocationId", "LocationId", "Existing address", "/lookup/locations", Model.LocationId?.ToString(), Model.LocationLabel, (string?)"Start typing the street address to reuse a location already on file, or enter a new one below.")' />
+            <fieldset class="usa-fieldset">
+                <legend class="usa-legend">New address</legend>
+                <div class="merit-form-row">
+                    <div class="usa-form-group"><label class="usa-label" for="AddressLine1">Street address</label><input class="usa-input" id="AddressLine1" name="AddressLine1" value="@Model.AddressLine1" autocomplete="off" /></div>
+                    <div class="usa-form-group"><label class="usa-label" for="Unit">Unit</label><input class="usa-input" id="Unit" name="Unit" value="@Model.Unit" /></div>
+                </div>
+                <div class="merit-form-row">
+                    <div class="usa-form-group"><label class="usa-label" for="City">City</label><input class="usa-input" id="City" name="City" value="@Model.City" /></div>
+                    <div class="usa-form-group"><label class="usa-label" for="State">State</label><input class="usa-input usa-input--small" id="State" name="State" value="@Model.State" maxlength="2" /></div>
+                    <div class="usa-form-group"><label class="usa-label" for="Zip5">ZIP</label><input class="usa-input usa-input--small" id="Zip5" name="Zip5" value="@Model.Zip5" maxlength="5" inputmode="numeric" /></div>
+                    <div class="usa-form-group"><label class="usa-label" for="CountyFips">County</label>
+                        <select class="usa-select" id="CountyFips" name="CountyFips">@foreach (var o in Model.Counties) { <option value="@o.Value" selected="@o.Selected">@o.Label</option> }</select></div>
+                    <div class="usa-form-group"><label class="usa-label" for="YearBuilt">Year built</label><input class="usa-input usa-input--small" id="YearBuilt" name="YearBuilt" value="@Model.YearBuilt" inputmode="numeric" /></div>
+                </div>
+                <div class="usa-checkbox"><input class="usa-checkbox__input" id="IsCityOnly" type="checkbox" name="IsCityOnly" value="true" @(Model.IsCityOnly ? "checked" : "") /><label class="usa-checkbox__label" for="IsCityOnly">City only (no fixed address)</label></div>
+            </fieldset>
+        </div>
+
+        <div class="merit-form-row">
+            <div class="usa-form-group"><label class="usa-label" for="ScheduleType">Schedule</label>
+                <select class="usa-select" id="ScheduleType" name="ScheduleType">@foreach (var o in Model.Schedules) { <option value="@o.Value" selected="@o.Selected">@o.Label</option> }</select></div>
+            <div class="usa-form-group"><label class="usa-label" for="HoursPerWeek">Hours per week</label><input class="usa-input usa-input--small" id="HoursPerWeek" name="HoursPerWeek" value="@Model.HoursPerWeek" inputmode="decimal" /></div>
+            <div class="usa-form-group"><label class="usa-label" for="ScheduleNote">Schedule note</label><input class="usa-input" id="ScheduleNote" name="ScheduleNote" value="@Model.ScheduleNote" /></div>
+            <div class="usa-form-group"><label class="usa-label" for="Source">Source</label>
+                <select class="usa-select" id="Source" name="Source"><option value="interview">Interview</option><option value="caseManager">Case manager</option><option value="labReport">Lab report</option><option value="otherAgency">Other agency</option></select></div>
+        </div>
+
+        @if (Model.NeedsPrimaryChoice)
+        {
+            @* Adding an overlapping residence opens the primary choice inline; it cannot be saved without one. *@
+            <fieldset class="usa-fieldset merit-inline-form">
+                <legend class="usa-legend">Which residence is primary?</legend>
+                <div class="usa-radio"><input class="usa-radio__input" id="pc-new" type="radio" name="PrimaryChoice" value="new" @(Model.PrimaryChoice == "new" ? "checked" : "") /><label class="usa-radio__label" for="pc-new">This new residence becomes primary from its start date</label></div>
+                <div class="usa-radio"><input class="usa-radio__input" id="pc-existing" type="radio" name="PrimaryChoice" value="existing" @(Model.PrimaryChoice == "existing" ? "checked" : "") /><label class="usa-radio__label" for="pc-existing">The current primary residence stays primary</label></div>
+                <div class="usa-form-group"><label class="usa-label" for="PrimaryReason">Reason (required when residences overlap)</label>
+                    <select class="usa-select" id="PrimaryReason" name="PrimaryReason">@foreach (var o in Model.Reasons) { <option value="@o.Value" selected="@o.Selected">@o.Label</option> }</select></div>
+            </fieldset>
+        }
+
+        <button class="usa-button" type="submit">Save place</button>
+        <button class="usa-button usa-button--unstyled" type="button" data-clear-target="#places-form">Cancel</button>
+    </form>
+</div>

@@ -1,0 +1,119 @@
+@model PersonPageModel
+@{
+    var p = Model.Person;
+    var h = Model.Page.Header;
+    string pop = Model.Page.CurrentPopulation;
+}
+<section id="person-header" class="merit-section" aria-labelledby="person-name"
+         hx-get="/people/@p.PersonId/header" hx-trigger="merit:personHeader from:body" hx-swap="outerHTML">
+    <div class="merit-page-header">
+        <h1 id="person-name">@Model.FullName</h1>
+        <div class="merit-section__actions">
+            @if (Model.CanEnterResults)
+            {
+                <a class="usa-button" href="/people/@p.PersonId/results/new">Enter a result</a>
+            }
+            @if (Model.CanEdit)
+            {
+                <button class="usa-button usa-button--outline" type="button" hx-get="/people/@p.PersonId/edit" hx-target="#dialog-body" hx-swap="innerHTML">Edit identity</button>
+            }
+        </div>
+    </div>
+    @if (p.MergedIntoPersonId is Guid merged)
+    {
+        <div class="usa-alert usa-alert--warning usa-alert--slim"><div class="usa-alert__body"><p class="usa-alert__text">This record was merged and is read-only. <a class="usa-link" href="/people/@merged">Open the surviving record</a>.</p></div></div>
+    }
+    @if (p.IsPlaceholderName)
+    {
+        <div class="usa-alert usa-alert--info usa-alert--slim"><div class="usa-alert__body"><p class="usa-alert__text">The first name is a placeholder from a lab report; it never links automatically.</p></div></div>
+    }
+    <p>
+        <span class="merit-badge merit-badge--@pop">@Options.Population(pop)</span>
+        @if (p.Dob is not null)
+        {
+            <span>Born @Options.Date(p.Dob)@(Model.Page.AgeYears is int a ? $" (age {a})" : "")@(p.DobVerified ? ", verified" : "")</span>
+        }
+        else
+        {
+            <span class="merit-badge merit-badge--urgent">Date of birth missing</span>
+        }
+        &middot; @Options.Humanize(p.Sex)
+        @if (p.DeceasedDate is not null) { <span> &middot; Died @Options.Date(p.DeceasedDate)</span> }
+        &middot; County: <strong>@(p.CurrentCountyName ?? "no current primary residence")</strong>
+        @if (p.IsContactOnly) { <span class="merit-badge">Contact only</span> }
+    </p>
+    @if (h.OpenCases.Count > 0)
+    {
+        <p>
+            Open cases:
+            @foreach (var c in h.OpenCases)
+            {
+                <a class="merit-badge merit-badge--@c.Classification" href="/cases/@c.ExposureCaseId">@c.AnalyteCode &middot; @Options.Humanize(c.Classification) &middot; @c.CaseNumber</a>
+            }
+        </p>
+    }
+    <details>
+        <summary>Aliases, race and ethnicity, contact methods@(Model.CanViewIdentifiers ? " and identifiers" : "")</summary>
+        <div class="merit-grid-2">
+            <div>
+                <h3>Names as reported</h3>
+                @if (h.Aliases.Count == 0) { <p class="merit-empty">No aliases recorded.</p> }
+                else
+                {
+                    <ul class="usa-list">@foreach (var a in h.Aliases) { <li>@a.LastName, @a.FirstName <span class="merit-meta">@Options.Humanize(a.AliasType), @Options.Humanize(a.Source), last seen @Options.Date(a.LastSeen)</span></li> }</ul>
+                }
+                <h3>Race and ethnicity</h3>
+                <p>@(h.Races.Count == 0 ? "Race not recorded" : string.Join(", ", h.Races.Select(r => r.DisplayName ?? r.RaceCode))) &middot; @Options.Humanize(p.Ethnicity)</p>
+                @if (Model.CanViewIdentifiers)
+                {
+                    <h3>External identifiers</h3>
+                    @if (h.Identifiers.Count == 0) { <p class="merit-empty">No identifiers recorded.</p> }
+                    else
+                    {
+                        <ul class="usa-list">@foreach (var i in h.Identifiers) { <li>@Options.Humanize(i.IdentifierType): @i.IdentifierValue <span class="merit-meta">@i.AssigningFacility</span></li> }</ul>
+                    }
+                    @if (Model.CanEdit)
+                    {
+                        <form class="merit-form-row" hx-post="/people/@p.PersonId/identifiers" hx-target="#person-header" hx-swap="outerHTML">
+                            <div class="usa-form-group"><label class="usa-label" for="idType">Type</label>
+                                <select class="usa-select" id="idType" name="identifierType"><option value="mrn">Medical record number</option><option value="medicaid">Medicaid ID</option><option value="stateId">State ID</option><option value="other">Other</option></select></div>
+                            <div class="usa-form-group"><label class="usa-label" for="idValue">Identifier</label><input class="usa-input" id="idValue" name="identifierValue" required /></div>
+                            <div class="usa-form-group"><label class="usa-label" for="idFacility">Assigning facility</label><input class="usa-input" id="idFacility" name="assigningFacility" /></div>
+                            <div class="usa-form-group"><button class="usa-button usa-button--outline" type="submit">Add identifier</button></div>
+                        </form>
+                    }
+                }
+            </div>
+            <div>
+                <h3>Contact methods</h3>
+                @if (h.ContactMethods.Count == 0) { <p class="merit-empty">No phone or email recorded.</p> }
+                else
+                {
+                    <ul class="usa-list usa-list--unstyled">
+                        @foreach (var c in h.ContactMethods)
+                        {
+                            <li>
+                                @Options.Humanize(c.ContactType): @c.ContactValue @if (c.IsPreferred) { <span class="merit-badge">Preferred</span> }
+                                @if (Model.CanEdit)
+                                {
+                                    <button class="usa-button usa-button--unstyled" type="button" hx-post="/people/@p.PersonId/contacts/@c.PersonContactMethodId/remove"
+                                            hx-target="#person-header" hx-swap="outerHTML" hx-confirm="Remove this contact method?">Remove</button>
+                                }
+                            </li>
+                        }
+                    </ul>
+                }
+                @if (Model.CanEdit)
+                {
+                    <form class="merit-form-row" hx-post="/people/@p.PersonId/contacts" hx-target="#person-header" hx-swap="outerHTML">
+                        <div class="usa-form-group"><label class="usa-label" for="cType">Type</label>
+                            <select class="usa-select" id="cType" name="ContactType"><option value="phone">Phone</option><option value="email">Email</option></select></div>
+                        <div class="usa-form-group"><label class="usa-label" for="cValue">Number or address</label><input class="usa-input" id="cValue" name="ContactValue" required /></div>
+                        <div class="usa-form-group"><div class="usa-checkbox"><input class="usa-checkbox__input" id="cPref" type="checkbox" name="IsPreferred" value="true" /><label class="usa-checkbox__label" for="cPref">Preferred</label></div></div>
+                        <div class="usa-form-group"><button class="usa-button usa-button--outline" type="submit">Add</button></div>
+                    </form>
+                }
+            </div>
+        </div>
+    </details>
+</section>

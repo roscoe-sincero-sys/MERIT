@@ -1,0 +1,34 @@
+@model UsersModel
+@{
+    ViewData["Title"] = "Users";
+}
+<div class="merit-page-header">
+    <h1>Users</h1>
+    <span><a class="usa-button" href="/admin/users/new">Add a user</a> <a class="usa-button usa-button--outline" href="/admin/audit">Audit log</a></span>
+</div>
+<p class="merit-meta">People who work for the tenants you administer, and people from elsewhere you have given access here.</p>
+<form class="merit-inline-form" method="get" action="/admin/users">
+    <label class="usa-label" for="find">Give access to someone from another tenant: their exact user name</label>
+    @if (ViewData["findMessage"] is string fm) { <span class="usa-error-message" role="alert">@fm</span> }
+    <input class="usa-input" id="find" name="find" autocomplete="off" />
+    <button class="usa-button usa-button--outline" type="submit">Find</button>
+</form>
+<div class="merit-table-wrap" tabindex="0" role="region" aria-label="Table; scroll sideways for more columns">
+    <table class="usa-table usa-table--borderless">
+        <thead><tr><th scope="col">Name</th><th scope="col">User name</th><th scope="col">Works for</th><th scope="col">Master profile</th><th scope="col">MFA</th><th scope="col">Last sign-in</th><th scope="col">Status</th></tr></thead>
+        <tbody>
+            @foreach (var u in Model.Users)
+            {
+                <tr>
+                    <td><a class="usa-link" href="/admin/users/@u.AppUserId">@u.DisplayName</a></td>
+                    <td>@u.UserName</td>
+                    <td>@u.HomeTenantName@(u.CanManageAccount ? "" : " (another administrator)")</td>
+                    <td>@u.Assignments</td>
+                    <td>@(u.MfaEnabled ? "Enrolled" : "Not yet enrolled")</td>
+                    <td>@Options.Date(u.LastSignInUtc)</td>
+                    <td>@(u.IsActive ? "Active" : "Disabled")@(u.LockoutEndUtc > DateTime.UtcNow ? " · locked" : "")</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>

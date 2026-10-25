@@ -1,0 +1,50 @@
+@model ResultFieldsModel
+@* Dependent fields of the result form. Specimen and unit changes re-request this partial with hx-include="closest form". *@
+@if (Model.Specimens.Count == 0)
+{
+    <p class="merit-meta">Choose an analyte to see its specimens and units.</p>
+}
+else
+{
+    <div class="merit-form-row">
+        <div class="usa-form-group">
+            <label class="usa-label" for="AnalyteSpecimenId">Specimen</label>
+            <select class="usa-select" id="AnalyteSpecimenId" name="AnalyteSpecimenId"
+                    hx-get="/results/fields" hx-target="#result-fields" hx-swap="innerHTML" hx-include="closest form">
+                @foreach (var o in Model.Specimens) { <option value="@o.Value" selected="@o.Selected">@o.Label</option> }
+            </select>
+        </div>
+        <div class="usa-form-group">
+            <label class="usa-label" for="Unit">Unit</label>
+            <select class="usa-select" id="Unit" name="Unit">
+                @foreach (var o in Model.Units) { <option value="@o.Value" selected="@o.Selected">@o.Label</option> }
+            </select>
+            <div class="usa-hint">Compared in @Model.CanonicalUnit.</div>
+        </div>
+        @if (Model.UsesSampleType)
+        {
+            <div class="usa-form-group">
+                <label class="usa-label" for="SampleType">Sample type</label>
+                <select class="usa-select" id="SampleType" name="SampleType">
+                    @foreach (var o in Model.SampleTypes) { <option value="@o.Value" selected="@o.Selected">@o.Label</option> }
+                </select>
+            </div>
+        }
+        @if (Model.Speciations.Count > 0)
+        {
+            <div class="usa-form-group">
+                <label class="usa-label" for="Speciation">Speciation</label>
+                <select class="usa-select" id="Speciation" name="Speciation">
+                    @foreach (var o in Model.Speciations) { <option value="@o.Value" selected="@o.Selected">@o.Label</option> }
+                </select>
+            </div>
+        }
+        @if (Model.RequiresCreatinine)
+        {
+            <div class="usa-form-group">
+                <label class="usa-label" for="Creatinine">Creatinine (g/L)</label>
+                <input class="usa-input usa-input--small" id="Creatinine" name="Creatinine" inputmode="decimal" />
+            </div>
+        }
+    </div>
+}

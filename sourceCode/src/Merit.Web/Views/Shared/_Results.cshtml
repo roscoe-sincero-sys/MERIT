@@ -1,0 +1,51 @@
+@model ResultsSectionModel
+<section class="merit-section" id="section-results" aria-labelledby="results-heading">
+    <h2 id="results-heading">
+        Results
+        @if (Model.CanEnter) { <a class="usa-button usa-button--outline usa-button--small" href="/people/@Model.PersonId/results/new">Enter a result</a> }
+    </h2>
+    @if (Model.AnalyteOptions.Count > 2)
+    {
+        <form class="usa-form" hx-get="/people/@Model.PersonId/results" hx-target="#section-results" hx-swap="outerHTML" hx-trigger="change">
+            <label class="usa-label" for="results-analyte">Analyte</label>
+            <select class="usa-select" id="results-analyte" name="analyteId">
+                @foreach (var o in Model.AnalyteOptions) { <option value="@o.Value" selected="@o.Selected">@o.Label</option> }
+            </select>
+        </form>
+    }
+
+    @foreach (var chart in Model.Charts)
+    {
+        <partial name="_TrendChart" model="chart" />
+    }
+
+    @if (Model.Rows.Count == 0)
+    {
+        <p class="merit-empty">No results recorded.</p>
+    }
+    else
+    {
+        <div class="merit-table-wrap" tabindex="0" role="region" aria-label="Table; scroll sideways for more columns">
+            <table class="usa-table usa-table--borderless usa-table--compact">
+                <thead><tr><th scope="col">Collected</th><th scope="col">Analyte</th><th scope="col">Result</th><th scope="col">Sample</th><th scope="col">Method</th><th scope="col">Population</th><th scope="col">Status</th><th scope="col">Lab</th></tr></thead>
+                <tbody>
+                    @foreach (var r in Model.Rows)
+                    {
+                        <tr>
+                            <td><a class="usa-link" href="/results/@r.LabResultId">@Options.Date(r.CollectedDate)</a></td>
+                            <td>@r.AnalyteCode <span class="merit-meta">@Options.Humanize(r.Specimen)</span></td>
+                            <td><strong>@Options.Value(r.Operator, r.ValueCanonical, r.UnitCanonical)</strong>
+                                @if (r.UnitReported != r.UnitCanonical) { <div class="merit-meta">reported @r.ValueText @r.UnitReported</div> }
+                                @if (r.IsIndeterminate) { <span class="merit-badge merit-badge--suspect">Indeterminate</span> }</td>
+                            <td>@Options.Humanize(r.SampleType)</td>
+                            <td>@Options.Humanize(r.TestMethod)</td>
+                            <td>@Options.Population(r.Population)</td>
+                            <td>@Options.Humanize(r.ResultStatus)@if (r.ResultRowStatus != "valid") { <span class="merit-badge">@Options.Humanize(r.ResultRowStatus)</span> }</td>
+                            <td>@r.LabName</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</section>

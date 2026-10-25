@@ -1,0 +1,85 @@
+@model PersonFormModel
+@{
+    bool isNew = Model.PersonId is null;
+    string action = isNew ? "/people/new" : $"/people/{Model.PersonId}/edit";
+}
+<div id="person-form">
+    <h2 id="dialog-title">@(isNew ? "Add a person" : "Edit identity")</h2>
+    @if (!ViewData.ModelState.IsValid)
+    {
+        <div class="usa-alert usa-alert--error usa-alert--slim" role="alert"><div class="usa-alert__body"><p class="usa-alert__text">Some fields need attention.</p></div></div>
+    }
+    @* A new person is a plain form post; editing posts with htmx and returns 422 with this form on a validation error. *@
+    <form class="usa-form usa-form--large" method="post" action="@action"
+          hx-post="@(isNew ? null : action)" hx-target="#person-form" hx-swap="outerHTML">
+        @Html.AntiForgeryToken()
+        <input type="hidden" name="RowVersion" value="@Model.RowVersion" />
+        <div class="merit-form-row">
+            <div class="usa-form-group @(ViewData.ModelState.FirstError("LastName").Length > 0 ? "usa-form-group--error" : "")">
+                <label class="usa-label" for="LastName">Last name</label>
+                <span class="usa-error-message">@ViewData.ModelState.FirstError("LastName")</span>
+                <input class="usa-input" id="LastName" name="LastName" value="@Model.LastName" required maxlength="60" />
+            </div>
+            <div class="usa-form-group">
+                <label class="usa-label" for="FirstName">First name</label>
+                <input class="usa-input" id="FirstName" name="FirstName" value="@Model.FirstName" maxlength="60" />
+            </div>
+            <div class="usa-form-group">
+                <label class="usa-label" for="MiddleName">Middle name</label>
+                <input class="usa-input" id="MiddleName" name="MiddleName" value="@Model.MiddleName" maxlength="60" />
+            </div>
+        </div>
+        <div class="merit-form-row">
+            <div class="usa-form-group @(ViewData.ModelState.FirstError("Dob").Length > 0 ? "usa-form-group--error" : "")">
+                <label class="usa-label" for="Dob">Date of birth</label>
+                <span class="usa-error-message">@ViewData.ModelState.FirstError("Dob")</span>
+                <input class="usa-input" id="Dob" name="Dob" type="date" value="@Options.Iso(Model.Dob)" />
+            </div>
+            <div class="usa-form-group">
+                <div class="usa-checkbox">
+                    <input class="usa-checkbox__input" id="DobVerified" type="checkbox" name="DobVerified" value="true" @(Model.DobVerified ? "checked" : "") />
+                    <label class="usa-checkbox__label" for="DobVerified">Verified against a second source</label>
+                </div>
+            </div>
+            <div class="usa-form-group">
+                <label class="usa-label" for="Sex">Sex</label>
+                <select class="usa-select" id="Sex" name="Sex">
+                    @foreach (var o in Options.Fixed(Model.Sex, Options.Sexes)) { <option value="@o.Value" selected="@o.Selected">@o.Label</option> }
+                </select>
+            </div>
+        </div>
+        <fieldset class="usa-fieldset">
+            <legend class="usa-legend">Race (any that apply)</legend>
+            <div class="merit-form-row">
+                @foreach (var r in Model.Races)
+                {
+                    <div class="usa-checkbox">
+                        <input class="usa-checkbox__input" id="race-@r.Value" type="checkbox" name="RaceCodes" value="@r.Value" @(r.Selected ? "checked" : "") />
+                        <label class="usa-checkbox__label" for="race-@r.Value">@r.Label</label>
+                    </div>
+                }
+            </div>
+        </fieldset>
+        <div class="merit-form-row">
+            <div class="usa-form-group">
+                <label class="usa-label" for="Ethnicity">Ethnicity</label>
+                <select class="usa-select" id="Ethnicity" name="Ethnicity">
+                    @foreach (var o in Options.Fixed(Model.Ethnicity, Options.Ethnicities)) { <option value="@o.Value" selected="@o.Selected">@o.Label</option> }
+                </select>
+            </div>
+            <div class="usa-form-group">
+                <label class="usa-label" for="PreferredLanguage">Preferred language</label>
+                <select class="usa-select" id="PreferredLanguage" name="PreferredLanguage">
+                    @foreach (var o in Model.Languages) { <option value="@o.Value" selected="@o.Selected">@o.Label</option> }
+                </select>
+            </div>
+            <div class="usa-form-group @(ViewData.ModelState.FirstError("DeceasedDate").Length > 0 ? "usa-form-group--error" : "")">
+                <label class="usa-label" for="DeceasedDate">Date of death</label>
+                <span class="usa-error-message">@ViewData.ModelState.FirstError("DeceasedDate")</span>
+                <input class="usa-input" id="DeceasedDate" name="DeceasedDate" type="date" value="@Options.Iso(Model.DeceasedDate)" />
+            </div>
+        </div>
+        <button class="usa-button" type="submit">Save</button>
+        @if (!isNew) { <button class="usa-button usa-button--unstyled" type="button" data-close-dialog>Cancel</button> }
+    </form>
+</div>

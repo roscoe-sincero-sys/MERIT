@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <!--
+    The worker program: claims jobs from the per-tenant queues in SQL Server and runs them through the same application
+    services as the web application (intake pipeline, federal extracts, cluster detection). It uses its own database
+    login with EXECUTE only on the procedures its jobs call. Web SDK only to expose health endpoints.
+  -->
+  <PropertyGroup>
+    <RootNamespace>Merit.Worker</RootNamespace>
+    <UserSecretsId>merit-worker-3f2a9c55</UserSecretsId>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Merit.Application\Merit.Application.csproj" />
+    <ProjectReference Include="..\Merit.Data.SqlServer\Merit.Data.SqlServer.csproj" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,39 @@
+@model PregnancyModel
+<section class="merit-section" id="section-pregnancy" aria-labelledby="pregnancy-heading">
+    <h2 id="pregnancy-heading">
+        Pregnancy
+        @if (Model.CanEdit)
+        {
+            <button class="usa-button usa-button--outline usa-button--small" type="button" hx-get="/people/@Model.PersonId/pregnancies/add" hx-target="#pregnancy-form" hx-swap="innerHTML">Add episode</button>
+        }
+    </h2>
+    <div id="pregnancy-form"></div>
+    @if (Model.IsMale)
+    {
+        <p class="merit-meta">This person is recorded as male; episodes were reported and are kept for review.</p>
+    }
+    @if (Model.Rows.Count == 0)
+    {
+        <p class="merit-empty">No pregnancy episodes recorded.</p>
+    }
+    else
+    {
+        <ul class="usa-list">
+            @foreach (var e in Model.Rows)
+            {
+                <li>
+                    From @Options.Date(e.StartDate)
+                    @if (e.ActualEndDate is not null) { <span>to @Options.Date(e.ActualEndDate)</span> }
+                    else if (e.ExpectedEndDate is not null) { <span>expected @Options.Date(e.ExpectedEndDate)</span> }
+                    @if (e.Outcome is not null) { <span class="merit-badge">@Options.Humanize(e.Outcome)</span> }
+                    @if (e.NewbornPersonId is Guid nb) { <span>&middot; newborn <a class="usa-link" href="/people/@nb">@e.NewbornFirstName @e.NewbornLastName</a></span> }
+                    <span class="merit-meta">@Options.Humanize(e.Source)</span>
+                    @if (Model.CanEdit)
+                    {
+                        <button class="usa-button usa-button--unstyled" type="button" hx-get="/people/@Model.PersonId/pregnancies/@e.PregnancyEpisodeId/edit" hx-target="#pregnancy-form" hx-swap="innerHTML">Edit</button>
+                    }
+                </li>
+            }
+        </ul>
+    }
+</section>

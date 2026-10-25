@@ -1,0 +1,7 @@
+@model PersonFormModel
+@{
+    ViewData["Title"] = Model.PersonId is null ? "Add a person" : "Edit identity";
+}
+<p><a class="usa-link" href="/search">Back to search</a></p>
+<p class="merit-meta">Search first, so the registry keeps one record per person. A person record holds identity only; places, relationships and jobs are added on the person page.</p>
+<partial name="_PersonForm" model="Model" />

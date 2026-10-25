@@ -1,0 +1,36 @@
+@model EmploymentModel
+<section class="merit-section" id="section-employment" aria-labelledby="employment-heading">
+    <h2 id="employment-heading">
+        Employment
+        @if (Model.CanEdit)
+        {
+            <button class="usa-button usa-button--outline usa-button--small" type="button" hx-get="/people/@Model.PersonId/employment/add" hx-target="#employment-form" hx-swap="innerHTML">Add job</button>
+        }
+    </h2>
+    <div id="employment-form"></div>
+    @if (Model.Rows.Count == 0)
+    {
+        <p class="merit-empty">No jobs recorded.</p>
+    }
+    else
+    {
+        <div class="merit-table-wrap" tabindex="0" role="region" aria-label="Table; scroll sideways for more columns">
+            <table class="usa-table usa-table--borderless">
+                <thead><tr><th scope="col">Employer and worksite</th><th scope="col">Job</th><th scope="col">Codes</th><th scope="col">Metal tasks and PPE</th><th scope="col">Dates</th></tr></thead>
+                <tbody>
+                    @foreach (var e in Model.Rows)
+                    {
+                        <tr>
+                            <td><strong>@e.OrganizationName</strong><div class="merit-meta">@e.WorksiteAddress @e.WorksiteCity @e.WorksiteState</div></td>
+                            <td>@e.JobTitle<div class="merit-meta">@e.IndustryText @(e.HoursPerWeek is decimal h ? $"· {h:0.#} h/week" : "")</div></td>
+                            <td>NAICS @(e.NaicsOverride ?? e.OrganizationNaics ?? "999")<br />COC @(e.OccupationCode ?? "990")</td>
+                            <td>@e.MetalTasks @if (!string.IsNullOrEmpty(e.Analytes)) { <span class="merit-badge">@e.Analytes</span> }<div class="merit-meta">@e.PpeNotes</div></td>
+                            <td>@Options.Date(e.StartDate) &ndash; @(e.EndDate is null ? "current" : Options.Date(e.EndDate))
+                                @if (e.VerifiedDate is null) { <div class="merit-meta">@Options.Humanize(e.Source), unverified</div> }</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</section>

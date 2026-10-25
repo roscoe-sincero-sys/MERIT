@@ -1,0 +1,43 @@
+@model InvestigationRequestModel
+<div id="investigation-request">
+    <h2 id="dialog-title">Request an investigation for case @Model.CaseNumber</h2>
+    @if (!ViewData.ModelState.IsValid)
+    {
+        <div class="usa-alert usa-alert--error usa-alert--slim" role="alert"><div class="usa-alert__body"><p class="usa-alert__text">@string.Join(" ", ViewData.ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage))</p></div></div>
+    }
+    <form class="usa-form" hx-post="/cases/@Model.ExposureCaseId/investigations" hx-target="#investigation-request" hx-swap="outerHTML">
+        <input type="hidden" name="Checked" value="@(Model.Checked ? "true" : "false")" />
+        <div class="usa-form-group">
+            <label class="usa-label" for="InvestigationType">Type</label>
+            <select class="usa-select" id="InvestigationType" name="InvestigationType">
+                <option value="residential" selected="@(Model.InvestigationType == "residential")">Residential</option>
+                <option value="childCareSchool" selected="@(Model.InvestigationType == "childCareSchool")">Child care or school</option>
+                <option value="nonOccupational" selected="@(Model.InvestigationType == "nonOccupational")">Non-occupational source at a place</option>
+            </select>
+            <div class="usa-hint">A workplace target makes it a workplace investigation.</div>
+        </div>
+        <fieldset class="usa-fieldset">
+            <legend class="usa-legend">What to investigate</legend>
+            @if (Model.Targets.Count == 0) { <p class="merit-empty">The person has no places or jobs recorded; add them on the person page first.</p> }
+            @for (int i = 0; i < Model.Targets.Count; i++)
+            {
+                var t = Model.Targets[i];
+                <div class="usa-radio"><input class="usa-radio__input" id="target-@i" type="radio" name="Target" value="@t.Value" @(t.Selected ? "checked" : "") /><label class="usa-radio__label" for="target-@i">@t.Label</label></div>
+            }
+        </fieldset>
+        @if (Model.Existing.Count > 0)
+        {
+            @* Offer any open investigation of the same target, so siblings in one home share one investigation. *@
+            <fieldset class="usa-fieldset merit-inline-form">
+                <legend class="usa-legend">An open investigation of this target already exists</legend>
+                @foreach (var e in Model.Existing)
+                {
+                    <div class="usa-radio"><input class="usa-radio__input" id="join-@e.InvestigationId" type="radio" name="JoinInvestigationId" value="@e.InvestigationId" checked /><label class="usa-radio__label" for="join-@e.InvestigationId">Join @e.InvestigationNumber (@Options.Humanize(e.InvestigationStatus), requested @Options.Date(e.RequestedDate), @e.LinkedCases case(s))</label></div>
+                }
+                <div class="usa-radio"><input class="usa-radio__input" id="join-none" type="radio" name="JoinInvestigationId" value="" /><label class="usa-radio__label" for="join-none">Create a separate investigation anyway</label></div>
+            </fieldset>
+        }
+        <button class="usa-button" type="submit">@(Model.Existing.Count > 0 ? "Continue" : "Request investigation")</button>
+        <button class="usa-button usa-button--unstyled" type="button" data-close-dialog>Cancel</button>
+    </form>
+</div>

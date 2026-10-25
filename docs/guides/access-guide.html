@@ -1,0 +1,417 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>MERIT: Who Sees What, and Your Profiles</title>
+<style>
+  @page { size: Letter; margin: 0.55in 0.65in 0.7in; }
+  :root { --ink:#1b1b1b; --muted:#565c65; --blue:#1a4480; --blue2:#005ea2; --soft:#f0f4f9; --line:#dfe1e2; --ok:#00a91c; --no:#b50909; --amber:#ffbe2e; }
+  * { box-sizing: border-box; }
+  body { font-family: "Segoe UI", "Source Sans Pro", Arial, sans-serif; color: var(--ink); font-size: 10.5pt; line-height: 1.38; margin: 0; }
+  h1 { font-size: 26pt; color: var(--blue); margin: 0 0 .2em; line-height: 1.15; }
+  h2 { font-size: 16pt; color: var(--blue); margin: .6em 0 .35em; border-bottom: 2px solid var(--blue); padding-bottom: .15em; break-after: avoid; }
+  h3 { font-size: 13pt; margin: 1em 0 .3em; break-after: avoid; }
+  p, li { margin: .3em 0; }
+  ul { padding-left: 1.2em; }
+  .page { break-after: page; }
+  .lead { font-size: 13pt; color: var(--muted); }
+  .cover { height: 9.2in; display: flex; flex-direction: column; justify-content: center; }
+  .cover .tag { display: inline-block; background: var(--blue); color: #fff; padding: .2em .7em; border-radius: 1em; font-size: 10pt; letter-spacing: .05em; }
+  .box { border: 1px solid var(--line); border-left: 6px solid var(--blue2); background: var(--soft); padding: .6em .9em; border-radius: 4px; margin: .7em 0; break-inside: avoid; }
+  .box.warn { border-left-color: var(--amber); background: #fff8e6; }
+  .box.ok { border-left-color: var(--ok); background: #ecf3ec; }
+  .box strong:first-child { color: var(--blue); }
+  table { border-collapse: collapse; width: 100%; margin: .5em 0; font-size: 10pt; break-inside: avoid; }
+  th, td { border: 1px solid var(--line); padding: .35em .5em; text-align: left; vertical-align: top; }
+  th { background: #e8eef5; }
+  .yes { color: #154c21; font-weight: 700; }
+  .no { color: var(--no); font-weight: 700; }
+  .words dt { font-weight: 700; color: var(--blue); margin-top: .5em; }
+  .words dd { margin: 0 0 0 1em; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 1em; }
+  .persona { border: 1px solid var(--line); border-radius: 6px; padding: .6em .9em; margin: .6em 0; break-inside: avoid; }
+  .persona h3 { margin-top: 0; }
+  .who { font-size: 9.5pt; color: var(--muted); }
+  /* mock screens */
+  .screen { border: 2px solid #71767a; border-radius: 8px; overflow: hidden; margin: .8em 0; break-inside: avoid; box-shadow: 0 2px 6px rgba(0,0,0,.15); font-size: 9.5pt; }
+  .screen .cap { background: #71767a; color: #fff; font-size: 8.5pt; padding: .15em .6em; }
+  .bar { background: var(--blue); color: #fff; padding: .45em .8em; display: flex; justify-content: space-between; align-items: center; }
+  .bar b { font-size: 13pt; letter-spacing: .03em; }
+  .bar .nav span { margin-right: .9em; font-size: 9pt; }
+  .bar .me { text-align: right; font-size: 8.5pt; line-height: 1.25; }
+  .bar .me u { color: #fff; }
+  .scr { padding: .6em .9em; background: #fff; }
+  .scr h4 { margin: .2em 0 .4em; font-size: 12pt; }
+  .btn { display: inline-block; background: var(--blue2); color: #fff; padding: .2em .7em; border-radius: 4px; font-size: 8.5pt; font-weight: 700; }
+  .btn.o { background: #fff; color: var(--blue2); border: 1.5px solid var(--blue2); }
+  .field { border: 1px solid #565c65; padding: .2em .4em; min-height: 1.6em; background: #fff; margin: .15em 0 .45em; }
+  .lbl { font-weight: 700; font-size: 9pt; }
+  .banner { background: #e7f6f8; border-left: 6px solid #00bde3; padding: .45em .8em; font-size: 9pt; display: flex; justify-content: space-between; align-items: center; }
+  .pill { display: inline-block; font-size: 8pt; background: #dfe1e2; padding: 0 .5em; border-radius: 1em; }
+  .pill.m { background: var(--blue); color: #fff; }
+  .note { font-size: 8.5pt; color: var(--muted); }
+  .callout { display: inline-block; background: var(--amber); color: var(--ink); font-weight: 700; border-radius: 50%; width: 1.4em; height: 1.4em; text-align: center; font-size: 8.5pt; line-height: 1.4em; }
+  svg text { font-family: "Segoe UI", Arial, sans-serif; }
+  .foot { font-size: 8.5pt; color: var(--muted); }
+</style>
+</head>
+<body>
+
+<!-- ============================================================ cover -->
+<section class="page cover">
+  <span class="tag">MERIT USER GUIDE</span>
+  <h1>Who sees what,<br>and your profiles</h1>
+  <p class="lead">A plain-language guide to how MERIT decides what you can see and do, how access is given out, and how to use profiles and switch between them.</p>
+  <div class="box">
+    <strong>In one minute</strong>
+    <ul>
+      <li>MERIT is organized like a family tree of agencies. You see the records of the agency you work for, and everything under it. You never see your neighbors' records.</li>
+      <li>Your <b>master profile</b> is everything you have been given. Only an administrator can change it.</li>
+      <li>You can make smaller <b>profiles</b> for everyday work, such as "read only" or "just one county", and switch between them at any time. A profile can never give you more than your master profile.</li>
+      <li>Administrators can <b>view MERIT as</b> someone they manage, to check what that person can see.</li>
+    </ul>
+  </div>
+  <p class="foot">The examples use EPA Region 3 (Delaware, the District of Columbia, Maryland, Pennsylvania, Virginia, West Virginia and seven federally recognized tribes). The people and screens are made up, to show how things work.</p>
+</section>
+
+<!-- ============================================================ tree -->
+<section class="page">
+  <h2>1. The tree: how MERIT is organized</h2>
+  <p>Every agency that uses MERIT is a <b>tenant</b>. Tenants are arranged in a tree, from the top down:</p>
+  <svg viewBox="0 0 700 330" width="88%" role="img" aria-label="Tenant tree for EPA Region 3">
+    <g stroke="#71767a" stroke-width="1.5" fill="none">
+      <path d="M350 48 V70"/><path d="M350 110 V130 H75 V150 M350 130 H625 V150 M160 130 V150 M245 130 V150 M330 130 V150 M415 130 V150 M500 130 V150"/>
+      <path d="M500 190 V215 H430 V235 M500 215 H570 V235"/>
+    </g>
+    <rect x="250" y="10" width="200" height="38" rx="6" fill="#565c65"/><text x="350" y="34" fill="#fff" text-anchor="middle" font-size="13">MERIT platform</text>
+    <rect x="250" y="70" width="200" height="40" rx="6" fill="#1a4480"/><text x="350" y="95" fill="#fff" text-anchor="middle" font-size="13">EPA Region 3 (region)</text>
+    <g font-size="11" text-anchor="middle">
+      <rect x="30" y="150" width="90" height="40" rx="6" fill="#005ea2"/><text x="75" y="174" fill="#fff">Delaware</text>
+      <rect x="125" y="150" width="70" height="40" rx="6" fill="#005ea2"/><text x="160" y="174" fill="#fff">D.C.</text>
+      <rect x="200" y="150" width="90" height="40" rx="6" fill="#005ea2"/><text x="245" y="174" fill="#fff">Maryland</text>
+      <rect x="295" y="150" width="70" height="40" rx="6" fill="#005ea2"/><text x="330" y="168" fill="#fff">Pennsyl-</text><text x="330" y="182" fill="#fff">vania</text>
+      <rect x="370" y="150" width="90" height="40" rx="6" fill="#005ea2"/><text x="415" y="174" fill="#fff">Virginia</text>
+      <rect x="455" y="150" width="90" height="40" rx="6" fill="#005ea2" stroke="#ffbe2e" stroke-width="3"/><text x="500" y="168" fill="#fff">West</text><text x="500" y="182" fill="#fff">Virginia</text>
+      <rect x="560" y="150" width="130" height="40" rx="6" fill="#2e6276"/><text x="625" y="168" fill="#fff">7 federally</text><text x="625" y="182" fill="#fff">recognized tribes</text>
+      <rect x="370" y="235" width="120" height="40" rx="6" fill="#73b3e7"/><text x="430" y="252">Jefferson</text><text x="430" y="266">County</text>
+      <rect x="510" y="235" width="120" height="40" rx="6" fill="#73b3e7"/><text x="570" y="252">Berkeley</text><text x="570" y="266">County</text>
+    </g>
+    <g font-size="10.5" fill="#565c65">
+      <text x="10" y="318">Platform: manages accounts only.  Region and states: their own records and everything below.  Counties: their own records.</text>
+    </g>
+  </svg>
+  <h3>The one rule to remember</h3>
+  <div class="box ok"><strong>You see the records of the place you work for, and of every place under it. Nothing beside it, and nothing above it.</strong></div>
+  <ul>
+    <li>A <b>Pennsylvania</b> case manager sees Pennsylvania records. They <span class="no">cannot</span> see Delaware's, or any other state's.</li>
+    <li>A <b>West Virginia</b> case manager sees West Virginia's records, including Jefferson County's and Berkeley County's.</li>
+    <li>A <b>Jefferson County</b> case manager sees Jefferson County only. Not Berkeley, and not the rest of the state.</li>
+    <li>An <b>EPA Region 3</b> staff member sees all six states and the tribes, because they are all under the region.</li>
+  </ul>
+  <p>Think of an office building. The region has the whole building, each state has a floor, and each county has a room on its floor. Your key opens your space and the rooms inside it, never the floor next door.</p>
+  <h3>Not everyone has every level</h3>
+  <p>Each organization uses only the levels it needs. Maryland on its own would have the platform, a state and its counties. Baltimore City on its own would have the platform and one jurisdiction. The rules are the same however tall the tree is.</p>
+  <div class="box"><strong>Shared lists stay in their own state.</strong> Each state (and each tribe) keeps its own address list, laboratory list, levels and settings. Pennsylvania users never see Delaware's address list either.</div>
+</section>
+
+<!-- ============================================================ words -->
+<section class="page">
+  <h2>2. Words you will see</h2>
+  <dl class="words">
+    <dt>Tenant</dt><dd>An agency or program in the tree: the platform, a region, a state, a tribe, a program or a county.</dd>
+    <dt>Home tenant ("Works for")</dt><dd>The agency you work for. Its administrators manage your account: your name, password reset and second factor.</dd>
+    <dt>Role</dt><dd>A named set of things you can do, such as <i>Case manager</i>, <i>Supervisor</i> or <i>User administrator</i>.</dd>
+    <dt>Grant</dt><dd>One line of access: <i>a role, at a place, with or without everything under it, at an access level</i>. For example: "Case manager at Jefferson County, read and write".</dd>
+    <dt>Access level</dt><dd><b>Read only</b>: look, but change nothing. <b>Read and write</b>: add and change records, but not delete them. <b>Full</b>: read, write and delete. (Deleted records are hidden, not destroyed: MERIT keeps them, with who deleted them and when.)</dd>
+    <dt>Master profile</dt><dd>All of your grants together: the most you can ever do. Only an administrator can change it. You cannot change or switch it off yourself.</dd>
+    <dt>Profile</dt><dd>A smaller version of your master profile that you make for yourself, such as "Read only - Berkeley". You choose which profile you are using.</dd>
+    <dt>Working in</dt><dd>The tenant your new records belong to, such as the county you are working on today.</dd>
+    <dt>View as</dt><dd>An administrator tool to see MERIT the way someone they manage sees it, without knowing that person's password.</dd>
+  </dl>
+
+  <h3>Your access is a list of grants</h3>
+  <table>
+    <tr><th>Role</th><th>Place</th><th>Including everything under it?</th><th>Access level</th></tr>
+    <tr><td>Case manager</td><td>Jefferson County</td><td>Yes</td><td>Full</td></tr>
+    <tr><td>Case manager</td><td>Berkeley County</td><td>Yes</td><td>Full</td></tr>
+  </table>
+  <p class="note">This is the master profile of Bailey, who works for both Jefferson and Berkeley counties (see section 3).</p>
+</section>
+
+<!-- ============================================================ personas -->
+<section class="page">
+  <h2>3. Who can do what: EPA Region 3</h2>
+  <p>Here are the kinds of people MERIT expects, using EPA Region 3 as the example.</p>
+
+  <div class="persona">
+    <h3>The platform administrator</h3>
+    <p class="who">Example: Pat, on the MERIT platform team. Pat was the first account ever created.</p>
+    <p><b>What Pat does:</b> creates, changes and deactivates accounts for everyone; gives and removes roles; manages each person's master profile; and sets up new regions, states and tribes with the platform setup tools.</p>
+    <p><b>What Pat cannot do:</b> see, add, change or delete any records about people, results, cases or investigations. Pat sees only what is needed to manage accounts: names, user names, work email and who has which role. Health information stays invisible. Pat also has just one profile and cannot switch profiles or view as others: managing accounts is the job.</p>
+  </div>
+
+  <div class="two">
+    <div class="persona">
+      <h3>EPA Region 3 administrator</h3>
+      <p class="who">Example: Reese. Roles: Administrator and Supervisor at EPA Region 3, and everything under it.</p>
+      <p><b>Sees:</b> every state's, tribe's and county's records in Region 3.</p>
+      <p><b>Does:</b> regional work, plus manages accounts for anyone who works in Region 3: adds people, gives roles at any place in the region, ends access and resets second factors.</p>
+      <p><b>Can view as:</b> anyone in Region 3, such as a West Virginia case manager.</p>
+    </div>
+    <div class="persona">
+      <h3>EPA Region 3 staff member</h3>
+      <p class="who">Example: Sky. Role: Supervisor at EPA Region 3, and everything under it.</p>
+      <p><b>Sees and works on:</b> records in every Region 3 state, tribe and county.</p>
+      <p><b>Cannot:</b> manage accounts or give access to anyone.</p>
+      <p><b>Tip:</b> when entering a West Virginia result, set <i>Working in</i> to West Virginia, so the record uses West Virginia's levels and settings.</p>
+    </div>
+    <div class="persona">
+      <h3>West Virginia administrator</h3>
+      <p class="who">Example: Wren. Roles: Administrator and Supervisor at West Virginia, and everything under it.</p>
+      <p><b>Sees:</b> West Virginia and all of its counties. <span class="no">Not</span> Pennsylvania, Delaware or the region's own records.</p>
+      <p><b>Does:</b> manages accounts for people who work in West Virginia or its counties, and changes West Virginia's settings and levels.</p>
+      <p><b>Can view as:</b> West Virginia and county staff, for example to check a new hire's access.</p>
+    </div>
+    <div class="persona">
+      <h3>West Virginia staff member</h3>
+      <p class="who">Example: Morgan. Role: Case manager at West Virginia, and everything under it.</p>
+      <p><b>Sees and works on:</b> West Virginia records, including Jefferson's and Berkeley's.</p>
+      <p><b>Cannot:</b> see any other state, or manage accounts.</p>
+    </div>
+    <div class="persona">
+      <h3>Jefferson County administrator</h3>
+      <p class="who">Example: Jamie. Roles: User administrator and Case manager at Jefferson County.</p>
+      <p><b>Sees:</b> Jefferson County records only.</p>
+      <p><b>Does:</b> adds new people, who must work in Jefferson; gives Jefferson access to people (including people from other counties); ends Jefferson access. Jamie can only give roles Jamie has at Jefferson, so Jamie cannot hand out state-level powers.</p>
+      <p><b>Cannot:</b> change accounts of people who work elsewhere, or give access in Berkeley.</p>
+      <p><b>Can view as:</b> Jefferson staff, and only the Jefferson part of anyone who also works elsewhere.</p>
+    </div>
+    <div class="persona">
+      <h3>Jefferson County staff member</h3>
+      <p class="who">Example: Jordan. Role: Case manager at Jefferson County.</p>
+      <p><b>Sees and works on:</b> Jefferson County records only.</p>
+      <p><b>Cannot:</b> see Berkeley or the rest of West Virginia, or manage accounts.</p>
+    </div>
+  </div>
+
+  <div class="persona">
+    <h3>A staff member who works for Jefferson and Berkeley counties</h3>
+    <p class="who">Example: Bailey. Works for Jefferson (home tenant). Grants: Case manager at Jefferson County, and Case manager at Berkeley County.</p>
+    <p><b>How Bailey got there:</b> Jamie (the Jefferson administrator) created Bailey's account and gave the Jefferson role. Then the Berkeley administrator found Bailey by user name and gave the Berkeley role. Each administrator manages only their own county's part.</p>
+    <p><b>Sees and works on:</b> Jefferson and Berkeley records, but not the rest of West Virginia or any other state.</p>
+    <p><b>Profiles that help:</b> "Berkeley only" for a day of Berkeley home visits, or "Read only" for a records review.</p>
+  </div>
+</section>
+
+<section class="page">
+  <h2>At a glance</h2>
+  <table>
+    <tr><th>Person</th><th>Sees records of</th><th>Can change records?</th><th>Manages accounts for</th><th>Can switch profiles / view as?</th></tr>
+    <tr><td>Platform administrator</td><td class="no">None</td><td class="no">No</td><td>Everyone</td><td class="no">No / No</td></tr>
+    <tr><td>Region 3 administrator</td><td>All of Region 3</td><td class="yes">Yes</td><td>People in Region 3</td><td class="yes">Yes / Yes</td></tr>
+    <tr><td>Region 3 staff</td><td>All of Region 3</td><td class="yes">Yes</td><td class="no">No one</td><td class="yes">Yes</td> </tr>
+    <tr><td>West Virginia administrator</td><td>West Virginia and its counties</td><td class="yes">Yes</td><td>People in WV</td><td class="yes">Yes / Yes</td></tr>
+    <tr><td>West Virginia staff</td><td>West Virginia and its counties</td><td class="yes">Yes</td><td class="no">No one</td><td class="yes">Yes</td></tr>
+    <tr><td>Jefferson administrator</td><td>Jefferson</td><td class="yes">Yes</td><td>People in Jefferson</td><td class="yes">Yes / Yes</td></tr>
+    <tr><td>Jefferson staff</td><td>Jefferson</td><td class="yes">Yes</td><td class="no">No one</td><td class="yes">Yes</td></tr>
+    <tr><td>Jefferson and Berkeley staff</td><td>Jefferson and Berkeley</td><td class="yes">Yes</td><td class="no">No one</td><td class="yes">Yes</td></tr>
+    <tr><td>Pennsylvania staff</td><td>Pennsylvania <span class="no">(not Delaware)</span></td><td class="yes">Yes</td><td class="no">No one</td><td class="yes">Yes</td></tr>
+  </table>
+
+  <h3>Rules administrators can count on</h3>
+  <ul>
+    <li><b>You give only what you have.</b> You can give a role at a place only if you have those abilities there yourself. A county administrator cannot hand out state-wide powers. (The platform administrator is the exception: giving access is the platform administrator's job.)</li>
+    <li><b>You manage only your part of the tree.</b> You manage accounts of people who work for your place or below it. For people who work elsewhere, you can give or end access only in your own place.</li>
+    <li><b>Nobody changes their own master profile.</b> Not even an administrator. Another administrator must do it.</li>
+    <li><b>Nobody can deactivate their own account</b>, or reset their own second factor.</li>
+    <li><b>Changes take effect at once.</b> When you change someone's grants, they are signed out of open sessions and start fresh with the new access.</li>
+  </ul>
+</section>
+
+<!-- ============================================================ profiles -->
+<section class="page">
+  <h2>4. Your master profile and your other profiles</h2>
+  <h3>A better way to think about it: your keys</h3>
+  <p>Your <b>master profile</b> is like the master key to your office. It opens everything you are allowed into. Carrying it all day is risky: if you mistakenly open the wrong door, it opens. So most people keep the master key in the drawer and carry a <b>day key</b> that opens just the rooms they need today.</p>
+  <p>In MERIT, a <b>profile</b> is that day key. You make it from your master key: it can open fewer doors, or let you look without touching, but it can never open a door your master key cannot.</p>
+  <div class="box"><strong>Compared with a cloud account's "root user":</strong> Cloud services tell you not to use the all-powerful root account for everyday work. MERIT builds that advice in. Your master profile is your root account, and your everyday profiles are smaller, safer copies of it that you can switch between in a click.</div>
+
+  <h3>Why have extra profiles?</h3>
+  <ul>
+    <li><b>Fewer mistakes.</b> When you are only reviewing records, a read-only profile means you cannot change or delete anything by accident.</li>
+    <li><b>Focus.</b> A "Berkeley only" profile keeps your lists, queues and searches to the county you are working on today.</li>
+    <li><b>Safer screen sharing and training.</b> Use a read-only profile when presenting or training others.</li>
+    <li><b>No deleting by accident.</b> A "read and write, no delete" profile lets you work normally while protecting records from deletion.</li>
+    <li><b>Easy to undo.</b> You can switch back to your master profile at any time, without signing out.</li>
+  </ul>
+
+  <h3>The rules</h3>
+  <table>
+    <tr><th>You can</th><th>You cannot</th></tr>
+    <tr><td>
+      <ul><li>Create as many extra profiles as you like</li><li>Rename and change them</li><li>Deactivate them (hide them from the switcher)</li><li>Switch between any of your active profiles</li><li>Go back to your master profile at any time</li></ul>
+    </td><td>
+      <ul><li>Give a profile more than your master profile has: a bigger role, another place, or a higher access level</li><li>Change or deactivate your master profile</li><li>Keep using a profile beyond your master: if your administrator narrows your master profile, your other profiles shrink with it, automatically</li></ul>
+    </td></tr>
+  </table>
+  <div class="box warn"><strong>MERIT checks this for you.</strong> If you try to save a profile that goes beyond your master profile, MERIT refuses and tells you which part is too big. The database itself enforces your profile's limits, so a read-only profile is truly read-only on every screen.</div>
+</section>
+
+<section class="page">
+  <h2>5. Using profiles: step by step</h2>
+  <h3>See which profile you are using</h3>
+  <p>The top right of every page shows your name, the place you are working in, and your profile. Select the profile name to open <b>My profiles</b>.</p>
+  <div class="screen"><div class="cap">Every page: the header</div>
+    <div class="bar"><b>MERIT</b><span class="nav"><span>Home</span><span>Work queues</span><span>Cases</span><span>Reports</span></span>
+      <span class="me">Bailey Kim<br>Jefferson County Health Department<br><u>Profile: Read only - Berkeley</u> <span class="callout">1</span></span></div>
+  </div>
+  <p><span class="callout">1</span> Select the profile to switch or manage your profiles.</p>
+
+  <h3>My profiles</h3>
+  <div class="screen"><div class="cap">Account &rsaquo; My profiles</div>
+    <div class="bar"><b>MERIT</b><span class="me">Bailey Kim<br><u>Profile: Master profile</u></span></div>
+    <div class="scr">
+      <h4>My profiles</h4>
+      <div class="box" style="margin:.3em 0"><b>You are using: Master profile</b><br><span class="note">What you can see and do right now comes from this profile.</span></div>
+      <table>
+        <tr><th>Profile</th><th>What it gives you</th><th></th></tr>
+        <tr><td>Master profile <span class="pill m">Master</span></td><td>Case manager at Jefferson County and everything under it &middot; Full<br>Case manager at Berkeley County and everything under it &middot; Full</td><td><b>In use</b></td></tr>
+        <tr><td>Read only - Berkeley</td><td>Case manager at Berkeley County &middot; Read only</td><td><span class="btn o">Use</span> <u>Change</u></td></tr>
+        <tr><td>Jefferson, no deleting</td><td>Case manager at Jefferson County &middot; Read and write (no delete)</td><td><span class="btn o">Use</span> <u>Change</u></td></tr>
+      </table>
+      <span class="btn">Create a profile</span>
+      <p class="lbl" style="margin-top:.7em">Working in</p>
+      <div class="field">Jefferson County Health Department &#9662;</div> <span class="btn o">Work here</span>
+    </div>
+  </div>
+  <ol>
+    <li>Select <b>Use</b> next to a profile. MERIT switches straight away; you do not sign out.</li>
+    <li>Everything you see now follows that profile: lists, searches, queues, reports and the buttons on each page.</li>
+    <li>To go back, open <b>My profiles</b> and select <b>Use</b> next to <i>Master profile</i>.</li>
+  </ol>
+</section>
+
+<section class="page">
+  <h3>Create a profile</h3>
+  <div class="screen"><div class="cap">Account &rsaquo; My profiles &rsaquo; Create a profile</div>
+    <div class="bar"><b>MERIT</b><span class="me">Bailey Kim<br><u>Profile: Master profile</u></span></div>
+    <div class="scr">
+      <h4>Create a profile</h4>
+      <div class="two">
+        <div>
+          <div class="lbl">Name</div><div class="field">Read only - Berkeley</div>
+          <div class="lbl">Grants</div>
+          <table>
+            <tr><th>Place</th><th>Role</th><th>Access</th></tr>
+            <tr><td>Berkeley County</td><td>Case manager</td><td>Read only &#9662;</td></tr>
+            <tr><td>(none)</td><td></td><td></td></tr>
+          </table>
+          <span class="btn">Save profile</span>
+        </div>
+        <div class="box" style="margin:0"><b>Your master profile</b><br><span class="note">This is the most you can have. A profile can be smaller, never bigger.</span>
+          <ul><li>Case manager at Jefferson County &middot; Full</li><li>Case manager at Berkeley County &middot; Full</li></ul></div>
+      </div>
+    </div>
+  </div>
+  <ol>
+    <li>Give it a name that says what it is for.</li>
+    <li>Add one or more grants: a place, a role and an access level. The choices come from your master profile.</li>
+    <li>Select <b>Save profile</b>. If anything goes beyond your master profile, MERIT says what and does not save.</li>
+  </ol>
+  <div class="screen"><div class="cap">What you see if a profile is too big</div>
+    <div class="scr"><div class="banner" style="background:#f4e3db;border-left-color:#b50909">This profile would give you more than your master profile: View cases and investigations at Pennsylvania (read).</div></div>
+  </div>
+
+  <h3>Change or deactivate a profile</h3>
+  <p>Select <b>Change</b> next to a profile. Clear <b>Active</b> to hide it from the switcher; you can turn it back on later. Your master profile has no Change link, because only your administrator can change it.</p>
+
+  <h3>Working in</h3>
+  <p>If your access covers more than one place, choose where new records belong under <b>Working in</b>. For example, a region staff member entering a West Virginia result chooses <i>West Virginia</i>, so the record uses West Virginia's levels and settings.</p>
+</section>
+
+<!-- ============================================================ admins -->
+<section>
+  <h2>6. For administrators</h2>
+  <h3>Add a person</h3>
+  <ol>
+    <li>Go to <b>Users</b> and select <b>Add a user</b>.</li>
+    <li>Fill in the name, user name and work email, and choose <b>Works for</b>. You can only choose places you administer.</li>
+    <li>Set an initial password. The person sets up an authenticator app the first time they sign in.</li>
+    <li>On their page, add grants to build their master profile.</li>
+  </ol>
+  <h3>Give access to someone from another place</h3>
+  <p>Example: Bailey works for Jefferson County but also needs Berkeley County. The Berkeley administrator types Bailey's exact user name in <b>Give access to someone from another tenant</b>, opens Bailey's page and adds a Berkeley grant. The Berkeley administrator can see and end only the Berkeley part; Bailey's account itself stays with Jefferson's administrators.</p>
+  <div class="screen"><div class="cap">Users &rsaquo; Bailey Kim (seen by the Berkeley County administrator)</div>
+    <div class="bar"><b>MERIT</b><span class="me">Blair Ortiz<br>Berkeley County Health Department<br><u>Profile: Master profile</u></span></div>
+    <div class="scr">
+      <h4>Bailey Kim</h4>
+      <div class="box" style="margin:.2em 0"><span class="note"><b>Bailey Kim</b> (bkim) works for <b>Jefferson County Health Department</b>. Their administrators manage the account itself. You can give or end access only at the tenants you administer.</span></div>
+      <p class="lbl">Master profile</p>
+      <ul>
+        <li>Case manager at Jefferson County and everything under it &middot; full <span class="note">(managed by another administrator)</span></li>
+        <li>Case manager at Berkeley County and everything under it &middot; full <u>End</u></li>
+      </ul>
+      <table><tr><th>Role</th><th>At</th><th>Access</th></tr>
+        <tr><td>Case manager (West Virginia) &#9662;</td><td>Berkeley County Health Department &#9662;</td><td>Read and write (no delete) &#9662;</td></tr></table>
+      <span class="btn o">Add grant</span> &nbsp; <span class="btn o">View MERIT as Bailey Kim</span>
+    </div>
+  </div>
+  <h3>Check what someone sees: View as</h3>
+  <ol>
+    <li>Open the person's page and select <b>View MERIT as ...</b> (or use <b>My profiles</b> &rsaquo; <b>View MERIT as someone you manage</b>).</li>
+    <li>A blue banner appears on every page while you are viewing as them.</li>
+    <li>You see only the parts you manage. A county administrator viewing as Bailey sees Bailey's access in that county only. You never get more than you can do yourself.</li>
+    <li>Anything you do is recorded under <b>your own name</b>, noted as "viewing as Bailey".</li>
+    <li>Select <b>Return to my profile</b> in the banner to go back.</li>
+  </ol>
+  <div class="screen"><div class="cap">The view-as banner</div>
+    <div class="banner"><span>You are viewing MERIT as <b>Bailey Kim</b>, limited to what you manage. Everything you do is recorded under your own name.</span><span class="btn">Return to my profile</span></div>
+  </div>
+</section>
+
+<section class="page">
+  <h2>7. The platform administrator</h2>
+  <p>The first account created in a new MERIT installation is the platform administrator. It has one purpose: managing accounts.</p>
+  <div class="screen"><div class="cap">What the platform administrator sees after signing in</div>
+    <div class="bar"><b>MERIT</b><span class="nav"><span>Users</span></span><span class="me">Pat Lee<br>MERIT platform<br><u>Profile: Master profile</u></span></div>
+    <div class="scr">
+      <h4>Users</h4>
+      <table>
+        <tr><th>Name</th><th>Works for</th><th>Master profile</th><th>Status</th></tr>
+        <tr><td>Reese Grant</td><td>EPA Region 3</td><td>Administrator @ EPA Region 3; Supervisor @ EPA Region 3</td><td>Active</td></tr>
+        <tr><td>Wren Hall</td><td>West Virginia</td><td>Administrator @ West Virginia; Supervisor @ West Virginia</td><td>Active</td></tr>
+        <tr><td>Jamie Fox</td><td>Jefferson County</td><td>User administrator @ Jefferson County; Case manager @ Jefferson County</td><td>Active</td></tr>
+        <tr><td>Bailey Kim</td><td>Jefferson County</td><td>Case manager @ Jefferson County; Case manager @ Berkeley County</td><td>Active</td></tr>
+      </table>
+      <p class="note">No Cases, Results, Work queues or Reports: the platform administrator sees no records and no health information.</p>
+    </div>
+  </div>
+  <ul>
+    <li><b>Can:</b> create, change and deactivate any account; give and end any role at any place; reset second factors; and set up regions, states and tribes with the platform setup tools.</li>
+    <li><b>Cannot:</b> open, search, add, change or delete any person, result, case, investigation, task or report. MERIT and its database refuse these requests.</li>
+    <li><b>One profile only:</b> the platform administrator cannot make other profiles, switch profiles, or view as anyone.</li>
+    <li><b>Good practice:</b> keep the number of platform administrators small, and give each regional or state administrator their own account rather than sharing the platform account.</li>
+  </ul>
+
+  <h2>8. Your safety net</h2>
+  <ul>
+    <li><b>The database enforces your access,</b> not just the screens. Even if a screen showed a button by mistake, the database would refuse to show another tenant's records, or to let a read-only profile change anything.</li>
+    <li><b>Every view, change and export is recorded</b> with your real name, including while you are viewing as someone else.</li>
+    <li><b>Deleting hides, it does not destroy.</b> Deleted records stay in the database, with who deleted them and when.</li>
+    <li><b>Sessions end when access changes,</b> so a removed grant stops working straight away.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>9. Common questions</h2>
+  <p><b>I can see Jefferson, but not Berkeley. Why?</b><br>Your master profile has a grant for Jefferson only. Ask the Berkeley administrator to give you Berkeley access.</p>
+  <p><b>A button I normally use is missing.</b><br>Check the profile in the header. You may be using a read-only or smaller profile. Switch back to your master profile.</p>
+  <p><b>Can I give myself Pennsylvania access in a profile?</b><br>No. A profile can only be a smaller copy of your master profile.</p>
+  <p><b>My administrator changed my access, and I was signed out.</b><br>That is on purpose: your new access takes effect at once. Sign in again.</p>
+  <p><b>Can my administrator see my password when viewing as me?</b><br>No. View as never uses your password or your second factor, and everything the administrator does is recorded under their own name.</p>
+  <p><b>Why can't the platform administrator look up a case for me?</b><br>Platform administrators manage accounts only, by design. Ask someone with access to that state or county.</p>
+  <p><b>Region staff: which settings does a new record use?</b><br>Those of the place under <b>Working in</b>. Choose the state you are entering records for.</p>
+  <p class="foot" style="margin-top:2em">MERIT user guide: access, profiles and switching. The examples are illustrative; names and screens are made up.</p>
+</section>
+</body>
+</html>

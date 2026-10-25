@@ -1,0 +1,63 @@
+@using Merit.Web.Controllers
+@model ProfileFormModel
+@{
+    ViewData["Title"] = Model.UserProfileId is null ? "Create a profile" : "Change profile";
+}
+<p><a class="usa-link" href="/account/profiles">Back to my profiles</a></p>
+<h1>@ViewData["Title"]</h1>
+@if (!ViewData.ModelState.IsValid)
+{
+    <div class="usa-alert usa-alert--error usa-alert--slim" role="alert"><div class="usa-alert__body"><p class="usa-alert__text">@string.Join(" ", ViewData.ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage))</p></div></div>
+}
+<div class="merit-grid-2">
+    <form class="usa-form usa-form--large" method="post" action="/account/profiles">
+        @Html.AntiForgeryToken()
+        <input type="hidden" name="UserProfileId" value="@Model.UserProfileId" />
+        <div class="usa-form-group"><label class="usa-label" for="ProfileName">Name</label>
+            <div class="usa-hint" id="name-hint">Say what it is for, for example "Read only, Jefferson County".</div>
+            <input class="usa-input" id="ProfileName" name="ProfileName" value="@Model.ProfileName" maxlength="80" aria-describedby="name-hint" required /></div>
+        <div class="usa-form-group"><label class="usa-label" for="ProfileDescription">Description (optional)</label>
+            <input class="usa-input" id="ProfileDescription" name="ProfileDescription" value="@Model.ProfileDescription" maxlength="300" /></div>
+
+        <fieldset class="usa-fieldset">
+            <legend class="usa-legend">Grants</legend>
+            <p class="usa-hint">Each grant is a role, a place, and how much you can do there. Leave a row's place empty to skip it.</p>
+            @for (int i = 0; i < Model.Grants.Count; i++)
+            {
+                var g = Model.Grants[i];
+                <div class="merit-grant-row">
+                    <div><label class="usa-label" for="g@(i)t">Place</label>
+                        <select class="usa-select" id="g@(i)t" name="Grants[@i].TenantId">
+                            <option value="">(none)</option>
+                            @foreach (var t in Model.Tenants) { <option value="@t.Value" selected="@(t.Value == g.TenantId?.ToString())">@t.Label</option> }
+                        </select></div>
+                    <div><label class="usa-label" for="g@(i)r">Role</label>
+                        <select class="usa-select" id="g@(i)r" name="Grants[@i].RoleId">
+                            @foreach (var r in Model.Roles) { <option value="@r.Value" selected="@(r.Value == g.RoleId?.ToString())">@r.Label</option> }
+                        </select></div>
+                    <div><label class="usa-label" for="g@(i)a">Access</label>
+                        <select class="usa-select" id="g@(i)a" name="Grants[@i].AccessLevel">
+                            <option value="read" selected="@(g.AccessLevel == "read")">Read only</option>
+                            <option value="write" selected="@(g.AccessLevel == "write")">Read and write (no delete)</option>
+                            <option value="full" selected="@(g.AccessLevel == "full")">Full (read, write and delete)</option>
+                        </select></div>
+                    <div class="usa-checkbox"><input class="usa-checkbox__input" id="g@(i)d" type="checkbox" name="Grants[@i].IncludeDescendants" value="true" @(g.IncludeDescendants ? "checked" : "") />
+                        <label class="usa-checkbox__label" for="g@(i)d">Include everything under this place</label></div>
+                    <input type="hidden" name="Grants[@i].IncludeDescendants" value="false" />
+                </div>
+            }
+        </fieldset>
+        <div class="usa-checkbox"><input class="usa-checkbox__input" id="IsActive" type="checkbox" name="IsActive" value="true" @(Model.IsActive ? "checked" : "") />
+            <label class="usa-checkbox__label" for="IsActive">Active (shown when you switch profiles)</label></div>
+        <input type="hidden" name="IsActive" value="false" />
+        <button class="usa-button" type="submit">Save profile</button>
+    </form>
+
+    <aside aria-labelledby="master-heading">
+        <h2 id="master-heading">Your master profile</h2>
+        <p class="merit-meta">This is the most you can have. A profile can be smaller, never bigger: MERIT refuses to save one that goes beyond it.</p>
+        <ul class="usa-list">
+            @foreach (var g in Model.MasterGrants) { <li>@g.RoleName at @g.TenantName @ProfilesPageModel.Scope(g.IncludeDescendants) &middot; @ProfilesPageModel.AccessText(g.AccessLevel)</li> }
+        </ul>
+    </aside>
+</div>

@@ -1,0 +1,9 @@
+[
+  {
+    "Name": "Web + Worker",
+    "Projects": [
+      { "Path": "src\Merit.Web\Merit.Web.csproj", "Action": "Start" },
+      { "Path": "src\Merit.Worker\Merit.Worker.csproj", "Action": "Start" }
+    ]
+  }
+]

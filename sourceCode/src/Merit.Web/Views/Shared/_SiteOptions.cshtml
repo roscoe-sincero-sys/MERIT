@@ -1,0 +1,17 @@
+@model LookupOptionsModel
+@{
+    var locations = (Model.Extra ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries);
+}
+@* Site picker options: the value carries both the organization site and its location, "siteId:locationId". *@
+@for (int i = 0; i < Model.Options.Count; i++)
+{
+    var o = Model.Options[i];
+    <li role="option" id="@(Model.FieldId)-opt-@i" aria-selected="false" data-value="@o.Id:@(i < locations.Length ? locations[i] : "")" data-label="@o.Label">
+        @o.Label
+        @if (!string.IsNullOrEmpty(o.Detail)) { <small>@o.Detail</small> }
+    </li>
+}
+@if (Model.Options.Count == 0)
+{
+    <li class="merit-empty" aria-disabled="true">No matches</li>
+}

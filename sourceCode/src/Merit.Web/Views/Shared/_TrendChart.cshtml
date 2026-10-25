@@ -1,0 +1,12 @@
+@model TrendChart
+@{
+    string id = "chart-" + Model.AnalyteCode + "-" + ViewContext.HttpContext.TraceIdentifier.GetHashCode(StringComparison.Ordinal).ToString("x", System.Globalization.CultureInfo.InvariantCulture) + Model.Points.Count;
+}
+<figure>
+    @* Rendered by Merit.Web.Mapping.TrendChartSvg, which HTML-encodes every text value it writes. *@
+    @Merit.Web.Mapping.TrendChartSvg.Render(Model, id)
+    <figcaption class="merit-legend">
+        <span>@Model.AnalyteName, @Model.Unit</span>
+        <span>&#9679; venous</span><span>&#9675; capillary or unknown</span><span>- - - levels in force today</span>
+    </figcaption>
+</figure>

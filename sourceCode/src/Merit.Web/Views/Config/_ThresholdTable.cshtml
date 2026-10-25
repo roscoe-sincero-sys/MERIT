@@ -1,0 +1,23 @@
+@model ThresholdListModel
+<div class="merit-table-wrap" tabindex="0" role="region" aria-label="Table; scroll sideways for more columns">
+    <table class="usa-table usa-table--borderless usa-table--compact">
+        <thead><tr><th scope="col">Analyte</th><th scope="col">Population</th><th scope="col">Type</th><th scope="col">Level</th><th scope="col">Applies to</th><th scope="col">Action</th><th scope="col">Effective</th><th scope="col">Active</th><th scope="col">Authority</th></tr></thead>
+        <tbody>
+            @foreach (var t in Model.Rows)
+            {
+                <tr>
+                    <td>@t.AnalyteName <span class="merit-meta">@Options.Humanize(t.Specimen)</span></td>
+                    <td>@Options.Humanize(t.Population)@(t.AgeMinMonths is null && t.AgeMaxMonths is null ? "" : $" ({t.AgeMinMonths}-{t.AgeMaxMonths} mo)")</td>
+                    <td>@Options.Humanize(t.ThresholdType)</td>
+                    <td>@t.Comparator @t.LowerValue.ToString("0.##")@(t.UpperValue is null ? "" : " and < " + t.UpperValue.Value.ToString("0.##")) @t.Unit</td>
+                    <td>@(t.SampleType ?? "any sample")@(t.Speciation is null ? "" : ", " + t.Speciation)</td>
+                    <td>@t.ActionName@(t.DueIntervalDays is null ? "" : $" within {t.DueIntervalDays} days")</td>
+                    <td>@Options.Date(t.EffectiveFrom) &ndash; @(t.EffectiveTo is null ? "current" : Options.Date(t.EffectiveTo))</td>
+                    <td>@(t.IsActive ? "Yes" : "No")</td>
+                    <td class="merit-meta">@t.Authority
+                        @if (Model.CanEdit) { <a class="usa-link" href="/config/thresholds/@t.ThresholdId">Edit</a> }</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>

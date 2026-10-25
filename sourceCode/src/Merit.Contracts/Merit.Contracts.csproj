@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- API request and response types that define the OpenAPI document. References nothing. -->
+  <PropertyGroup>
+    <RootNamespace>Merit.Contracts</RootNamespace>
+  </PropertyGroup>
+</Project>

@@ -1,0 +1,13 @@
+@model ThresholdListModel
+@{
+    ViewData["Title"] = "Thresholds";
+}
+<partial name="_ConfigNav" model='"thresholds"' />
+<div class="merit-page-header">
+    <h1>Thresholds</h1>
+    @if (Model.CanEdit) { <a class="usa-button" href="/config/thresholds/new">Add a level</a> }
+</div>
+<p class="merit-meta">Every rule value is effective-dated data. A changed level is a new row from a date; open cases keep their classification and new results are evaluated under the rows in force on their collection date. Federal reference rows ship inactive until the jurisdiction turns them on.</p>
+<div id="threshold-table">
+    <partial name="_ThresholdTable" model="Model" />
+</div>

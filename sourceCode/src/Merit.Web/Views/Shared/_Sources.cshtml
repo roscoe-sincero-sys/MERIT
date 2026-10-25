@@ -1,0 +1,30 @@
+@model SourcesModel
+<section class="merit-section" id="section-sources" aria-labelledby="sources-heading">
+    <h2 id="sources-heading">
+        Exposure sources
+        @if (Model.CanEdit)
+        {
+            <button class="usa-button usa-button--outline usa-button--small" type="button" hx-get="/people/@Model.PersonId/sources/add" hx-target="#sources-form" hx-swap="innerHTML">Add source</button>
+        }
+    </h2>
+    <div id="sources-form"></div>
+    @if (Model.Rows.Count == 0)
+    {
+        <p class="merit-empty">No non-occupational sources recorded.</p>
+    }
+    else
+    {
+        <ul class="usa-list">
+            @foreach (var s in Model.Rows)
+            {
+                <li>
+                    <strong>@s.SourceTypeLabel</strong>
+                    @if (s.ProductName is not null) { <span>&middot; @s.Brand @s.ProductName</span> }
+                    @if (s.SourceDescription is not null) { <span>&middot; @s.SourceDescription</span> }
+                    @if (s.IsConfirmed) { <span class="merit-badge merit-badge--confirmed">Confirmed by sample</span> }
+                    <span class="merit-meta">@Options.Date(s.StartDate)</span>
+                </li>
+            }
+        </ul>
+    }
+</section>

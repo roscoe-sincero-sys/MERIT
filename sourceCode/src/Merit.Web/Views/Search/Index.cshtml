@@ -1,0 +1,24 @@
+@model SearchModel
+@{
+    ViewData["Title"] = "Search";
+}
+<h1>Search</h1>
+<form class="usa-search usa-search--big" role="search" method="get" action="/search">
+    <label class="usa-sr-only" for="search-q">Search</label>
+    <input class="usa-input" id="search-q" type="search" name="q" value="@Model.Query"
+           hx-get="/search" hx-trigger="input changed delay:500ms, search" hx-target="#search-results" hx-swap="innerHTML"
+           hx-push-url="true" hx-indicator="#search-indicator" aria-describedby="search-hint" />
+    <button class="usa-button" type="submit"><span class="usa-search__submit-text">Search</span></button>
+</form>
+<p class="usa-hint" id="search-hint">
+    Search by name ("Rivera, Mia"), name and date of birth ("Rivera Mia 2023-05-14"), street address, organization,
+    accession number or case number.
+    <span class="merit-indicator htmx-indicator" id="search-indicator">Searching&hellip;</span>
+</p>
+<div id="search-results">
+    <partial name="_Results" model="Model" />
+</div>
+@if (User.HasClaim(MeritClaims.Permission, Permissions.PersonEdit))
+{
+    <p><a class="usa-button usa-button--outline" href="/people/new">Add a person</a></p>
+}

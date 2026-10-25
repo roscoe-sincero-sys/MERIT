@@ -1,0 +1,6 @@
+@model CasePageModel
+@{
+    ViewData["Title"] = "Case " + Model.Detail.Case.CaseNumber;
+}
+<p><a class="usa-link" href="/people/@Model.Detail.Case.PersonId">Back to @Model.Detail.Case.FirstName @Model.Detail.Case.LastName</a></p>
+<partial name="_CaseBody" model="Model" />

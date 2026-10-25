@@ -1,0 +1,72 @@
+@model PlacesModel
+@{
+    var today = DateOnly.FromDateTime(DateTime.UtcNow);
+    var current = Model.Rows.Where(r => r.EndDate is null || r.EndDate >= today).ToList();
+    var past = Model.Rows.Where(r => r.EndDate is not null && r.EndDate < today).ToList();
+}
+<section class="merit-section" id="section-places" aria-labelledby="places-heading">
+    <h2 id="places-heading">
+        Places
+        @if (Model.CanEdit)
+        {
+            <span class="merit-section__actions">
+                <button class="usa-button usa-button--outline usa-button--small" type="button" hx-get="/people/@Model.PersonId/places/add?role=residence" hx-target="#places-form" hx-swap="innerHTML">Add residence</button>
+                <button class="usa-button usa-button--outline usa-button--small" type="button" hx-get="/people/@Model.PersonId/places/add?role=childCare" hx-target="#places-form" hx-swap="innerHTML">Add child care or school</button>
+                <button class="usa-button usa-button--outline usa-button--small" type="button" hx-get="/people/@Model.PersonId/places/add?role=relativeHome" hx-target="#places-form" hx-swap="innerHTML">Add other place</button>
+            </span>
+        }
+    </h2>
+    <div id="places-form"></div>
+    @if (Model.Rows.Count == 0)
+    {
+        <p class="merit-empty">No places recorded.</p>
+    }
+    else
+    {
+        <div class="merit-table-wrap" tabindex="0" role="region" aria-label="Table; scroll sideways for more columns">
+            <table class="usa-table usa-table--borderless">
+                <caption class="usa-sr-only">Current places</caption>
+                <thead><tr><th scope="col">Role</th><th scope="col">Address</th><th scope="col">County</th><th scope="col">Schedule</th><th scope="col">Dates</th><th scope="col">Source</th><th scope="col"><span class="usa-sr-only">Actions</span></th></tr></thead>
+                <tbody>
+                    @foreach (var r in current.Concat(past))
+                    {
+                        bool ended = r.EndDate is not null && r.EndDate < today;
+                        <tr class="@(ended ? "merit-meta" : "")">
+                            <td>
+                                @(Model.RoleLabels.GetValueOrDefault(r.Role) ?? r.Role)
+                                @if (r.IsPrimary) { <span class="merit-star" title="Primary residence">&#9733;</span><span class="usa-sr-only">Primary residence</span> }
+                                @if (r.IsPrimary && r.PrimaryReason is not null) { <div class="merit-meta">@(Model.ReasonLabels.GetValueOrDefault(r.PrimaryReason) ?? r.PrimaryReason)</div> }
+                            </td>
+                            <td>
+                                @if (r.OrganizationName is not null) { <strong>@r.OrganizationName</strong><br /> }
+                                @r.AddressLabel @r.Zip5
+                                @if (r.YearBuilt is int y && y < 1978) { <span class="merit-badge merit-badge--suspect">Built @y (pre-1978)</span> }
+                            </td>
+                            <td>@r.CountyName</td>
+                            <td>@Options.Humanize(r.ScheduleType)@(r.HoursPerWeek is decimal h ? $", {h:0.#} h/week" : "") <div class="merit-meta">@r.ScheduleNote</div></td>
+                            <td>@Options.Date(r.StartDate) &ndash; @(r.EndDate is null ? "current" : Options.Date(r.EndDate))</td>
+                            <td>@Options.Humanize(r.Source)@if (r.VerifiedDate is null) { <span class="merit-meta"> (unverified)</span> }</td>
+                            <td>
+                                @if (Model.CanEdit && !ended)
+                                {
+                                    @if (r.Role == "residence" && !r.IsPrimary)
+                                    {
+                                        <button class="usa-button usa-button--unstyled" type="button" hx-get="/people/@Model.PersonId/places/@r.PersonLocationId/primary" hx-target="#dialog-body" hx-swap="innerHTML">Set as primary</button>
+                                    }
+                                    @if (r.VerifiedDate is null)
+                                    {
+                                        <button class="usa-button usa-button--unstyled" type="button" hx-post="/people/@Model.PersonId/places/@r.PersonLocationId/verify" hx-target="#section-places" hx-swap="outerHTML">Verify</button>
+                                    }
+                                    @if (!r.IsPrimary)
+                                    {
+                                        <button class="usa-button usa-button--unstyled" type="button" hx-post="/people/@Model.PersonId/places/@r.PersonLocationId/end" hx-target="#section-places" hx-swap="outerHTML" hx-confirm="End this place as of today?">End today</button>
+                                    }
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</section>

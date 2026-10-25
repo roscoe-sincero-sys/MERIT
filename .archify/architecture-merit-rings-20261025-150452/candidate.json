@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "MERIT Clean Architecture: rings and dependency direction",
+    "output": "docs/merit_architecture.html",
+    "quality_profile": "showcase",
+    "legend": {
+      "entries": {
+        "external": { "label": "People and outside systems" },
+        "frontend": { "label": "Presentation / entry points" },
+        "cloud": { "label": "Shared contracts" },
+        "backend": { "label": "Application / use cases" },
+        "messagebus": { "label": "Domain core" },
+        "database": { "label": "Infrastructure / persistence" }
+      }
+    },
+    "views": [
+      { "id": "view-request", "label": "Web request ring crossing", "focus": ["users", "web", "contracts", "application", "domain"], "note": "Web binds a request, checks the permission policy, calls one Application service, which applies Domain rules." },
+      { "id": "view-ports", "label": "Ports and adapters", "focus": ["application", "data", "sqlserver"], "note": "Application owns the I*Data ports; Merit.Data.SqlServer implements them with Dapper calls to stored procedures." },
+      { "id": "view-worker", "label": "Background entry point", "focus": ["worker", "application", "data"], "note": "The Worker is a second entry point: it claims queued jobs and runs Application job code under the requesting user's scope." },
+      { "id": "view-core", "label": "Domain core", "focus": ["domain"], "note": "Merit.Domain references nothing: population, normalization, thresholds, classification, matching and residence rules." }
+    ]
+  },
+  "components": [
+    { "id": "users", "type": "external", "label": "Staff browsers", "sublabel": "htmx pages + Angular", "pos": [40, 200], "size": [150, 64] },
+    { "id": "web", "type": "frontend", "label": "Merit.Web", "sublabel": "MVC/htmx, API, Angular host", "tag": "sync HTTP", "pos": [260, 192], "size": [200, 80] },
+    { "id": "worker", "type": "frontend", "label": "Merit.Worker", "sublabel": "BackgroundService loop", "tag": "async jobs", "pos": [260, 412], "size": [200, 80] },
+    { "id": "contracts", "type": "cloud", "label": "Merit.Contracts", "sublabel": "API DTO records", "tag": "no references", "pos": [600, 40], "size": [200, 72] },
+    { "id": "application", "type": "backend", "label": "Merit.Application", "sublabel": "services, ports, jobs", "tag": "use cases", "pos": [600, 302], "size": [200, 80] },
+    { "id": "domain", "type": "messagebus", "label": "Merit.Domain", "sublabel": "pure rules, no I/O", "tag": "references nothing", "pos": [920, 302], "size": [200, 80] },
+    { "id": "data", "type": "database", "label": "Merit.Data.SqlServer", "sublabel": "Dapper, procedures only", "tag": "adapter", "pos": [600, 532], "size": [200, 80] },
+    { "id": "sqlserver", "type": "database", "label": "SQL Server 2022", "sublabel": "procedures + row-level security", "pos": [600, 712], "size": [200, 72] }
+  ],
+  "boundaries": [
+    { "kind": "region", "label": "Domain core", "wraps": ["domain"] },
+    { "kind": "region", "label": "Application ring", "wraps": ["application", "domain"] },
+    { "kind": "region", "label": "Outer ring: entry points, adapters, contracts", "wraps": ["web", "worker", "contracts", "application", "domain", "data"] }
+  ],
+  "connections": [
+    { "id": "browser-https", "from": "users", "to": "web", "label": "HTTPS", "variant": "emphasis" },
+    { "id": "web-uses-app", "from": "web", "to": "application", "label": "calls services", "variant": "emphasis" },
+    { "id": "worker-uses-app", "from": "worker", "to": "application", "label": "runs jobs", "variant": "dashed" },
+    { "id": "web-maps-contracts", "from": "web", "to": "contracts", "label": "maps API DTOs" },
+    { "id": "app-uses-domain", "from": "application", "to": "domain", "label": "applies rules", "variant": "emphasis" },
+    { "id": "data-implements-ports", "from": "data", "to": "application", "label": "implements I*Data" },
+    { "id": "data-calls-sql", "from": "data", "to": "sqlserver", "label": "EXEC procedures" }
+  ],
+  "cards": [
+    { "dot": "cyan", "title": "Presentation / entry points", "items": ["Merit.Web: thin MVC controllers (Razor + htmx), JSON API under /api/v1, the Angular host under /app/, security headers and CSP", "Merit.Worker: BackgroundService that claims queued jobs and a cluster-detection scheduler", "Both are composition roots: AddMeritApplication() plus AddMeritSqlServer(), so they reference the Data project for wiring only"] },
+    { "dot": "emerald", "title": "Application / use cases", "items": ["Services (Person, Result, Case, Intake, Report, Profile ...) validate input and check permissions", "Ports: IAccountData, IPersonData, IResultData, ICaseData, IWorkData, IIntakeData ... implemented outside", "Jobs: JobDispatcher runs intakeBatch, extractRun and clusterDetection"] },
+    { "dot": "violet", "title": "Domain core", "items": ["Pure C#: population, result normalization, thresholds, case classification, matching, residence planning, extract formats", "No project or package references, so every ring can depend on it and it depends on none"] },
+    { "dot": "amber", "title": "Infrastructure / persistence", "items": ["Merit.Data.SqlServer references Application and implements its ports with Dapper", "Every call is a stored procedure; each connection sets a read-only SESSION_CONTEXT that row-level security filters by"] },
+    { "dot": "slate", "title": "Shared contracts and the inward rule", "items": ["Merit.Contracts holds the API DTO records and references nothing; only Web uses them, so Application never sees transport types", "Every arrow points inward or into a port: Web and Worker to Application, Application to Domain, Data to the ports Application owns (dependency inversion)", "DI wiring is not drawn: Web and Worker register the adapters at startup, and no controller or job calls Data directly (architecture tests enforce this)"] }
+  ]
+}

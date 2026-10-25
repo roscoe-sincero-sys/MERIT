@@ -1,0 +1,45 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <!--
+    The web application: MVC controllers with Razor views and htmx for server-rendered screens, API controllers for the
+    JSON API under /api/v1, and the host view for the Angular client under /app/. The Angular client in ClientApp is
+    built by the BuildAngularClient target below into wwwroot/app.
+  -->
+  <PropertyGroup>
+    <RootNamespace>Merit.Web</RootNamespace>
+    <UserSecretsId>merit-web-7c1d1f0b</UserSecretsId>
+    <SpaRoot>ClientApp\</SpaRoot>
+    <AngularOutput>wwwroot\app\</AngularOutput>
+    <DefaultItemExcludes>$(DefaultItemExcludes);$(SpaRoot)node_modules\**;$(SpaRoot)dist\**;$(SpaRoot).angular\**</DefaultItemExcludes>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Merit.Application\Merit.Application.csproj" />
+    <ProjectReference Include="..\Merit.Contracts\Merit.Contracts.csproj" />
+    <!-- Composition root only: Program.cs registers the SQL Server implementation. Controllers never use it (architecture test). -->
+    <ProjectReference Include="..\Merit.Data.SqlServer\Merit.Data.SqlServer.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
+    <PackageReference Include="QRCoder" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Remove="$(SpaRoot)**" />
+    <None Include="$(SpaRoot)**" Exclude="$(SpaRoot)node_modules\**;$(SpaRoot).angular\**" />
+  </ItemGroup>
+
+  <!--
+    Builds the Angular client when its output is missing (first build) or on a Release build. Needs Node.js 20+ and npm;
+    the first run downloads packages. Skip with -p:SkipAngularBuild=true (the htmx screens work without it).
+  -->
+  <Target Name="BuildAngularClient" BeforeTargets="Build"
+          Condition="'$(SkipAngularBuild)' != 'true' And Exists('$(SpaRoot)package.json') And ('$(Configuration)' == 'Release' Or !Exists('$(AngularOutput)index.html'))">
+    <Exec Command="node --version" ContinueOnError="true">
+      <Output TaskParameter="ExitCode" PropertyName="NodeExitCode" />
+    </Exec>
+    <Warning Condition="'$(NodeExitCode)' != '0'" Text="Node.js was not found, so the Angular screens under /app/ were not built. Install Node.js 20 or later and rebuild." />
+    <Exec Condition="'$(NodeExitCode)' == '0' And !Exists('$(SpaRoot)node_modules')" WorkingDirectory="$(SpaRoot)" Command="npm install --no-audit --no-fund" />
+    <Exec Condition="'$(NodeExitCode)' == '0'" WorkingDirectory="$(SpaRoot)" Command="npm run build" />
+  </Target>
+</Project>

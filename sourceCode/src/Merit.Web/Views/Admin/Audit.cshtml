@@ -1,0 +1,22 @@
+@model AuditModel
+@{
+    ViewData["Title"] = "Audit log";
+}
+<p><a class="usa-link" href="/admin/users">Back to users</a></p>
+<h1>Audit log</h1>
+<p class="merit-meta">The tamper-evident ledger of views, changes and exports. It holds IDs, actions, users and times only.</p>
+<form class="usa-form merit-form-row" method="get" action="/admin/audit">
+    <div class="usa-form-group"><label class="usa-label" for="entityId">Record id</label><input class="usa-input" id="entityId" name="entityId" value="@Model.EntityId" /></div>
+    <div class="usa-form-group"><button class="usa-button" type="submit">Search</button></div>
+</form>
+<div class="merit-table-wrap" tabindex="0" role="region" aria-label="Table; scroll sideways for more columns">
+    <table class="usa-table usa-table--borderless usa-table--compact">
+        <thead><tr><th scope="col">When</th><th scope="col">User</th><th scope="col">Action</th><th scope="col">Record</th><th scope="col">Rows</th><th scope="col">Address</th></tr></thead>
+        <tbody>
+            @foreach (var e in Model.Events)
+            {
+                <tr><td>@Options.Date(e.EventUtc)</td><td>@e.DisplayName</td><td>@e.EventAction</td><td>@e.EntityType <span class="merit-meta">@e.EntityId</span></td><td>@e.RecordCount</td><td>@e.ClientAddress</td></tr>
+            }
+        </tbody>
+    </table>
+</div>

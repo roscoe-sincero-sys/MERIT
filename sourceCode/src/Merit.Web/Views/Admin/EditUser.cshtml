@@ -1,0 +1,103 @@
+@model UserFormModel
+@{
+    ViewData["Title"] = Model.AppUserId is null ? "Add a user" : Model.DisplayName;
+    string Access(string level) => level switch { "full" => "full", "write" => "read and write, no delete", _ => "read only" };
+}
+<p><a class="usa-link" href="/admin/users">Back to users</a></p>
+<h1>@(Model.AppUserId is null ? "Add a user" : Model.DisplayName)</h1>
+@if (!ViewData.ModelState.IsValid)
+{
+    <div class="usa-alert usa-alert--error usa-alert--slim" role="alert"><div class="usa-alert__body"><p class="usa-alert__text">@string.Join(" ", ViewData.ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage))</p></div></div>
+}
+@if (TempData["userError"] is string err)
+{
+    <div class="usa-alert usa-alert--error usa-alert--slim" role="alert"><div class="usa-alert__body"><p class="usa-alert__text">@err</p></div></div>
+}
+<div class="merit-grid-2">
+    @if (Model.CanManageAccount)
+    {
+        <form class="usa-form" method="post" action="/admin/users">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="AppUserId" value="@Model.AppUserId" />
+            <div class="usa-form-group"><label class="usa-label" for="UserName">User name</label><input class="usa-input" id="UserName" name="UserName" value="@Model.UserName" readonly="@(Model.AppUserId is not null)" required /></div>
+            <div class="usa-form-group"><label class="usa-label" for="DisplayName">Display name</label><input class="usa-input" id="DisplayName" name="DisplayName" value="@Model.DisplayName" required /></div>
+            <div class="usa-form-group"><label class="usa-label" for="Email">Work email</label><input class="usa-input" id="Email" name="Email" type="email" value="@Model.Email" /></div>
+            <div class="usa-form-group"><label class="usa-label" for="HomeTenantId">Works for</label>
+                <div class="usa-hint" id="home-hint">Administrators of this tenant manage the account. You can choose only tenants you administer.</div>
+                <select class="usa-select" id="HomeTenantId" name="HomeTenantId" aria-describedby="home-hint">
+                    @foreach (var t in Model.Tenants) { <option value="@t.Value" selected="@(t.Value == Model.HomeTenantId?.ToString())">@t.Label</option> }
+                </select></div>
+            <div class="usa-form-group">
+                <label class="usa-label" for="NewPassword">@(Model.AppUserId is null ? "Initial password" : "New password (leave blank to keep)")</label>
+                <div class="usa-hint">At least 8 characters; no composition rules; checked against breached-password lists (NIST SP 800-63B-4).</div>
+                <input class="usa-input" id="NewPassword" name="NewPassword" type="password" autocomplete="new-password" />
+            </div>
+            <div class="usa-checkbox"><input class="usa-checkbox__input" id="IsActive" type="checkbox" name="IsActive" value="true" @(Model.IsActive ? "checked" : "") /><label class="usa-checkbox__label" for="IsActive">Active (clear to deactivate; the account and its history are kept)</label></div>
+            <input type="hidden" name="IsActive" value="false" />
+            <button class="usa-button" type="submit">Save</button>
+        </form>
+    }
+    else
+    {
+        <div class="usa-summary-box"><div class="usa-summary-box__body">
+            <p class="usa-summary-box__text"><strong>@Model.DisplayName</strong> (@Model.UserName) works for <strong>@Model.HomeTenantName</strong>. Their administrators manage the account itself. You can give or end access only at the tenants you administer.</p>
+        </div></div>
+    }
+
+    @if (Model.AppUserId is Guid id)
+    {
+        <div>
+            <h2>Master profile</h2>
+            <p class="merit-meta">Everything this person may do. They can make smaller profiles from it for daily work, never bigger ones, and they cannot change this list themselves.</p>
+            @if (Model.Assignments.Count == 0) { <p class="merit-empty">No grants: the person can sign in but sees nothing.</p> }
+            <ul class="usa-list">
+                @foreach (var a in Model.Assignments)
+                {
+                    <li>@a.RoleName at @a.TenantName @(a.IncludeDescendants ? "and everything under it" : "only") &middot; @Access(a.AccessLevel)
+                        <span class="merit-meta">@Options.Date(a.StartDate) &ndash; @(a.EndDate is null ? "current" : Options.Date(a.EndDate))</span>
+                        @if (a.EndDate is null && a.CanManage)
+                        {
+                            <form class="display-inline" method="post" action="/admin/users/@id/assignments/@a.UserAssignmentId/end">@Html.AntiForgeryToken()<button class="usa-button usa-button--unstyled" type="submit">End<span class="usa-sr-only"> @a.RoleName at @a.TenantName</span></button></form>
+                        }
+                        else if (!a.CanManage) { <span class="merit-meta">(managed by another administrator)</span> }
+                    </li>
+                }
+            </ul>
+            <form class="usa-form" method="post" action="/admin/users/@id/assignments">
+                @Html.AntiForgeryToken()
+                <div class="usa-form-group"><label class="usa-label" for="roleId">Role</label>
+                    <select class="usa-select" id="roleId" name="roleId">@foreach (var r in Model.Roles) { <option value="@r.Value">@r.Label</option> }</select></div>
+                <div class="usa-form-group"><label class="usa-label" for="tenantId">At</label>
+                    <select class="usa-select" id="tenantId" name="tenantId">@foreach (var t in Model.Tenants) { <option value="@t.Value">@t.Label</option> }</select></div>
+                <div class="usa-form-group"><label class="usa-label" for="accessLevel">Access</label>
+                    <select class="usa-select" id="accessLevel" name="accessLevel">
+                        <option value="full">Full (read, write and delete)</option>
+                        <option value="write">Read and write (no delete)</option>
+                        <option value="read">Read only</option>
+                    </select></div>
+                <div class="usa-checkbox"><input class="usa-checkbox__input" id="includeDescendants" type="checkbox" name="includeDescendants" value="true" checked /><label class="usa-checkbox__label" for="includeDescendants">Include everything under it</label></div>
+                <input type="hidden" name="includeDescendants" value="false" />
+                <button class="usa-button usa-button--outline" type="submit">Add grant</button>
+                <p class="merit-meta">You can grant only at tenants you administer, and never more than you can do there yourself. A change signs the person out of open sessions.</p>
+            </form>
+
+            @if (Model.CanViewAs)
+            {
+                <h2>Check what they see</h2>
+                <form method="post" action="/account/view-as/@id">@Html.AntiForgeryToken()
+                    <button class="usa-button usa-button--outline" type="submit">View MERIT as @Model.DisplayName</button></form>
+                <p class="merit-meta">Limited to what you manage. Return from the banner at the top of every page.</p>
+            }
+
+            @if (Model.CanManageAccount)
+            {
+                <h2>Multi-factor authentication</h2>
+                <p>@(Model.MfaEnabled ? "Enrolled." : "Not yet enrolled; the person enrolls at next sign-in.")</p>
+                <form method="post" action="/admin/users/@id/reset-mfa">
+                    @Html.AntiForgeryToken()
+                    <button class="usa-button usa-button--secondary" type="submit">Reset MFA after verifying the person</button>
+                </form>
+            }
+        </div>
+    }
+</div>

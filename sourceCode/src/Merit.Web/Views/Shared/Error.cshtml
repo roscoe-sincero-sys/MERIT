@@ -1,0 +1,7 @@
+@model AlertModel
+@{
+    ViewData["Title"] = Model.Title;
+}
+<h1>@Model.Title</h1>
+<partial name="_Alert" model="Model" />
+<p><a class="usa-link" href="/">Return to the home page</a></p>

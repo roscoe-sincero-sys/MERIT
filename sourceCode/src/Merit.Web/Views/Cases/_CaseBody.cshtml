@@ -1,0 +1,170 @@
+@model CasePageModel
+@{
+    var c = Model.Detail.Case;
+    string rv = Options.Hex(c.RowVersion);
+}
+<div id="case-body">
+    <div class="merit-page-header">
+        <h1>Case @c.CaseNumber</h1>
+        <p>
+            <span class="merit-badge merit-badge--@c.Classification">@Options.Humanize(c.Classification)</span>
+            <span class="merit-badge">@Options.Humanize(c.CaseStatus)</span>
+            <span class="merit-badge merit-badge--@c.Population">@Options.Population(c.Population)</span>
+        </p>
+    </div>
+    @if (Model.Message is not null)
+    {
+        <div class="usa-alert usa-alert--info usa-alert--slim" role="status"><div class="usa-alert__body"><p class="usa-alert__text">@Model.Message</p></div></div>
+    }
+    <div class="merit-grid-2">
+        <section class="merit-section" aria-labelledby="case-summary">
+            <h2 id="case-summary">Summary</h2>
+            <dl>
+                <dt>Person</dt><dd><a class="usa-link" href="/people/@c.PersonId">@c.LastName, @c.FirstName</a> @(c.Dob is null ? "" : "b. " + Options.Date(c.Dob))</dd>
+                <dt>Analyte</dt><dd>@c.AnalyteName</dd>
+                <dt>Classification</dt><dd>@Options.Humanize(c.Classification)@(c.Classification != c.ComputedClassification ? $" (computed: {c.ComputedClassification})" : "")
+                    @if (c.OverrideReason is not null) { <div class="merit-meta">Override reason: @c.OverrideReason</div> }</dd>
+                <dt>Highest result</dt><dd>@Options.Value("=", c.HighestValue, c.HighestUnit ?? "") on @Options.Date(c.HighestCollectedDate)</dd>
+                <dt>Workflow</dt><dd>@Options.Humanize(c.WorkflowTemplate)</dd>
+                <dt>Owner</dt><dd>@c.OwningTenantName</dd>
+                <dt>Opened</dt><dd>@Options.Date(c.OpenedDate)@(c.ClosedDate is null ? "" : ", closed " + Options.Date(c.ClosedDate) + " (" + Options.Humanize(c.ClosureReason) + ")")</dd>
+                @if (Model.Detail.PrimaryContact is { } pc)
+                {
+                    <dt>Primary contact</dt><dd><a class="usa-link" href="/people/@pc.ContactPersonId">@pc.FirstName @pc.LastName</a> (@Options.Humanize(pc.Role)) @pc.Phone</dd>
+                }
+            </dl>
+            @if (Model.CanEdit)
+            {
+                <form class="usa-form" hx-post="/cases/@c.ExposureCaseId/update" hx-target="#case-body" hx-swap="outerHTML">
+                    <input type="hidden" name="rowVersion" value="@rv" />
+                    <div class="merit-form-row">
+                        <div class="usa-form-group"><label class="usa-label" for="assignedToUserId">Assigned to</label>
+                            <select class="usa-select" id="assignedToUserId" name="assignedToUserId">@foreach (var o in Model.Users) { <option value="@o.Value" selected="@o.Selected">@o.Label</option> }</select></div>
+                        <div class="usa-form-group"><label class="usa-label" for="exposureCategory">Exposure category</label>
+                            <select class="usa-select" id="exposureCategory" name="exposureCategory">@foreach (var o in Options.Fixed(c.ExposureCategory, Options.ExposureCategories)) { <option value="@o.Value" selected="@o.Selected">@o.Label</option> }</select></div>
+                        <div class="usa-form-group"><label class="usa-label" for="caseStatus">Status</label>
+                            <select class="usa-select" id="caseStatus" name="caseStatus"><option value="open" selected="@(c.CaseStatus == "open")">Open</option><option value="monitoring" selected="@(c.CaseStatus == "monitoring")">Monitoring</option></select></div>
+                    </div>
+                    <button class="usa-button usa-button--outline" type="submit">Save</button>
+                </form>
+            }
+        </section>
+
+        <section class="merit-section" aria-labelledby="case-tasks">
+            <h2 id="case-tasks">Open tasks</h2>
+            @if (Model.Detail.Tasks.Count == 0) { <p class="merit-empty">No open tasks.</p> }
+            else
+            {
+                <ul class="usa-list">
+                    @foreach (var t in Model.Detail.Tasks)
+                    {
+                        <li>@if (t.IsUrgent) { <span class="merit-badge merit-badge--urgent">Urgent</span> } <strong>@t.Title</strong>
+                            @(t.DueDate is null ? "" : "· due " + Options.Date(t.DueDate)) <div class="merit-meta">@t.Detail</div></li>
+                    }
+                </ul>
+                <p><a class="usa-link" href="/app/queues">Work these in the queue</a></p>
+            }
+            <h2>Investigations</h2>
+            @if (Model.Detail.Investigations.Count == 0) { <p class="merit-empty">No investigations yet.</p> }
+            else
+            {
+                <ul class="usa-list">
+                    @foreach (var i in Model.Detail.Investigations)
+                    {
+                        <li><a class="usa-link" href="/investigations/@i.InvestigationId">@i.InvestigationNumber</a> &middot; @Options.Humanize(i.InvestigationType) &middot; @i.TargetLabel @i.TargetCity &middot; @Options.Humanize(i.InvestigationStatus)</li>
+                    }
+                </ul>
+            }
+            @if (Model.CanInvestigate && c.CaseStatus != "closed")
+            {
+                <button class="usa-button usa-button--outline" type="button" hx-get="/cases/@c.ExposureCaseId/investigations/new" hx-target="#dialog-body" hx-swap="innerHTML">Request an investigation</button>
+            }
+        </section>
+    </div>
+
+    <section class="merit-section" aria-labelledby="case-results">
+        <h2 id="case-results">Results for this analyte</h2>
+        <div class="merit-table-wrap" tabindex="0" role="region" aria-label="Table; scroll sideways for more columns">
+            <table class="usa-table usa-table--borderless usa-table--compact">
+                <thead><tr><th scope="col">Collected</th><th scope="col">Value</th><th scope="col">Sample</th><th scope="col">Method</th><th scope="col">Status</th><th scope="col">Lab</th></tr></thead>
+                <tbody>
+                    @foreach (var r in Model.Detail.Results)
+                    {
+                        <tr class="@(r.LabResultId == c.QualifyingLabResultId ? "text-bold" : "")">
+                            <td><a class="usa-link" href="/results/@r.LabResultId">@Options.Date(r.CollectedDate)</a>@(r.LabResultId == c.QualifyingLabResultId ? " (qualifying)" : "")</td>
+                            <td>@Options.Value(r.Operator, r.ValueCanonical, r.UnitCanonical)</td>
+                            <td>@Options.Humanize(r.SampleType)</td>
+                            <td>@Options.Humanize(r.TestMethod)</td>
+                            <td>@Options.Humanize(r.ResultStatus) @(r.ResultRowStatus == "valid" ? "" : "· " + r.ResultRowStatus)</td>
+                            <td>@r.LabName</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <section class="merit-section" aria-labelledby="case-activities">
+        <h2 id="case-activities">Activity log</h2>
+        @if (Model.CanEdit)
+        {
+            <form class="usa-form merit-inline-form" hx-post="/cases/@c.ExposureCaseId/activities" hx-target="#case-body" hx-swap="outerHTML">
+                <div class="merit-form-row">
+                    <div class="usa-form-group"><label class="usa-label" for="activityType">Activity</label>
+                        <select class="usa-select" id="activityType" name="activityType">@foreach (var o in Model.ActivityTypes) { <option value="@o.Value" selected="@o.Selected">@o.Label</option> }</select></div>
+                    <div class="usa-form-group"><label class="usa-label" for="activityDate">Date</label><input class="usa-input" id="activityDate" name="activityDate" type="date" value="@Options.Iso(DateOnly.FromDateTime(DateTime.UtcNow))" /></div>
+                    <div class="usa-form-group"><label class="usa-label" for="outcome">Outcome</label>
+                        <select class="usa-select" id="outcome" name="outcome">@foreach (var o in Model.Outcomes) { <option value="@o.Value" selected="@o.Selected">@o.Label</option> }</select></div>
+                </div>
+                @if (Model.Detail.PrimaryContact is { } pc2) { <input type="hidden" name="contactPersonId" value="@pc2.ContactPersonId" /> }
+                <div class="usa-form-group"><label class="usa-label" for="note">Note</label><textarea class="usa-textarea" id="note" name="note" rows="2" maxlength="2000"></textarea></div>
+                <button class="usa-button" type="submit">Log activity</button>
+            </form>
+        }
+        @if (Model.Detail.Activities.Count == 0) { <p class="merit-empty">No activity yet.</p> }
+        else
+        {
+            <ol class="usa-list usa-list--unstyled">
+                @foreach (var a in Model.Detail.Activities)
+                {
+                    <li class="margin-bottom-1"><strong>@Options.Date(a.ActivityDate)</strong> &middot; @Options.Humanize(a.ActivityType)@(a.Outcome is null ? "" : " · " + Options.Humanize(a.Outcome))
+                        @if (a.ContactLastName is not null) { <span>&middot; with @a.ContactFirstName @a.ContactLastName</span> }
+                        <span class="merit-meta">&middot; @a.WorkerName</span><div>@a.Note</div></li>
+                }
+            </ol>
+        }
+    </section>
+
+    @if (Model.CanEdit)
+    {
+        <div class="merit-grid-2">
+            <section class="merit-section" aria-labelledby="override-heading">
+                <h2 id="override-heading">Override classification</h2>
+                <form class="usa-form" hx-post="/cases/@c.ExposureCaseId/override" hx-target="#case-body" hx-swap="outerHTML">
+                    <input type="hidden" name="rowVersion" value="@rv" />
+                    <div class="merit-form-row">
+                        <div class="usa-form-group"><label class="usa-label" for="classification">Classification</label>
+                            <select class="usa-select" id="classification" name="classification"><option value="confirmed" selected="@(c.Classification == "confirmed")">Confirmed</option><option value="suspect" selected="@(c.Classification == "suspect")">Suspect</option><option value="notACase" selected="@(c.Classification == "notACase")">Not a case</option></select></div>
+                        <div class="usa-form-group"><label class="usa-label" for="population">Population</label>
+                            <select class="usa-select" id="population" name="population"><option value="child" selected="@(c.Population == "child")">Child</option><option value="adult" selected="@(c.Population == "adult")">Adult</option><option value="pregnant" selected="@(c.Population == "pregnant")">Pregnant</option></select></div>
+                    </div>
+                    <div class="usa-form-group"><label class="usa-label" for="reason">Reason (required)</label><input class="usa-input" id="reason" name="reason" required /></div>
+                    <button class="usa-button usa-button--outline" type="submit">Override</button>
+                </form>
+            </section>
+            <section class="merit-section" aria-labelledby="close-heading">
+                <h2 id="close-heading">Close case</h2>
+                <form class="usa-form" hx-post="/cases/@c.ExposureCaseId/close" hx-target="#case-body" hx-swap="outerHTML" hx-confirm="Close this case?">
+                    <input type="hidden" name="rowVersion" value="@rv" />
+                    <div class="merit-form-row">
+                        <div class="usa-form-group"><label class="usa-label" for="closureReason">Reason</label>
+                            <select class="usa-select" id="closureReason" name="closureReason" required>@foreach (var o in Model.ClosureReasons) { <option value="@o.Value">@o.Label</option> }</select></div>
+                        <div class="usa-form-group"><label class="usa-label" for="closedDate">Closed date</label><input class="usa-input" id="closedDate" name="closedDate" type="date" value="@Options.Iso(DateOnly.FromDateTime(DateTime.UtcNow))" /></div>
+                    </div>
+                    <div class="usa-form-group"><label class="usa-label" for="closeNote">Note</label><input class="usa-input" id="closeNote" name="note" /></div>
+                    <button class="usa-button usa-button--secondary" type="submit">Close case</button>
+                </form>
+            </section>
+        </div>
+    }
+</div>

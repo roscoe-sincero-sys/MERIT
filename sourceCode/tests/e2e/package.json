@@ -1,0 +1,19 @@
+{
+  "name": "merit-e2e",
+  "version": "1.0.0",
+  "private": true,
+  "description": "End-to-end and accessibility checks for both MERIT front ends: keyboard only, tablet width, axe WCAG 2.1 AA.",
+  "scripts": {
+    "test": "playwright test",
+    "report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "4.13.0",
+    "@playwright/test": "1.64.0",
+    "@types/node": "^24.10.1",
+    "typescript": "6.0.3"
+  },
+  "overrides": {
+    "playwright-core": "1.64.0"
+  }
+}

@@ -1,0 +1,10 @@
+@model SettingsModel
+@{
+    ViewData["Title"] = "Jurisdiction settings";
+}
+<partial name="_ConfigNav" model='"settings"' />
+<h1>Jurisdiction settings</h1>
+<p class="merit-meta">Anything that differs between jurisdictions is a setting rather than code. Each change is effective-dated and audited; "NOTSET" marks a value the specification says must be set at install.</p>
+<div id="settings-table">
+    <partial name="_SettingsTable" model="Model" />
+</div>

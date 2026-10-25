@@ -1,0 +1,22 @@
+@model QueueTilesModel
+<ul class="merit-tiles" id="queue-tile-list">
+    @foreach (var q in Model.Queues.Where(q => q.OpenCount > 0))
+    {
+        var href = q.QueueCode == "heldRecords" ? "/app/held" : "/app/queues?queue=" + q.QueueCode;
+        var urgent = q.UrgentCount > 0 || q.OverdueCount > 0;
+        <li id="tile-@q.QueueCode">
+            <a class="merit-tile @(urgent ? "merit-tile--urgent" : "")" href="@href">
+                <span class="merit-tile__count">@q.OpenCount</span>
+                <span class="merit-tile__label">@q.QueueName</span>
+                <span class="merit-tile__detail">
+                    @if (q.UrgentCount > 0) { <text>@q.UrgentCount urgent </text> }
+                    @if (q.OverdueCount > 0) { <text>@q.OverdueCount overdue</text> }
+                </span>
+            </a>
+        </li>
+    }
+    @if (!Model.Queues.Any(q => q.OpenCount > 0))
+    {
+        <li class="merit-empty">All queues are empty.</li>
+    }
+</ul>

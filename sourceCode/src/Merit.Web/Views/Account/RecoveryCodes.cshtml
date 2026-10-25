@@ -1,0 +1,10 @@
+@model RecoveryCodesModel
+@{
+    ViewData["Title"] = "Recovery codes";
+}
+<h1>Save your recovery codes</h1>
+<div class="usa-alert usa-alert--warning"><div class="usa-alert__body"><p class="usa-alert__text">Each code works once if you lose your authenticator. Store them somewhere safe; they will not be shown again.</p></div></div>
+<ul class="usa-list merit-mono">
+    @foreach (var c in Model.Codes) { <li>@c[..5]-@c[5..]</li> }
+</ul>
+<a class="usa-button" href="/">Continue to MERIT</a>

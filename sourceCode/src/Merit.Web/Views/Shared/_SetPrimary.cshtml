@@ -1,0 +1,43 @@
+@model SetPrimaryModel
+<div id="set-primary">
+    <h2 id="dialog-title">Set as primary residence</h2>
+    <p><strong>@Model.AddressLabel</strong></p>
+    <p class="merit-meta">The current primary row ends the day before the start date. If the person still lives there, a non-primary row continues from that date with the same schedule, so history stays exact.</p>
+    @if (!ViewData.ModelState.IsValid)
+    {
+        <div class="usa-alert usa-alert--error usa-alert--slim" role="alert"><div class="usa-alert__body"><p class="usa-alert__text">@string.Join(" ", ViewData.ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage))</p></div></div>
+    }
+    <form class="usa-form" hx-post="/people/@Model.PersonId/places/@Model.PersonLocationId/primary/preview" hx-target="#set-primary" hx-swap="outerHTML">
+        <div class="usa-form-group">
+            <label class="usa-label" for="sp-start">Primary from</label>
+            <input class="usa-input" id="sp-start" name="StartDate" type="date" value="@Options.Iso(Model.StartDate)" required />
+        </div>
+        <div class="usa-form-group">
+            <label class="usa-label" for="sp-reason">Reason</label>
+            <select class="usa-select" id="sp-reason" name="PrimaryReason" required>@foreach (var o in Model.Reasons) { <option value="@o.Value" selected="@o.Selected">@o.Label</option> }</select>
+        </div>
+        <button class="usa-button usa-button--outline" type="submit">Preview the change</button>
+    </form>
+
+    @if (Model.Errors.Count > 0)
+    {
+        <div class="usa-alert usa-alert--error usa-alert--slim" role="alert"><div class="usa-alert__body"><p class="usa-alert__text">@string.Join(" ", Model.Errors)</p></div></div>
+    }
+    @if (Model.Previewed)
+    {
+        <div class="usa-summary-box" role="region" aria-labelledby="sp-summary">
+            <div class="usa-summary-box__body">
+                <h3 class="usa-summary-box__heading" id="sp-summary">What will change</h3>
+                <ul class="usa-list">@foreach (var c in Model.Changes) { <li>@c</li> }</ul>
+                <p>County: <strong>@(Model.CountyBefore ?? "none")</strong> &rarr; <strong>@(Model.CountyAfter ?? "none")</strong>@(Model.CountyBefore != Model.CountyAfter ? " (assignment and local access follow the new county)" : "")</p>
+                @foreach (var w in Model.Warnings) { <p class="merit-meta">@w</p> }
+            </div>
+        </div>
+        <form hx-post="/people/@Model.PersonId/places/@Model.PersonLocationId/primary" hx-target="#section-places" hx-swap="outerHTML">
+            <input type="hidden" name="StartDate" value="@Options.Iso(Model.StartDate)" />
+            <input type="hidden" name="PrimaryReason" value="@Model.PrimaryReason" />
+            <button class="usa-button" type="submit">Confirm and save</button>
+            <button class="usa-button usa-button--unstyled" type="button" data-close-dialog>Cancel</button>
+        </form>
+    }
+</div>

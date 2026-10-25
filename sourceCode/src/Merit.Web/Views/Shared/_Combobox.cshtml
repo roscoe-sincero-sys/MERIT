@@ -1,0 +1,13 @@
+@model (string Id, string Name, string Label, string Url, string? Value, string? Text, string? Hint)
+@* A server-side type-ahead field: visible text input + hidden id. The text input's hx-get returns _Options. *@
+<div class="usa-form-group merit-combobox">
+    <label class="usa-label" for="@Model.Id-text">@Model.Label</label>
+    @if (Model.Hint is not null) { <div class="usa-hint" id="@Model.Id-hint">@Model.Hint</div> }
+    <input class="usa-input" id="@Model.Id-text" type="text" autocomplete="off" value="@Model.Text"
+           role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="@Model.Id-list"
+           data-hidden="@Model.Id" name="q"
+           hx-get="@Model.Url" hx-trigger="input changed delay:400ms" hx-target="#@Model.Id-list" hx-swap="innerHTML"
+           hx-vals='{"field":"@Model.Id"}' />
+    <input type="hidden" id="@Model.Id" name="@Model.Name" value="@Model.Value" />
+    <ul class="merit-listbox" id="@Model.Id-list" role="listbox" data-for="@Model.Id-text" aria-label="@Model.Label matches"></ul>
+</div>

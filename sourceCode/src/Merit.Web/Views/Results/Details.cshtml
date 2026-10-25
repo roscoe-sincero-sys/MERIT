@@ -1,0 +1,32 @@
+@model ResultDetailModel
+@{
+    var r = Model.Result;
+    ViewData["Title"] = "Lab result";
+}
+@if (r.PersonId is Guid pid) { <p><a class="usa-link" href="/people/@pid">Back to the person</a></p> }
+<h1>@r.AnalyteName result, collected @Options.Date(r.CollectedDate)</h1>
+<div class="merit-grid-2">
+    <section class="merit-section">
+        <h2>Result</h2>
+        <dl>
+            <dt>Value</dt><dd><strong>@Options.Value(r.Operator, r.ValueCanonical, r.UnitCanonical)</strong> (reported @r.ValueText @r.UnitReported)</dd>
+            @if (r.ValueCreatinineAdj is not null) { <dt>Creatinine-adjusted</dt><dd>@r.ValueCreatinineAdj ug/g</dd> }
+            <dt>Specimen</dt><dd>@Options.Humanize(r.Specimen) @(r.SampleType is null ? "" : "· " + Options.Humanize(r.SampleType)) @(r.Speciation is null ? "" : "· " + r.Speciation)</dd>
+            <dt>Method</dt><dd>@Options.Humanize(r.TestMethod) @r.DeviceModel @r.KitLot</dd>
+            <dt>Status</dt><dd>@Options.Humanize(r.ResultStatus) &middot; @Options.Humanize(r.ResultRowStatus)@(r.IsIndeterminate ? " · indeterminate (detection limit above the case level)" : "")</dd>
+            <dt>Population at collection</dt><dd>@Options.Population(r.Population)@(r.AgeAtCollectionMonths is int m ? $", age {m / 12} y {m % 12} m" : "")</dd>
+            <dt>Dates</dt><dd>Collected @Options.Date(r.CollectedDate), analyzed @Options.Date(r.AnalyzedDate), reported @Options.Date(r.ReportedDate), received @Options.Date(r.ReceivedUtc)</dd>
+            <dt>Lab and orderer</dt><dd>@r.LabName &middot; @r.OrderingProviderName @r.OrderingFacilityName</dd>
+            <dt>Accession, LOINC</dt><dd>@r.AccessionNumber @r.LoincReported</dd>
+            <dt>Arrived by</dt><dd>@Options.Humanize(r.SourceChannel) @r.FileName</dd>
+        </dl>
+    </section>
+    <section class="merit-section">
+        <h2>As reported (never edited)</h2>
+        <table class="usa-table usa-table--borderless usa-table--compact">
+            <tbody>
+                @foreach (var kv in Model.Snapshot) { <tr><th scope="row">@kv.Key</th><td>@kv.Value</td></tr> }
+            </tbody>
+        </table>
+    </section>
+</div>

@@ -1,0 +1,45 @@
+@model RelationshipsModel
+<section class="merit-section" id="section-relationships" aria-labelledby="relationships-heading">
+    <h2 id="relationships-heading">
+        Relationships
+        @if (Model.CanEdit)
+        {
+            <button class="usa-button usa-button--outline usa-button--small" type="button"
+                    hx-get="/people/@Model.PersonId/relationships/add" hx-target="#relationships-form" hx-swap="innerHTML">Add relationship</button>
+        }
+    </h2>
+    <div id="relationships-form"></div>
+    @if (Model.Rows.Count == 0)
+    {
+        <p class="merit-empty">@Model.EmptyText</p>
+    }
+    else
+    {
+        <div class="merit-table-wrap" tabindex="0" role="region" aria-label="Table; scroll sideways for more columns">
+            <table class="usa-table usa-table--borderless">
+                <thead><tr><th scope="col">Person</th><th scope="col">Is</th><th scope="col">Contact</th><th scope="col">Dates</th><th scope="col">Source</th><th scope="col"><span class="usa-sr-only">Actions</span></th></tr></thead>
+                <tbody>
+                    @foreach (var r in Model.Rows)
+                    {
+                        <tr>
+                            <td><a class="usa-link" href="/people/@r.OtherPersonId">@r.OtherLastName, @r.OtherFirstName</a>
+                                @if (r.OtherDob is not null) { <span class="merit-meta">b. @Options.Date(r.OtherDob)</span> }
+                                @if (r.OtherIsContactOnly) { <span class="merit-badge">Contact only</span> }</td>
+                            <td>@r.RoleLabel @if (r.HasLegalCustody) { <span class="merit-badge">Legal custody</span> }</td>
+                            <td>@if (r.IsPrimaryContact) { <span class="merit-star" aria-label="Primary contact">&#9733;</span> <span>Primary contact</span> }</td>
+                            <td>@Options.Date(r.StartDate)@(r.EndDate is null ? "" : " to " + Options.Date(r.EndDate))</td>
+                            <td>@Options.Humanize(r.Source)@if (r.VerifiedDate is null) { <span class="merit-meta"> (unverified)</span> }</td>
+                            <td>
+                                @if (Model.CanEdit && !r.IsInverse && r.EndDate is null)
+                                {
+                                    <button class="usa-button usa-button--unstyled" type="button" hx-post="/people/@Model.PersonId/relationships/@r.PersonRelationshipId/end"
+                                            hx-target="#section-relationships" hx-swap="outerHTML" hx-confirm="End this relationship today?">End</button>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</section>

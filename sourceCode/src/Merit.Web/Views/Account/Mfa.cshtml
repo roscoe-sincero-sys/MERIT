@@ -1,0 +1,22 @@
+@model MfaModel
+@{
+    ViewData["Title"] = "Verify your sign-in";
+}
+<div class="grid-row">
+    <div class="grid-col-12 tablet:grid-col-8 desktop:grid-col-6">
+        <h1>Enter your verification code</h1>
+        @if (Model.Message is not null)
+        {
+            <div class="usa-alert usa-alert--error usa-alert--slim" role="alert"><div class="usa-alert__body"><p class="usa-alert__text">@Model.Message</p></div></div>
+        }
+        <form class="usa-form" method="post" asp-action="Mfa">
+            <div class="usa-form-group">
+                <label class="usa-label" asp-for="Code">Six-digit code from your authenticator app</label>
+                <div class="usa-hint" id="code-hint">Or enter one of your ten-character recovery codes.</div>
+                <span class="usa-error-message" asp-validation-for="Code"></span>
+                <input class="usa-input usa-input--medium" asp-for="Code" autocomplete="one-time-code" inputmode="text" aria-describedby="code-hint" />
+            </div>
+            <button class="usa-button" type="submit">Verify and sign in</button>
+        </form>
+    </div>
+</div>

@@ -1,0 +1,23 @@
+
+In the sub-folder is a sub-folder containing requirements for this MERIT project.
+In the sub-folder journal is a tracking spreadsheet that records /usage data for each claude code session used for this MERIT project.  Include date time start and time end if possible.
+
+Your job is to create the MERIT web application using Opus 5.5 at medium effort while logging claude code session usage.  Usage tracking is in the journal sub-folder.  Create a spreadsheet to track this usage.
+
+If usage hits 85 or more%, stop and wait for it to reset to continue.
+
+The details for the MERIT application is in \docs\requirements folder.
+
+The requirements shows pascal case for objects but use camelCase instead.  The skills implements a standard and template on how sql objects must be.  I want a slight change to the template.  Instead of using field names like auditDeletedBy and auditDeletedDateUtc for the auditing fields, use names DeletedBy and DeletedDateUtc instead.
+
+1.  Start by creating the Claude Code usage tracking spreadsheet to be stored in the \journal sub-folder.
+2.  Create a task spreadsheet to be saved in the \tracking sub-folder.  The task spreadsheet shall list all of the tasks needed to create this web application.  This serves as a progress report on the development of this applicatioin.
+3.  Create the web application with source code in the \sourceCode folder.
+
+
+The deliverables would be: 
+
+1.  a powershell deployment script that installs the MERIT database and its objects.  Make sure that it checks if objects exist unless it is an object that needs updating (such as updating an existing procedures.)  Otherwords, it is re-runnable.
+2. a solution file that I can click to open in Visual Studio, compile, and then run. 
+
+ 

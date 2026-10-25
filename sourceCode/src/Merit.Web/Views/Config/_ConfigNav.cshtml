@@ -1,0 +1,8 @@
+@model string
+<nav aria-label="Configuration">
+    <ul class="usa-button-group usa-button-group--segmented">
+        <li class="usa-button-group__item"><a class="usa-button @(Model == "thresholds" ? "" : "usa-button--outline")" href="/config/thresholds">Thresholds</a></li>
+        <li class="usa-button-group__item"><a class="usa-button @(Model == "settings" ? "" : "usa-button--outline")" href="/config/settings">Jurisdiction settings</a></li>
+        <li class="usa-button-group__item"><a class="usa-button @(Model == "analytes" ? "" : "usa-button--outline")" href="/config/analytes">Analytes</a></li>
+    </ul>
+</nav>

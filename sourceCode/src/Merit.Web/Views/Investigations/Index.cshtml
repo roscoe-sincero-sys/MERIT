@@ -1,0 +1,12 @@
+@model InvestigationListModel
+@{
+    ViewData["Title"] = "Investigations";
+}
+<h1>Investigations</h1>
+<form class="usa-form merit-form-row" method="get" action="/investigations" hx-get="/investigations" hx-target="#investigation-list" hx-swap="innerMorph" hx-trigger="change" hx-push-url="true">
+    <div class="usa-checkbox"><input class="usa-checkbox__input" id="openOnly" type="checkbox" name="openOnly" value="true" @(Model.OpenOnly ? "checked" : "") /><label class="usa-checkbox__label" for="openOnly">Open only</label></div>
+    <input type="hidden" name="openOnly" value="false" />
+</form>
+<div id="investigation-list">
+    <partial name="_InvestigationList" model="Model" />
+</div>

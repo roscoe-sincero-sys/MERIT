@@ -1,0 +1,29 @@
+@model InvestigationListModel
+<div id="investigation-list-body">
+    @if (Model.Rows.Count == 0)
+    {
+        <p class="merit-empty">No investigations match.</p>
+    }
+    else
+    {
+        <div class="merit-table-wrap" tabindex="0" role="region" aria-label="Table; scroll sideways for more columns">
+            <table class="usa-table usa-table--borderless">
+                <thead><tr><th scope="col">Number</th><th scope="col">Type</th><th scope="col">Target</th><th scope="col">Status</th><th scope="col">Requested</th><th scope="col">Scheduled</th><th scope="col">Assigned</th></tr></thead>
+                <tbody>
+                    @foreach (var i in Model.Rows)
+                    {
+                        <tr id="inv-@i.InvestigationId">
+                            <td><a class="usa-link" href="/investigations/@i.InvestigationId">@i.InvestigationNumber</a></td>
+                            <td>@Options.Humanize(i.InvestigationType)</td>
+                            <td>@i.TargetLabel</td>
+                            <td>@Options.Humanize(i.InvestigationStatus)</td>
+                            <td>@Options.Date(i.RequestedDate)</td>
+                            <td>@Options.Date(i.ScheduledDate)</td>
+                            <td>@i.AssignedToName</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>

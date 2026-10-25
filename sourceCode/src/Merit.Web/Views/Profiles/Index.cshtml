@@ -1,0 +1,94 @@
+@using Merit.Web.Controllers
+@model ProfilesPageModel
+@{
+    ViewData["Title"] = "My profiles";
+    var master = Model.Mine.Profiles.FirstOrDefault(p => p.IsMaster);
+    var others = Model.Mine.Profiles.Where(p => !p.IsMaster).ToList();
+}
+<h1>My profiles</h1>
+@if (Model.Message is string m) { <div class="usa-alert usa-alert--success usa-alert--slim" role="status"><div class="usa-alert__body"><p class="usa-alert__text">@m</p></div></div> }
+@if (Model.Error is string e) { <div class="usa-alert usa-alert--error usa-alert--slim" role="alert"><div class="usa-alert__body"><p class="usa-alert__text">@e</p></div></div> }
+
+<div class="usa-summary-box" role="region" aria-labelledby="current-heading">
+    <div class="usa-summary-box__body">
+        <h2 class="usa-summary-box__heading" id="current-heading">You are using: @Model.CurrentProfileName</h2>
+        <p class="usa-summary-box__text">What you can see and do right now comes from this profile.
+            @if (Model.ViewingAs is not null) { <text>You are seeing MERIT the way <strong>@Model.ViewingAs</strong> does, limited to what you manage. Everything you do is recorded under your own name.</text> }</p>
+        @if (Model.ViewingAs is not null)
+        {
+            <form method="post" action="/account/view-as/end">@Html.AntiForgeryToken()<button class="usa-button" type="submit">Return to my own profile</button></form>
+        }
+    </div>
+</div>
+
+@if (Model.IsPlatformAdmin)
+{
+    <p>As a platform administrator you have one profile, for managing accounts and roles. It cannot be switched, and it shows no records.</p>
+}
+else
+{
+    <h2>Switch profile</h2>
+    <p class="merit-meta">Your master profile is everything your administrator gave you. Extra profiles are smaller versions of it for everyday work: for example read only, or one county. You cannot give yourself more than your master profile.</p>
+    <div class="merit-table-wrap" tabindex="0" role="region" aria-label="Your profiles">
+        <table class="usa-table usa-table--borderless">
+            <thead><tr><th scope="col">Profile</th><th scope="col">What it gives you</th><th scope="col"><span class="usa-sr-only">Actions</span></th></tr></thead>
+            <tbody>
+                @foreach (var p in Model.Mine.Profiles)
+                {
+                    var grants = Model.Mine.Grants.Where(g => g.UserProfileId == p.UserProfileId).ToList();
+                    bool current = p.IsMaster ? Model.CurrentProfileId is null && Model.ViewingAs is null : Model.CurrentProfileId == p.UserProfileId;
+                    <tr>
+                        <th scope="row">@p.ProfileName @if (p.IsMaster) { <span class="merit-badge">Master</span> } @if (!p.IsActive) { <span class="merit-badge">Inactive</span> }
+                            @if (p.ProfileDescription is string d) { <br /><span class="merit-meta">@d</span> }</th>
+                        <td>
+                            @if (grants.Count == 0) { <span class="merit-empty">Nothing yet.</span> }
+                            <ul class="usa-list usa-list--unstyled">
+                                @foreach (var g in grants) { <li>@g.RoleName at @g.TenantName @ProfilesPageModel.Scope(g.IncludeDescendants) &middot; @ProfilesPageModel.AccessText(g.AccessLevel)</li> }
+                            </ul>
+                        </td>
+                        <td>
+                            @if (current) { <strong>In use</strong> }
+                            else if (p.IsActive)
+                            {
+                                <form method="post" action="/account/profiles/switch">@Html.AntiForgeryToken()
+                                    <input type="hidden" name="userProfileId" value="@(p.IsMaster ? "" : p.UserProfileId.ToString())" />
+                                    <button class="usa-button usa-button--outline usa-button--small" type="submit">Use<span class="usa-sr-only"> @p.ProfileName</span></button></form>
+                            }
+                            @if (!p.IsMaster) { <a class="usa-link" href="/account/profiles/@p.UserProfileId/edit">Change<span class="usa-sr-only"> @p.ProfileName</span></a> }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+    <p><a class="usa-button" href="/account/profiles/new">Create a profile</a></p>
+
+    <h2>Working in</h2>
+    <p class="merit-meta">New records you create belong to this tenant. Pick the state or county you are working on today.</p>
+    <form class="merit-inline-form" method="post" action="/account/profiles/switch">
+        @Html.AntiForgeryToken()
+        <input type="hidden" name="userProfileId" value="@ProfilesPageModel.Id(Model.CurrentProfileId)" />
+        <label class="usa-label" for="actingTenantId">Tenant</label>
+        <select class="usa-select" id="actingTenantId" name="actingTenantId">
+            @foreach (var t in Model.Tenants.Where(t => t.TenantType != "platform"))
+            {
+                <option value="@t.TenantId" selected="@(t.TenantId == Model.ActingTenantId)">@(new string(' ', Math.Max(0, t.Depth - 1) * 3))@t.TenantName</option>
+            }
+        </select>
+        <button class="usa-button usa-button--outline" type="submit">Work here</button>
+    </form>
+
+    @if (Model.ViewAsCandidates.Count > 0)
+    {
+        <h2>View MERIT as someone you manage</h2>
+        <p class="merit-meta">Check what a person can see and do, for example after changing their access. You see only the parts you manage yourself, and never more than you can do yourself.</p>
+        <ul class="usa-list usa-list--unstyled">
+            @foreach (var u in Model.ViewAsCandidates)
+            {
+                <li><form class="display-inline" method="post" action="/account/view-as/@u.AppUserId">@Html.AntiForgeryToken()
+                    <button class="usa-button usa-button--unstyled" type="submit">View as @u.DisplayName</button></form>
+                    <span class="merit-meta">@u.UserName &middot; @u.HomeTenantName</span></li>
+            }
+        </ul>
+    }
+}

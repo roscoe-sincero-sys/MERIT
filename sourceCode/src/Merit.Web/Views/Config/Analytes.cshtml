@@ -1,0 +1,10 @@
+@model AnalytesModel
+@{
+    ViewData["Title"] = "Analytes";
+}
+<partial name="_ConfigNav" model='"analytes"' />
+<h1>Analytes</h1>
+<p class="merit-meta">Adding a metal or changing a level is an administrator task, not a software release. Inactive analytes stay on old records but leave the drop-downs.</p>
+<div id="analyte-table">
+    <partial name="_AnalyteTable" model="Model" />
+</div>
