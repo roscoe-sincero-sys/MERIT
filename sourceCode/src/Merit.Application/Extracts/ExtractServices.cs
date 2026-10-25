@@ -58,7 +58,28 @@ public sealed class ExtractService(IExtractData extracts, AuditService audit, IC
         await audit.ExportedAsync("extractRun", runId, run.RecordCount ?? 0, ct).ConfigureAwait(false);
         return run;
     }
+
+    /// <summary>The validation findings of one run: record, field and message. No person data is stored in them.</summary>
+    public async Task<(ExtractRunRow Run, IReadOnlyList<ExtractFinding> Findings)> FindingsAsync(Guid runId, CancellationToken ct = default)
+    {
+        session.Require(Permissions.ExtractRun);
+        var run = await extracts.GetRunAsync(runId, false, ct).ConfigureAwait(false) ?? throw new NotFoundException();
+        var findings = string.IsNullOrWhiteSpace(run.ValidationReportJson)
+            ? []
+            : JsonSerializer.Deserialize<List<ExtractFinding>>(run.ValidationReportJson) ?? [];
+        return (run, findings);
+    }
+
+    /// <summary>Records that the file was sent; the run stays downloadable.</summary>
+    public async Task MarkSubmittedAsync(Guid runId, CancellationToken ct = default)
+    {
+        session.Require(Permissions.ExtractSubmit);
+        await extracts.MarkSubmittedAsync(runId, ct).ConfigureAwait(false);
+    }
 }
+
+/// <summary>One validation finding as the builder stores it.</summary>
+public sealed record ExtractFinding(string? RecordId, string? FieldName, string? Message);
 
 /// <summary>
 /// Builds a federal extract in the worker from the configured layout. Names, street addresses, phone numbers, SSNs and

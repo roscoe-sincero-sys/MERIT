@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
 import { totp } from './totp';
 
-export const USERS = ['supervisor', 'cmbalt'] as const;
+export const USERS = ['supervisor', 'cmbalt', 'admin'] as const;
 export const PASSWORD = 'MeritDemo!2026';
 
 /**

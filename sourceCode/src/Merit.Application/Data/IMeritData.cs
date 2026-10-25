@@ -47,6 +47,12 @@ public interface IAccountData
     Task<IReadOnlyList<TenantListRow>> ListTenantsAsync(CancellationToken ct = default);
 
     Task<IReadOnlyList<AssignableUserRow>> ListAssignableUsersAsync(CancellationToken ct = default);
+
+    /// <summary>A region, state, tribe or stand-alone jurisdiction; the database checks who may create it.</summary>
+    Task<Guid> CreateRootTenantAsync(TenantCreate tenant, CancellationToken ct = default);
+
+    /// <summary>A program or local jurisdiction under a tenant the caller administers.</summary>
+    Task<Guid> CreateChildTenantAsync(TenantCreate tenant, CancellationToken ct = default);
 }
 
 public interface IConfigData
@@ -136,6 +142,11 @@ public interface IPlaceData
     Task SaveProviderAsync(Guid providerId, string? npi, string lastName, string? firstName, string? credential, Guid? practiceLocationId, CancellationToken ct = default);
 
     Task<OrganizationResolveRow?> ResolveOrganizationAsync(string? cliaNumber, string? npi, string? nameKey, CancellationToken ct = default);
+
+    Task<IReadOnlyList<ReporterRow>> ListReportersAsync(string? text, string? kind, int maxRows, CancellationToken ct = default);
+
+    /// <summary>Adds or updates checked registry rows, matched on CLIA number or NPI.</summary>
+    Task<RegistryImportCounts> ImportReportersAsync(IReadOnlyList<ReporterSave> rows, CancellationToken ct = default);
 }
 
 public interface IResultData
@@ -261,6 +272,9 @@ public interface IExtractData
     Task<ExtractRunRow?> GetRunAsync(Guid extractRunId, bool includeFile, CancellationToken ct = default);
 
     Task UpdateRunAsync(Guid extractRunId, string runStatus, int? recordCount, int? errorCount, string? validationReportJson, string? fileName, string? fileContent, CancellationToken ct = default);
+
+    /// <summary>Records that a ready file was sent to CDC or NIOSH.</summary>
+    Task MarkSubmittedAsync(Guid extractRunId, CancellationToken ct = default);
 
     Task<IReadOnlyList<CblsSourceRow>> GetCblsRowsAsync(DateOnly periodStart, DateOnly periodEnd, CancellationToken ct = default);
 

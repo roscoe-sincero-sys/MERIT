@@ -30,6 +30,7 @@ public static class DependencyInjection
         services.AddScoped<ConfigService>();
         services.AddScoped<AdminService>();
         services.AddScoped<LookupService>();
+        services.AddScoped<RegistryService>();
         services.AddScoped<IntakeService>();
         services.AddScoped<IntakeProcessor>();
         services.AddScoped<ExtractService>();

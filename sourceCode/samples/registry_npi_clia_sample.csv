@@ -1,0 +1,9 @@
+type,name,lastName,firstName,credential,npi,clia,phone
+laboratory,Tidewater Clinical Laboratory,,,,,21D0456789,410-555-0170
+laboratory,Allegany Regional Lab,,,,,21D04567,301-555-0122
+facility,Patapsco Family Health Center,,,,1987654328,,410-555-0188
+facility,Severn Pediatric Associates,,,,1765432100,,410-555-0190
+provider,,Okafor,Grace,MD,1543210987,,
+provider,,Lindqvist,Erik,DO,1334455668,,
+provider,,Patel,,NP,,,
+provider,,Okafor,Grace,MD,1543210987,,

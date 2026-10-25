@@ -557,7 +557,7 @@ SELECT r.roleId, r.roleCode, r.roleName, r.isAdministrator, r.isDeidentified, r.
         "schema": "auth", "name": "uspListTenants", "kind": "read", "grants": BOTH, "ticket": "T160",
         "desc": "Tenants for pickers and the tenant tree: those the caller administers, those whose records the session "
                 "covers, and those in the caller's master profile; every tenant for a platform administrator. Depth is "
-                "counted from the platform tenant.",
+                "counted from the platform tenant; canAdminister marks the tenants the caller may add tenants under.",
         "params": "",
         "key": "NULL",
         "body": f"""
@@ -575,7 +575,8 @@ SELECT st.tenantId
 UNION
 SELECT tenantId FROM auth.tvfUserGrantPermissions (@me);
 
-SELECT t.tenantId, t.parentTenantId, t.tenantCode, t.tenantName, t.tenantType, t.rootTenantId, tc.depth
+SELECT t.tenantId, t.parentTenantId, t.tenantCode, t.tenantName, t.tenantType, t.rootTenantId, tc.depth,
+       CAST (CASE WHEN EXISTS (SELECT 1 FROM @admin AS a WHERE a.tenantId = t.tenantId) THEN 1 ELSE 0 END AS BIT) AS canAdminister
   FROM auth.tenant AS t
   JOIN @ids AS i ON i.tenantId = t.tenantId
   JOIN auth.tenantClosure AS tc ON tc.descendantTenantId = t.tenantId AND tc.ancestorTenantId = @platform AND tc.isDeleted = 0

@@ -117,3 +117,7 @@ dialog.merit-dialog::backdrop { background: rgba(0,0,0,.5); }
 .merit-grant-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: .25rem 1rem; align-items: end;
                    border-bottom: 1px solid #dfe1e2; padding-bottom: .75rem; margin-bottom: .75rem; }
 .merit-grant-row .usa-select { max-width: none; }
+
+/* Tenant tree: nested lists step in */
+.merit-tree .merit-tree { margin-left: 1.25rem; }
+.merit-tree li { margin-bottom: 0.25rem; }

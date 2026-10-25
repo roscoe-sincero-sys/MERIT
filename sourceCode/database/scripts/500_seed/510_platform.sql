@@ -10,7 +10,7 @@ GO
     Converges on every run:
       - creates the platform tenant and its closure row;
       - moves any tenant still without a parent under the platform (older installations had state roots at the top);
-      - ships the Platform administrator role (tenant.administer, platform.administer, audit.view);
+      - ships the Platform administrator role (tenant.administer, tenant.create, platform.administer, audit.view);
       - fills in each account's home tenant and master profile where missing.
 
     The first platform administrator account is created by Deploy-MeritDatabase.ps1 -PlatformAdminUserName (or, for
@@ -57,7 +57,7 @@ END;
 INSERT auth.rolePermission (rolePermissionId, roleId, permissionId)
 SELECT CAST (HASHBYTES ('MD5', N'rolePermission:PLATFORM:' + p.permissionCode) AS UNIQUEIDENTIFIER), @role, p.permissionId
   FROM auth.permission AS p
- WHERE p.permissionCode IN ('tenant.administer', 'platform.administer', 'audit.view') AND p.isDeleted = 0
+ WHERE p.permissionCode IN ('tenant.administer', 'tenant.create', 'platform.administer', 'audit.view') AND p.isDeleted = 0
    AND NOT EXISTS (SELECT 1 FROM auth.rolePermission AS x WHERE x.roleId = @role AND x.permissionId = p.permissionId
                                                           AND x.isDeleted = 0);
 

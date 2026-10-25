@@ -447,7 +447,7 @@
   "grants": [
    "meritWebRole"
   ],
-  "permission": "tenant.administer",
+  "permission": "tenant.create",
   "params": [
    {
     "name": "tenantCode",
@@ -478,6 +478,12 @@
     "type": "VARCHAR (400)",
     "hasDefault": true,
     "isOutput": false
+   },
+   {
+    "name": "countiesJson",
+    "type": "NVARCHAR (MAX)",
+    "hasDefault": true,
+    "isOutput": false
    }
   ]
  },
@@ -487,7 +493,7 @@
   "grants": [
    "meritWebRole"
   ],
-  "permission": "platform.administer",
+  "permission": null,
   "params": [
    {
     "name": "tenantCode",
@@ -528,6 +534,12 @@
    {
     "name": "parentTenantCode",
     "type": "VARCHAR (30)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "countiesJson",
+    "type": "NVARCHAR (MAX)",
     "hasDefault": true,
     "isOutput": false
    }
@@ -611,6 +623,106 @@
    {
     "name": "asOfDate",
     "type": "DATE",
+    "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
+  "name": "config.uspInstallChildTenant",
+  "kind": "write",
+  "grants": [],
+  "permission": null,
+  "params": [
+   {
+    "name": "tenantCode",
+    "type": "VARCHAR (30)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "tenantName",
+    "type": "NVARCHAR (120)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "tenantType",
+    "type": "VARCHAR (30)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "parentTenantCode",
+    "type": "VARCHAR (30)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "countyFipsList",
+    "type": "VARCHAR (400)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "countiesJson",
+    "type": "NVARCHAR (MAX)",
+    "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
+  "name": "config.uspInstallRootTenant",
+  "kind": "write",
+  "grants": [],
+  "permission": null,
+  "params": [
+   {
+    "name": "tenantCode",
+    "type": "VARCHAR (30)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "tenantName",
+    "type": "NVARCHAR (120)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "statePostalCode",
+    "type": "CHAR (2)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "stateFips",
+    "type": "CHAR (2)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "effectiveFrom",
+    "type": "DATE",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "tenantType",
+    "type": "VARCHAR (30)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "parentTenantCode",
+    "type": "VARCHAR (30)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "countiesJson",
+    "type": "NVARCHAR (MAX)",
     "hasDefault": true,
     "isOutput": false
    }
@@ -1927,6 +2039,22 @@
   ]
  },
  {
+  "name": "dbo.uspImportReporters",
+  "kind": "write",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": "registry.edit",
+  "params": [
+   {
+    "name": "rowsJson",
+    "type": "NVARCHAR (MAX)",
+    "hasDefault": false,
+    "isOutput": false
+   }
+  ]
+ },
+ {
   "name": "dbo.uspLinkInvestigationCase",
   "kind": "write",
   "grants": [
@@ -2270,6 +2398,34 @@
   ]
  },
  {
+  "name": "dbo.uspListReporters",
+  "kind": "read",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": "person.view",
+  "params": [
+   {
+    "name": "text",
+    "type": "NVARCHAR (120)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "kind",
+    "type": "VARCHAR (20)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "maxRows",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
   "name": "dbo.uspListWorkTasks",
   "kind": "read",
   "grants": [
@@ -2323,6 +2479,22 @@
     "name": "pageSize",
     "type": "INT",
     "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
+  "name": "dbo.uspMarkExtractSubmitted",
+  "kind": "write",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": "extract.submit",
+  "params": [
+   {
+    "name": "extractRunId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
     "isOutput": false
    }
   ]

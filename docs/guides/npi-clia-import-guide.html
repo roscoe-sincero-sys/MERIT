@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>MERIT: Importing NPI and CLIA Records</title>
+<style>
+  @page { size: Letter; margin: 0.55in 0.65in 0.7in; }
+  :root { --ink:#1b1b1b; --muted:#565c65; --blue:#1a4480; --blue2:#005ea2; --soft:#f0f4f9; --line:#dfe1e2; --ok:#00a91c; --no:#b50909; --amber:#ffbe2e; }
+  * { box-sizing: border-box; }
+  body { font-family: "Segoe UI", "Source Sans Pro", Arial, sans-serif; color: var(--ink); font-size: 10.5pt; line-height: 1.38; margin: 0; }
+  h1 { font-size: 26pt; color: var(--blue); margin: 0 0 .2em; line-height: 1.15; }
+  h2 { font-size: 16pt; color: var(--blue); margin: .7em 0 .35em; border-bottom: 2px solid var(--blue); padding-bottom: .15em; break-after: avoid; }
+  h2.newpage { break-before: page; }
+  h3 { font-size: 12.5pt; margin: .9em 0 .3em; break-after: avoid; }
+  p, li { margin: .3em 0; }
+  ul, ol { padding-left: 1.3em; }
+  .page { break-after: page; }
+  .lead { font-size: 13pt; color: var(--muted); }
+  .cover { height: 9.2in; display: flex; flex-direction: column; justify-content: center; }
+  .cover .tag { display: inline-block; background: var(--blue); color: #fff; padding: .2em .7em; border-radius: 1em; font-size: 10pt; letter-spacing: .05em; align-self: flex-start; }
+  .box { border: 1px solid var(--line); border-left: 6px solid var(--blue2); background: var(--soft); padding: .6em .9em; border-radius: 4px; margin: .7em 0; break-inside: avoid; }
+  .box.warn { border-left-color: var(--amber); background: #fff8e6; }
+  .box.ok { border-left-color: var(--ok); background: #ecf3ec; }
+  .box strong:first-child { color: var(--blue); }
+  table { border-collapse: collapse; width: 100%; margin: .5em 0; font-size: 9.8pt; break-inside: avoid; }
+  th, td { border: 1px solid var(--line); padding: .32em .5em; text-align: left; vertical-align: top; }
+  th { background: #e8eef5; }
+  .yes { color: #154c21; font-weight: 700; }
+  .no { color: var(--no); font-weight: 700; }
+  .steps { counter-reset: s; list-style: none; padding-left: 0; }
+  .steps > li { counter-increment: s; position: relative; padding-left: 2.1em; margin: .45em 0; }
+  .steps > li::before { content: counter(s); position: absolute; left: 0; top: .05em; width: 1.5em; height: 1.5em; border-radius: 50%; background: var(--blue2); color: #fff; font-weight: 700; font-size: 9pt; text-align: center; line-height: 1.5em; }
+  figure { margin: .7em 0; break-inside: avoid; }
+  figure img { width: 100%; border: 1px solid #a9aeb1; border-radius: 6px; box-shadow: 0 1px 4px rgba(0,0,0,.12); display: block; max-height: 3.6in; object-fit: cover; object-position: top; }
+  figure.diagram img { width: 90%; margin: 0 auto; max-height: none; object-fit: contain; }
+  figcaption { font-size: 8.8pt; color: var(--muted); margin-top: .25em; }
+  .ui { font-weight: 700; color: var(--blue); }
+  code, pre { font-family: Consolas, monospace; font-size: 9.2pt; background: #f1f3f6; border-radius: 2px; }
+  code { padding: 0 .2em; }
+  pre { padding: .5em .7em; border: 1px solid var(--line); white-space: pre; overflow: hidden; break-inside: avoid; }
+  .idcard { display: grid; grid-template-columns: 1fr 1fr; gap: .9em; }
+  .idcard > div { border: 1px solid var(--line); border-radius: 6px; padding: .6em .9em; break-inside: avoid; }
+  .idcard h3 { margin-top: 0; }
+  .big { font-family: Consolas, monospace; font-size: 15pt; letter-spacing: .06em; color: var(--blue); }
+  .foot { font-size: 8.5pt; color: var(--muted); }
+</style>
+</head>
+<body>
+
+<!-- ============================================================ cover -->
+<section class="page cover">
+  <span class="tag">MERIT USER GUIDE</span>
+  <h1>Importing NPI and CLIA records</h1>
+  <p class="lead">How to load laboratories, ordering facilities and providers into MERIT's reporter registry from a spreadsheet, check the file before anything is saved, fix the rows MERIT cannot load, and clear the results that were waiting for them.</p>
+  <div class="box">
+    <strong>In one minute</strong>
+    <ol>
+      <li>Open <span class="ui">Reporters</span> &rarr; <span class="ui">Import NPI and CLIA records</span> and download the CSV template.</li>
+      <li>Fill in one row per laboratory, facility or provider: its <code>type</code>, name, and its CLIA number or NPI.</li>
+      <li>Click <span class="ui">Check the file</span>. Nothing is saved yet: MERIT lists the ready rows and explains every row it cannot load.</li>
+      <li>Click <span class="ui">Import</span>. Ready rows are added, or update the entry with the same CLIA number or NPI.</li>
+      <li>Fix the other rows and check again. Then release any results held as <b>unknown sender</b>.</li>
+    </ol>
+  </div>
+  <p class="foot">Who can import: people with the <i>Edit the reporter registry</i> permission (intake clerks, supervisors and administrators). Everyone who can see people can search the registry. A practice file, <code>sourceCode/samples/registry_npi_clia_sample.csv</code>, comes with MERIT.</p>
+  <p class="foot">Companion guide: <i>MERIT User Guide - Daily Operations</i>. Interactive diagram: <code>docs/npi-clia-import_workflow.html</code>.</p>
+</section>
+
+<!-- ============================================================ why -->
+<section>
+  <h2>1. What the reporter registry is for</h2>
+  <p>Every blood test result in MERIT names the <b>laboratory</b> that ran it and, usually, the <b>facility and provider</b> who ordered it. The reporter registry is MERIT's list of them, each identified by a national number:</p>
+  <table>
+    <tr><th>Kind</th><th>Examples</th><th>Identified by</th><th>Why MERIT needs it</th></tr>
+    <tr><td><b>Laboratory</b></td><td>A reference laboratory, a hospital laboratory</td><td>CLIA number (required); NPI optional</td><td>Intake links every result to its laboratory by CLIA number. A result from a laboratory that is not registered is <b>held as unknown sender</b>.</td></tr>
+    <tr><td><b>Facility</b></td><td>A pediatric practice, a clinic, a hospital, a health center</td><td>NPI (organization) or CLIA number</td><td>Shows who ordered the test, for follow-up calls and the reporter timeliness report.</td></tr>
+    <tr><td><b>Provider</b></td><td>A physician, nurse practitioner or physician assistant</td><td>NPI (individual)</td><td>Links the ordering provider on each result, for confirmatory test and prenatal notifications.</td></tr>
+  </table>
+
+  <h2>2. NPI and CLIA numbers in brief</h2>
+  <div class="idcard">
+    <div>
+      <h3>NPI: National Provider Identifier</h3>
+      <p class="big">1245319599</p>
+      <ul>
+        <li><b>10 digits</b>, no letters.</li>
+        <li>The <b>last digit is a check digit</b>. One wrong or swapped digit almost always fails it, so MERIT catches most typing mistakes.</li>
+        <li>Individuals and organizations each have their own NPI.</li>
+        <li>Look one up in the national NPPES NPI Registry (npiregistry.cms.hhs.gov).</li>
+      </ul>
+    </div>
+    <div>
+      <h3>CLIA number</h3>
+      <p class="big">21D0123456</p>
+      <ul>
+        <li><b>Two digits, the letter D, then seven digits</b>: ten characters.</li>
+        <li>Issued by CMS to every laboratory that tests human specimens.</li>
+        <li>Laboratories print it on their reports; you can also look it up with CMS's CLIA laboratory search.</li>
+        <li>Providers do not have CLIA numbers.</li>
+      </ul>
+    </div>
+  </div>
+  <p>MERIT ignores spaces and hyphens in both (<code>21D-0123456</code> and <code>1245 319 599</code> are accepted) and accepts a lower-case <code>d</code>.</p>
+  <figure class="diagram"><img src="../images/guide/diagram-npi-clia-import.png" alt="Workflow diagram: look up identifiers, fill the template, MERIT checks the file, rows to fix go back to the template, ready rows are imported, the registry is updated, held rows are released"><figcaption>The import workflow. Interactive version: <code>docs/npi-clia-import_workflow.html</code>.</figcaption></figure>
+</section>
+
+<!-- ============================================================ prepare -->
+<section>
+  <h2 class="newpage">3. Prepare the file</h2>
+  <ol class="steps">
+    <li>Open <span class="ui">Reporters</span> and click <span class="ui">Import NPI and CLIA records</span>.</li>
+    <li>Click <span class="ui">Download the CSV template</span>. It has the column names and one example of each kind.</li>
+    <li>Open it in Excel or another spreadsheet. Replace the examples with your rows: one row per laboratory, facility or provider.</li>
+    <li>Save as <b>CSV</b> (in Excel: <i>File &rarr; Save As &rarr; CSV UTF-8 (Comma delimited)</i>). Keep the first line, the column names, unchanged.</li>
+  </ol>
+  <h3>The columns</h3>
+  <table>
+    <tr><th>Column</th><th>What to put in it</th><th>Laboratory</th><th>Facility</th><th>Provider</th></tr>
+    <tr><td><code>type</code></td><td><code>laboratory</code>, <code>facility</code> or <code>provider</code></td><td class="yes">Required</td><td class="yes">Required</td><td class="yes">Required</td></tr>
+    <tr><td><code>name</code></td><td>Laboratory or facility name, as it should appear in MERIT (up to 120 characters)</td><td class="yes">Required</td><td class="yes">Required</td><td>Leave blank</td></tr>
+    <tr><td><code>lastName</code>, <code>firstName</code></td><td>The provider's name</td><td>Leave blank</td><td>Leave blank</td><td class="yes">Last name required</td></tr>
+    <tr><td><code>credential</code></td><td>MD, DO, NP, PA…</td><td></td><td></td><td>Optional</td></tr>
+    <tr><td><code>npi</code></td><td>10-digit NPI</td><td>Optional</td><td class="yes">NPI or CLIA</td><td class="yes">Required</td></tr>
+    <tr><td><code>clia</code></td><td>CLIA number, for example 21D0123456</td><td class="yes">Required</td><td class="yes">NPI or CLIA</td><td class="no">Must be blank</td></tr>
+    <tr><td><code>phone</code></td><td>Main phone number, for follow-up calls</td><td>Optional</td><td>Optional</td><td></td></tr>
+  </table>
+  <h3>An example</h3>
+<pre>type,name,lastName,firstName,credential,npi,clia,phone
+laboratory,Tidewater Clinical Laboratory,,,,,21D0456789,410-555-0170
+facility,Patapsco Family Health Center,,,,1987654328,,410-555-0188
+provider,,Okafor,Grace,MD,1543210987,,</pre>
+  <div class="box warn"><strong>Spreadsheet tips.</strong> Keep NPIs as plain 10-digit numbers: if Excel shows <code>1.24532E+09</code>, widen the column or format it as Text before saving. Do not add total rows, notes or extra header lines. Up to 5,000 rows and 2 MB per file; split bigger lists.</div>
+</section>
+
+<!-- ============================================================ check -->
+<section>
+  <h2>4. Check the file</h2>
+  <ol class="steps">
+    <li>On the import page, under <b>Choose the file</b>, click <b>Choose File</b> and pick your CSV.</li>
+    <li>Click <span class="ui">Check the file</span>. <b>Nothing is saved yet.</b></li>
+    <li>Read the summary: how many rows are <b>ready</b> (by kind) and how many <b>need attention</b>. Each row that needs attention is listed with its line number in the file and what to fix.</li>
+  </ol>
+  <figure><img src="../images/guide/06-reporter-check.jpg" alt="Check results: 4 rows ready, 4 need attention, with the line, name and what to fix for each"><figcaption>Checking the practice file: four rows ready, four to fix.</figcaption></figure>
+  <h3>What the messages mean</h3>
+  <table>
+    <tr><th>Message</th><th>What to do</th></tr>
+    <tr><td>NPI … is not valid: an NPI is 10 digits and its last digit is a check digit</td><td>A digit is wrong or missing. Copy the NPI again from the NPPES NPI Registry.</td></tr>
+    <tr><td>CLIA number … is not valid: it is two digits, the letter D, then seven digits</td><td>Usually a digit is missing or the letter is not D. Copy it from the laboratory report or the CMS search.</td></tr>
+    <tr><td>A laboratory needs its CLIA number</td><td>Fill in <code>clia</code>. If you only have an NPI, the row is probably a facility: change <code>type</code>.</td></tr>
+    <tr><td>A facility needs an NPI or a CLIA number</td><td>Fill in one of them.</td></tr>
+    <tr><td>A provider needs an NPI / a last name</td><td>Fill in the missing column. Providers without an NPI cannot be registered.</td></tr>
+    <tr><td>Providers have no CLIA number; leave clia blank</td><td>Clear the <code>clia</code> cell, or change <code>type</code> to laboratory.</td></tr>
+    <tr><td>Same NPI (or CLIA number) as line …; only the first is loaded</td><td>The file lists the same reporter twice. Delete the duplicate row, or keep it if the first is correct.</td></tr>
+    <tr><td>Type must be laboratory, facility or provider</td><td>Check the spelling in the <code>type</code> column.</td></tr>
+    <tr><td>… is longer than … characters</td><td>Shorten the name, credential or phone.</td></tr>
+  </table>
+</section>
+
+<!-- ============================================================ import -->
+<section>
+  <h2>5. Import</h2>
+  <ol class="steps">
+    <li>When the ready rows look right, click <span class="ui">Import <i>n</i> ready row(s)</span>.</li>
+    <li>MERIT shows how many entries were <b>added</b> and how many <b>updated</b>, and lists the rows it did not load.</li>
+    <li>Fix those rows in your spreadsheet. Save, then check and import the file again. Rows already loaded are simply updated again, so re-importing the whole file is safe.</li>
+  </ol>
+  <h3>How MERIT decides "add" or "update"</h3>
+  <ul>
+    <li><b>Laboratories and facilities</b> are matched on their CLIA number first, then their NPI. A match is updated with the new name and phone; otherwise a new entry is added.</li>
+    <li><b>Providers</b> are matched on their NPI.</li>
+    <li><b>Blank cells never erase</b> what is stored. To remove a phone number or end a reporter, ask your administrator.</li>
+  </ul>
+  <div class="box"><strong>The check is valid for 30 minutes.</strong> If you wait longer, MERIT asks you to check the file again before importing. That way the rows imported are always the rows you just reviewed.</div>
+
+  <h2>6. After the import: release the held results</h2>
+  <p>Results that arrived before their laboratory was registered are waiting on <span class="ui">Held records</span> with the cause <b>unknown sender</b>.</p>
+  <ol class="steps">
+    <li>Open <span class="ui">Held records</span> and click the <b>Unknown sender</b> group for that laboratory.</li>
+    <li>Tick the rows (or the box at the top of the table for all of them) and click <span class="ui">Release selected</span>.</li>
+    <li>MERIT checks them again. Now that the laboratory is known they load, or wait for another cause such as match review.</li>
+  </ol>
+  <p>To confirm an entry, search for it on <span class="ui">Reporters</span> by name, CLIA number or NPI.</p>
+</section>
+
+<!-- ============================================================ one at a time -->
+<section>
+  <h2 class="newpage">7. Adding or correcting one entry</h2>
+  <p>For a single new laboratory or a corrected name you do not need a file.</p>
+  <figure><img src="../images/guide/05-reporters.jpg" alt="The Reporters screen with search, filters and the registry table"><figcaption>Reporters: search by name, CLIA number or NPI, and filter by kind. The Add or correct one entry form is below the table.</figcaption></figure>
+  <ol class="steps">
+    <li>Open <span class="ui">Reporters</span> and search for the reporter first.</li>
+    <li>Under <b>Add or correct one entry</b>, choose the <b>Kind</b> and fill in the name and identifiers.</li>
+    <li>Click <span class="ui">Save entry</span>. The same rules apply as for a file: identifiers are checked, and an entry with the same CLIA number or NPI is updated.</li>
+  </ol>
+
+  <h2>8. Good practice</h2>
+  <ul>
+    <li><b>Register a laboratory before its first file arrives</b> when a new laboratory starts reporting. Ask your administrator to set up its intake profile at the same time.</li>
+    <li><b>Once a month</b>, open <span class="ui">Reports</span> &rarr; <b>Reporter timeliness and completeness</b> to find reporters that send late or leave fields blank.</li>
+    <li><b>Keep one master spreadsheet</b> of your reporters and re-import it after big changes, such as a hospital system merger. Re-importing updates; it never duplicates.</li>
+    <li><b>Use the names people recognize</b>, for example "Harbor Pediatrics - Dundalk" for one branch of a practice.</li>
+  </ul>
+
+  <h2>9. Common questions</h2>
+  <p><b>I imported the same file twice. Do I now have duplicates?</b><br>No. The second import updated the entries the first one added.</p>
+  <p><b>A laboratory has two CLIA numbers (two sites).</b><br>Register each site as its own laboratory row, with its own CLIA number and a name that tells them apart.</p>
+  <p><b>The NPI is right but MERIT says the check digit is wrong.</b><br>Check for a dropped or extra digit, or a cell that the spreadsheet changed (scientific notation, removed leading characters). Copy it again from the NPPES NPI Registry.</p>
+  <p><b>Can I import people's test results this way?</b><br>No. This import is only for reporters. Results come in on <span class="ui">Intake</span> (see the Daily Operations guide).</p>
+  <p><b>The Import button is missing.</b><br>Your role or profile does not include <i>Edit the reporter registry</i>. Ask your supervisor or administrator.</p>
+  <p class="foot" style="margin-top:2em">MERIT user guide: importing NPI and CLIA records. The examples use made-up reporters with identifiers that pass the format checks.</p>
+</section>
+</body>
+</html>

@@ -3,6 +3,7 @@ using Merit.Application.Errors;
 using Merit.Application.Reference;
 using Merit.Application.Security;
 using Merit.Domain.Ids;
+using Merit.Domain.Tenants;
 using Merit.Domain.Text;
 
 namespace Merit.Application.Services;
@@ -180,7 +181,87 @@ public sealed class AdminService(IAccountData accounts, AccountService accountSe
     public Task<IReadOnlyList<RoleRow>> RolesAsync(CancellationToken ct = default) => accounts.ListRolesAsync(ct);
 
     public Task<IReadOnlyList<TenantListRow>> TenantsAsync(CancellationToken ct = default) => accounts.ListTenantsAsync(ct);
+
+    /// <summary>
+    /// Adds a tenant under one the caller administers. Under the platform or a region the new tenant is a data root
+    /// (a platform administrator, or a region administrator adding a state or tribe); elsewhere it is a program or
+    /// local jurisdiction sharing its parent's records. The database repeats every check.
+    /// </summary>
+    public async Task<Guid> CreateTenantAsync(TenantInput input, CancellationToken ct = default)
+    {
+        if (!session.IsPlatformAdmin)
+        {
+            session.Require(Permissions.TenantCreate);
+        }
+
+        var tenants = await accounts.ListTenantsAsync(ct).ConfigureAwait(false);
+        var parent = tenants.FirstOrDefault(t => t.TenantId == input.ParentTenantId && t.CanAdminister)
+                     ?? throw new ValidationException("ParentTenantId", "Choose the tenant the new one goes under.");
+
+        string code = (input.TenantCode ?? string.Empty).Trim().ToUpperInvariant();
+        string type = input.TenantType ?? string.Empty;
+        string? postal = NullIfBlank(input.StatePostalCode)?.ToUpperInvariant();
+        string? stateFips = NullIfBlank(input.StateFips);
+        var countyFips = TenantRules.ParseFipsList(input.CountyFipsList);
+        var newCounties = ParseNewCounties(input.NewCounties, out var badLines);
+        var allowed = TenantRules.ChildTypes(parent.TenantType);
+
+        var v = new Validator();
+        v.When(!TenantRules.IsValidCode(code), "TenantCode", "Use capital letters, digits and hyphens, up to 30 characters (for example WV-JEFFERSON).");
+        v.Required("TenantName", input.TenantName, "Name").MaxLength("TenantName", input.TenantName, 120, "Name");
+        v.When(!allowed.Contains(type), "TenantType", $"Under a {parent.TenantType} you can add: {string.Join(", ", allowed)}.");
+        v.When(TenantRules.NeedsPostalCode(type) && (postal is null || postal.Length != 2 || !postal.All(char.IsAsciiLetter)),
+            "StatePostalCode", "Enter the two-letter postal code.");
+        v.When(stateFips is not null && (stateFips.Length != 2 || !stateFips.All(char.IsAsciiDigit)), "StateFips", "A state FIPS code is two digits.");
+        v.When(countyFips.Any(f => !TenantRules.IsValidCountyFips(f)), "CountyFipsList", "County FIPS codes are three digits, for example 037.");
+        v.When(badLines.Count > 0, "NewCounties",
+            $"Write each new county as its FIPS code then its name, for example \"037 Jefferson County\". Check: {string.Join("; ", badLines)}.");
+        v.When(tenants.Any(t => string.Equals(t.TenantCode, code, StringComparison.OrdinalIgnoreCase) && t.ParentTenantId != parent.TenantId),
+            "TenantCode", "That code is already used elsewhere in the tree.");
+        v.ThrowIfInvalid();
+
+        var create = new TenantCreate(code, input.TenantName!.Trim(), type, parent.TenantCode, postal, stateFips, countyFips, newCounties);
+        return TenantRules.CreatesDataRoot(parent.TenantType)
+            ? await accounts.CreateRootTenantAsync(create, ct).ConfigureAwait(false)
+            : await accounts.CreateChildTenantAsync(create, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>One county per line: "037 Jefferson County". Lines that do not fit are returned for the message.</summary>
+    public static IReadOnlyList<NewCounty> ParseNewCounties(string? text, out IReadOnlyList<string> badLines)
+    {
+        var counties = new List<NewCounty>();
+        var bad = new List<string>();
+        foreach (var raw in (text ?? string.Empty).Split('\n'))
+        {
+            string line = raw.Trim();
+            if (line.Length == 0)
+            {
+                continue;
+            }
+
+            int gap = line.IndexOfAny([' ', '\t', ',']);
+            string fips = gap < 0 ? line : line[..gap];
+            string name = gap < 0 ? string.Empty : line[(gap + 1)..].Trim(' ', ',', '\t');
+            if (TenantRules.IsValidCountyFips(fips) && name.Length is > 0 and <= 80)
+            {
+                counties.Add(new NewCounty(fips, name));
+            }
+            else
+            {
+                bad.Add(line);
+            }
+        }
+
+        badLines = bad;
+        return counties;
+    }
+
+    private static string? NullIfBlank(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
 }
+
+/// <summary>The Add tenant form. County FIPS codes are those the tenant serves; new counties are added to the data root.</summary>
+public sealed record TenantInput(Guid? ParentTenantId, string? TenantCode, string? TenantName, string? TenantType, string? StatePostalCode,
+                                 string? StateFips, string? CountyFipsList, string? NewCounties);
 
 /// <summary>Server-side type-ahead for organizations, providers, locations and products.</summary>
 public sealed class LookupService(IPlaceData places, ICurrentSession session)

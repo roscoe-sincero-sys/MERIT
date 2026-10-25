@@ -202,3 +202,28 @@ SELECT r.labResultId, r.personId, p.dob, p.sex, p.ethnicity,
 """,
     },
 ]
+
+
+PROCS += [
+    {
+        "schema": "dbo", "name": "uspMarkExtractSubmitted", "kind": "write", "grants": WEB, "ticket": "T164",
+        "permission": "extract.submit",
+        "desc": "Records that a ready extract file was sent to CDC or NIOSH, so the next period's work starts from a "
+                "clear list. Only a ready run can be marked; the file itself is unchanged.",
+        "params": "@extractRunId UNIQUEIDENTIFIER",
+        "key": "CONCAT (N'extractRunId=', @extractRunId)",
+        "validate": """IF NOT EXISTS (SELECT 1 FROM dbo.extractRun WHERE extractRunId = @extractRunId AND isDeleted = 0)
+BEGIN
+    ;THROW 51404, N'The extract run was not found.', 1;
+END;
+IF NOT EXISTS (SELECT 1 FROM dbo.extractRun WHERE extractRunId = @extractRunId AND isDeleted = 0 AND runStatus = 'ready')
+BEGIN
+    ;THROW 51422, N'Only a ready extract can be marked submitted.', 1;
+END;""",
+        "body": """
+UPDATE dbo.extractRun SET runStatus = 'submitted' WHERE extractRunId = @extractRunId AND isDeleted = 0;
+
+SET @Comments = N'Extract marked submitted.';
+""",
+    },
+]

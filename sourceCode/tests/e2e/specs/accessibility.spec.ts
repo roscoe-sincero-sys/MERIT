@@ -2,7 +2,7 @@ import { angularReady, expectAccessible, test } from './helpers';
 
 // Every key screen of both front ends at tablet width, checked with axe for WCAG 2.1 AA.
 const htmxPages = ['/', '/cases', '/investigations', '/intake', '/extracts', '/config/thresholds', '/search?q=Rivera', '/account/profiles',
-  '/account/profiles/new'];
+  '/account/profiles/new', '/reporters', '/reporters/import'];
 const angularPages = ['/app/queues', '/app/held', '/app/results', '/app/match-review', '/app/map', '/app/clusters', '/app/reports'];
 
 for (const path of htmxPages) {
@@ -13,6 +13,13 @@ for (const path of htmxPages) {
     await expectAccessible(page, path);
   });
 }
+
+test('htmx /admin/tenants meets WCAG 2.1 AA', async ({ asUser }) => {
+  const page = await asUser('admin');
+  await page.goto('/admin/tenants');
+  await page.waitForLoadState('networkidle');
+  await expectAccessible(page, '/admin/tenants');
+});
 
 for (const path of angularPages) {
   test(`Angular ${path} meets WCAG 2.1 AA`, async ({ asUser }) => {

@@ -1,0 +1,61 @@
+@model ReportersModel
+@{
+    ViewData["Title"] = "Reporters";
+    var f = Model.Form;
+}
+<div class="merit-page-header">
+    <h1>Reporters</h1>
+    @if (Model.CanEdit) { <span><a class="usa-button usa-button--outline" href="/reporters/import">Import NPI and CLIA records</a></span> }
+</div>
+<p class="merit-meta">Laboratories (by CLIA number), facilities that order tests (by NPI or CLIA number) and providers (by NPI). Intake links every result
+    to its laboratory and ordering provider through this list; a result from a laboratory that is not here is held as <em>unknown sender</em>.</p>
+@if (Model.Message is not null)
+{
+    <div class="usa-alert usa-alert--success usa-alert--slim" role="status"><div class="usa-alert__body"><p class="usa-alert__text">@Model.Message</p></div></div>
+}
+@if (!ViewData.ModelState.IsValid)
+{
+    <div class="usa-alert usa-alert--error usa-alert--slim" role="alert"><div class="usa-alert__body"><p class="usa-alert__text">@string.Join(" ", ViewData.ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage))</p></div></div>
+}
+<form class="usa-form merit-form-row" method="get" action="/reporters" hx-get="/reporters" hx-target="#reporter-list" hx-swap="outerHTML"
+      hx-trigger="change, keyup changed delay:400ms from:#q" hx-push-url="true">
+    <div class="usa-form-group"><label class="usa-label" for="q">Name, CLIA number or NPI</label>
+        <input class="usa-input" id="q" name="q" type="search" value="@Model.Query" autocomplete="off" /></div>
+    <div class="usa-form-group"><label class="usa-label" for="kind">Kind</label>
+        <select class="usa-select" id="kind" name="kind">
+            <option value="" selected="@(Model.Kind is null)">All</option>
+            <option value="laboratory" selected="@(Model.Kind == "laboratory")">Laboratories</option>
+            <option value="facility" selected="@(Model.Kind == "facility")">Facilities</option>
+            <option value="provider" selected="@(Model.Kind == "provider")">Providers</option>
+        </select></div>
+    <button class="usa-button usa-button--outline" type="submit">Find</button>
+</form>
+<partial name="_List" model="Model" />
+@if (Model.CanEdit)
+{
+    <section class="merit-section" aria-labelledby="add-h">
+        <h2 id="add-h">Add or correct one entry</h2>
+        <p class="merit-meta">An entry with the same CLIA number (laboratories and facilities) or NPI (providers) is updated, not duplicated. Blank fields keep what is stored.</p>
+        <form class="usa-form merit-grid-2" method="post" action="/reporters">
+            @Html.AntiForgeryToken()
+            <div class="usa-form-group"><label class="usa-label" for="Kind">Kind</label>
+                <select class="usa-select" id="Kind" name="Kind">
+                    <option value="laboratory" selected="@(f.Kind == "laboratory")">Laboratory (needs CLIA)</option>
+                    <option value="facility" selected="@(f.Kind == "facility")">Facility (needs NPI or CLIA)</option>
+                    <option value="provider" selected="@(f.Kind == "provider")">Provider (needs NPI)</option>
+                </select></div>
+            <div class="usa-form-group"><label class="usa-label" for="Name">Laboratory or facility name</label><input class="usa-input" id="Name" name="Name" value="@f.Name" maxlength="120" /></div>
+            <div class="usa-form-group"><label class="usa-label" for="Clia">CLIA number</label>
+                <div class="usa-hint" id="clia-hint">Two digits, D, seven digits: 21D0123456.</div>
+                <input class="usa-input" id="Clia" name="Clia" value="@f.Clia" maxlength="12" aria-describedby="clia-hint" /></div>
+            <div class="usa-form-group"><label class="usa-label" for="Npi">NPI</label>
+                <div class="usa-hint" id="npi-hint">Ten digits; MERIT checks the last digit.</div>
+                <input class="usa-input" id="Npi" name="Npi" value="@f.Npi" maxlength="12" inputmode="numeric" aria-describedby="npi-hint" /></div>
+            <div class="usa-form-group"><label class="usa-label" for="LastName">Provider last name</label><input class="usa-input" id="LastName" name="LastName" value="@f.LastName" maxlength="60" /></div>
+            <div class="usa-form-group"><label class="usa-label" for="FirstName">Provider first name</label><input class="usa-input" id="FirstName" name="FirstName" value="@f.FirstName" maxlength="60" /></div>
+            <div class="usa-form-group"><label class="usa-label" for="Credential">Credential</label><input class="usa-input" id="Credential" name="Credential" value="@f.Credential" maxlength="20" /></div>
+            <div class="usa-form-group"><label class="usa-label" for="Phone">Phone</label><input class="usa-input" id="Phone" name="Phone" value="@f.Phone" maxlength="30" /></div>
+            <div><button class="usa-button" type="submit">Save entry</button></div>
+        </form>
+    </section>
+}

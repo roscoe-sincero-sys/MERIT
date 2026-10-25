@@ -584,3 +584,71 @@ public sealed record AuditModel(IReadOnlyList<AuditEventRow> Events, Guid? Entit
 public sealed record LookupOptionsModel(string FieldId, IReadOnlyList<(Guid Id, string Label, string? Detail)> Options, string? Extra = null);
 
 public sealed record AngularHostModel(IReadOnlyList<string> Scripts, IReadOnlyList<string> Styles, bool IsBuilt);
+
+/// <summary>The tenant tree and the Add tenant form; the type, code and county fields depend on the chosen parent.</summary>
+public sealed class TenantFormModel
+{
+    public Guid? ParentTenantId { get; set; }
+
+    public string? TenantCode { get; set; }
+
+    public string? TenantName { get; set; }
+
+    public string? TenantType { get; set; }
+
+    public string? StatePostalCode { get; set; }
+
+    public string? StateFips { get; set; }
+
+    public string? CountyFipsList { get; set; }
+
+    public string? NewCounties { get; set; }
+
+    public string? ParentType { get; set; }
+
+    public string? ParentName { get; set; }
+
+    public IReadOnlyList<string> TypeOptions { get; set; } = [];
+
+    public IReadOnlyList<SelectOption> Parents { get; set; } = [];
+
+    public IReadOnlyList<TenantListRow> Tree { get; set; } = [];
+
+    public IReadOnlyList<SubJurisdictionRow> ExistingCounties { get; set; } = [];
+}
+
+public sealed class ReporterFormModel
+{
+    public string? Kind { get; set; } = "laboratory";
+
+    public string? Name { get; set; }
+
+    public string? LastName { get; set; }
+
+    public string? FirstName { get; set; }
+
+    public string? Credential { get; set; }
+
+    public string? Npi { get; set; }
+
+    public string? Clia { get; set; }
+
+    public string? Phone { get; set; }
+}
+
+public sealed record ReportersModel(IReadOnlyList<ReporterRow> Rows, string? Query, string? Kind, string? Message, bool CanEdit, ReporterFormModel Form);
+
+public sealed class RegistryImportModel
+{
+    public string? FileName { get; init; }
+
+    public string? Error { get; init; }
+
+    public string? Token { get; init; }
+
+    public RegistryCheck? Check { get; init; }
+
+    public RegistryImportCounts? Counts { get; init; }
+}
+
+public sealed record ExtractFindingsModel(ExtractRunRow Run, IReadOnlyList<Merit.Application.Extracts.ExtractFinding> Findings);

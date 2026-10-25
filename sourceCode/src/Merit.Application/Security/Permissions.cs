@@ -27,7 +27,9 @@ public static class Permissions
     public const string ExtractRun = "extract.run";
     public const string ExtractSubmit = "extract.submit";
     public const string ConfigEdit = "config.edit";
+    public const string RegistryEdit = "registry.edit";
     public const string TenantAdminister = "tenant.administer";
+    public const string TenantCreate = "tenant.create";
     public const string AuditView = "audit.view";
     public const string PlatformAdminister = "platform.administer";
 
@@ -38,6 +40,6 @@ public static class Permissions
     [
         PersonView, PersonEdit, PersonViewIdentifiers, PersonMerge, ResultView, ResultEdit, ResultReleaseHold, CaseView,
         CaseOpen, CaseEdit, InvestigationEdit, TaskView, TaskEdit, IntakeUpload, IntakeConfigure, DataExport,
-        MatchingConfigure, ExtractRun, ExtractSubmit, ConfigEdit, TenantAdminister, AuditView, PlatformAdminister,
+        MatchingConfigure, ExtractRun, ExtractSubmit, ConfigEdit, RegistryEdit, TenantAdminister, TenantCreate, AuditView, PlatformAdminister,
     ];
 }

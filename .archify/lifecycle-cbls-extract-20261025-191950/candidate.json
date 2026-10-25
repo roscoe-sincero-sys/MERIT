@@ -1,0 +1,146 @@
+{
+  "schema_version": 3,
+  "diagram_type": "lifecycle",
+  "meta": {
+    "title": "The quarterly CDC CBLS extract, from request to submitted",
+    "output": "docs/cbls-extract_lifecycle.html",
+    "quality_profile": "showcase"
+  },
+  "mainPath": [
+    "queued",
+    "building",
+    "ready",
+    "uploaded",
+    "submitted"
+  ],
+  "states": [
+    {
+      "id": "queued",
+      "type": "start",
+      "label": "Queued",
+      "sublabel": "you chose the quarter",
+      "step": "01"
+    },
+    {
+      "id": "building",
+      "type": "active",
+      "label": "Running",
+      "sublabel": "worker builds the file",
+      "step": "02"
+    },
+    {
+      "id": "ready",
+      "type": "decision",
+      "label": "Ready",
+      "sublabel": "file + findings",
+      "tag": "review",
+      "step": "03"
+    },
+    {
+      "id": "uploaded",
+      "type": "external",
+      "label": "Sent to CDC",
+      "sublabel": "your secure upload",
+      "step": "04"
+    },
+    {
+      "id": "submitted",
+      "type": "success",
+      "label": "Submitted",
+      "sublabel": "marked in MERIT",
+      "step": "05"
+    },
+    {
+      "id": "failed",
+      "type": "failure",
+      "label": "Failed",
+      "sublabel": "error on the card"
+    },
+    {
+      "id": "fixing",
+      "type": "waiting",
+      "label": "Fixing records",
+      "sublabel": "from the findings list"
+    }
+  ],
+  "transitions": [
+    {
+      "id": "queued-building",
+      "from": "queued",
+      "to": "building",
+      "label": "picked up"
+    },
+    {
+      "id": "building-ready",
+      "from": "building",
+      "to": "ready",
+      "label": "file built"
+    },
+    {
+      "id": "ready-uploaded",
+      "from": "ready",
+      "to": "uploaded",
+      "label": "download, upload"
+    },
+    {
+      "id": "uploaded-submitted",
+      "from": "uploaded",
+      "to": "submitted",
+      "label": "Mark submitted",
+      "variant": "emphasis"
+    },
+    {
+      "id": "building-failed",
+      "from": "building",
+      "to": "failed",
+      "label": "error",
+      "variant": "security"
+    },
+    {
+      "id": "failed-queued",
+      "from": "failed",
+      "to": "queued",
+      "label": "request again"
+    },
+    {
+      "id": "ready-fixing",
+      "from": "ready",
+      "to": "fixing",
+      "label": "findings to fix",
+      "variant": "dashed"
+    },
+    {
+      "id": "fixing-queued",
+      "from": "fixing",
+      "to": "queued",
+      "label": "request again"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "When",
+      "items": [
+        "Each quarter, for the quarter that just ended (the form starts on it)",
+        "ABLES (NIOSH adults) works the same way once a year"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Findings",
+      "items": [
+        "View findings lists each record by surrogate id, field and rule",
+        "Correct the person or result in MERIT, then request the file again",
+        "Findings are warnings: you decide whether to send now or fix first"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Privacy",
+      "items": [
+        "Files carry a stable surrogate id, never names, street addresses, phone numbers or record numbers",
+        "Every download is recorded in the audit log"
+      ]
+    }
+  ]
+}

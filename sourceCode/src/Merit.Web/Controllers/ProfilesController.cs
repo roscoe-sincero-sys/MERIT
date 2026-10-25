@@ -19,7 +19,7 @@ namespace Merit.Web.Controllers;
 public sealed class ProfilesController(ProfileService profiles, AdminService admin, AccountService accounts, ICurrentSession session)
     : Controller
 {
-    private static readonly TimeSpan SessionLifetime = TimeSpan.FromHours(12);
+    internal static readonly TimeSpan SessionLifetime = TimeSpan.FromHours(12);
 
     [HttpGet("profiles")]
     [Authorize(Policy = Permissions.SignedIn)]

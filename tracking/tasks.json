@@ -934,6 +934,50 @@
       "started": "2026-10-25",
       "finished": "2026-10-25",
       "notes": "docs/MERIT User Guide - Access and Profiles.pdf (12 pages; source docs/guides/access-guide.html)"
+    },
+    {
+      "id": "T162",
+      "phase": "11 Tenant management",
+      "task": "Add tenants: tenant.create permission, checked wrappers over owner-run installers, Tenants screen with session refresh",
+      "ref": "Request 2026-10-25",
+      "where": "config.uspCreateRoot/ChildTenant, /admin/tenants",
+      "status": "Done",
+      "started": "2026-10-25",
+      "finished": "2026-10-25",
+      "notes": "Platform admin anywhere; region admin states/tribes under region; Administrator role programs/jurisdictions; user administrator refused. Unit, scenario and e2e tests."
+    },
+    {
+      "id": "T163",
+      "phase": "11 Tenant management",
+      "task": "Reporter registry: laboratories, facilities, providers; one-entry add/correct; checked CSV import of NPI and CLIA records",
+      "ref": "Request 2026-10-25",
+      "where": "/reporters, dbo.uspListReporters, dbo.uspImportReporters",
+      "status": "Done",
+      "started": "2026-10-25",
+      "finished": "2026-10-25",
+      "notes": "registry.edit for intake clerk, supervisor, administrator; sample samples/registry_npi_clia_sample.csv"
+    },
+    {
+      "id": "T164",
+      "phase": "11 Tenant management",
+      "task": "Extracts: View findings dialog and Mark submitted; quarter label fix and default to the last completed quarter",
+      "ref": "Request 2026-10-25",
+      "where": "/extracts, dbo.uspMarkExtractSubmitted",
+      "status": "Done",
+      "started": "2026-10-25",
+      "finished": "2026-10-25",
+      "notes": "extract.submit"
+    },
+    {
+      "id": "T165",
+      "phase": "11 Tenant management",
+      "task": "User guides: Daily Operations and Importing NPI and CLIA Records (PDF), three Archify workflow diagrams, access guide and README updates",
+      "ref": "Request 2026-10-25",
+      "where": "docs",
+      "status": "Done",
+      "started": "2026-10-25",
+      "finished": "2026-10-25",
+      "notes": "Real screenshots in docs/images/guide; sources in docs/guides"
     }
   ]
 }

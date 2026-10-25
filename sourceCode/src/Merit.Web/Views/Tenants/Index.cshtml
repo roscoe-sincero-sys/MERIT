@@ -1,0 +1,73 @@
+@model TenantFormModel
+@{
+    ViewData["Title"] = "Tenants";
+    var children = Model.Tree.ToLookup(t => t.ParentTenantId);
+    var ids = Model.Tree.Select(t => t.TenantId).ToHashSet();
+    var tops = Model.Tree.Where(t => t.ParentTenantId is null || !ids.Contains(t.ParentTenantId.Value)).ToList();
+}
+@functions {
+    static string Kind(string type) => type switch
+    {
+        "platform" => "Platform", "region" => "Region (data root)", "state" => "State (data root)", "tribe" => "Tribe (data root)",
+        "program" => "Program", _ => "Jurisdiction",
+    };
+}
+<div class="merit-page-header">
+    <h1>Tenants</h1>
+    <span><a class="usa-button usa-button--outline" href="/admin/users">Users</a></span>
+</div>
+<p class="merit-meta">Every organization in MERIT is a tenant. States, tribes and regions own their records (data roots); programs and local
+    jurisdictions under them share those records and see the parts their role allows.</p>
+@if (ViewData["created"] is string created && created.Length > 0)
+{
+    <div class="usa-alert usa-alert--success usa-alert--slim" role="status"><div class="usa-alert__body"><p class="usa-alert__text">Tenant @created was created. Next, add its users on the Users page and give them roles there.</p></div></div>
+}
+@if (!ViewData.ModelState.IsValid)
+{
+    <div class="usa-alert usa-alert--error usa-alert--slim" role="alert"><div class="usa-alert__body"><p class="usa-alert__text">@string.Join(" ", ViewData.ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage))</p></div></div>
+}
+<div class="merit-grid-2">
+    <section aria-labelledby="tree-h">
+        <h2 id="tree-h">Tenant tree</h2>
+        @{
+            void Branch(IEnumerable<Merit.Application.Data.TenantListRow> nodes)
+            {
+                <ul class="usa-list merit-tree">
+                    @foreach (var t in nodes)
+                    {
+                        <li><strong>@t.TenantName</strong> <span class="merit-meta">@t.TenantCode &middot; @Kind(t.TenantType)</span>
+                            @if (children[t.TenantId].Any()) { Branch(children[t.TenantId]); }
+                        </li>
+                    }
+                </ul>
+            }
+            Branch(tops);
+        }
+    </section>
+    <section aria-labelledby="add-h">
+        <h2 id="add-h">Add a tenant</h2>
+        @if (Model.Parents.Count == 0)
+        {
+            <p class="merit-empty">You do not administer any tenant that can hold another.</p>
+        }
+        else
+        {
+            <form class="usa-form" method="post" action="/admin/tenants">
+                @Html.AntiForgeryToken()
+                <div class="usa-form-group"><label class="usa-label" for="ParentTenantId">Goes under</label>
+                    <div class="usa-hint" id="parent-hint">Only tenants you administer are listed.</div>
+                    <select class="usa-select" id="ParentTenantId" name="ParentTenantId" aria-describedby="parent-hint"
+                            hx-get="/admin/tenants" hx-target="#type-fields" hx-swap="outerHTML" hx-trigger="change" hx-include="this">
+                        @foreach (var p in Model.Parents) { <option value="@p.Value" selected="@p.Selected">@p.Label</option> }
+                    </select></div>
+                <partial name="_TypeFields" model="Model" />
+                <div class="usa-form-group"><label class="usa-label" for="TenantCode">Code</label>
+                    <div class="usa-hint" id="code-hint">Capital letters, digits and hyphens, for example WV-JEFFERSON. It cannot be changed later.</div>
+                    <input class="usa-input" id="TenantCode" name="TenantCode" value="@Model.TenantCode" maxlength="30" required aria-describedby="code-hint" /></div>
+                <div class="usa-form-group"><label class="usa-label" for="TenantName">Name</label>
+                    <input class="usa-input" id="TenantName" name="TenantName" value="@Model.TenantName" maxlength="120" required /></div>
+                <button class="usa-button" type="submit">Add tenant</button>
+            </form>
+        }
+    </section>
+</div>

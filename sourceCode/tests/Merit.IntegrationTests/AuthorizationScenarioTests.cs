@@ -83,6 +83,55 @@ public sealed class AuthorizationScenarioTests(MeritFixture fixture)
         Assert.Equal(51403, switchEx.Number);
     }
 
+    // ------------------------------------------------------------------------------------------------ adding tenants
+
+    [SqlFact]
+    public async Task TenantCreationFollowsTheTreeAndTheRole()
+    {
+        Build();
+        string s = Suffix().ToUpperInvariant();
+
+        // Platform administrator: any data root, directly under the platform.
+        var platform = await ScopeAsync("platform");
+        await RunAsync(platform, "config.uspCreateRootTenant", new() { ["tenantCode"] = "R9-" + s, ["tenantName"] = "Region 9 " + s, ["tenantType"] = "region" });
+
+        // Region administrator: a state under the region, never a top-level tenant.
+        var r3 = await ScopeAsync("r3admin");
+        await RunAsync(r3, "config.uspCreateRootTenant", new()
+        {
+            ["tenantCode"] = "R3-MD-" + s, ["tenantName"] = "Maryland " + s, ["tenantType"] = "state", ["statePostalCode"] = "MD",
+            ["stateFips"] = "24", ["parentTenantCode"] = "EPA-R3", ["countiesJson"] = """[{"fips":"510","name":"Baltimore city"}]""",
+        });
+        Assert.Equal(51403, (await Assert.ThrowsAsync<SqlException>(() => RunAsync(r3, "config.uspCreateRootTenant",
+            new() { ["tenantCode"] = "TOP-" + s, ["tenantName"] = "Top level", ["tenantType"] = "region" }))).Number);
+
+        // State administrator (administrator role holds tenant.create): a county with a county new to the state.
+        var wv = await ScopeAsync("wvadmin");
+        await RunAsync(wv, "config.uspCreateChildTenant", new()
+        {
+            ["tenantCode"] = "R3-WV-MOR-" + s, ["tenantName"] = "Morgan County " + s, ["tenantType"] = "jurisdiction",
+            ["parentTenantCode"] = "R3-WV", ["countiesJson"] = """[{"fips":"065","name":"Morgan County"}]""",
+        });
+        var wvAgain = await ScopeAsync("wvadmin");
+        var counties = await RowsAsync(wvAgain, "config.uspListSubJurisdictions", []);
+        Assert.Contains(counties, r => (string?)r["countyFips"] == "065" && ((string?)r["servedBy"] ?? "").Contains("Morgan County " + s));
+        Assert.Equal(51403, (await Assert.ThrowsAsync<SqlException>(() => RunAsync(wv, "config.uspCreateRootTenant", new()
+            { ["tenantCode"] = "R3-VA-" + s, ["tenantName"] = "Virginia", ["tenantType"] = "state", ["statePostalCode"] = "VA", ["parentTenantCode"] = "EPA-R3" }))).Number);
+        Assert.Equal(51403, (await Assert.ThrowsAsync<SqlException>(() => RunAsync(wv, "config.uspCreateChildTenant", new()
+            { ["tenantCode"] = "R3-PA-X-" + s, ["tenantName"] = "Not mine", ["tenantType"] = "jurisdiction", ["parentTenantCode"] = "R3-PA" }))).Number);
+
+        // A user administrator manages accounts only; and codes stay unique across the tree.
+        var jef = await ScopeAsync("jefadmin");
+        Assert.Equal(51403, (await Assert.ThrowsAsync<SqlException>(() => RunAsync(jef, "config.uspCreateChildTenant", new()
+            { ["tenantCode"] = "R3-WV-JEF-P-" + s, ["tenantName"] = "Jefferson program", ["tenantType"] = "program", ["parentTenantCode"] = "R3-WV-JEF" }))).Number);
+        Assert.Equal(51422, (await Assert.ThrowsAsync<SqlException>(() => RunAsync(wv, "config.uspCreateChildTenant", new()
+            { ["tenantCode"] = "R3-WV-BER", ["tenantName"] = "Duplicate", ["tenantType"] = "program", ["parentTenantCode"] = "R3-WV-JEF" }))).Number);
+
+        // The core installers are not reachable directly.
+        Assert.Equal(229, (await Assert.ThrowsAsync<SqlException>(() => RunAsync(wv, "config.uspInstallChildTenant", new()
+            { ["tenantCode"] = "R3-WV-Z-" + s, ["tenantName"] = "Direct", ["tenantType"] = "program", ["parentTenantCode"] = "R3-WV" }))).Number);
+    }
+
     // ------------------------------------------------------------------------------------------------ 8 jurisdiction admins
 
     [SqlFact]

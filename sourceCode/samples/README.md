@@ -28,3 +28,19 @@ exactly, so all four wait on the **Match review** screen (`/app/match-review`):
 | 4 | Ana Rivera | Hyphenated last name (Rivera-Lopez) with the same first name and date of birth. |
 
 Mark row 1 **Different person** and the pair is remembered; with no candidate left, the row loads as a new person.
+
+## Reporter registry sample
+
+`registry_npi_clia_sample.csv` loads laboratories, facilities and providers on **Reporters > Import NPI and CLIA records**
+(`/reporters/import`). Checking it shows four rows ready and four to fix:
+
+| Line | Entry | Result |
+| --- | --- | --- |
+| 2 | Tidewater Clinical Laboratory, CLIA 21D0456789 | Ready (laboratory). |
+| 3 | Allegany Regional Lab, CLIA 21D04567 | Not loaded: a CLIA number is two digits, D, then seven digits. |
+| 4 | Patapsco Family Health Center, NPI 1987654328 | Ready (facility). |
+| 5 | Severn Pediatric Associates, NPI 1765432100 | Not loaded: the NPI check digit is wrong (the real one ends in 3). |
+| 6 | Grace Okafor, MD, NPI 1543210987 | Ready (provider). |
+| 7 | Erik Lindqvist, DO, NPI 1334455668 | Ready (provider). |
+| 8 | Patel, NP, no NPI | Not loaded: a provider needs an NPI. |
+| 9 | Grace Okafor again | Not loaded: same NPI as line 6. |

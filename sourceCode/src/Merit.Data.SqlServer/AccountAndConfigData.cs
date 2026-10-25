@@ -96,6 +96,23 @@ public sealed class AccountData(Db db) : IAccountData
 
     public Task<IReadOnlyList<AssignableUserRow>> ListAssignableUsersAsync(CancellationToken ct = default)
         => db.QueryAsync<AssignableUserRow>("dbo.uspListAssignableUsers", null, ct);
+
+    public async Task<Guid> CreateRootTenantAsync(TenantCreate t, CancellationToken ct = default)
+        => await db.QuerySingleAsync<Guid>("config.uspCreateRootTenant", new
+        {
+            tenantCode = t.TenantCode, tenantName = t.TenantName, statePostalCode = t.StatePostalCode, stateFips = t.StateFips,
+            tenantType = t.TenantType, parentTenantCode = t.ParentTenantCode, countiesJson = CountiesJson(t.NewCounties),
+        }, ct).ConfigureAwait(false);
+
+    public async Task<Guid> CreateChildTenantAsync(TenantCreate t, CancellationToken ct = default)
+        => await db.QuerySingleAsync<Guid>("config.uspCreateChildTenant", new
+        {
+            tenantCode = t.TenantCode, tenantName = t.TenantName, tenantType = t.TenantType, parentTenantCode = t.ParentTenantCode,
+            countyFipsList = string.Join(',', t.CountyFips), countiesJson = CountiesJson(t.NewCounties),
+        }, ct).ConfigureAwait(false);
+
+    private static string CountiesJson(IReadOnlyList<NewCounty> counties)
+        => JsonSerializer.Serialize(counties.Select(c => new { fips = c.Fips, name = c.Name, type = c.Type }));
 }
 
 public sealed class ConfigData(Db db) : IConfigData

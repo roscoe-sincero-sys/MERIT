@@ -146,7 +146,7 @@
   <div class="persona">
     <h3>The platform administrator</h3>
     <p class="who">Example: Pat, on the MERIT platform team. Pat was the first account ever created.</p>
-    <p><b>What Pat does:</b> creates, changes and deactivates accounts for everyone; gives and removes roles; manages each person's master profile; and sets up new regions, states and tribes with the platform setup tools.</p>
+    <p><b>What Pat does:</b> creates, changes and deactivates accounts for everyone; gives and removes roles; manages each person's master profile; and adds new regions, states, tribes and counties on the <b>Tenants</b> screen.</p>
     <p><b>What Pat cannot do:</b> see, add, change or delete any records about people, results, cases or investigations. Pat sees only what is needed to manage accounts: names, user names, work email and who has which role. Health information stays invisible. Pat also has just one profile and cannot switch profiles or view as others: managing accounts is the job.</p>
   </div>
 
@@ -387,11 +387,22 @@
     </div>
   </div>
   <ul>
-    <li><b>Can:</b> create, change and deactivate any account; give and end any role at any place; reset second factors; and set up regions, states and tribes with the platform setup tools.</li>
+    <li><b>Can:</b> create, change and deactivate any account; give and end any role at any place; reset second factors; and add regions, states, tribes and counties anywhere in the tree on the <b>Tenants</b> screen.</li>
     <li><b>Cannot:</b> open, search, add, change or delete any person, result, case, investigation, task or report. MERIT and its database refuse these requests.</li>
     <li><b>One profile only:</b> the platform administrator cannot make other profiles, switch profiles, or view as anyone.</li>
     <li><b>Good practice:</b> keep the number of platform administrators small, and give each regional or state administrator their own account rather than sharing the platform account.</li>
   </ul>
+
+  <h3>Adding tenants</h3>
+  <p>New agencies join MERIT on the <b>Tenants</b> screen (<b>Tenants</b> in the top menu). You choose where the new tenant goes, what kind it is, its code and name, and for a county the county FIPS codes it serves. The menu item appears only for people who may add tenants:</p>
+  <table>
+    <tr><th>Who</th><th>Can add</th><th>Under</th></tr>
+    <tr><td>Platform administrator</td><td class="yes">Regions, states, tribes, stand-alone jurisdictions; programs and counties</td><td>Anywhere in the tree</td></tr>
+    <tr><td>Region administrator (Administrator role at a region)</td><td class="yes">States and tribes</td><td>Their region</td></tr>
+    <tr><td>State or tribe administrator (Administrator role)</td><td class="yes">Counties, cities and programs</td><td>Their state or tribe, and anything under it</td></tr>
+    <tr><td>User administrator (for example a county administrator)</td><td class="no">Nothing</td><td>They manage accounts and access only</td></tr>
+  </table>
+  <p>The permission behind this is <b>Add tenants</b> (<code>tenant.create</code>). It is part of the Administrator role and the Platform administrator role, and not of the User administrator role. A new state or tribe gets its own roles, settings and counties straight away; a new county shares its state's records and settings. After you add a tenant, give its people access on the <b>Users</b> screen.</p>
 
   <h2>8. Your safety net</h2>
   <ul>
@@ -410,6 +421,7 @@
   <p><b>My administrator changed my access, and I was signed out.</b><br>That is on purpose: your new access takes effect at once. Sign in again.</p>
   <p><b>Can my administrator see my password when viewing as me?</b><br>No. View as never uses your password or your second factor, and everything the administrator does is recorded under their own name.</p>
   <p><b>Why can't the platform administrator look up a case for me?</b><br>Platform administrators manage accounts only, by design. Ask someone with access to that state or county.</p>
+  <p><b>Our county was reorganized. Can I add the new health district myself?</b><br>Yes, if you hold the Administrator role at the state: open <b>Tenants</b>, choose the state, choose <b>Local jurisdiction</b>, and list the county FIPS codes it serves. County user administrators ask the state administrator.</p>
   <p><b>Region staff: which settings does a new record use?</b><br>Those of the place under <b>Working in</b>. Choose the state you are entering records for.</p>
   <p class="foot" style="margin-top:2em">MERIT user guide: access, profiles and switching. The examples are illustrative; names and screens are made up.</p>
 </section>

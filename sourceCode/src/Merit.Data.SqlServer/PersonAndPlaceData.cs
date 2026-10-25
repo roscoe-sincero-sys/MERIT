@@ -171,4 +171,17 @@ public sealed class PlaceData(Db db) : IPlaceData
 
     public Task<OrganizationResolveRow?> ResolveOrganizationAsync(string? cliaNumber, string? npi, string? nameKey, CancellationToken ct = default)
         => db.QuerySingleAsync<OrganizationResolveRow>("dbo.uspResolveOrganization", new { cliaNumber, npi, nameKey }, ct);
+
+    public Task<IReadOnlyList<ReporterRow>> ListReportersAsync(string? text, string? kind, int maxRows, CancellationToken ct = default)
+        => db.QueryAsync<ReporterRow>("dbo.uspListReporters", new { text, kind, maxRows }, ct);
+
+    public async Task<RegistryImportCounts> ImportReportersAsync(IReadOnlyList<ReporterSave> rows, CancellationToken ct = default)
+        => await db.QuerySingleAsync<RegistryImportCounts>("dbo.uspImportReporters", new
+        {
+            rowsJson = System.Text.Json.JsonSerializer.Serialize(rows.Select(r => new
+            {
+                rowNumber = r.RowNumber, kind = r.Kind, name = r.Name, nameKey = r.NameKey, lastName = r.LastName, firstName = r.FirstName,
+                credential = r.Credential, npi = r.Npi, clia = r.Clia, phone = r.Phone,
+            })),
+        }, ct).ConfigureAwait(false) ?? new RegistryImportCounts(0, 0);
 }

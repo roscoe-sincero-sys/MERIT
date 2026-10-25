@@ -1,0 +1,47 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Importing NPI and CLIA records into the reporter registry",
+    "output": "docs/npi-clia-import_workflow.html",
+    "quality_profile": "showcase",
+    "legend": {
+      "entries": {
+        "external": { "label": "Outside source of identifiers" },
+        "frontend": { "label": "A step you take" },
+        "backend": { "label": "MERIT checks automatically" },
+        "database": { "label": "Saved in the registry" },
+        "security": { "label": "Needs your correction" }
+      }
+    }
+  },
+  "lanes": [
+    { "id": "you", "label": "You" },
+    { "id": "merit", "label": "MERIT" },
+    { "id": "fix", "label": "Rows to fix", "variant": "exception" }
+  ],
+  "mainPath": ["lookup", "template", "check", "confirm", "registry", "release"],
+  "nodes": [
+    { "id": "lookup", "lane": "you", "col": 0, "type": "external", "label": "Look up identifiers", "sublabel": "NPPES (NPI), CMS (CLIA)" },
+    { "id": "template", "lane": "you", "col": 1, "type": "frontend", "label": "Fill the template", "sublabel": "one row per reporter", "icon": "person" },
+    { "id": "check", "lane": "merit", "col": 2, "type": "backend", "label": "Check the file", "sublabel": "nothing saved yet", "tag": "format rules" },
+    { "id": "confirm", "lane": "you", "col": 3, "type": "frontend", "label": "Import ready rows", "sublabel": "one button", "icon": "person" },
+    { "id": "registry", "lane": "merit", "col": 4, "type": "database", "label": "Registry updated", "sublabel": "added or updated" },
+    { "id": "release", "lane": "you", "col": 5, "type": "frontend", "label": "Release held rows", "sublabel": "unknown sender", "icon": "person" },
+    { "id": "rows", "lane": "fix", "col": 2, "type": "security", "label": "What to fix", "sublabel": "line and reason" }
+  ],
+  "edges": [
+    { "id": "lookup-to-template", "from": "lookup", "to": "template", "label": "copy" },
+    { "id": "template-to-check", "from": "template", "to": "check", "label": "upload CSV", "variant": "emphasis" },
+    { "id": "check-to-confirm", "from": "check", "to": "confirm", "label": "ready rows", "variant": "emphasis" },
+    { "id": "confirm-to-registry", "from": "confirm", "to": "registry", "label": "matched on CLIA or NPI" },
+    { "id": "registry-to-release", "from": "registry", "to": "release", "label": "now known" },
+    { "id": "check-to-rows", "from": "check", "to": "rows", "label": "bad format", "variant": "security", "role": "error" },
+    { "id": "rows-to-template", "from": "rows", "to": "template", "label": "correct, check again", "role": "return" }
+  ],
+  "cards": [
+    { "dot": "cyan", "title": "Template columns", "items": ["type: laboratory, facility or provider", "name (laboratory or facility), lastName and firstName (provider), credential", "npi, clia, phone"] },
+    { "dot": "rose", "title": "Checks before anything is saved", "items": ["NPI: 10 digits with a valid check digit", "CLIA: two digits, the letter D, seven digits", "A laboratory needs a CLIA number; a facility an NPI or CLIA; a provider an NPI and last name", "The same identifier twice in one file loads once"] },
+    { "dot": "emerald", "title": "Add or update", "items": ["An entry with the same CLIA number (or NPI) is updated, never duplicated", "Blank cells keep what is already stored"] }
+  ]
+}
