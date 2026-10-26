@@ -754,3 +754,31 @@ public sealed class OrganizationResolveRow
 
     public string? Npi { get; init; }
 }
+
+/// <summary>One row of the reporter registry: a laboratory, a facility (ordering practice, clinic, hospital) or a provider.</summary>
+public sealed class ReporterRow
+{
+    public string ReporterKind { get; init; } = string.Empty;
+
+    public Guid ReporterId { get; init; }
+
+    public string ReporterName { get; init; } = string.Empty;
+
+    public string? CliaNumber { get; init; }
+
+    public string? Npi { get; init; }
+
+    public string? Credential { get; init; }
+
+    public string? Phone { get; init; }
+
+    public string? RegistryStatus { get; init; }
+
+    public DateTime ModifiedDateUtc { get; init; }
+}
+
+/// <summary>A checked registry row ready for the database: laboratories and facilities carry a name, providers a person's name.</summary>
+public sealed record ReporterSave(int RowNumber, string Kind, string? Name, string? NameKey, string? LastName, string? FirstName,
+                                  string? Credential, string? Npi, string? Clia, string? Phone);
+
+public sealed record RegistryImportCounts(int AddedCount, int UpdatedCount);

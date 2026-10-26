@@ -1,0 +1,19 @@
+@model ExtractFindingsModel
+<h2 id="dialog-title">Validation findings: @Model.Run.ExtractType @Options.Date(Model.Run.PeriodStart) &ndash; @Options.Date(Model.Run.PeriodEnd)</h2>
+<p class="merit-meta">Each finding names the surrogate record id, the field and the rule. Correct the person or result in MERIT, then generate the extract again.
+    Records are identified by surrogate id only; open the person from the result search to fix them.</p>
+@if (Model.Findings.Count == 0)
+{
+    <p class="merit-empty">No findings.</p>
+}
+else
+{
+    <div class="merit-table-wrap" tabindex="0" role="region" aria-label="Validation findings">
+        <table class="usa-table usa-table--borderless">
+            <thead><tr><th scope="col">Record</th><th scope="col">Field</th><th scope="col">Finding</th></tr></thead>
+            <tbody>
+                @foreach (var f in Model.Findings) { <tr><td>@f.RecordId</td><td>@f.FieldName</td><td>@f.Message</td></tr> }
+            </tbody>
+        </table>
+    </div>
+}

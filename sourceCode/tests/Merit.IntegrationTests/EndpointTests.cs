@@ -208,5 +208,6 @@ public sealed class EndpointTests(MeritFixture fixture, ITestOutputHelper output
     private static bool IsPartialOnly(string pattern)
         => pattern.EndsWith("/add", StringComparison.Ordinal) || pattern.Contains("/primary", StringComparison.Ordinal)
            || pattern.EndsWith("/investigations/new", StringComparison.Ordinal) || pattern == "/results/fields"
-           || pattern.Contains("{episodeId", StringComparison.Ordinal);
+           || pattern.Contains("{episodeId", StringComparison.Ordinal)
+           || pattern.EndsWith(".csv", StringComparison.Ordinal);   // file downloads, not pages
 }

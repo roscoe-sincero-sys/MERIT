@@ -110,6 +110,13 @@ administrators can view MERIT as the people they manage. `docs/MERIT User Guide 
 the model for users.
 
 To try intake, sign in as `intake` and upload `samples/chesapeake_lab_sample.csv` on the Intake screen.
+
+The reporter registry (`/reporters`) lists laboratories (CLIA), facilities (NPI or CLIA) and providers (NPI). People
+with `registry.edit` (intake clerk, supervisor, administrator) add entries one at a time or import a CSV: the file is
+checked first (NPI check digit, CLIA format, required fields per kind, duplicates in the file), the checked content
+waits 30 minutes in memory under a per-user token, and `dbo.uspImportReporters` adds or updates by CLIA number, then
+NPI. Try it with `samples/registry_npi_clia_sample.csv`. On **Extracts**, a run with findings has **View findings**,
+and a ready run can be marked submitted (`extract.submit`, `dbo.uspMarkExtractSubmitted`).
 `samples/README.md` describes what each row should do. To try the person matching review, also upload
 `samples/chesapeake_match_review_sample.csv`, then open **Match review**.
 
@@ -167,6 +174,13 @@ To try intake, sign in as `intake` and upload `samples/chesapeake_lab_sample.csv
 - **Administration.** It is scoped to the tree. Administrators manage accounts whose home tenant they administer, and
   grant only at tenants they administer and only rights they hold there; the platform administrator grants any.
   Nobody can change their own master profile.
+- **Adding tenants** (`/admin/tenants`, permission `tenant.create`). A platform administrator adds data roots anywhere
+  and programs or jurisdictions under any tenant; an administrator holding `tenant.create` (the Administrator role)
+  adds programs and local jurisdictions under the tenants they administer, and at a region also states and tribes.
+  User administrators cannot. `config.uspCreateRootTenant` and `config.uspCreateChildTenant` make these checks, then
+  call the installers `config.uspInstallRootTenant` / `config.uspInstallChildTenant`, which run `WITH EXECUTE AS OWNER`
+  and are granted to no role, because seeding a new data root's roles, settings and counties is outside every caller's
+  row-level security scope. After a create the web app issues a fresh session scope so the new tenant appears at once.
 - **View as.** An administrator can see another person's access, clipped to the tenants the administrator manages and
   to the administrator's own rights. It is audited under the administrator's name.
 - **Platform administrators** hold no record permissions, so their sessions see no data. They have one profile and

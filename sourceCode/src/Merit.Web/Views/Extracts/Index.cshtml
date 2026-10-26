@@ -11,7 +11,7 @@
             <select class="usa-select" id="extractType" name="extractType"><option value="CBLS">CBLS (quarterly)</option><option value="ABLES">ABLES (annual)</option></select></div>
         <div class="usa-form-group"><label class="usa-label" for="year">Year</label><input class="usa-input usa-input--small" id="year" name="year" value="@Model.Year" inputmode="numeric" /></div>
         <div class="usa-form-group"><label class="usa-label" for="quarter">Quarter (CBLS)</label>
-            <select class="usa-select" id="quarter" name="quarter">@for (int q = 1; q <= 4; q++) { <option value="@q" selected="@(q == Model.Quarter)">Q@q</option> }</select></div>
+            <select class="usa-select" id="quarter" name="quarter">@for (int q = 1; q <= 4; q++) { <option value="@q" selected="@(q == Model.Quarter)">Q@(q)</option> }</select></div>
         <div class="usa-form-group"><button class="usa-button" type="submit">Request</button></div>
     </form>
 </section>

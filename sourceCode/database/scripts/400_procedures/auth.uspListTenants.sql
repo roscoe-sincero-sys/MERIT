@@ -13,7 +13,7 @@ CreateDate:   2026-10-24
 ========================================================================================================================
 Description:
 
-Tenants for pickers and the tenant tree: those the caller administers, those whose records the session covers, and those in the caller's master profile; every tenant for a platform administrator. Depth is counted from the platform tenant.
+Tenants for pickers and the tenant tree: those the caller administers, those whose records the session covers, and those in the caller's master profile; every tenant for a platform administrator. Depth is counted from the platform tenant; canAdminister marks the tenants the caller may add tenants under.
 
 ========================================================================================================================
 Requirements and Key Dependencies:
@@ -91,7 +91,8 @@ BEGIN
         UNION
         SELECT tenantId FROM auth.tvfUserGrantPermissions (@me);
 
-        SELECT t.tenantId, t.parentTenantId, t.tenantCode, t.tenantName, t.tenantType, t.rootTenantId, tc.depth
+        SELECT t.tenantId, t.parentTenantId, t.tenantCode, t.tenantName, t.tenantType, t.rootTenantId, tc.depth,
+               CAST (CASE WHEN EXISTS (SELECT 1 FROM @admin AS a WHERE a.tenantId = t.tenantId) THEN 1 ELSE 0 END AS BIT) AS canAdminister
           FROM auth.tenant AS t
           JOIN @ids AS i ON i.tenantId = t.tenantId
           JOIN auth.tenantClosure AS tc ON tc.descendantTenantId = t.tenantId AND tc.ancestorTenantId = @platform AND tc.isDeleted = 0
@@ -135,7 +136,7 @@ EXEC util.uspSetObjectDescription
       @SchemaName  = N'auth'
     , @ObjectType  = N'PROCEDURE'
     , @ObjectName  = N'uspListTenants'
-    , @Description = N'Tenants for pickers and the tenant tree: those the caller administers, those whose records the session covers, and those in the caller''s master profile; every tenant for a platform administrator. Depth is counted from the platform tenant.';
+    , @Description = N'Tenants for pickers and the tenant tree: those the caller administers, those whose records the session covers, and those in the caller''s master profile; every tenant for a platform administrator. Depth is counted from the platform tenant; canAdminister marks the tenants the caller may add tenants under.';
 GO
 
 IF DATABASE_PRINCIPAL_ID (N'meritWebRole') IS NOT NULL

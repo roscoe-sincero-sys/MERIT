@@ -70,9 +70,17 @@ Interactive diagrams:
 | [Architecture rings](docs/merit_architecture.html) | The Clean Architecture rings and the direction of dependencies |
 | [Codebase inspection](docs/codebase_inspection.html) | Project references, plus the synchronous web path and the asynchronous worker path |
 | [Data-flow workflows](docs/data-flow_workflows.html) | A request and a background job, step by step through the layers |
+| [Daily intake workflow](docs/daily-intake_workflow.html) | A laboratory file from upload to loaded, held or match review, then to a case and its tasks |
+| [NPI and CLIA import](docs/npi-clia-import_workflow.html) | Loading the reporter registry from a CSV file: check, fix, import, release |
+| [CBLS extract lifecycle](docs/cbls-extract_lifecycle.html) | A quarterly CDC extract run from request to submitted |
 
-For users, [the access and profiles guide](docs/MERIT%20User%20Guide%20-%20Access%20and%20Profiles.pdf) explains who
-sees what and how profiles work.
+User guides (PDF, with the HTML sources in `docs/guides/`):
+
+| Guide | For |
+| --- | --- |
+| [Daily operations](docs/MERIT%20User%20Guide%20-%20Daily%20Operations.pdf) | Daily, weekly and quarterly work: intake, held records, match review, manual entry, cases, investigations, reports, federal extracts |
+| [Importing NPI and CLIA records](docs/MERIT%20User%20Guide%20-%20Importing%20NPI%20and%20CLIA%20Records.pdf) | Keeping the laboratory, facility and provider registry current |
+| [Access and profiles](docs/MERIT%20User%20Guide%20-%20Access%20and%20Profiles.pdf) | Who sees what, profiles, view as, and who can add tenants |
 
 ---
 
@@ -169,7 +177,10 @@ dotnet run --project src/Merit.Web         # terminal 2: https://localhost:7243
 | See only one county's records | `cmbalt` (Baltimore City) or `cmbaltco` (Baltimore County) |
 | Work across two counties, then make a read-only profile under **Profile** in the header | `cmboth` |
 | Administer one county and **View as** its staff | `cityadmin` |
-| Manage accounts only, with no records visible | `platform` |
+| Load `samples/registry_npi_clia_sample.csv` on **Reporters > Import NPI and CLIA records** | `supervisor` |
+| Generate a CBLS file on **Extracts**, view its findings, then **Mark submitted** | `supervisor` |
+| Add a county health department or program on **Tenants** | `admin` |
+| Manage accounts only, with no records visible; add regions, states and tribes on **Tenants** | `platform` |
 
 ---
 
@@ -220,8 +231,12 @@ merit/
 ├── docs/
 │   ├── requirements/          specification, architecture requirements, screen mock-ups
 │   ├── merit_architecture.html, codebase_inspection.html, data-flow_workflows.html   interactive diagrams
+│   ├── daily-intake_workflow.html, npi-clia-import_workflow.html, cbls-extract_lifecycle.html   user workflow diagrams
+│   ├── MERIT User Guide - Daily Operations.pdf
+│   ├── MERIT User Guide - Importing NPI and CLIA Records.pdf
 │   ├── MERIT User Guide - Access and Profiles.pdf
-│   └── guides/                source of the user guide
+│   ├── images/guide/          screenshots and diagram images used by the guides
+│   └── guides/                HTML sources of the user guides (printed to PDF)
 ├── sourceCode/
 │   ├── Merit.sln              solution (Web + Worker launch profile in Merit.slnLaunch)
 │   ├── README.md              detailed developer notes

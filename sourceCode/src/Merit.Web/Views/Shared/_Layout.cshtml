@@ -37,8 +37,10 @@
                         @if (CurrentSession.Has(Permissions.CaseView)) { <li><a href="/investigations" aria-current="@Current("/investigations")">Investigations</a></li> }
                         @if (CurrentSession.Has(Permissions.IntakeUpload)) { <li><a href="/intake" aria-current="@Current("/intake")">Intake</a></li> }
                         @if (CurrentSession.Has(Permissions.ExtractRun)) { <li><a href="/extracts" aria-current="@Current("/extracts")">Extracts</a></li> }
+                        @if (CurrentSession.Has(Permissions.PersonView)) { <li><a href="/reporters" aria-current="@Current("/reporters")">Reporters</a></li> }
                         <li><a href="/config/thresholds" aria-current="@Current("/config")">Configuration</a></li>
-                        @if (CurrentSession.Has(Permissions.TenantAdminister)) { <li><a href="/admin/users" aria-current="@Current("/admin")">Users</a></li> }
+                        @if (CurrentSession.Has(Permissions.TenantAdminister)) { <li><a href="/admin/users" aria-current="@Current("/admin/users")">Users</a></li> }
+                        @if (CurrentSession.Has(Permissions.TenantCreate)) { <li><a href="/admin/tenants" aria-current="@Current("/admin/tenants")">Tenants</a></li> }
                     </ul>
                 </nav>
                 @if (CurrentSession.Has(Permissions.PersonView))

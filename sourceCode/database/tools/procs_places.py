@@ -587,3 +587,130 @@ SET @Comments = N'Provider saved.';
 """,
     },
 ]
+
+
+PROCS += [
+    {
+        "schema": "dbo", "name": "uspListReporters", "kind": "read", "grants": WEB, "ticket": "T163",
+        "permission": "person.view",
+        "desc": "The reporter registry: laboratories and facilities (organizations with a CLIA number or NPI) and "
+                "individual providers, filtered by name or identifier and by kind, for the Reporters screen.",
+        "params": """@text    NVARCHAR (120) = NULL
+, @kind    VARCHAR (20) = NULL
+, @maxRows INT = 200""",
+        "key": "CONCAT (N'kind=', @kind, N', maxRows=', @maxRows)",
+        "body": """
+DECLARE @t NVARCHAR (120) = NULLIF (LTRIM (RTRIM (@text)), N'');
+
+SELECT TOP (@maxRows) x.reporterKind, x.reporterId, x.reporterName, x.cliaNumber, x.npi, x.credential, x.phone,
+       x.registryStatus, x.modifiedDateUtc
+  FROM (SELECT CASE WHEN EXISTS (SELECT 1 FROM dbo.organizationType AS ot WHERE ot.organizationId = o.organizationId
+                                                                         AND ot.organizationTypeCode = 'laboratory'
+                                                                         AND ot.isDeleted = 0)
+                    THEN 'laboratory' ELSE 'facility' END AS reporterKind,
+               o.organizationId AS reporterId, o.organizationName AS reporterName, o.cliaNumber, o.npi,
+               CAST (NULL AS NVARCHAR (20)) AS credential, o.phone, CAST (NULL AS VARCHAR (20)) AS registryStatus,
+               o.modifiedDateUtc
+          FROM dbo.organization AS o
+         WHERE o.isDeleted = 0 AND o.isActive = 1 AND (o.cliaNumber IS NOT NULL OR o.npi IS NOT NULL)
+           AND (@t IS NULL OR o.organizationName LIKE N'%' + @t + N'%' OR o.cliaNumber = @t OR o.npi = @t)
+        UNION ALL
+        SELECT 'provider', pv.providerId, CONCAT (pv.lastName, CASE WHEN pv.firstName IS NULL THEN N'' ELSE N', ' + pv.firstName END),
+               NULL, pv.npi, pv.credential, NULL, pv.registryStatus, pv.modifiedDateUtc
+          FROM dbo.provider AS pv
+         WHERE pv.isDeleted = 0
+           AND (@t IS NULL OR pv.lastName LIKE @t + N'%' OR pv.firstName LIKE @t + N'%' OR pv.npi = @t)) AS x
+ WHERE @kind IS NULL OR x.reporterKind = @kind
+ ORDER BY x.reporterKind, x.reporterName;
+""",
+    },
+    {
+        "schema": "dbo", "name": "uspImportReporters", "kind": "write", "grants": WEB, "ticket": "T163",
+        "permission": "registry.edit",
+        "desc": "Adds or updates registry entries from checked rows (JSON): laboratories and facilities are matched on "
+                "CLIA number, then NPI; providers on NPI. Blank fields never erase what is stored. Returns how many "
+                "were added and updated.",
+        "params": "@rowsJson NVARCHAR (MAX)",
+        "key": "CONCAT (N'rows=', (SELECT COUNT (*) FROM OPENJSON (@rowsJson)))",
+        "validate": """IF ISJSON (@rowsJson) = 0
+BEGIN
+    ;THROW 50000, N'@rowsJson must be a JSON array of registry rows.', 1;
+END;""",
+        "notes": "The application has already checked identifier formats (NPI Luhn check digit, CLIA pattern) and "
+                 "removed duplicate rows; this procedure trusts the shape and decides only add versus update.",
+        "body": f"""
+DECLARE @root UNIQUEIDENTIFIER = auth.udfSessionRootTenantId ();
+DECLARE @rows TABLE (rowNumber INT PRIMARY KEY, reporterKind VARCHAR (20), reporterName NVARCHAR (120),
+                     nameKey NVARCHAR (120), lastName NVARCHAR (60), firstName NVARCHAR (60), credential NVARCHAR (20),
+                     npi VARCHAR (10), cliaNumber VARCHAR (10), phone NVARCHAR (30), existingId UNIQUEIDENTIFIER,
+                     newId UNIQUEIDENTIFIER);
+
+INSERT @rows (rowNumber, reporterKind, reporterName, nameKey, lastName, firstName, credential, npi, cliaNumber, phone)
+SELECT j.rowNumber, j.reporterKind, j.reporterName, j.nameKey, j.lastName, NULLIF (j.firstName, N''),
+       NULLIF (j.credential, N''), NULLIF (j.npi, ''), NULLIF (j.cliaNumber, ''), NULLIF (j.phone, N'')
+  FROM OPENJSON (@rowsJson)
+  WITH (rowNumber INT '$.rowNumber', reporterKind VARCHAR (20) '$.kind', reporterName NVARCHAR (120) '$.name',
+        nameKey NVARCHAR (120) '$.nameKey', lastName NVARCHAR (60) '$.lastName', firstName NVARCHAR (60) '$.firstName',
+        credential NVARCHAR (20) '$.credential', npi VARCHAR (10) '$.npi', cliaNumber VARCHAR (10) '$.clia',
+        phone NVARCHAR (30) '$.phone') AS j
+ WHERE j.reporterKind IN ('laboratory', 'facility', 'provider');
+
+-- ------------------------------------------------------------------------------------------ organizations
+UPDATE r SET existingId = m.organizationId
+  FROM @rows AS r
+ CROSS APPLY (SELECT TOP (1) o.organizationId FROM dbo.organization AS o
+               WHERE o.isDeleted = 0
+                 AND ((r.cliaNumber IS NOT NULL AND o.cliaNumber = r.cliaNumber)
+                   OR (r.npi IS NOT NULL AND o.npi = r.npi))
+               ORDER BY CASE WHEN o.cliaNumber = r.cliaNumber THEN 0 ELSE 1 END) AS m
+ WHERE r.reporterKind IN ('laboratory', 'facility');
+
+UPDATE o
+   SET organizationName = r.reporterName, organizationNameKey = r.nameKey, npi = COALESCE (r.npi, o.npi),
+       cliaNumber = COALESCE (r.cliaNumber, o.cliaNumber), phone = COALESCE (r.phone, o.phone), isActive = 1
+  FROM dbo.organization AS o
+  JOIN @rows AS r ON r.existingId = o.organizationId;
+
+UPDATE @rows SET newId = {NEWID} WHERE existingId IS NULL;
+
+INSERT dbo.organization (organizationId, rootTenantId, owningTenantId, organizationName, organizationNameKey, npi,
+                         cliaNumber, phone, isActive)
+SELECT r.newId, @root, @root, r.reporterName, r.nameKey, r.npi, r.cliaNumber, r.phone, 1
+  FROM @rows AS r
+ WHERE r.existingId IS NULL AND r.reporterKind IN ('laboratory', 'facility');
+
+INSERT dbo.organizationType (organizationTypeId, rootTenantId, owningTenantId, organizationId, organizationTypeCode)
+SELECT {NEWID}, @root, @root, COALESCE (r.existingId, r.newId),
+       CASE r.reporterKind WHEN 'laboratory' THEN 'laboratory' ELSE 'providerPractice' END
+  FROM @rows AS r
+ WHERE r.reporterKind IN ('laboratory', 'facility')
+   AND NOT EXISTS (SELECT 1 FROM dbo.organizationType AS t
+                    WHERE t.organizationId = COALESCE (r.existingId, r.newId) AND t.isDeleted = 0
+                      AND t.organizationTypeCode = CASE r.reporterKind WHEN 'laboratory' THEN 'laboratory'
+                                                                       ELSE 'providerPractice' END);
+
+-- ------------------------------------------------------------------------------------------ providers
+UPDATE r SET existingId = pv.providerId
+  FROM @rows AS r
+  JOIN dbo.provider AS pv ON pv.npi = r.npi AND pv.isDeleted = 0
+ WHERE r.reporterKind = 'provider';
+
+UPDATE pv
+   SET lastName = r.lastName, firstName = COALESCE (r.firstName, pv.firstName),
+       credential = COALESCE (r.credential, pv.credential)
+  FROM dbo.provider AS pv
+  JOIN @rows AS r ON r.existingId = pv.providerId AND r.reporterKind = 'provider';
+
+INSERT dbo.provider (providerId, rootTenantId, owningTenantId, npi, lastName, firstName, credential)
+SELECT r.newId, @root, @root, r.npi, r.lastName, r.firstName, r.credential
+  FROM @rows AS r
+ WHERE r.existingId IS NULL AND r.reporterKind = 'provider';
+
+DECLARE @added INT = (SELECT COUNT (*) FROM @rows WHERE existingId IS NULL);
+DECLARE @updated INT = (SELECT COUNT (*) FROM @rows WHERE existingId IS NOT NULL);
+SELECT @added AS addedCount, @updated AS updatedCount;
+
+SET @Comments = CONCAT (N'Registry import: ', @added, N' added, ', @updated, N' updated.');
+""",
+    },
+]

@@ -1,0 +1,55 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Daily intake: from a laboratory file to a case",
+    "output": "docs/daily-intake_workflow.html",
+    "quality_profile": "showcase",
+    "legend": {
+      "entries": {
+        "external": { "label": "Arrives from outside MERIT" },
+        "frontend": { "label": "A screen you use" },
+        "backend": { "label": "MERIT works automatically" },
+        "database": { "label": "Saved in the registry" },
+        "security": { "label": "Waiting for a person to decide" },
+        "messagebus": { "label": "Work handed to staff" }
+      }
+    }
+  },
+  "lanes": [
+    { "id": "staff", "label": "Intake staff" },
+    { "id": "merit", "label": "MERIT (automatic)" },
+    { "id": "review", "label": "Review and fix", "variant": "exception" },
+    { "id": "casework", "label": "Case work" }
+  ],
+  "mainPath": ["labfile", "upload", "process", "loaded", "caseopen", "queues"],
+  "nodes": [
+    { "id": "labfile", "lane": "staff", "col": 0, "type": "external", "label": "Lab file arrives", "sublabel": "CSV, pipe or tab file", "icon": "calendar" },
+    { "id": "upload", "lane": "staff", "col": 1, "type": "frontend", "label": "Upload on Intake", "sublabel": "pick the sender profile", "icon": "person" },
+    { "id": "process", "lane": "merit", "col": 2, "type": "backend", "label": "Check and match", "sublabel": "codes, units, dates, person", "tag": "minutes" },
+    { "id": "loaded", "lane": "merit", "col": 3, "type": "database", "label": "Result loaded", "sublabel": "on the person's record" },
+    { "id": "held", "lane": "review", "col": 1, "type": "security", "label": "Held records", "sublabel": "grouped by cause", "tag": "urgent first" },
+    { "id": "fix", "lane": "review", "col": 2, "type": "frontend", "label": "Fix the cause", "sublabel": "correct, map or register", "icon": "person" },
+    { "id": "matchreview", "lane": "review", "col": 3, "type": "security", "label": "Match review", "sublabel": "same, different, not sure" },
+    { "id": "caseopen", "lane": "casework", "col": 4, "type": "backend", "label": "Case opened", "sublabel": "level reached" },
+    { "id": "queues", "lane": "casework", "col": 5, "type": "messagebus", "label": "Work queues", "sublabel": "follow-up tasks", "icon": "briefcase" }
+  ],
+  "edges": [
+    { "id": "file-to-upload", "from": "labfile", "to": "upload", "label": "save the file" },
+    { "id": "upload-to-process", "from": "upload", "to": "process", "label": "queued", "variant": "dashed" },
+    { "id": "process-to-loaded", "from": "process", "to": "loaded", "label": "passes", "variant": "emphasis" },
+    { "id": "process-to-held", "from": "process", "to": "held", "label": "a check fails", "variant": "security", "role": "error" },
+    { "id": "held-to-fix", "from": "held", "to": "fix", "label": "open a group" },
+    { "id": "fix-to-process", "from": "fix", "to": "process", "label": "release", "role": "return" },
+    { "id": "process-to-review", "from": "process", "to": "matchreview", "label": "maybe a match", "variant": "security", "role": "branch" },
+    { "id": "review-to-loaded", "from": "matchreview", "to": "loaded", "label": "decided" },
+    { "id": "loaded-to-case", "from": "loaded", "to": "caseopen", "label": "case level", "variant": "emphasis" },
+    { "id": "case-to-queues", "from": "caseopen", "to": "queues", "label": "creates tasks" }
+  ],
+  "cards": [
+    { "dot": "cyan", "title": "Every day", "items": ["Upload each laboratory file on Intake as it arrives", "Watch the batch card: received, loaded, held, rejected", "Open Held records and Match review from the Home page counts"] },
+    { "dot": "rose", "title": "Held records", "items": ["Rows wait with a named cause: unknown sender, unknown test code, unknown unit, missing date of birth and others", "Fix the cause once, then release every row it held; released rows are checked again", "Reject only with a reason; urgent rows (high results) come first"] },
+    { "dot": "amber", "title": "Match review", "items": ["Shown when an incoming record looks like an existing person but not exactly", "Same person links it; Different person remembers the pair; Not sure sends it to a supervisor", "Create as a new person when no candidate is right"] },
+    { "dot": "emerald", "title": "After loading", "items": ["A result at or above the case level opens or updates a case automatically", "Follow-up tasks appear in Work queues: confirmatory tests, address review, investigations"] }
+  ]
+}

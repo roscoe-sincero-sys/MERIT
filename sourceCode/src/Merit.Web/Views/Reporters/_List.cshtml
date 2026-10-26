@@ -1,0 +1,32 @@
+@model ReportersModel
+@{
+    string Kind(string k) => k switch { "laboratory" => "Laboratory", "facility" => "Facility", _ => "Provider" };
+}
+<div id="reporter-list">
+    @if (Model.Rows.Count == 0)
+    {
+        <p class="merit-empty">No entries match.</p>
+    }
+    else
+    {
+        <p class="merit-meta">@Model.Rows.Count entr@(Model.Rows.Count == 1 ? "y" : "ies")@(Model.Rows.Count >= 200 ? " (the first 200; narrow the search)" : "")</p>
+        <div class="merit-table-wrap" tabindex="0" role="region" aria-label="Reporter registry; scroll sideways for more columns">
+            <table class="usa-table usa-table--borderless">
+                <thead><tr><th scope="col">Name</th><th scope="col">Kind</th><th scope="col">CLIA number</th><th scope="col">NPI</th><th scope="col">Phone</th><th scope="col">Last changed</th></tr></thead>
+                <tbody>
+                    @foreach (var r in Model.Rows)
+                    {
+                        <tr>
+                            <td>@r.ReporterName@(r.Credential is null ? "" : ", " + r.Credential)</td>
+                            <td>@Kind(r.ReporterKind)</td>
+                            <td>@r.CliaNumber</td>
+                            <td>@r.Npi</td>
+                            <td>@r.Phone</td>
+                            <td>@Options.Date(r.ModifiedDateUtc)</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>

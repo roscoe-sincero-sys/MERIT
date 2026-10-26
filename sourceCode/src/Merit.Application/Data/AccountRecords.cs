@@ -235,6 +235,9 @@ public sealed class TenantListRow
     public Guid RootTenantId { get; init; }
 
     public int Depth { get; init; }
+
+    /// <summary>The caller administers this tenant (users, grants, and new tenants under it).</summary>
+    public bool CanAdminister { get; init; }
 }
 
 public sealed class AssignableUserRow
@@ -264,3 +267,10 @@ public sealed class AuditEventRow
 
     public string? ClientAddress { get; init; }
 }
+
+/// <summary>A county or other sub-jurisdiction new to a data root, added while creating a tenant that serves it.</summary>
+public sealed record NewCounty(string Fips, string Name, string Type = "county");
+
+/// <summary>What the database needs to create a tenant. A data root also gets its roles, settings and counties.</summary>
+public sealed record TenantCreate(string TenantCode, string TenantName, string TenantType, string ParentTenantCode, string? StatePostalCode,
+                                  string? StateFips, IReadOnlyList<string> CountyFips, IReadOnlyList<NewCounty> NewCounties);

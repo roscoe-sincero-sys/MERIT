@@ -1,0 +1,61 @@
+@model RegistryImportModel
+@{
+    ViewData["Title"] = "Import NPI and CLIA records";
+}
+<p><a class="usa-link" href="/reporters">Back to reporters</a></p>
+<h1>Import NPI and CLIA records</h1>
+<ol class="usa-process-list merit-steps">
+    <li class="usa-process-list__item"><h2 class="usa-process-list__heading">Fill in the template</h2>
+        <p><a class="usa-link" href="/reporters/template.csv">Download the CSV template</a>. One row per laboratory, facility or provider; the <code>type</code> column says which.</p></li>
+    <li class="usa-process-list__item"><h2 class="usa-process-list__heading">Check the file</h2>
+        <p>Nothing is saved yet. MERIT lists the rows that are ready and explains every row it cannot load.</p></li>
+    <li class="usa-process-list__item"><h2 class="usa-process-list__heading">Import</h2>
+        <p>Ready rows are added, or update the entry with the same CLIA number or NPI. Fix the other rows and check the file again.</p></li>
+</ol>
+@if (Model.Error is not null)
+{
+    <div class="usa-alert usa-alert--error usa-alert--slim" role="alert"><div class="usa-alert__body"><p class="usa-alert__text">@Model.Error</p></div></div>
+}
+@if (Model.Counts is { } c)
+{
+    <div class="usa-alert usa-alert--success usa-alert--slim" role="status"><div class="usa-alert__body"><p class="usa-alert__text">Imported @Model.FileName: @c.AddedCount added, @c.UpdatedCount updated@(Model.Check?.Rejected.Count > 0 ? $", {Model.Check.Rejected.Count} not loaded (listed below)" : "").</p></div></div>
+}
+@if (Model.Check is { } check)
+{
+    <section class="merit-section" aria-labelledby="check-h">
+        <h2 id="check-h">@(Model.Counts is null ? "Check results" : "Rows not loaded") for @Model.FileName</h2>
+        @if (Model.Counts is null)
+        {
+            <p><strong>@check.Ready.Count</strong> row(s) ready (@check.Ready.Count(r => r.Kind == "laboratory") laboratories, @check.Ready.Count(r => r.Kind == "facility") facilities, @check.Ready.Count(r => r.Kind == "provider") providers) &middot; <strong>@check.Rejected.Count</strong> row(s) need attention.</p>
+            @if (check.Ready.Count > 0)
+            {
+                <form method="post" action="/reporters/import">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="token" value="@Model.Token" />
+                    <input type="hidden" name="fileName" value="@Model.FileName" />
+                    <button class="usa-button" type="submit">Import @check.Ready.Count ready row(s)</button>
+                </form>
+            }
+        }
+        @if (check.Rejected.Count > 0)
+        {
+            <div class="merit-table-wrap" tabindex="0" role="region" aria-label="Rows that need attention">
+                <table class="usa-table usa-table--borderless">
+                    <thead><tr><th scope="col">Line</th><th scope="col">Name</th><th scope="col">What to fix</th></tr></thead>
+                    <tbody>
+                        @foreach (var p in check.Rejected) { <tr><td>@p.Line</td><td>@p.Name</td><td>@p.Problem</td></tr> }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
+}
+<section class="merit-section" aria-labelledby="upload-h">
+    <h2 id="upload-h">@(Model.Check is null ? "Choose the file" : "Check another file")</h2>
+    <form class="usa-form" method="post" action="/reporters/import/check" enctype="multipart/form-data">
+        @Html.AntiForgeryToken()
+        <div class="usa-form-group"><label class="usa-label" for="file">CSV file (up to 2 MB, 5,000 rows)</label>
+            <input class="usa-file-input" id="file" name="file" type="file" accept=".csv" required /></div>
+        <button class="usa-button usa-button--outline" type="submit">Check the file</button>
+    </form>
+</section>

@@ -1,0 +1,395 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>MERIT: Daily, Weekly and Quarterly Work</title>
+<style>
+  @page { size: Letter; margin: 0.55in 0.65in 0.7in; }
+  :root { --ink:#1b1b1b; --muted:#565c65; --blue:#1a4480; --blue2:#005ea2; --soft:#f0f4f9; --line:#dfe1e2; --ok:#00a91c; --no:#b50909; --amber:#ffbe2e; }
+  * { box-sizing: border-box; }
+  body { font-family: "Segoe UI", "Source Sans Pro", Arial, sans-serif; color: var(--ink); font-size: 10.5pt; line-height: 1.38; margin: 0; }
+  h1 { font-size: 26pt; color: var(--blue); margin: 0 0 .2em; line-height: 1.15; }
+  h2 { font-size: 16pt; color: var(--blue); margin: .6em 0 .35em; border-bottom: 2px solid var(--blue); padding-bottom: .15em; break-after: avoid; }
+  h3 { font-size: 12.5pt; margin: .9em 0 .3em; break-after: avoid; }
+  p, li { margin: .3em 0; }
+  ul, ol { padding-left: 1.3em; }
+  .page { break-after: page; }
+  .lead { font-size: 13pt; color: var(--muted); }
+  .cover { height: 9.2in; display: flex; flex-direction: column; justify-content: center; }
+  .cover .tag { display: inline-block; background: var(--blue); color: #fff; padding: .2em .7em; border-radius: 1em; font-size: 10pt; letter-spacing: .05em; align-self: flex-start; }
+  .box { border: 1px solid var(--line); border-left: 6px solid var(--blue2); background: var(--soft); padding: .6em .9em; border-radius: 4px; margin: .7em 0; break-inside: avoid; }
+  .box.warn { border-left-color: var(--amber); background: #fff8e6; }
+  .box.ok { border-left-color: var(--ok); background: #ecf3ec; }
+  .box strong:first-child { color: var(--blue); }
+  table { border-collapse: collapse; width: 100%; margin: .5em 0; font-size: 9.8pt; break-inside: avoid; }
+  th, td { border: 1px solid var(--line); padding: .32em .5em; text-align: left; vertical-align: top; }
+  th { background: #e8eef5; }
+  .steps { counter-reset: s; list-style: none; padding-left: 0; }
+  .steps > li { counter-increment: s; position: relative; padding-left: 2.1em; margin: .45em 0; }
+  .steps > li::before { content: counter(s); position: absolute; left: 0; top: .05em; width: 1.5em; height: 1.5em; border-radius: 50%; background: var(--blue2); color: #fff; font-weight: 700; font-size: 9pt; text-align: center; line-height: 1.5em; }
+  figure { margin: .7em 0; break-inside: avoid; }
+  figure img { width: 100%; border: 1px solid #a9aeb1; border-radius: 6px; box-shadow: 0 1px 4px rgba(0,0,0,.12); display: block; }
+  figure img { max-height: 3.35in; object-fit: cover; object-position: top; }
+  figure.half img { width: 78%; margin: 0 auto; max-height: 3in; }
+  figure.diagram img { max-height: none; object-fit: contain; width: 88%; margin: 0 auto; }
+  section.flow { margin-top: .4em; }
+  h2.newpage { break-before: page; }
+  .grid2 figure img { max-height: 2.1in; }
+  figcaption { font-size: 8.8pt; color: var(--muted); margin-top: .25em; }
+  .ui { font-weight: 700; color: var(--blue); }
+  .key { display: inline-block; border: 1px solid #71767a; border-bottom-width: 2px; border-radius: 3px; padding: 0 .35em; font-size: 8.8pt; font-family: Consolas, monospace; background: #fafafa; }
+  code { font-family: Consolas, monospace; font-size: 9.3pt; background: #f1f3f6; padding: 0 .2em; border-radius: 2px; }
+  .who { font-size: 9pt; color: var(--muted); margin-top: -.2em; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: .9em; }
+  .toc { columns: 2; column-gap: 2em; padding-left: 1.2em; }
+  .toc li { break-inside: avoid; }
+  .cadence th:first-child { width: 17%; }
+  .foot { font-size: 8.5pt; color: var(--muted); }
+  a { color: var(--blue2); }
+</style>
+</head>
+<body>
+
+<!-- ============================================================ cover -->
+<section class="page cover">
+  <span class="tag">MERIT USER GUIDE</span>
+  <h1>Your daily, weekly<br>and quarterly work</h1>
+  <p class="lead">A step-by-step guide to the work most MERIT users do: loading blood test results, clearing held records, keeping laboratory and provider identifiers current, entering people and results by hand, following up cases, and sending the federal extracts.</p>
+  <div class="box">
+    <strong>In one minute</strong>
+    <ul>
+      <li><b>Every day:</b> upload each laboratory file on <span class="ui">Intake</span>, then clear <span class="ui">Held records</span> and <span class="ui">Match review</span>. Work your tasks in <span class="ui">Work queues</span>.</li>
+      <li><b>When a fax or paper report arrives:</b> search for the person first, then <span class="ui">Enter a result</span> on their page.</li>
+      <li><b>Every week:</b> check overdue tasks, open cases, clusters and the reporter timeliness report.</li>
+      <li><b>Every quarter:</b> generate the CDC CBLS file on <span class="ui">Extracts</span>, review its findings, send it, and mark it submitted. ABLES (NIOSH, adults) is once a year.</li>
+    </ul>
+  </div>
+  <p class="foot">Screens shown are from the MERIT demonstration site, with made-up people. What you see depends on your role and profile: a button that is missing for you is a permission you do not have (see the companion guide <i>Who sees what, and your profiles</i>).</p>
+  <p class="foot">Companion guides: <i>MERIT User Guide - Importing NPI and CLIA Records</i>; <i>MERIT User Guide - Access and Profiles</i>. Interactive diagrams: <code>docs/daily-intake_workflow.html</code>, <code>docs/npi-clia-import_workflow.html</code>, <code>docs/cbls-extract_lifecycle.html</code>.</p>
+</section>
+
+<!-- ============================================================ contents + cadence -->
+<section class="page">
+  <h2>Contents</h2>
+  <ol class="toc">
+    <li>Signing in and finding your way</li>
+    <li>Your routine at a glance</li>
+    <li>Importing blood test results</li>
+    <li>Clearing held records</li>
+    <li>Match review: is this the same person?</li>
+    <li>Laboratories, providers, NPI and CLIA</li>
+    <li>Entering people and results by hand</li>
+    <li>Places, relationships, jobs and sources</li>
+    <li>Cases and work queues</li>
+    <li>Investigations</li>
+    <li>Searching, results, clusters, map and reports</li>
+    <li>Federal extracts: CDC CBLS and NIOSH ABLES</li>
+    <li>For supervisors and administrators</li>
+    <li>Who can do what</li>
+    <li>Common questions</li>
+  </ol>
+
+  <h2>2. Your routine at a glance</h2>
+  <table class="cadence">
+    <tr><th>How often</th><th>Task</th><th>Where</th><th>Usually done by</th></tr>
+    <tr><td rowspan="5"><b>Every day</b></td><td>Upload each laboratory file as it arrives; check the batch card</td><td>Intake</td><td>Intake clerk, supervisor</td></tr>
+    <tr><td>Clear held records, urgent (high results) first</td><td>Held records</td><td>Intake clerk, supervisor</td></tr>
+    <tr><td>Decide possible person matches</td><td>Match review</td><td>Intake clerk, supervisor</td></tr>
+    <tr><td>Enter fax and paper reports</td><td>Search, then the person page</td><td>Intake clerk, case manager</td></tr>
+    <tr><td>Work your tasks: confirmatory tests, address review, contacts, notifications</td><td>Work queues, Cases</td><td>Case manager, investigator</td></tr>
+    <tr><td rowspan="4"><b>Every week</b></td><td>Look for overdue tasks and unassigned cases; reassign</td><td>Home, Work queues, Cases</td><td>Supervisor</td></tr>
+    <tr><td>Review clusters under review and new cluster alerts</td><td>Clusters, Map</td><td>Supervisor, epidemiologist</td></tr>
+    <tr><td>Add new laboratories, facilities and providers; fix "unknown sender" holds</td><td>Reporters</td><td>Intake clerk, supervisor</td></tr>
+    <tr><td>Schedule and close investigations</td><td>Investigations</td><td>Investigator</td></tr>
+    <tr><td><b>Every month</b></td><td>Check reporter timeliness and completeness; case timeliness</td><td>Reports</td><td>Supervisor, epidemiologist</td></tr>
+    <tr><td rowspan="2"><b>Every quarter</b></td><td>Generate, review, send and mark submitted the CDC CBLS file for the quarter that ended</td><td>Extracts</td><td>Supervisor (epidemiologists can generate)</td></tr>
+    <tr><td>Review testing counts and elevated counts; export for partners</td><td>Reports</td><td>Epidemiologist</td></tr>
+    <tr><td><b>Every year</b></td><td>Generate and send the NIOSH ABLES file; review thresholds and settings</td><td>Extracts, Configuration</td><td>Supervisor, administrator</td></tr>
+    <tr><td><b>As needed</b></td><td>Add users and give access; add a county, program or other tenant</td><td>Users, Tenants</td><td>Administrator</td></tr>
+  </table>
+</section>
+
+<!-- ============================================================ 1 sign in -->
+<section class="flow">
+  <h2>1. Signing in and finding your way</h2>
+  <ol class="steps">
+    <li>Go to your MERIT address and enter your <b>user name</b> and <b>password</b>.</li>
+    <li>Enter the 6-digit <b>code from your authenticator app</b>. The first time, MERIT shows a QR code and a key: add it to an authenticator app on your phone, type the code it shows, then <b>save your recovery codes</b> somewhere safe. Each recovery code works once if you lose your phone.</li>
+    <li>MERIT opens on <span class="ui">Home</span>. After 20 minutes without activity (your agency may set a different time) you are signed out; unsaved typing is lost, so save as you go.</li>
+  </ol>
+  <figure><img src="../images/guide/01-home.jpg" alt="The MERIT Home page with count tiles, the Needs attention list and the work queue tiles"><figcaption>Home: your counts across the top, <b>Needs attention</b> (urgent items first), then a tile for each work queue. Click any count or tile to open the list behind it.</figcaption></figure>
+  <h3>The header</h3>
+  <ul>
+    <li><b>Menu:</b> only the screens your role allows are shown.</li>
+    <li><b>Search:</b> type a name, date of birth, address, case number or accession number and press <span class="key">Enter</span>.</li>
+    <li><b>Your name, the agency you are working in, and your profile.</b> Click <span class="ui">Profile</span> to switch to a smaller profile (for example read-only) or back to your master profile.</li>
+  </ul>
+  <div class="box"><strong>Tip:</strong> every screen works with the keyboard alone. <span class="key">Tab</span> moves between fields, <span class="key">Enter</span> presses the focused button, and the first <span class="key">Tab</span> on a page offers <i>Skip to main content</i>.</div>
+</section>
+
+<!-- ============================================================ 3 intake -->
+<section class="flow">
+  <h2 class="newpage">3. Importing blood test results</h2>
+  <p class="who">Who: anyone with the <i>Upload intake files</i> permission (intake clerks and supervisors).</p>
+  <p>Laboratories send results as files (CSV, pipe- or tab-delimited). Each laboratory has an <b>intake profile</b> that tells MERIT how to read its file. MERIT stores the file unchanged, then checks every row in the background, usually within a few minutes.</p>
+  <figure class="diagram"><img src="../images/guide/diagram-daily-intake.png" alt="Workflow diagram: a lab file is uploaded, checked and matched; it is loaded, held, or sent to match review; loaded results can open a case and create tasks"><figcaption>The daily intake workflow. Interactive version: <code>docs/daily-intake_workflow.html</code>.</figcaption></figure>
+  <h3>Upload a file</h3>
+  <ol class="steps">
+    <li>Open <span class="ui">Intake</span>.</li>
+    <li>Under <b>Sender and intake profile</b>, choose the laboratory that sent the file. If the laboratory is not listed, ask your administrator to set up its intake profile.</li>
+    <li>Click <b>Choose File</b>, pick the file, then click <span class="ui">Upload</span>.</li>
+    <li>Watch the batch card under <b>Recent batches</b>. It updates by itself until processing ends.</li>
+  </ol>
+  <figure><img src="../images/guide/02-intake.jpg" alt="The Intake page with the upload form and two batch cards"><figcaption>Each batch card shows how many rows were <b>received</b>, <b>loaded</b>, <b>held</b> and <b>rejected</b>. Click <b>held</b> to go straight to those rows.</figcaption></figure>
+  <table>
+    <tr><th>The card says</th><th>What it means</th><th>What to do</th></tr>
+    <tr><td>Loaded</td><td>Every row was checked; good rows are on people's records</td><td>Clear any held rows (next section)</td></tr>
+    <tr><td>Processing</td><td>MERIT is still working</td><td>Wait; the card refreshes itself</td></tr>
+    <tr><td>Failed</td><td>The file could not be read (wrong format or sender)</td><td>Check you chose the right sender; ask the laboratory for a corrected file</td></tr>
+  </table>
+  <div class="box warn"><strong>Do not upload the same file twice.</strong> MERIT recognizes exact duplicate results, but a re-sent file with corrections should come from the laboratory marked as corrected.</div>
+</section>
+
+<!-- ============================================================ 4 held -->
+<section class="flow">
+  <h2>4. Clearing held records</h2>
+  <p class="who">Who: anyone with the <i>Release held results</i> permission (intake clerks and supervisors).</p>
+  <p>A row is <b>held</b> when MERIT cannot load it safely. It waits with a named <b>cause</b>. Held records are grouped by cause, laboratory and reported value, so you fix a cause once and release every row it held. Groups with high results are marked <b>urgent</b>: work them first.</p>
+  <figure><img src="../images/guide/03-held.jpg" alt="Held records grouped by cause, with Release selected and Reject selected buttons and the list of rows"><figcaption>Held records: groups by cause at the top, rows below. Selecting a single row opens its reported values beside a correction form.</figcaption></figure>
+  <ol class="steps">
+    <li>Open <span class="ui">Held records</span> (or click <b>Held intake records</b> on Home).</li>
+    <li>Click a group under <b>By cause</b>. Its rows appear under <b>Rows</b>.</li>
+    <li>Fix the cause (table below). To correct one row, tick only that row: type the right value in the <b>Correction</b> column and click <span class="ui">Save correction</span>. The reported value is never changed; the correction sits beside it.</li>
+    <li>Tick the rows and click <span class="ui">Release selected</span>. MERIT checks them again; rows that now pass are loaded.</li>
+    <li>If a row should never load (a test row, or a result for another state), type a <b>Reject reason</b> and click <span class="ui">Reject selected</span>.</li>
+  </ol>
+  <table>
+    <tr><th>Cause</th><th>Usual fix</th></tr>
+    <tr><td>Unknown sender</td><td>The laboratory's CLIA number is not in the registry. Add it on <span class="ui">Reporters</span> (section 6), then release.</td></tr>
+    <tr><td>Unknown test code</td><td>The LOINC code is not mapped to a metal. Ask your administrator to map it, or correct an obvious typo, then release.</td></tr>
+    <tr><td>Unknown unit</td><td>The unit is not accepted for this test (for example mg/L for blood lead). Confirm the right unit with the laboratory and correct it.</td></tr>
+    <tr><td>Missing date of birth / missing result value / impossible dates</td><td>Call the laboratory or the ordering provider; correct the field.</td></tr>
+    <tr><td>Uncertain person match</td><td>Decide it on <span class="ui">Match review</span> (next section).</td></tr>
+    <tr><td>Possible duplicate</td><td>Compare with the result already loaded; reject the duplicate with a reason.</td></tr>
+    <tr><td>Out of jurisdiction / unusable address</td><td>Check the address; correct it, or reject with a reason and forward the report as your program requires.</td></tr>
+  </table>
+</section>
+
+<!-- ============================================================ 5 match review -->
+<section class="flow">
+  <h2>5. Match review: is this the same person?</h2>
+  <p>MERIT links a result to a person automatically only when name, date of birth and sex agree exactly. When a record looks like someone already in MERIT but not exactly (a nickname, a swapped day and month, a hyphenated name, a possible twin), it waits for you on <span class="ui">Match review</span>. Placeholder names such as "Baby Boy" are never linked automatically.</p>
+  <figure><img src="../images/guide/04-match-review.jpg" alt="Person matching review: the waiting records on the left, the incoming record and its candidates field by field"><figcaption>Match review: the waiting records on the left (urgent first); the incoming record and each candidate side by side, with <b>Why suggested</b>.</figcaption></figure>
+  <table>
+    <tr><th>Decision</th><th>Key</th><th>What happens</th></tr>
+    <tr><td>Same person as …</td><td><span class="key">S</span> (or <span class="key">1</span>–<span class="key">5</span> to pick a candidate)</td><td>The result is linked to that person</td></tr>
+    <tr><td>Different person</td><td><span class="key">D</span></td><td>MERIT remembers the pair and will not suggest it again; with no candidate left, the record loads as a new person</td></tr>
+    <tr><td>Not sure</td><td><span class="key">N</span></td><td>Sent to a supervisor, with your optional note</td></tr>
+    <tr><td>Create as a new person</td><td><span class="key">C</span></td><td>A new person record is created</td></tr>
+    <tr><td>History / next / previous</td><td><span class="key">H</span> <span class="key">J</span> <span class="key">K</span></td><td>Show the candidate's history; move through the queue</td></tr>
+  </table>
+  <div class="box"><strong>When in doubt, choose Not sure.</strong> Linking two different people is much harder to undo than waiting a day for a supervisor. Supervisors tick <b>Sent to a supervisor only</b> to see the records escalated to them.</div>
+</section>
+
+<!-- ============================================================ 6 reporters -->
+<section class="flow">
+  <h2>6. Laboratories, providers, NPI and CLIA</h2>
+  <p>The <span class="ui">Reporters</span> screen is MERIT's list of who reports results: <b>laboratories</b> (identified by their CLIA number), <b>facilities</b> that order tests such as clinics and hospitals (by NPI or CLIA number), and individual <b>providers</b> (by NPI). Intake uses it to link each result to its laboratory and ordering provider. A result from a laboratory that is not on the list is held as <b>unknown sender</b>.</p>
+  <figure><img src="../images/guide/05-reporters.jpg" alt="The Reporters screen with search, kind filter and the registry table"><figcaption>Reporters: search by name, CLIA number or NPI; filter by kind. People with <i>Edit the reporter registry</i> also see the Add form and <b>Import NPI and CLIA records</b>.</figcaption></figure>
+  <h3>Add or correct one entry</h3>
+  <ol class="steps">
+    <li>Open <span class="ui">Reporters</span> and search first: the entry may already be there.</li>
+    <li>Under <b>Add or correct one entry</b>, choose the <b>Kind</b>, then fill in the name (laboratory or facility) or last and first name (provider), and the CLIA number or NPI.</li>
+    <li>Click <span class="ui">Save entry</span>. An entry with the same CLIA number or NPI is <b>updated</b>, never duplicated.</li>
+    <li>If rows were held as <i>unknown sender</i>, go to <span class="ui">Held records</span> and release them.</li>
+  </ol>
+  <div class="box ok"><strong>Many entries at once?</strong> Use <b>Import NPI and CLIA records</b> with a CSV file. The separate guide <i>MERIT User Guide - Importing NPI and CLIA Records</i> walks through it.</div>
+</section>
+
+<!-- ============================================================ 7 manual entry -->
+<section class="flow">
+  <h2 class="newpage">7. Entering people and results by hand</h2>
+  <p class="who">For fax and paper reports, phone calls, and records from other programs. Who: anyone with <i>Edit people</i> and <i>Enter results</i>.</p>
+  <h3>Always search first</h3>
+  <p>Use the header search with the person's name and date of birth. MERIT keeps <b>one record per person</b>; a duplicate splits their history and can hide a case. Open the person if they are already there.</p>
+  <h3>Add a person</h3>
+  <ol class="steps">
+    <li>From the search results, choose <b>Add a person</b>.</li>
+    <li>Enter last, first and middle name, date of birth (tick <b>Verified against a second source</b> when you have checked it), sex, race (any that apply), ethnicity and preferred language.</li>
+    <li>Save. The person page opens. A person record holds identity only; places, relationships and jobs are added on the person page.</li>
+  </ol>
+  <figure class="half"><img src="../images/guide/07-person-new.jpg" alt="The Add a person form"><figcaption>Add a person.</figcaption></figure>
+</section>
+
+<section class="flow">
+  <h3>The person page</h3>
+  <figure><img src="../images/guide/08-person.jpg" alt="A person page: name, age, population badge, open cases, and the Employment and Places sections"><figcaption>The person page: identity at the top (<span class="ui">Enter a result</span>, <span class="ui">Edit identity</span>), then a section for each kind of information, in the order the person's population needs them.</figcaption></figure>
+  <h3>Enter a result (fax or paper)</h3>
+  <ol class="steps">
+    <li>On the person page click <span class="ui">Enter a result</span>.</li>
+    <li>Choose the <b>Analyte</b> (lead, arsenic and so on). The specimen and unit choices then follow the analyte.</li>
+    <li>Enter the <b>Result value</b> exactly as reported. Use <code>&lt;</code> or <code>&gt;</code> for a detection limit: <code>4.2</code>, <code>&lt;1.0</code>, <code>&gt;65</code>.</li>
+    <li>Enter the <b>Collected</b> date (required), and the analyzed and reported dates, test method, accession number, reason for test and payer when you have them.</li>
+    <li>Save. MERIT shows the standardized value and whether it reached any level. A result at or above the case level opens or updates a case, exactly as for an uploaded file.</li>
+  </ol>
+  <figure class="half"><img src="../images/guide/09-result-new.jpg" alt="The Enter a result form"><figcaption>Enter a result.</figcaption></figure>
+</section>
+
+<!-- ============================================================ 8 other data -->
+<section class="flow">
+  <h2>8. Places, relationships, jobs and sources</h2>
+  <p>Each is a section of the person page with its own <b>Add</b> button. Every entry records its <b>source</b> (interview, laboratory report, and so on) and dates, so history is kept rather than overwritten.</p>
+  <table>
+    <tr><th>Section</th><th>Buttons</th><th>Good to know</th></tr>
+    <tr><td><b>Places</b></td><td>Add residence · Add child care or school · Add other place · Set as primary · Verify · End</td><td>Enter the street address, city, state and ZIP; MERIT finds the county. For a new residence choose whether it <b>becomes primary from its start date</b> or the current primary <b>stays primary</b>; overlapping residences need a reason. Add the year built for housing-age risk. For child care and other places, give the schedule (hours per week) so MERIT can tell when a site investigation is needed.</td></tr>
+    <tr><td><b>Relationships</b></td><td>Add relationship · End</td><td>Search for the other person or enter their name and date of birth, then choose what they are to this person (parent, guardian, sibling, household member…). Mark the <b>primary contact</b> and who <b>has legal custody</b>. Household children and pregnant members of an adult case get testing recommendations automatically.</td></tr>
+    <tr><td><b>Employment</b></td><td>Add job</td><td>Employer and worksite, job title, industry and occupation codes, hours, metal tasks and protective equipment. Needed for adult cases and the ABLES file.</td></tr>
+    <tr><td><b>Exposure sources</b></td><td>Add source</td><td>Source type, since when, and a description (product, brand, country of origin). Tick <b>Confirmed by a sample</b> after an environmental sample confirms it.</td></tr>
+    <tr><td><b>Pregnancies</b></td><td>Add episode</td><td>Start date and expected end. While an episode is open, results count in the pregnant population and prenatal notifications are created.</td></tr>
+    <tr><td><b>Timeline</b></td><td>Open the interactive timeline</td><td>Every result, case, place and job on one time line.</td></tr>
+  </table>
+  <div class="box warn"><strong>Change, do not retype.</strong> To correct a name or date of birth use <span class="ui">Edit identity</span>; to record a move add a new residence with its start date. Never create a second person to "start fresh".</div>
+</section>
+
+<!-- ============================================================ 9 cases -->
+<section class="flow">
+  <h2 class="newpage">9. Cases and work queues</h2>
+  <p>MERIT opens a <b>case</b> automatically when a result reaches the case level for the person's population (child, adult, pregnant). The case collects the results, tasks, activity and investigations for that exposure.</p>
+  <figure><img src="../images/guide/11-case.jpg" alt="A case page: summary, assignment, status, open tasks and investigations"><figcaption>A case: the summary and classification on the left, open tasks and investigations on the right.</figcaption></figure>
+  <h3>Working a case</h3>
+  <ol class="steps">
+    <li>Open it from <span class="ui">Cases</span>, from Home, from a task, or from the person page.</li>
+    <li>Set <b>Assigned to</b>, the <b>Exposure category</b> and the <b>Status</b>, then save.</li>
+    <li>Record every call, letter and visit in the <b>Activity log</b>. Contact attempts count toward the letter MERIT queues after repeated failed attempts.</li>
+    <li>Click <span class="ui">Request an investigation</span> for a home, child-care or workplace investigation (section 10).</li>
+    <li>If the automatic classification is wrong, use <b>Override classification</b> and give the reason; the override and its reason stay on the case. When follow-up is complete, <span class="ui">Close case</span> with the closing reason.</li>
+  </ol>
+</section>
+
+<section class="flow">
+  <h3>Work queues</h3>
+  <figure><img src="../images/guide/13-queues.jpg" alt="Work queues: the queue list on the left and the task table with Assign to me, Assign, Complete and Dismiss"><figcaption>Work queues: pick a queue on the left; filter by status, <b>Assigned to me</b> or <b>Urgent only</b>; tick tasks and use the buttons above the table.</figcaption></figure>
+  <table>
+    <tr><th>Queue</th><th>What it asks you to do</th></tr>
+    <tr><td>Confirmatory tests due</td><td>A capillary result needs a venous test: contact the family or provider</td></tr>
+    <tr><td>Address review</td><td>A laboratory report gave a new address: decide whether the person moved</td></tr>
+    <tr><td>Investigation requests</td><td>Schedule the requested home, child-care or workplace investigation</td></tr>
+    <tr><td>Prenatal provider notifications / Newborn testing</td><td>Notify the prenatal care provider; make sure the newborn is tested</td></tr>
+    <tr><td>Cross-link tasks</td><td>Recommend testing for household members of a case</td></tr>
+    <tr><td>Cluster alerts</td><td>Several cases share a building, child-care site or worksite: review the cluster</td></tr>
+    <tr><td>Person match review (supervisor)</td><td>A reviewer was not sure; decide on Match review</td></tr>
+  </table>
+  <p>Tick one or more tasks, then <span class="ui">Assign to me</span>, choose a person and <span class="ui">Assign</span>, <span class="ui">Complete</span>, or <span class="ui">Dismiss</span> a task that no longer applies. Change <b>Status</b> to see done and dismissed tasks.</p>
+</section>
+
+<!-- ============================================================ 10 investigations -->
+<section class="flow">
+  <h2>10. Investigations</h2>
+  <p class="who">Who: investigators and occupational investigators; supervisors.</p>
+  <figure><img src="../images/guide/12-investigations.jpg" alt="The Investigations list"><figcaption>Investigations: number, type (residential, child care, workplace), target, status and dates. Untick <b>Open only</b> to see closed ones.</figcaption></figure>
+  <ol class="steps">
+    <li>A case manager requests an investigation from the case (<span class="ui">Request an investigation</span>). One investigation of a place can serve several cases; MERIT offers an open one at the same place.</li>
+    <li>Open it from <span class="ui">Investigations</span>, set the scheduled date and who is assigned, and save.</li>
+    <li>Record <b>environmental samples</b> (<span class="ui">Add sample</span>): where, what (dust, soil, water, paint, product), the result and unit. MERIT compares each with the standard in force.</li>
+    <li>Record the findings and any orders or referrals (for example to OSHA), set the status to complete, and save. The cases served show the outcome.</li>
+  </ol>
+</section>
+
+<!-- ============================================================ 11 find + report -->
+<section class="flow">
+  <h2>11. Searching, results, clusters, map and reports</h2>
+  <div class="grid2">
+    <figure><img src="../images/guide/19-search.jpg" alt="Search results"><figcaption><b>Search</b> (header): people, cases and accession numbers.</figcaption></figure>
+    <figure><img src="../images/guide/18-results.jpg" alt="The Results list"><figcaption><b>Results</b>: every result you may see, filterable and sortable.</figcaption></figure>
+    <figure><img src="../images/guide/14-clusters.jpg" alt="The Clusters list"><figcaption><b>Clusters</b>: cases sharing a building, child-care site or worksite. Cases join or leave a cluster; nothing is merged.</figcaption></figure>
+    <figure><img src="../images/guide/15-map.jpg" alt="The case map"><figcaption><b>Map</b>: cases by residence. Zoom and pan with the mouse or the keyboard; select a point to read it.</figcaption></figure>
+  </div>
+  <h3>Reports</h3>
+  <p>Choose a report on the left, set <b>From</b>, <b>To</b> and the analyte, click <span class="ui">Apply</span>, and use <span class="ui">Export CSV</span> or <span class="ui">Export Excel</span> to share it. Exports are recorded in the audit log.</p>
+  <table>
+    <tr><th>Report</th><th>Use it to</th></tr>
+    <tr><td>Testing counts and rates</td><td>See tests, people tested and results at or above the case level by month and population</td></tr>
+    <tr><td>Elevated counts by population and analyte</td><td>Track elevated results for partners and grant reports</td></tr>
+    <tr><td>Case timeliness</td><td>Check how quickly cases are opened, contacted and investigated</td></tr>
+    <tr><td>Investigation outcomes</td><td>Summarize findings, sources and orders</td></tr>
+    <tr><td>Reporter timeliness and completeness</td><td>Find laboratories that report late or leave fields blank, and follow up with them</td></tr>
+  </table>
+</section>
+
+<!-- ============================================================ 12 extracts -->
+<section class="flow">
+  <h2 class="newpage">12. Federal extracts: CDC CBLS and NIOSH ABLES</h2>
+  <p class="who">Who: <i>Generate federal extracts</i> (supervisors, epidemiologists); <i>Mark extracts submitted</i> (supervisors).</p>
+  <p><b>CBLS</b> is CDC's Childhood Blood Lead Surveillance file, sent <b>every quarter</b>. <b>ABLES</b> is NIOSH's Adult Blood Lead Epidemiology and Surveillance file, sent <b>once a year</b>. Both are built from the results already in MERIT; you do not re-enter anything. The files carry a stable surrogate id, date of birth, county and the fields each layout needs, never names, street addresses, phone numbers or record numbers.</p>
+  <figure class="diagram"><img src="../images/guide/diagram-cbls-extract.png" alt="Lifecycle diagram: Queued, Running, Ready, Sent to CDC, Submitted, with Failed and Fixing records loops back to Queued"><figcaption>An extract run from request to submitted. Interactive version: <code>docs/cbls-extract_lifecycle.html</code>.</figcaption></figure>
+  <h3>The quarterly CBLS file, step by step</h3>
+  <ol class="steps">
+    <li><b>Before you start</b> (the week the quarter ends): clear held records and match review, so every result of the quarter is loaded and linked.</li>
+    <li>Open <span class="ui">Extracts</span>. The form starts on the quarter that just ended. Check <b>Extract</b> = CBLS (quarterly), the <b>Year</b> and the <b>Quarter</b>, then click <span class="ui">Request</span>.</li>
+    <li>A card appears: <b>Queued</b>, then <b>Running</b>, then <b>Ready</b>. It refreshes by itself.</li>
+    <li>On the ready card, read the record count and the number of <b>validation findings</b>. Click <span class="ui">View findings</span> to see each one: the surrogate record id, the field and the rule.</li>
+    <li>Fix what you can in MERIT (for example a missing county or a wrong date of birth) and click <span class="ui">Request</span> again for a fresh file. Findings are warnings: your program decides whether a file with findings may be sent.</li>
+    <li>Click <span class="ui">Download</span> and upload the file to CDC the way your CDC program contact has set up.</li>
+    <li>When CDC has received it, click <span class="ui">Mark submitted</span> and confirm. The card shows <b>Submitted</b>, and the file can still be downloaded later.</li>
+  </ol>
+  <figure><img src="../images/guide/17-extracts.jpg" alt="Federal extracts: the Request a file form and the run cards"><figcaption>Extracts: request a file, then follow the run cards below.</figcaption></figure>
+  <h3>The annual ABLES file</h3>
+  <p>The same steps, with <b>Extract</b> = ABLES (annual) and the year. ABLES uses each adult's employment (industry and occupation codes) and exposure sources, so check the Employment section of adult cases during the year.</p>
+  <div class="box warn"><strong>A run failed?</strong> The card shows the error. Most failures are an inactive layout or missing setting; tell your administrator, then request again.</div>
+</section>
+
+<!-- ============================================================ 13 admin -->
+<section class="flow">
+  <h2 class="newpage">13. For supervisors and administrators</h2>
+  <h3>Weekly checks for supervisors</h3>
+  <ul>
+    <li><b>Home:</b> overdue tasks and elevated results held at intake should be near zero.</li>
+    <li><b>Work queues:</b> filter <b>Urgent only</b>; reassign tasks of people who are away.</li>
+    <li><b>Match review:</b> tick <b>Sent to a supervisor only</b> and decide the escalated records.</li>
+    <li><b>Clusters:</b> review new clusters and set their status.</li>
+  </ul>
+  <h3>Configuration (administrators)</h3>
+  <p><span class="ui">Configuration</span> holds the <b>thresholds</b> (case and action levels for each metal, specimen and population, with the date each takes effect), the <b>jurisdiction settings</b> (for example the investigation look-back, contact attempts before a letter, cluster window and size) and the <b>analytes</b> in use. A new value takes effect from its date; old values are kept for history. Review them once a year and whenever guidance changes.</p>
+  <h3>Users and access</h3>
+  <p>On <span class="ui">Users</span>, add people, set where they work, and give them roles at a tenant. The companion guide <i>Who sees what, and your profiles</i> explains roles, master profiles and viewing as someone.</p>
+  <h3>Adding a county, program or other tenant</h3>
+  <figure><img src="../images/guide/20-tenants.jpg" alt="The Tenants screen: the tenant tree and the Add a tenant form"><figcaption>Tenants: the tree of agencies on the left; <b>Add a tenant</b> on the right. The kinds offered depend on the tenant you choose under <b>Goes under</b>.</figcaption></figure>
+  <ol class="steps">
+    <li>Open <span class="ui">Tenants</span>. Under <b>Goes under</b> choose the parent (only tenants you administer are listed).</li>
+    <li>Choose the <b>Kind of tenant</b>: under a state, a <i>local jurisdiction</i> (a county or city health department) or a <i>program</i> (for example occupational health). A platform administrator can also add regions, states and tribes; a region administrator can add states and tribes to the region.</li>
+    <li>Give a <b>Code</b> (capital letters, digits and hyphens, for example <code>WV-JEFFERSON</code>; it cannot be changed) and a <b>Name</b>.</li>
+    <li>For a county, list the three-digit county FIPS codes it serves (<code>037, 003</code>). Counties not yet in MERIT go in <b>New counties</b>, one per line: <code>037 Jefferson County</code>. For a new state or tribe, give its two-letter postal code and state FIPS code.</li>
+    <li>Click <span class="ui">Add tenant</span>, then add its people on <span class="ui">Users</span>.</li>
+  </ol>
+</section>
+
+<!-- ============================================================ 14 who -->
+<section class="flow">
+  <h2>14. Who can do what</h2>
+  <p>The usual roles. Your administrator may give you more than one, and your profile may use only part of what you have.</p>
+  <table>
+    <tr><th>Role</th><th>Main screens</th><th>Typical work</th></tr>
+    <tr><td>Intake clerk</td><td>Intake, Held records, Match review, Reporters, people and results</td><td>Load files, clear holds, enter fax and paper reports, keep the reporter registry current</td></tr>
+    <tr><td>Case manager</td><td>Cases, Work queues, people, Reports (export)</td><td>Follow up cases, contact families and providers, request investigations</td></tr>
+    <tr><td>Investigator / occupational investigator</td><td>Investigations, Cases, people</td><td>Home, child-care and workplace investigations, samples, findings</td></tr>
+    <tr><td>Supervisor</td><td>Everything above, Extracts, audit log</td><td>Escalated matches, overrides, reassignments, federal extracts and their submission</td></tr>
+    <tr><td>Epidemiologist (de-identified)</td><td>Results, Cases, Clusters, Map, Reports, Extracts</td><td>Analysis and reports without names; can generate extracts</td></tr>
+    <tr><td>Administrator</td><td>Configuration, Users, Tenants, Reporters, audit log</td><td>Thresholds and settings, accounts and access, new counties and programs</td></tr>
+    <tr><td>User administrator</td><td>Users, audit log</td><td>Accounts and access only, for example at one county</td></tr>
+  </table>
+</section>
+
+<!-- ============================================================ 15 faq -->
+<section>
+  <h2>15. Common questions</h2>
+  <p><b>My file shows "held 12". Did I do something wrong?</b><br>No. Held rows are MERIT protecting the registry. Open the held link on the batch card, fix each cause once, and release.</p>
+  <p><b>A whole file is held as unknown sender.</b><br>The laboratory's CLIA number is not in the reporter registry. Add the laboratory on <span class="ui">Reporters</span>, then release the rows.</p>
+  <p><b>I entered a person and then found they already existed.</b><br>Stop adding information to the new record and tell your supervisor, who arranges for the two records to be combined. A combined record is marked read-only with a link to the surviving record, so no history is lost.</p>
+  <p><b>Can I change a result a laboratory reported?</b><br>No. Reported values are kept as sent. Corrections come from the laboratory as a corrected result, or as a correction beside a held row before it is released.</p>
+  <p><b>The Extracts card says Ready but shows findings. Can I send it?</b><br>Findings are warnings. Fix what you can and request the file again; your program decides whether to send a file that still has findings.</p>
+  <p><b>I marked an extract submitted by mistake.</b><br>The file is unchanged and can still be downloaded. Ask your administrator if the status needs correcting.</p>
+  <p><b>A menu item a colleague has is missing for me.</b><br>Your role or profile does not include it. Check the profile in the header, then ask your administrator.</p>
+  <p class="foot" style="margin-top:2em">MERIT user guide: daily, weekly and quarterly work. Screens are from the demonstration site; people and data are made up.</p>
+</section>
+</body>
+</html>

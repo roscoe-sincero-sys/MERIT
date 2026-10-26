@@ -100,6 +100,13 @@ Description:	Initial version.
 ***********************************************************************************************************************/"""
 
 
+def execute_as(p: dict) -> str:
+    """Core installation procedures run as their owner so they can seed a data root's shared rows that row-level
+    security would hide from the caller. They are granted to no role: only a checked wrapper can reach them, through
+    ownership chaining, and the wrapper does every authorization check first."""
+    return "\nWITH EXECUTE AS OWNER" if p.get("execute_as_owner") else ""
+
+
 def permission_check(p: dict, pad: int) -> str:
     perm = p.get("permission")
     if not perm:
@@ -121,7 +128,7 @@ def write_proc(p: dict) -> str:
     return f"""{PROLOGUE}
 {header(p)}
 CREATE OR ALTER PROCEDURE {full}
-{params}
+{params}{execute_as(p)}
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -252,7 +259,7 @@ def read_proc(p: dict) -> str:
     return f"""{PROLOGUE}
 {header(p)}
 CREATE OR ALTER PROCEDURE {full}
-{params}
+{params}{execute_as(p)}
 AS
 BEGIN
     SET NOCOUNT ON;

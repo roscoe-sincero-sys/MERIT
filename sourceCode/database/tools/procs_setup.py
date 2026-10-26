@@ -8,8 +8,8 @@ def k(expr: str) -> str:
 
 PROCS = [
     {
-        "schema": "config", "name": "uspCreateRootTenant", "kind": "write", "grants": WEB, "ticket": "T032",
-        "permission": "platform.administer",
+        "schema": "config", "name": "uspInstallRootTenant", "kind": "write", "grants": [], "ticket": "T032",
+        "execute_as_owner": True,
         "desc": "Installs a data root (a region, state, tribe or stand-alone jurisdiction) under the platform tenant or "
                 "under a region: creates the tenant, its closure rows, the shipped roles with their permissions, the jurisdiction settings with their shipped defaults, the default threshold rows (the CDC "
                 "child blood lead reference value active; federal reference rows inactive) and the EPA dust standards. "
@@ -20,11 +20,14 @@ PROCS = [
 , @stateFips        CHAR (2) = NULL
 , @effectiveFrom    DATE = '2026-01-01'
 , @tenantType       VARCHAR (30) = 'state'
-, @parentTenantCode VARCHAR (30) = NULL""",
+, @parentTenantCode VARCHAR (30) = NULL
+, @countiesJson     NVARCHAR (MAX) = N'[]'""",
         "key": "CONCAT (N'tenantCode=', @tenantCode)",
-        "notes": "Settings the specification says 'must be set at install' are created with a placeholder value of "
-                 "NOTSET where the application needs a number to run; an administrator replaces them on the settings "
-                 "screen. Returns the root tenant id.",
+        "notes": "Core installer: runs as its owner and is granted to no role, because it seeds the new root's shared "
+                 "rows, which row-level security would hide from a platform administrator. Reached only through "
+                 "config.uspCreateRootTenant, which checks who may create the tenant. Settings the specification says "
+                 "'must be set at install' are created with a placeholder value of NOTSET where the application needs "
+                 "a number to run; an administrator replaces them on the settings screen. Returns the root tenant id.",
         "body": f"""
 DECLARE @root UNIQUEIDENTIFIER = {k("CONCAT (N'tenant:', @tenantCode)")};
 DECLARE @parent UNIQUEIDENTIFIER = COALESCE ((SELECT tenantId FROM auth.tenant WHERE tenantCode = @parentTenantCode
@@ -60,13 +63,13 @@ SELECT {NEWID}, x.ancestorTenantId, @root, x.depth
 DECLARE @roles TABLE (roleCode VARCHAR (40), roleName NVARCHAR (120), isAdministrator BIT, isDeidentified BIT,
                       permissions VARCHAR (1000));
 INSERT @roles VALUES
-  ('intakeClerk', N'Intake clerk', 0, 0, 'person.view,person.edit,result.view,result.edit,result.release_hold,intake.upload,task.view,task.edit,case.view,case.open'),
+  ('intakeClerk', N'Intake clerk', 0, 0, 'person.view,person.edit,result.view,result.edit,result.release_hold,intake.upload,registry.edit,task.view,task.edit,case.view,case.open'),
   ('caseManager', N'Case manager', 0, 0, 'person.view,person.edit,result.view,result.edit,case.view,case.open,case.edit,investigation.edit,task.view,task.edit,data.export'),
   ('investigator', N'Investigator', 0, 0, 'person.view,person.edit,result.view,case.view,investigation.edit,task.view,task.edit'),
   ('occupationalInvestigator', N'Occupational investigator', 0, 0, 'person.view,person.edit,result.view,result.edit,case.view,case.open,case.edit,investigation.edit,task.view,task.edit,data.export'),
-  ('supervisor', N'Supervisor', 0, 0, 'person.view,person.edit,person.view_identifiers,person.merge,result.view,result.edit,result.release_hold,case.view,case.open,case.edit,investigation.edit,task.view,task.edit,intake.upload,data.export,extract.run,extract.submit,audit.view'),
+  ('supervisor', N'Supervisor', 0, 0, 'person.view,person.edit,person.view_identifiers,person.merge,result.view,result.edit,result.release_hold,case.view,case.open,case.edit,investigation.edit,task.view,task.edit,intake.upload,registry.edit,data.export,extract.run,extract.submit,audit.view'),
   ('epidemiologist', N'Epidemiologist (de-identified)', 0, 1, 'person.view,result.view,case.view,task.view,data.export,extract.run'),
-  ('administrator', N'Administrator (users and configuration)', 1, 0, 'tenant.administer,config.edit,intake.configure,matching.configure,audit.view,person.view,result.view,case.view,task.view'),
+  ('administrator', N'Administrator (users and configuration)', 1, 0, 'tenant.administer,tenant.create,config.edit,registry.edit,intake.configure,matching.configure,audit.view,person.view,result.view,case.view,task.view'),
   ('userAdministrator', N'User administrator (accounts and access only)', 1, 0, 'tenant.administer,audit.view');
 
 INSERT auth.role (roleId, rootTenantId, roleCode, roleName, isAdministrator, isDeidentified)
@@ -171,22 +174,32 @@ SELECT {k("CONCAT (N'standard:', @tenantCode, N':', s.rowKey)")}, @root, s.sampl
  WHERE NOT EXISTS (SELECT 1 FROM config.environmentalStandard AS x
                     WHERE x.environmentalStandardId = {k("CONCAT (N'standard:', @tenantCode, N':', s.rowKey)")});
 
+-- ------------------------------------------------------------------------------------------ counties
+INSERT config.subJurisdiction (subJurisdictionId, rootTenantId, countyFips, subJurisdictionName, jurisdictionType)
+SELECT {k("CONCAT (N'county:', @tenantCode, N':', j.fips)")}, @root, j.fips, j.countyName, COALESCE (j.countyType, 'county')
+  FROM OPENJSON (COALESCE (@countiesJson, N'[]'))
+  WITH (fips CHAR (3) '$.fips', countyName NVARCHAR (80) '$.name', countyType VARCHAR (20) '$.type') AS j
+ WHERE j.fips LIKE '[0-9][0-9][0-9]' AND LEN (LTRIM (j.countyName)) > 0
+   AND NOT EXISTS (SELECT 1 FROM config.subJurisdiction AS x WHERE x.rootTenantId = @root AND x.countyFips = j.fips
+                                                              AND x.isDeleted = 0);
+
 SELECT @root AS rootTenantId;
 
 SET @Comments = N'Root tenant installed.';
 """,
     },
     {
-        "schema": "config", "name": "uspCreateChildTenant", "kind": "write", "grants": WEB, "ticket": "T032",
-        "permission": "tenant.administer",
-        "desc": "Adds a program or a local jurisdiction under a parent the caller administers, maintains the closure "
-                "table, and maps it to the sub-jurisdictions (county FIPS codes) it serves. It belongs to its parent's data "
-                "root. States, tribes and regions are data roots: use uspCreateRootTenant. Re-runnable.",
+        "schema": "config", "name": "uspInstallChildTenant", "kind": "write", "grants": [], "ticket": "T032",
+        "execute_as_owner": True,
+        "desc": "Core installer for a program or local jurisdiction: the tenant, its closure rows, any counties new to "
+                "its data root, and the counties it serves. Runs as its owner, granted to no role; reached only through "
+                "config.uspCreateChildTenant, which checks who may create it. Re-runnable.",
         "params": """@tenantCode       VARCHAR (30)
 , @tenantName       NVARCHAR (120)
 , @tenantType       VARCHAR (30)
 , @parentTenantCode VARCHAR (30)
-, @countyFipsList   VARCHAR (400) = NULL""",
+, @countyFipsList   VARCHAR (400) = NULL
+, @countiesJson     NVARCHAR (MAX) = N'[]'""",
         "key": "CONCAT (N'tenantCode=', @tenantCode, N', parentTenantCode=', @parentTenantCode)",
         "body": f"""
 DECLARE @parent UNIQUEIDENTIFIER, @root UNIQUEIDENTIFIER, @state CHAR (2);
@@ -201,11 +214,6 @@ END;
 IF @tenantType NOT IN ('program', 'jurisdiction')
 BEGIN
     ;THROW 51422, N'A child tenant is a program or a jurisdiction; states, tribes and regions are created as data roots.', 1;
-END;
-
-IF NOT EXISTS (SELECT 1 FROM auth.tvfAdminTenants () WHERE tenantId = @parent)
-BEGIN
-    ;THROW 51403, N'You can add tenants only under tenants you administer.', 1;
 END;
 
 IF EXISTS (SELECT 1 FROM auth.tenant WHERE tenantId = @parent AND tenantType = 'platform')
@@ -230,10 +238,22 @@ SELECT {NEWID}, x.ancestorTenantId, @id, x.depth
  WHERE NOT EXISTS (SELECT 1 FROM auth.tenantClosure AS c WHERE c.ancestorTenantId = x.ancestorTenantId
                                                          AND c.descendantTenantId = @id AND c.isDeleted = 0);
 
+-- Counties new to the data root are added first, then the tenant is mapped to every county it serves.
+INSERT config.subJurisdiction (subJurisdictionId, rootTenantId, countyFips, subJurisdictionName, jurisdictionType)
+SELECT {k("CONCAT (N'county:', (SELECT tenantCode FROM auth.tenant WHERE tenantId = @root), N':', j.fips)")}, @root, j.fips,
+       j.countyName, COALESCE (j.countyType, 'county')
+  FROM OPENJSON (COALESCE (@countiesJson, N'[]'))
+  WITH (fips CHAR (3) '$.fips', countyName NVARCHAR (80) '$.name', countyType VARCHAR (20) '$.type') AS j
+ WHERE j.fips LIKE '[0-9][0-9][0-9]' AND LEN (LTRIM (j.countyName)) > 0
+   AND NOT EXISTS (SELECT 1 FROM config.subJurisdiction AS x WHERE x.rootTenantId = @root AND x.countyFips = j.fips
+                                                              AND x.isDeleted = 0);
+
 INSERT auth.tenantJurisdiction (tenantJurisdictionId, tenantId, subJurisdictionId)
 SELECT {NEWID}, @id, sj.subJurisdictionId
-  FROM STRING_SPLIT (COALESCE (@countyFipsList, ''), ',') AS s
-  JOIN config.subJurisdiction AS sj ON sj.rootTenantId = @root AND sj.countyFips = LTRIM (RTRIM (s.[value]))
+  FROM (SELECT LTRIM (RTRIM ([value])) AS fips FROM STRING_SPLIT (COALESCE (@countyFipsList, ''), ',')
+        UNION
+        SELECT fips FROM OPENJSON (COALESCE (@countiesJson, N'[]')) WITH (fips CHAR (3) '$.fips')) AS s
+  JOIN config.subJurisdiction AS sj ON sj.rootTenantId = @root AND sj.countyFips = s.fips
  WHERE NOT EXISTS (SELECT 1 FROM auth.tenantJurisdiction AS tj WHERE tj.tenantId = @id
                                                               AND tj.subJurisdictionId = sj.subJurisdictionId
                                                               AND tj.isDeleted = 0);
@@ -241,6 +261,116 @@ SELECT {NEWID}, @id, sj.subJurisdictionId
 SELECT @id AS tenantId;
 
 SET @Comments = N'Child tenant installed.';
+""",
+    },
+]
+
+CODE_RULE = """IF @tenantCode IS NULL OR @tenantCode NOT LIKE '[A-Z0-9]%' OR @tenantCode LIKE '%[^A-Z0-9-]%' COLLATE Latin1_General_BIN
+   OR LEN (@tenantCode) > 30
+BEGIN
+    ;THROW 51422, N'The tenant code uses capital letters, digits and hyphens, up to 30 characters (for example WV-JEFFERSON).', 1;
+END;
+IF LEN (LTRIM (RTRIM (COALESCE (@tenantName, N'')))) = 0
+BEGIN
+    ;THROW 51422, N'Give the tenant a name.', 1;
+END;
+IF @countiesJson IS NOT NULL AND ISJSON (@countiesJson) = 0
+BEGIN
+    ;THROW 50000, N'@countiesJson must be a JSON array of {fips, name, type}.', 1;
+END;"""
+
+PROCS += [
+    {
+        "schema": "config", "name": "uspCreateRootTenant", "kind": "write", "grants": WEB, "ticket": "T162",
+        "desc": "Creates a data root: a region, state, tribe or stand-alone jurisdiction, with its roles, settings, "
+                "default levels and counties. A platform administrator can create one anywhere; an administrator holding "
+                "tenant.create at a region can add a state or tribe under that region. Re-runnable for the same parent.",
+        "params": """@tenantCode       VARCHAR (30)
+, @tenantName       NVARCHAR (120)
+, @statePostalCode  CHAR (2) = NULL
+, @stateFips        CHAR (2) = NULL
+, @effectiveFrom    DATE = '2026-01-01'
+, @tenantType       VARCHAR (30) = 'state'
+, @parentTenantCode VARCHAR (30) = NULL
+, @countiesJson     NVARCHAR (MAX) = N'[]'""",
+        "key": "CONCAT (N'tenantCode=', @tenantCode, N', parentTenantCode=', @parentTenantCode, N', tenantType=', @tenantType)",
+        "notes": "Returns the root tenant id. The inserts run in config.uspInstallRootTenant.",
+        "validate": CODE_RULE + """
+DECLARE @parentId UNIQUEIDENTIFIER = COALESCE ((SELECT tenantId FROM auth.tenant WHERE tenantCode = @parentTenantCode AND isDeleted = 0),
+                                               """ + k("N'tenant:PLATFORM'") + """);
+DECLARE @parentType VARCHAR (30) = (SELECT tenantType FROM auth.tenant WHERE tenantId = @parentId);
+
+IF auth.udfIsPlatformAdmin () = 0
+   AND NOT (auth.udfHasPermission ('tenant.create') = 1 AND @parentType = 'region' AND @tenantType IN ('state', 'tribe')
+            AND EXISTS (SELECT 1 FROM auth.tvfAdminTenants () WHERE tenantId = @parentId))
+BEGIN
+    ;THROW 51403, N'Only a platform administrator can create a region or a top-level tenant; a region administrator can add states and tribes to the region.', 1;
+END;
+
+IF EXISTS (SELECT 1 FROM auth.tenant WHERE tenantCode = @tenantCode AND isDeleted = 0
+                                       AND COALESCE (parentTenantId, '00000000-0000-0000-0000-000000000000') <> @parentId)
+BEGIN
+    ;THROW 51422, N'That tenant code is already used elsewhere in the tree.', 1;
+END;
+
+IF @tenantType IN ('state', 'tribe') AND (@statePostalCode IS NULL OR @statePostalCode NOT LIKE '[A-Z][A-Z]')
+BEGIN
+    ;THROW 51422, N'A state or tribe needs its two-letter postal code.', 1;
+END;""",
+        "body": """
+EXEC config.uspInstallRootTenant @tenantCode = @tenantCode, @tenantName = @tenantName, @statePostalCode = @statePostalCode,
+     @stateFips = @stateFips, @effectiveFrom = @effectiveFrom, @tenantType = @tenantType,
+     @parentTenantCode = @parentTenantCode, @countiesJson = @countiesJson;
+
+SET @Comments = N'Root tenant created.';
+""",
+    },
+    {
+        "schema": "config", "name": "uspCreateChildTenant", "kind": "write", "grants": WEB, "ticket": "T162",
+        "permission": "tenant.create",
+        "desc": "Adds a program or a local jurisdiction under a tenant the caller administers (any tenant for a platform "
+                "administrator), with the counties it serves; counties new to the data root are added. Needs "
+                "tenant.create. Re-runnable for the same parent.",
+        "params": """@tenantCode       VARCHAR (30)
+, @tenantName       NVARCHAR (120)
+, @tenantType       VARCHAR (30)
+, @parentTenantCode VARCHAR (30)
+, @countyFipsList   VARCHAR (400) = NULL
+, @countiesJson     NVARCHAR (MAX) = N'[]'""",
+        "key": "CONCAT (N'tenantCode=', @tenantCode, N', parentTenantCode=', @parentTenantCode, N', tenantType=', @tenantType)",
+        "notes": "Returns the new tenant id. The inserts run in config.uspInstallChildTenant.",
+        "validate": CODE_RULE + """
+DECLARE @parentId UNIQUEIDENTIFIER = (SELECT tenantId FROM auth.tenant WHERE tenantCode = @parentTenantCode AND isDeleted = 0);
+
+IF @parentId IS NULL
+BEGIN
+    ;THROW 51404, N'The parent tenant was not found.', 1;
+END;
+
+IF NOT EXISTS (SELECT 1 FROM auth.tvfAdminTenants () WHERE tenantId = @parentId)
+BEGIN
+    ;THROW 51403, N'You can add tenants only under tenants you administer.', 1;
+END;
+
+IF @tenantType NOT IN ('program', 'jurisdiction')
+BEGIN
+    ;THROW 51422, N'A tenant added under another is a program or a jurisdiction; states, tribes and regions are data roots.', 1;
+END;
+
+IF EXISTS (SELECT 1 FROM auth.tenant WHERE tenantId = @parentId AND tenantType = 'platform')
+BEGIN
+    ;THROW 51422, N'The platform holds data roots only: create a region, state, tribe or stand-alone jurisdiction.', 1;
+END;
+
+IF EXISTS (SELECT 1 FROM auth.tenant WHERE tenantCode = @tenantCode AND isDeleted = 0 AND parentTenantId <> @parentId)
+BEGIN
+    ;THROW 51422, N'That tenant code is already used elsewhere in the tree.', 1;
+END;""",
+        "body": """
+EXEC config.uspInstallChildTenant @tenantCode = @tenantCode, @tenantName = @tenantName, @tenantType = @tenantType,
+     @parentTenantCode = @parentTenantCode, @countyFipsList = @countyFipsList, @countiesJson = @countiesJson;
+
+SET @Comments = N'Child tenant created.';
 """,
     },
 ]

@@ -284,8 +284,9 @@ public sealed class ExtractsController(ExtractService extracts) : Controller
     public async Task<IActionResult> Index(CancellationToken ct)
     {
         var runs = await extracts.RunsAsync(ct);
-        var now = DateTime.UtcNow;
-        var model = new ExtractsModel(runs, runs.Any(r => r.RunStatus is "queued" or "running"), now.Year, ((now.Month - 1) / 3) + 1);
+        // The form starts on the quarter that last ended: the one due to CDC.
+        var lastQuarterEnd = new DateTime(DateTime.UtcNow.Year, ((DateTime.UtcNow.Month - 1) / 3 * 3) + 1, 1).AddDays(-1);
+        var model = new ExtractsModel(runs, runs.Any(r => r.RunStatus is "queued" or "running"), lastQuarterEnd.Year, ((lastQuarterEnd.Month - 1) / 3) + 1);
         return this.PageOrPartial("Index", "_Runs", model);
     }
 
@@ -305,5 +306,22 @@ public sealed class ExtractsController(ExtractService extracts) : Controller
         var run = await extracts.DownloadAsync(id, ct);
         return File(System.Text.Encoding.ASCII.GetBytes(run.FileContent!), run.ExtractType == "ABLES" ? "text/csv" : "text/plain",
             run.FileName ?? "extract.txt");
+    }
+
+    [HttpGet("{id:guid}/findings")]
+    [Authorize(Policy = Permissions.ExtractRun)]
+    public async Task<IActionResult> Findings(Guid id, CancellationToken ct)
+    {
+        var (run, findings) = await extracts.FindingsAsync(id, ct);
+        return PartialView("_Findings", new ExtractFindingsModel(run, findings));
+    }
+
+    [HttpPost("{id:guid}/submitted")]
+    [Authorize(Policy = Permissions.ExtractSubmit)]
+    public async Task<IActionResult> MarkSubmitted(Guid id, CancellationToken ct)
+    {
+        await extracts.MarkSubmittedAsync(id, ct);
+        Response.Announce("Extract marked submitted.");
+        return await Index(ct);
     }
 }

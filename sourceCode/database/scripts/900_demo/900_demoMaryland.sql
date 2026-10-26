@@ -126,7 +126,7 @@ INSERT @users VALUES
 
 INSERT auth.appUser (appUserId, rootTenantId, homeTenantId, userName, displayName, email, passwordHash, securityStamp)
 SELECT CAST (HASHBYTES ('MD5', N'user:' + u.userName) AS UNIQUEIDENTIFIER), h.rootTenantId, h.tenantId, u.userName,
-       u.displayName, u.userName + N'@merit.example', N'AQAAAAIAAYagAAAAEE1xeIKPy1p19R8JwraMlAn3Y+p0iSB5m1wiiD0nEdFtGzSx18NG6lmRwWlgE4qFmQ==', NEWID ()
+       u.displayName, u.userName + N'@merit.example', N'AQAAAAIAAYagAAAAEO7hfYawERZBd7aw6N0dF2bYGr2HzZX5DxBnrm3tMok3bj2hZX8uFfDqJrjZFNIeeQ==', NEWID ()
   FROM @users AS u
   JOIN auth.tenant AS h ON h.tenantCode = u.homeTenantCode
  WHERE NOT EXISTS (SELECT 1 FROM auth.appUser AS x WHERE x.userName = u.userName AND x.isDeleted = 0);

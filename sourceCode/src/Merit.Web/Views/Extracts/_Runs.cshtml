@@ -1,4 +1,5 @@
 @model ExtractsModel
+@inject ICurrentSession CurrentSession
 @* Status cards poll this partial while a job runs. *@
 <div id="extract-runs" hx-get="/extracts" hx-trigger="@(Model.AnyRunning ? "every 3s" : "never")" hx-swap="outerHTML">
     @if (Model.Runs.Count == 0)
@@ -13,11 +14,23 @@
                 <div class="usa-card__container" id="run-@r.ExtractRunId">
                     <div class="usa-card__header"><h3 class="usa-card__heading">@r.ExtractType @Options.Date(r.PeriodStart) &ndash; @Options.Date(r.PeriodEnd)</h3></div>
                     <div class="usa-card__body">
-                        <p><span class="merit-badge @(r.RunStatus == "ready" ? "merit-badge--ok" : r.RunStatus == "failed" ? "merit-badge--urgent" : "")">@Options.Humanize(r.RunStatus)</span>
+                        <p><span class="merit-badge @(r.RunStatus is "ready" or "submitted" ? "merit-badge--ok" : r.RunStatus == "failed" ? "merit-badge--urgent" : "")">@Options.Humanize(r.RunStatus)</span>
                             <span class="merit-meta">layout @r.LayoutVersion &middot; @r.RequestedBy &middot; @Options.Date(r.CreatedDateUtc)</span></p>
-                        @if (r.RecordCount is not null) { <p>@r.RecordCount record(s) &middot; @r.ErrorCount validation finding(s)</p> }
-                        @if (r.LastError is not null && r.RunStatus != "ready") { <p class="merit-meta">@r.LastError</p> }
-                        @if (r.RunStatus == "ready") { <a class="usa-button usa-button--outline" href="/extracts/@r.ExtractRunId/download">Download @r.FileName</a> }
+                        @if (r.RecordCount is not null)
+                        {
+                            <p>@r.RecordCount record(s) &middot; @r.ErrorCount validation finding(s)
+                                @if (r.ErrorCount > 0) { <button class="usa-button usa-button--unstyled" type="button" hx-get="/extracts/@r.ExtractRunId/findings" hx-target="#dialog-body" hx-swap="innerHTML">View findings<span class="usa-sr-only"> for @r.ExtractType @Options.Date(r.PeriodStart)</span></button> }
+                            </p>
+                        }
+                        @if (r.LastError is not null && r.RunStatus is not ("ready" or "submitted")) { <p class="merit-meta">@r.LastError</p> }
+                        @if (r.RunStatus is "ready" or "submitted") { <a class="usa-button usa-button--outline" href="/extracts/@r.ExtractRunId/download">Download @r.FileName</a> }
+                        @if (r.RunStatus == "ready" && CurrentSession.Has(Permissions.ExtractSubmit))
+                        {
+                            <form class="display-inline" hx-post="/extracts/@r.ExtractRunId/submitted" hx-target="#extract-runs" hx-swap="outerHTML"
+                                  hx-confirm="Mark this file as sent to @(r.ExtractType == "CBLS" ? "CDC" : "NIOSH")? Do this after the upload succeeds.">
+                                <button class="usa-button" type="submit">Mark submitted<span class="usa-sr-only"> @r.ExtractType @Options.Date(r.PeriodStart)</span></button>
+                            </form>
+                        }
                     </div>
                 </div>
             }

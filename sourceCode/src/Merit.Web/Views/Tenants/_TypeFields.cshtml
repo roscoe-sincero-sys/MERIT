@@ -1,0 +1,43 @@
+@model TenantFormModel
+@{
+    bool root = Model.ParentType is "platform" or "region";
+    string Label(string type) => type switch
+    {
+        "region" => "Region (for example an EPA region)", "state" => "State", "tribe" => "Tribe",
+        "jurisdiction" => root ? "Stand-alone jurisdiction (for example a city)" : "Local jurisdiction (for example a county health department)",
+        "program" => "Program (for example occupational health)", _ => type,
+    };
+}
+<div id="type-fields">
+    <div class="usa-form-group"><label class="usa-label" for="TenantType">Kind of tenant</label>
+        <div class="usa-hint" id="type-hint">@(root
+            ? "This creates a data root: it owns its own records, roles, settings and counties."
+            : $"It shares the records of {Model.ParentName} and sees the counties you give it.")</div>
+        <select class="usa-select" id="TenantType" name="TenantType" aria-describedby="type-hint">
+            @foreach (var t in Model.TypeOptions) { <option value="@t" selected="@(t == Model.TenantType)">@Label(t)</option> }
+        </select></div>
+    @if (root)
+    {
+        <div class="usa-form-group"><label class="usa-label" for="StatePostalCode">Postal code</label>
+            <div class="usa-hint" id="postal-hint">Two letters; needed for a state or tribe (used on the federal extracts).</div>
+            <input class="usa-input usa-input--small" id="StatePostalCode" name="StatePostalCode" value="@Model.StatePostalCode" maxlength="2" aria-describedby="postal-hint" /></div>
+        <div class="usa-form-group"><label class="usa-label" for="StateFips">State FIPS code</label>
+            <div class="usa-hint" id="fips-hint">Two digits, for example 54 for West Virginia. Optional for a tribe.</div>
+            <input class="usa-input usa-input--small" id="StateFips" name="StateFips" value="@Model.StateFips" maxlength="2" inputmode="numeric" aria-describedby="fips-hint" /></div>
+    }
+    else
+    {
+        <div class="usa-form-group"><label class="usa-label" for="CountyFipsList">Counties it serves</label>
+            <div class="usa-hint" id="county-hint">Three-digit county FIPS codes separated by commas, for example 037, 003. Leave blank for a program that covers the whole state.</div>
+            <input class="usa-input" id="CountyFipsList" name="CountyFipsList" value="@Model.CountyFipsList" aria-describedby="county-hint" /></div>
+        @if (Model.ExistingCounties.Count > 0)
+        {
+            <details class="merit-details"><summary>Counties already set up (@Model.ExistingCounties.Count)</summary>
+                <ul class="usa-list">@foreach (var c in Model.ExistingCounties) { <li>@c.CountyFips @c.SubJurisdictionName</li> }</ul>
+            </details>
+        }
+    }
+    <div class="usa-form-group"><label class="usa-label" for="NewCounties">New counties (optional)</label>
+        <div class="usa-hint" id="new-hint">Counties not yet in MERIT: one per line, the FIPS code then the name, for example "037 Jefferson County".@(root ? "" : " They are also added to the counties this tenant serves.")</div>
+        <textarea class="usa-textarea" id="NewCounties" name="NewCounties" rows="3" aria-describedby="new-hint">@Model.NewCounties</textarea></div>
+</div>

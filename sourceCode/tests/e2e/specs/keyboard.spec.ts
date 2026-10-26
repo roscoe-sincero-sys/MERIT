@@ -87,3 +87,26 @@ test('a county case manager cannot open a case another tenant owns', async ({ as
   const response = await city.goto(`/cases/${hidden!.exposureCaseId}`);
   expect(response?.status()).toBe(404);
 });
+
+test('adding a tenant: choosing the parent with the keyboard changes the kinds offered', async ({ asUser }) => {
+  const page = await asUser('admin');
+  await page.goto('/admin/tenants');
+  const kind = page.getByLabel('Kind of tenant');
+  await expect(kind.locator('option')).toHaveText([/Program/, /Local jurisdiction/]);
+  await expect(page.getByLabel('Counties it serves')).toBeVisible();
+  await page.getByLabel('Goes under').focus();
+  await page.keyboard.press('ArrowDown');
+  await expect(page.getByLabel('Counties it serves')).toBeVisible();
+  await expect(page.getByLabel('Postal code')).toHaveCount(0);
+});
+
+test('reporter import: check the sample file and see the rows to fix', async ({ asUser }) => {
+  const page = await asUser('supervisor');
+  await page.goto('/reporters/import');
+  await page.getByLabel(/CSV file/).setInputFiles('../../samples/registry_npi_clia_sample.csv');
+  await page.getByRole('button', { name: 'Check the file' }).focus();
+  await page.keyboard.press('Enter');
+  await expect(page.getByText('row(s) need attention')).toBeVisible();
+  await expect(page.locator('table tbody tr')).toHaveCount(4);
+  await expect(page.getByRole('button', { name: /Import 4 ready row/ })).toBeVisible();
+});

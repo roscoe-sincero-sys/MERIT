@@ -2,6 +2,7 @@ using Merit.Domain.Identifiers;
 using Merit.Domain.Ids;
 using Merit.Domain.Population;
 using Merit.Domain.Results;
+using Merit.Domain.Tenants;
 using Merit.Domain.Text;
 
 namespace Merit.Tests;
@@ -158,5 +159,98 @@ public sealed class TimeOrderedIdTests
         var earlier = new System.Data.SqlTypes.SqlGuid(TimeOrderedId.New(DateTimeOffset.UtcNow.AddSeconds(-1)));
         var later = new System.Data.SqlTypes.SqlGuid(TimeOrderedId.New(DateTimeOffset.UtcNow));
         Assert.True(earlier.CompareTo(later) < 0);
+    }
+}
+
+/// <summary>Where each kind of tenant may be added, and the form's code and county formats.</summary>
+public sealed class TenantRulesTests
+{
+    [Theory]
+    [InlineData("platform", "region", true)]
+    [InlineData("platform", "program", false)]
+    [InlineData("region", "state", true)]
+    [InlineData("region", "jurisdiction", false)]
+    [InlineData("state", "jurisdiction", true)]
+    [InlineData("state", "state", false)]
+    [InlineData("jurisdiction", "program", true)]
+    public void ChildTypesFollowTheTree(string parent, string child, bool allowed)
+        => Assert.Equal(allowed, TenantRules.ChildTypes(parent).Contains(child));
+
+    [Fact]
+    public void OnlyThePlatformAndRegionsHoldDataRoots()
+    {
+        Assert.True(TenantRules.CreatesDataRoot("platform"));
+        Assert.True(TenantRules.CreatesDataRoot("region"));
+        Assert.False(TenantRules.CreatesDataRoot("state"));
+    }
+
+    [Theory]
+    [InlineData("WV-JEFFERSON", true)]
+    [InlineData("R3", true)]
+    [InlineData("wv-jefferson", false)]
+    [InlineData("-WV", false)]
+    [InlineData("WV JEFF", false)]
+    [InlineData("", false)]
+    public void TenantCodes(string code, bool valid) => Assert.Equal(valid, TenantRules.IsValidCode(code));
+
+    [Fact]
+    public void FipsListsAreSplitAndDeduplicated()
+        => Assert.Equal(["005", "510", "033"], TenantRules.ParseFipsList("005, 510 033;005"));
+
+    [Fact]
+    public void NewCountyLinesNeedACodeAndAName()
+    {
+        var counties = Merit.Application.Services.AdminService.ParseNewCounties("037 Jefferson County\n003, Berkeley County\n\n12 Bad\n065", out var bad);
+        Assert.Equal(["037", "003"], counties.Select(c => c.Fips));
+        Assert.Equal("Berkeley County", counties[1].Name);
+        Assert.Equal(["12 Bad", "065"], bad);
+    }
+}
+
+/// <summary>The reporter registry's format rules: what a laboratory, facility and provider each need.</summary>
+public sealed class RegistryRulesTests
+{
+    private static (Merit.Application.Data.ReporterSave? Row, List<string> Problems) Check(string? kind, string? name = null, string? last = null,
+                                                                                          string? npi = null, string? clia = null)
+        => Merit.Application.Services.RegistryService.Check(1, new Merit.Application.Services.ReporterInput(kind, name, last, null, null, npi, clia, null));
+
+    [Fact]
+    public void ALaboratoryNeedsAValidClia()
+    {
+        Assert.NotNull(Check("laboratory", "Tidewater Clinical Laboratory", clia: "21d-0456789").Row);
+        Assert.Equal("21D0456789", Check("laboratory", "Tidewater", clia: "21D0456789").Row!.Clia);
+        Assert.Contains(Check("laboratory", "Allegany", clia: "21D04567").Problems, p => p.Contains("CLIA number 21D04567 is not valid"));
+        Assert.Contains(Check("laboratory", "No CLIA").Problems, p => p.Contains("needs its CLIA number"));
+    }
+
+    [Fact]
+    public void AFacilityNeedsAnNpiOrClia()
+    {
+        Assert.NotNull(Check("facility", "Patapsco Family Health Center", npi: "1987654328").Row);
+        Assert.Contains(Check("facility", "Severn", npi: "1765432100").Problems, p => p.Contains("check digit"));
+        Assert.Contains(Check("facility", "Nothing").Problems, p => p.Contains("needs an NPI or a CLIA number"));
+    }
+
+    [Fact]
+    public void AProviderNeedsAnNpiAndALastName()
+    {
+        var ok = Check("provider", last: "Okafor", npi: "1543 210 987").Row;
+        Assert.Equal("1543210987", ok!.Npi);
+        Assert.Null(ok.Name);
+        Assert.Contains(Check("provider", last: "Patel").Problems, p => p.Contains("needs an NPI"));
+        Assert.Contains(Check("provider", npi: "1543210987").Problems, p => p.Contains("needs a last name"));
+        Assert.Contains(Check("clinic", "x").Problems, p => p.Contains("laboratory, facility or provider"));
+    }
+
+    [Fact]
+    public void TheTemplateExamplesPassTheirOwnChecks()
+    {
+        var lines = Merit.Application.Services.RegistryService.Template().Split("\r\n", StringSplitOptions.RemoveEmptyEntries).Skip(1);
+        foreach (var line in lines)
+        {
+            var c = line.Split(',');
+            Assert.NotNull(Merit.Application.Services.RegistryService.Check(1,
+                new Merit.Application.Services.ReporterInput(c[0], c[1], c[2], c[3], c[4], c[5], c[6], c[7])).Row);
+        }
     }
 }

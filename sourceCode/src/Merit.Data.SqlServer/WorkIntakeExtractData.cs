@@ -143,6 +143,9 @@ public sealed class ExtractData(Db db) : IExtractData
         => db.ExecuteAsync("dbo.uspUpdateExtractRun",
             new { extractRunId, runStatus, recordCount, errorCount, validationReportJson, fileName, fileContent }, ct);
 
+    public Task MarkSubmittedAsync(Guid extractRunId, CancellationToken ct = default)
+        => db.ExecuteAsync("dbo.uspMarkExtractSubmitted", new { extractRunId }, ct);
+
     public Task<IReadOnlyList<CblsSourceRow>> GetCblsRowsAsync(DateOnly periodStart, DateOnly periodEnd, CancellationToken ct = default)
         => db.QueryAsync<CblsSourceRow>("dbo.uspGetCblsExtractRows", new { periodStart, periodEnd }, ct);
 
