@@ -27,7 +27,7 @@ public sealed class AccountController(AccountService accounts, QrCodes qr) : Con
 
     [HttpPost("signin")]
     [AllowAnonymous]
-    [EnableRateLimiting("signin")]
+    [EnableRateLimiting(SignInRateLimits.Password)]
     public async Task<IActionResult> SignIn(SignInModel model, CancellationToken ct)
     {
         if (!ModelState.IsValid)
@@ -81,7 +81,7 @@ public sealed class AccountController(AccountService accounts, QrCodes qr) : Con
 
     [HttpPost("enroll")]
     [Authorize(AuthenticationSchemes = AuthSchemes.PendingMfa)]
-    [EnableRateLimiting("signin")]
+    [EnableRateLimiting(SignInRateLimits.Code)]
     public async Task<IActionResult> Enroll(EnrollModel model, CancellationToken ct)
     {
         var secret = User.FindFirstValue(MeritClaims.EnrollSecret);
@@ -111,7 +111,7 @@ public sealed class AccountController(AccountService accounts, QrCodes qr) : Con
 
     [HttpPost("mfa")]
     [Authorize(AuthenticationSchemes = AuthSchemes.PendingMfa)]
-    [EnableRateLimiting("signin")]
+    [EnableRateLimiting(SignInRateLimits.Code)]
     public async Task<IActionResult> Mfa(MfaModel model, CancellationToken ct)
     {
         if (!ModelState.IsValid)
