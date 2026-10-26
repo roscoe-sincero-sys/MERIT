@@ -13,7 +13,7 @@ CreateDate:   2026-10-24
 ========================================================================================================================
 Description:
 
-Adds a program or a local jurisdiction under a tenant the caller administers (any tenant for a platform administrator), with the counties it serves; counties new to the data root are added. Needs tenant.create. Re-runnable for the same parent.
+Adds a program or a local jurisdiction under a tenant the caller administers (any tenant for a platform administrator), with the counties it serves. Needs tenant.create. Below the data root the new tenant serves only counties its parent serves, and counties new to the root are added only under the root (config.uspInstallChildTenant enforces both). Re-runnable for the same parent.
 
 ========================================================================================================================
 Requirements and Key Dependencies:
@@ -227,7 +227,7 @@ EXEC util.uspSetObjectDescription
       @SchemaName  = N'config'
     , @ObjectType  = N'PROCEDURE'
     , @ObjectName  = N'uspCreateChildTenant'
-    , @Description = N'Adds a program or a local jurisdiction under a tenant the caller administers (any tenant for a platform administrator), with the counties it serves; counties new to the data root are added. Needs tenant.create. Re-runnable for the same parent.';
+    , @Description = N'Adds a program or a local jurisdiction under a tenant the caller administers (any tenant for a platform administrator), with the counties it serves. Needs tenant.create. Below the data root the new tenant serves only counties its parent serves, and counties new to the root are added only under the root (config.uspInstallChildTenant enforces both). Re-runnable for the same parent.';
 GO
 
 IF DATABASE_PRINCIPAL_ID (N'meritWebRole') IS NOT NULL

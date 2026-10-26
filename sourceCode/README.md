@@ -180,7 +180,8 @@ and a ready run can be marked submitted (`extract.submit`, `dbo.uspMarkExtractSu
   User administrators cannot. `config.uspCreateRootTenant` and `config.uspCreateChildTenant` make these checks, then
   call the installers `config.uspInstallRootTenant` / `config.uspInstallChildTenant`, which run `WITH EXECUTE AS OWNER`
   and are granted to no role, because seeding a new data root's roles, settings and counties is outside every caller's
-  row-level security scope. After a create the web app issues a fresh session scope so the new tenant appears at once.
+  row-level security scope. Below the data root, `uspInstallChildTenant` maps a new tenant only to counties its parent
+  serves and refuses new counties, for every caller: county mappings drive residence-based person access. After a create the web app issues a fresh session scope so the new tenant appears at once.
 - **View as.** An administrator can see another person's access, clipped to the tenants the administrator manages and
   to the administrator's own rights. It is audited under the administrator's name.
 - **Platform administrators** hold no record permissions, so their sessions see no data. They have one profile and

@@ -102,10 +102,15 @@ public sealed class TenantsController(AdminService admin, ConfigService config, 
             form.TenantType = form.TypeOptions.FirstOrDefault();
         }
 
-        // Counties of the parent's data root, when this session can read them (a platform administrator sees no records).
+        // The counties the new tenant may serve: any county of the data root under the root itself, otherwise only the
+        // parent's own (the database enforces the same rule). Shown when this session can read them; a platform
+        // administrator sees no records.
+        form.MayChooseAnyCounty = parent is null
+            || TenantRules.MayChooseAnyCounty(parent.TenantId == parent.RootTenantId, parent.TenantType);
         if (parent is not null && !TenantRules.CreatesDataRoot(parent.TenantType) && parent.RootTenantId == session.RootTenantId)
         {
-            form.ExistingCounties = await config.SubJurisdictionsAsync(ct);
+            var counties = await config.SubJurisdictionsAsync(ct);
+            form.ExistingCounties = form.MayChooseAnyCounty ? counties : counties.Where(c => c.IsServedBy(parent.TenantId)).ToList();
         }
 
         return form;

@@ -28,16 +28,20 @@
     else
     {
         <div class="usa-form-group"><label class="usa-label" for="CountyFipsList">Counties it serves</label>
-            <div class="usa-hint" id="county-hint">Three-digit county FIPS codes separated by commas, for example 037, 003. Leave blank for a program that covers the whole state.</div>
+            <div class="usa-hint" id="county-hint">Three-digit county FIPS codes separated by commas, for example 037, 003.
+                @(Model.MayChooseAnyCounty ? "Leave blank for a program that covers the whole state." : $"Only counties {Model.ParentName} serves; leave blank for none.")</div>
             <input class="usa-input" id="CountyFipsList" name="CountyFipsList" value="@Model.CountyFipsList" aria-describedby="county-hint" /></div>
         @if (Model.ExistingCounties.Count > 0)
         {
-            <details class="merit-details"><summary>Counties already set up (@Model.ExistingCounties.Count)</summary>
+            <details class="merit-details"><summary>@(Model.MayChooseAnyCounty ? "Counties already set up" : $"Counties {Model.ParentName} serves") (@Model.ExistingCounties.Count)</summary>
                 <ul class="usa-list">@foreach (var c in Model.ExistingCounties) { <li>@c.CountyFips @c.SubJurisdictionName</li> }</ul>
             </details>
         }
     }
-    <div class="usa-form-group"><label class="usa-label" for="NewCounties">New counties (optional)</label>
-        <div class="usa-hint" id="new-hint">Counties not yet in MERIT: one per line, the FIPS code then the name, for example "037 Jefferson County".@(root ? "" : " They are also added to the counties this tenant serves.")</div>
-        <textarea class="usa-textarea" id="NewCounties" name="NewCounties" rows="3" aria-describedby="new-hint">@Model.NewCounties</textarea></div>
+    @if (Model.MayChooseAnyCounty)
+    {
+        <div class="usa-form-group"><label class="usa-label" for="NewCounties">New counties (optional)</label>
+            <div class="usa-hint" id="new-hint">Counties not yet in MERIT: one per line, the FIPS code then the name, for example "037 Jefferson County".@(root ? "" : " They are also added to the counties this tenant serves.")</div>
+            <textarea class="usa-textarea" id="NewCounties" name="NewCounties" rows="3" aria-describedby="new-hint">@Model.NewCounties</textarea></div>
+    }
 </div>

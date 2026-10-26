@@ -189,12 +189,14 @@ SET @Comments = CONCAT (@@ROWCOUNT, N' analyte(s) updated.');
     },
     {
         "schema": "config", "name": "uspListSubJurisdictions", "kind": "read", "grants": BOTH, "ticket": "T020",
-        "desc": "Counties and other sub-jurisdictions of the caller's root, with the tenants that serve them.",
+        "desc": "Counties and other sub-jurisdictions of the caller's root, with the tenants that serve them (names for "
+                "display, ids for choosing among a parent's counties).",
         "params": "",
         "key": "NULL",
         "body": """
 SELECT sj.subJurisdictionId, sj.countyFips, sj.subJurisdictionName, sj.jurisdictionType,
-       STRING_AGG (t.tenantName, N', ') AS servedBy
+       STRING_AGG (t.tenantName, N', ') AS servedBy,
+       STRING_AGG (CAST (t.tenantId AS NVARCHAR (36)), N',') AS servedByTenantIds
   FROM config.subJurisdiction AS sj
   LEFT JOIN auth.tenantJurisdiction AS tj ON tj.subJurisdictionId = sj.subJurisdictionId AND tj.isDeleted = 0
   LEFT JOIN auth.tenant AS t ON t.tenantId = tj.tenantId

@@ -192,8 +192,9 @@ SET @Comments = N'Root tenant installed.';
         "schema": "config", "name": "uspInstallChildTenant", "kind": "write", "grants": [], "ticket": "T032",
         "execute_as_owner": True,
         "desc": "Core installer for a program or local jurisdiction: the tenant, its closure rows, any counties new to "
-                "its data root, and the counties it serves. Runs as its owner, granted to no role; reached only through "
-                "config.uspCreateChildTenant, which checks who may create it. Re-runnable.",
+                "its data root, and the counties it serves. Below the data root the tenant serves only counties its "
+                "parent serves, and new counties are refused. Runs as its owner, granted to no role; reached only "
+                "through config.uspCreateChildTenant, which checks who may create it. Re-runnable.",
         "params": """@tenantCode       VARCHAR (30)
 , @tenantName       NVARCHAR (120)
 , @tenantType       VARCHAR (30)
@@ -219,6 +220,31 @@ END;
 IF EXISTS (SELECT 1 FROM auth.tenant WHERE tenantId = @parent AND tenantType = 'platform')
 BEGIN
     ;THROW 51422, N'The platform holds data roots only.', 1;
+END;
+
+-- Counties give residence access to the people who live there (dbo.uspRefreshPersonAccess). Below the data root a
+-- tenant serves only counties its parent serves, and counties new to the data root come only through the root itself:
+-- otherwise an administrator of one county could map a child to another county and see the people who live there.
+-- This is a rule of the tree, so it holds for every caller, platform administrators and deployment scripts included.
+IF @parent <> @root
+BEGIN
+    IF EXISTS (SELECT 1 FROM OPENJSON (COALESCE (@countiesJson, N'[]')))
+    BEGIN
+        ;THROW 51403, N'New counties are added under the state, tribe or other data root, not under one of its tenants.', 1;
+    END;
+
+    IF EXISTS (SELECT 1
+                 FROM STRING_SPLIT (COALESCE (@countyFipsList, ''), ',') AS s
+                WHERE LTRIM (RTRIM (s.[value])) <> ''
+                  AND NOT EXISTS (SELECT 1
+                                    FROM auth.tenantJurisdiction AS tj
+                                    JOIN config.subJurisdiction AS sj ON sj.subJurisdictionId = tj.subJurisdictionId
+                                                                     AND sj.isDeleted = 0
+                                   WHERE tj.tenantId = @parent AND tj.isDeleted = 0
+                                     AND sj.countyFips = LTRIM (RTRIM (s.[value]))))
+    BEGIN
+        ;THROW 51403, N'A tenant can serve only counties its parent serves.', 1;
+    END;
 END;
 
 DECLARE @id UNIQUEIDENTIFIER = {k("CONCAT (N'tenant:', @tenantCode)")};
@@ -329,8 +355,9 @@ SET @Comments = N'Root tenant created.';
         "schema": "config", "name": "uspCreateChildTenant", "kind": "write", "grants": WEB, "ticket": "T162",
         "permission": "tenant.create",
         "desc": "Adds a program or a local jurisdiction under a tenant the caller administers (any tenant for a platform "
-                "administrator), with the counties it serves; counties new to the data root are added. Needs "
-                "tenant.create. Re-runnable for the same parent.",
+                "administrator), with the counties it serves. Needs tenant.create. Below the data root the new tenant serves "
+                "only counties its parent serves, and counties new to the root are added only under the root "
+                "(config.uspInstallChildTenant enforces both). Re-runnable for the same parent.",
         "params": """@tenantCode       VARCHAR (30)
 , @tenantName       NVARCHAR (120)
 , @tenantType       VARCHAR (30)

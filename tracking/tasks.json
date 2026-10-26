@@ -1000,6 +1000,17 @@
       "started": "2026-10-26",
       "finished": "2026-10-26",
       "notes": "16 issues: 3 security (#6 county mapping, #7 job session scope, #8 sign-in rate limit), 8 bugs, 1 performance, 4 UI/maintainability"
+    },
+    {
+      "id": "T168",
+      "phase": "12 Quality",
+      "task": "Issue #6: below the data root a new tenant serves only its parent's counties; new counties only under the root (enforced in config.uspInstallChildTenant for every caller)",
+      "ref": "GitHub issue #6",
+      "where": "procs_setup.py, Tenants screen, AuthorizationScenarioTests",
+      "status": "Done",
+      "started": "2026-10-26",
+      "finished": "2026-10-26",
+      "notes": "Scenario test BelowTheDataRootANewTenantServesOnlyItsParentsCounties; form lists only the parent's counties"
     }
   ]
 }

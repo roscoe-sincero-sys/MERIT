@@ -13,7 +13,7 @@ CreateDate:   2026-10-24
 ========================================================================================================================
 Description:
 
-Counties and other sub-jurisdictions of the caller's root, with the tenants that serve them.
+Counties and other sub-jurisdictions of the caller's root, with the tenants that serve them (names for display, ids for choosing among a parent's counties).
 
 ========================================================================================================================
 Requirements and Key Dependencies:
@@ -77,7 +77,8 @@ BEGIN
         -- =========================================================================================
 
         SELECT sj.subJurisdictionId, sj.countyFips, sj.subJurisdictionName, sj.jurisdictionType,
-               STRING_AGG (t.tenantName, N', ') AS servedBy
+               STRING_AGG (t.tenantName, N', ') AS servedBy,
+               STRING_AGG (CAST (t.tenantId AS NVARCHAR (36)), N',') AS servedByTenantIds
           FROM config.subJurisdiction AS sj
           LEFT JOIN auth.tenantJurisdiction AS tj ON tj.subJurisdictionId = sj.subJurisdictionId AND tj.isDeleted = 0
           LEFT JOIN auth.tenant AS t ON t.tenantId = tj.tenantId
@@ -122,7 +123,7 @@ EXEC util.uspSetObjectDescription
       @SchemaName  = N'config'
     , @ObjectType  = N'PROCEDURE'
     , @ObjectName  = N'uspListSubJurisdictions'
-    , @Description = N'Counties and other sub-jurisdictions of the caller''s root, with the tenants that serve them.';
+    , @Description = N'Counties and other sub-jurisdictions of the caller''s root, with the tenants that serve them (names for display, ids for choosing among a parent''s counties).';
 GO
 
 IF DATABASE_PRINCIPAL_ID (N'meritWebRole') IS NOT NULL

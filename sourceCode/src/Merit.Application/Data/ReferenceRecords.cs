@@ -194,6 +194,12 @@ public sealed class SubJurisdictionRow
     public string JurisdictionType { get; init; } = string.Empty;
 
     public string? ServedBy { get; init; }
+
+    /// <summary>Ids of the tenants that serve this county, comma-separated.</summary>
+    public string? ServedByTenantIds { get; init; }
+
+    public bool IsServedBy(Guid tenantId)
+        => (ServedByTenantIds ?? string.Empty).Split(',').Any(id => Guid.TryParse(id, out var g) && g == tenantId);
 }
 
 public sealed class EnvironmentalStandardRow
