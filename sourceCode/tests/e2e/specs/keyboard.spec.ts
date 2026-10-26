@@ -39,15 +39,17 @@ test('match review moves through the queue with J and K', async ({ asUser }) => 
   const page = await asUser('supervisor');
   await page.goto('/app/match-review');
   await angularReady(page);
-  const current = page.locator('nav [aria-current="true"]');
-  const count = await page.locator('nav ol li').count();
+  const items = page.locator('nav ol li');
+  const count = await items.count();
   test.skip(count < 2, 'Needs two records waiting for review (upload samples/chesapeake_match_review_sample.csv).');
-  const first = await current.innerText();
+  // Compare positions, not text: a file uploaded twice puts identical records next to each other.
+  const position = () => items.evaluateAll(lis => lis.findIndex(li => li.querySelector('[aria-current="true"]') !== null));
+  const first = await position();
   await page.locator('h1').focus();
   await page.keyboard.press('j');
-  await expect(current).not.toHaveText(first);
+  await expect.poll(position).toBe(first + 1);
   await page.keyboard.press('k');
-  await expect(current).toHaveText(first);
+  await expect.poll(position).toBe(first);
 });
 
 test('reports: change the charted measure and open another report from the keyboard', async ({ asUser }) => {

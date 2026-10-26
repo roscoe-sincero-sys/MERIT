@@ -1,4 +1,4 @@
-import { angularReady, expectAccessible, test } from './helpers';
+import { angularReady, expect, expectAccessible, test } from './helpers';
 
 // Every key screen of both front ends at tablet width, checked with axe for WCAG 2.1 AA.
 const htmxPages = ['/', '/cases', '/investigations', '/intake', '/extracts', '/config/thresholds', '/search?q=Rivera', '/account/profiles',
@@ -19,6 +19,17 @@ test('htmx /admin/tenants meets WCAG 2.1 AA', async ({ asUser }) => {
   await page.goto('/admin/tenants');
   await page.waitForLoadState('networkidle');
   await expectAccessible(page, '/admin/tenants');
+});
+
+test('the sign-in page is styled and meets WCAG 2.1 AA before signing in', async ({ browser }) => {
+  const context = await browser.newContext({ baseURL: test.info().project.use.baseURL, ignoreHTTPSErrors: true });
+  const page = await context.newPage();
+  await page.goto('/account/signin');
+  await page.waitForLoadState('networkidle');
+  await expect(page.locator('.merit-signin__card')).toHaveCSS('background-color', 'rgb(255, 255, 255)');
+  await expect(page.locator('body')).toHaveCSS('font-family', /Source Sans Pro/);
+  await expectAccessible(page, '/account/signin');
+  await context.close();
 });
 
 for (const path of angularPages) {

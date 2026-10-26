@@ -121,3 +121,27 @@ dialog.merit-dialog::backdrop { background: rgba(0,0,0,.5); }
 /* Tenant tree: nested lists step in */
 .merit-tree .merit-tree { margin-left: 1.25rem; }
 .merit-tree li { margin-bottom: 0.25rem; }
+
+/* USWDS drops the right border of search inputs for its attached search button; a search field in a form has no button. */
+.usa-form .usa-input[type=search] { border-right: 1px solid #565c65; }
+
+/* Sign-in and second-factor pages: a card on a soft band, with a short description beside it on wide screens. */
+.merit-signin { display: grid; grid-template-columns: minmax(0, 28rem) minmax(0, 24rem); gap: 2rem 3rem; align-items: start;
+                justify-content: center; margin: 1.5rem auto 2rem; padding: 2.5rem 1rem; background: #f0f4f9; border-radius: .5rem; }
+.merit-signin--single { grid-template-columns: minmax(0, 30rem); }
+.merit-signin__card { background: #fff; border: 1px solid #dfe1e2; border-top: .35rem solid #1a4480; border-radius: .5rem;
+                      padding: 1.5rem 2rem 1.75rem; box-shadow: 0 .25rem 1rem rgba(0, 0, 0, .08); }
+.merit-signin__card h1 { margin: .25rem 0 .5rem; font-size: 1.75rem; color: #1a4480; }
+.merit-signin__card .usa-form { max-width: none; }
+.merit-signin__card .usa-input { max-width: none; }
+.merit-signin__submit { width: 100%; margin-top: 1.25rem; }
+.merit-signin__mfa { margin: 1.25rem 0 0; padding-top: 1rem; border-top: 1px solid #dfe1e2; color: #565c65; font-size: .9rem; }
+.merit-signin__about { padding-top: 2.25rem; color: #1b1b1b; }
+.merit-signin__about h2 { margin-top: 0; font-size: 1.25rem; color: #1a4480; }
+.merit-signin__about ul { padding-left: 1.1rem; }
+.merit-signin__about li { margin-bottom: .5rem; }
+.merit-signin__about p { color: #565c65; font-size: .9rem; }
+@media (max-width: 52em) {
+    .merit-signin { grid-template-columns: minmax(0, 1fr); padding: 1.5rem 1rem; }
+    .merit-signin__about { padding-top: 0; }
+}

@@ -2,8 +2,8 @@
 @{
     ViewData["Title"] = "Verify your sign-in";
 }
-<div class="grid-row">
-    <div class="grid-col-12 tablet:grid-col-8 desktop:grid-col-6">
+<div class="merit-signin merit-signin--single">
+    <section class="merit-signin__card">
         <h1>Enter your verification code</h1>
         @if (Model.Message is not null)
         {
@@ -18,5 +18,5 @@
             </div>
             <button class="usa-button" type="submit">Verify and sign in</button>
         </form>
-    </div>
+    </section>
 </div>
