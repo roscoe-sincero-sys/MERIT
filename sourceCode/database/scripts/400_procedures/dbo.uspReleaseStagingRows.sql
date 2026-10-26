@@ -114,11 +114,16 @@ BEGIN
         SELECT DISTINCT s.intakeBatchId FROM dbo.stagingRow AS s JOIN @ids AS i ON i.stagingRowId = s.stagingRowId
          WHERE s.rowStatus = 'released';
 
+        DECLARE @jobProfile UNIQUEIDENTIFIER, @jobViewAs UNIQUEIDENTIFIER, @jobActing UNIQUEIDENTIFIER;
+        SELECT @jobProfile = userProfileId, @jobViewAs = viewAsUserId, @jobActing = actingTenantId
+          FROM auth.sessionScope
+         WHERE sessionScopeId = TRY_CAST (SESSION_CONTEXT (N'scopeKey') AS UNIQUEIDENTIFIER) AND isDeleted = 0;
+
         INSERT dbo.jobQueue (jobId, rootTenantId, owningTenantId, jobType, payloadJson, payloadVersion, availableUtc,
-                             requestedByUserId)
+                             requestedByUserId, requestedProfileId, requestedViewAsUserId, requestedActingTenantId)
         SELECT CAST (CAST (NEWID () AS BINARY (10)) + CAST (DATEDIFF_BIG (MILLISECOND, '19700101', SYSUTCDATETIME ()) AS BINARY (6)) AS UNIQUEIDENTIFIER), b.rootTenantId, b.owningTenantId, 'intakeBatch',
                CONCAT (N'{"intakeBatchId":"', b.intakeBatchId, N'","releasedOnly":true}'), 1, SYSUTCDATETIME (),
-               auth.udfSessionUserId ()
+               auth.udfSessionUserId (), @jobProfile, @jobViewAs, @jobActing
           FROM dbo.intakeBatch AS b JOIN @batches AS x ON x.intakeBatchId = b.intakeBatchId;
 
         SELECT COUNT (*) AS releasedCount FROM dbo.stagingRow AS s JOIN @ids AS i ON i.stagingRowId = s.stagingRowId

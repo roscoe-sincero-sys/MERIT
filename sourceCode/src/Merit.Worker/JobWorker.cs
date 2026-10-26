@@ -115,8 +115,7 @@ public sealed partial class JobWorker(IServiceProvider services, JobSessionHolde
         var sp = scope.ServiceProvider;
         try
         {
-            sessions.Current = await sp.GetRequiredService<IAccountData>()
-                .CreateSessionScopeAsync(Guid.NewGuid(), job.RequestedByUserId, DateTime.UtcNow.AddHours(2), ct: ct);
+            sessions.Current = await JobSessions.OpenAsync(sp.GetRequiredService<IAccountData>(), job, DateTime.UtcNow.AddHours(2), ct);
             string result = await sp.GetRequiredService<JobDispatcher>().RunAsync(job, ct);
             await sp.GetRequiredService<IWorkData>().CompleteJobAsync(job.JobId, result, ct);
             LogCompleted(logger, job.JobId);

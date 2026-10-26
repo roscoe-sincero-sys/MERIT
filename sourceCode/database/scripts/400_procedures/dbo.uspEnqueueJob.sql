@@ -98,6 +98,10 @@ BEGIN
 
         DECLARE @root UNIQUEIDENTIFIER = auth.udfSessionRootTenantId ();
         DECLARE @user UNIQUEIDENTIFIER = auth.udfSessionUserId ();
+        DECLARE @jobProfile UNIQUEIDENTIFIER, @jobViewAs UNIQUEIDENTIFIER, @jobActing UNIQUEIDENTIFIER;
+        SELECT @jobProfile = userProfileId, @jobViewAs = viewAsUserId, @jobActing = actingTenantId
+          FROM auth.sessionScope
+         WHERE sessionScopeId = TRY_CAST (SESSION_CONTEXT (N'scopeKey') AS UNIQUEIDENTIFIER) AND isDeleted = 0;
 
         IF @root IS NULL OR @user IS NULL
         BEGIN
@@ -105,9 +109,9 @@ BEGIN
         END;
 
         INSERT dbo.jobQueue (jobId, rootTenantId, owningTenantId, jobType, payloadJson, payloadVersion, availableUtc,
-                             requestedByUserId)
+                             requestedByUserId, requestedProfileId, requestedViewAsUserId, requestedActingTenantId)
         VALUES (@jobId, @root, auth.udfSessionActingTenantId (), @jobType, @payloadJson, @payloadVersion,
-                COALESCE (@availableUtc, SYSUTCDATETIME ()), @user);
+                COALESCE (@availableUtc, SYSUTCDATETIME ()), @user, @jobProfile, @jobViewAs, @jobActing);
 
         SET @Comments = N'Job queued.';
 

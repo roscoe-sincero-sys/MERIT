@@ -1,5 +1,5 @@
 """Intake: profiles, batches, staging rows, held records and person-match candidates."""
-from procs_common import NEWID, WEB, WORKER, BOTH, CONCURRENCY, not_found
+from procs_common import NEWID, WEB, WORKER, BOTH, CONCURRENCY, not_found, JOB_SCOPE, JOB_SCOPE_COLUMNS, JOB_SCOPE_VALUES
 
 PROCS = [
     {
@@ -92,10 +92,13 @@ INSERT dbo.intakeBatch (intakeBatchId, rootTenantId, owningTenantId, intakeProfi
 VALUES (@intakeBatchId, @root, @acting, @intakeProfileId, @sender, 'upload', @fileName, @rawContent, SYSUTCDATETIME (),
         'received', @user);
 
+""" + JOB_SCOPE + """
+
 INSERT dbo.jobQueue (jobId, rootTenantId, owningTenantId, jobType, payloadJson, payloadVersion, availableUtc,
-                     requestedByUserId)
+                     requestedByUserId, """ + JOB_SCOPE_COLUMNS + """)
 VALUES (@jobId, @root, @acting, 'intakeBatch',
-        CONCAT (N'{"intakeBatchId":"', @intakeBatchId, N'","releasedOnly":false}'), 1, SYSUTCDATETIME (), @user);
+        CONCAT (N'{"intakeBatchId":"', @intakeBatchId, N'","releasedOnly":false}'), 1, SYSUTCDATETIME (), @user,
+        """ + JOB_SCOPE_VALUES + """);
 
 SET @Comments = N'Batch received and queued.';
 """,
@@ -335,11 +338,13 @@ INSERT @batches (intakeBatchId)
 SELECT DISTINCT s.intakeBatchId FROM dbo.stagingRow AS s JOIN @ids AS i ON i.stagingRowId = s.stagingRowId
  WHERE s.rowStatus = 'released';
 
+{JOB_SCOPE}
+
 INSERT dbo.jobQueue (jobId, rootTenantId, owningTenantId, jobType, payloadJson, payloadVersion, availableUtc,
-                     requestedByUserId)
+                     requestedByUserId, {JOB_SCOPE_COLUMNS})
 SELECT {NEWID}, b.rootTenantId, b.owningTenantId, 'intakeBatch',
        CONCAT (N'{{"intakeBatchId":"', b.intakeBatchId, N'","releasedOnly":true}}'), 1, SYSUTCDATETIME (),
-       auth.udfSessionUserId ()
+       auth.udfSessionUserId (), {JOB_SCOPE_VALUES}
   FROM dbo.intakeBatch AS b JOIN @batches AS x ON x.intakeBatchId = b.intakeBatchId;
 
 SELECT COUNT (*) AS releasedCount FROM dbo.stagingRow AS s JOIN @ids AS i ON i.stagingRowId = s.stagingRowId

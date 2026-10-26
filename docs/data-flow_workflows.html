@@ -5644,7 +5644,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         </div>
         <ul>
           <li>A web action enqueues the job in the same request, for example an intake upload writes the batch and its dbo.jobQueue row</li>
-          <li>JobWorker polls, claims one row with UPDLOCK + READPAST, and creates a session scope for the user who requested it</li>
+          <li>JobWorker polls, claims one row with UPDLOCK + READPAST, and opens a session with the requester&#39;s profile, view-as and acting tenant stored on the job</li>
           <li>JobDispatcher runs intakeBatch (IntakeProcessor), extractRun (ExtractBuilder) or clusterDetection, then completes or fails the job</li>
         </ul>
       </div>

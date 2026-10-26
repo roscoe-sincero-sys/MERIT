@@ -114,10 +114,15 @@ BEGIN
             ;THROW 51422, N'The period end is before its start.', 1;
         END;
 
+        DECLARE @jobProfile UNIQUEIDENTIFIER, @jobViewAs UNIQUEIDENTIFIER, @jobActing UNIQUEIDENTIFIER;
+        SELECT @jobProfile = userProfileId, @jobViewAs = viewAsUserId, @jobActing = actingTenantId
+          FROM auth.sessionScope
+         WHERE sessionScopeId = TRY_CAST (SESSION_CONTEXT (N'scopeKey') AS UNIQUEIDENTIFIER) AND isDeleted = 0;
+
         INSERT dbo.jobQueue (jobId, rootTenantId, owningTenantId, jobType, payloadJson, payloadVersion, availableUtc,
-                             requestedByUserId)
+                             requestedByUserId, requestedProfileId, requestedViewAsUserId, requestedActingTenantId)
         VALUES (@jobId, @root, @root, 'extractRun', CONCAT (N'{"extractRunId":"', @extractRunId, N'"}'), 1, SYSUTCDATETIME (),
-                @user);
+                @user, @jobProfile, @jobViewAs, @jobActing);
 
         INSERT dbo.extractRun (extractRunId, rootTenantId, owningTenantId, extractType, periodStart, periodEnd, extractLayoutId,
                                runStatus, jobId, requestedByUserId)

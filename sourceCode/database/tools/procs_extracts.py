@@ -1,5 +1,5 @@
 """Federal extract procedures: CBLS (children, quarterly) and ABLES (adults, annual)."""
-from procs_common import NEWID, WEB, WORKER, BOTH, CONCURRENCY
+from procs_common import NEWID, WEB, WORKER, BOTH, CONCURRENCY, JOB_SCOPE, JOB_SCOPE_COLUMNS, JOB_SCOPE_VALUES
 
 # Reporting county: the county of the primary residence on the collection date; when none is known, the result's
 # as-reported address (address rule 6).
@@ -40,10 +40,12 @@ BEGIN
     ;THROW 51422, N'The period end is before its start.', 1;
 END;
 
+""" + JOB_SCOPE + """
+
 INSERT dbo.jobQueue (jobId, rootTenantId, owningTenantId, jobType, payloadJson, payloadVersion, availableUtc,
-                     requestedByUserId)
+                     requestedByUserId, """ + JOB_SCOPE_COLUMNS + """)
 VALUES (@jobId, @root, @root, 'extractRun', CONCAT (N'{"extractRunId":"', @extractRunId, N'"}'), 1, SYSUTCDATETIME (),
-        @user);
+        @user, """ + JOB_SCOPE_VALUES + """);
 
 INSERT dbo.extractRun (extractRunId, rootTenantId, owningTenantId, extractType, periodStart, periodEnd, extractLayoutId,
                        runStatus, jobId, requestedByUserId)

@@ -35,6 +35,9 @@ BEGIN
         completedUtc               DATETIME2 (3)     NULL,
         lastError                  NVARCHAR (2000)   NULL,
         requestedByUserId          UNIQUEIDENTIFIER  NOT NULL,
+        requestedProfileId         UNIQUEIDENTIFIER  NULL,
+        requestedViewAsUserId      UNIQUEIDENTIFIER  NULL,
+        requestedActingTenantId    UNIQUEIDENTIFIER  NULL,
         resultJson                 NVARCHAR (MAX)    NULL,
 
         -- Standard audit columns. Soft delete only. Convention: DF_<schema>_<tableName>_<fieldName>.
@@ -71,6 +74,12 @@ IF COL_LENGTH (N'dbo.jobQueue', N'completedUtc') IS NULL
     ALTER TABLE dbo.jobQueue ADD completedUtc               DATETIME2 (3)     NULL;
 IF COL_LENGTH (N'dbo.jobQueue', N'lastError') IS NULL
     ALTER TABLE dbo.jobQueue ADD lastError                  NVARCHAR (2000)   NULL;
+IF COL_LENGTH (N'dbo.jobQueue', N'requestedProfileId') IS NULL
+    ALTER TABLE dbo.jobQueue ADD requestedProfileId         UNIQUEIDENTIFIER  NULL;
+IF COL_LENGTH (N'dbo.jobQueue', N'requestedViewAsUserId') IS NULL
+    ALTER TABLE dbo.jobQueue ADD requestedViewAsUserId      UNIQUEIDENTIFIER  NULL;
+IF COL_LENGTH (N'dbo.jobQueue', N'requestedActingTenantId') IS NULL
+    ALTER TABLE dbo.jobQueue ADD requestedActingTenantId    UNIQUEIDENTIFIER  NULL;
 IF COL_LENGTH (N'dbo.jobQueue', N'resultJson') IS NULL
     ALTER TABLE dbo.jobQueue ADD resultJson                 NVARCHAR (MAX)    NULL;
 GO
@@ -217,6 +226,9 @@ EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', 
 EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'jobQueue', @ColumnName = N'completedUtc', @Description = N'UTC time it succeeded or finally failed.';
 EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'jobQueue', @ColumnName = N'lastError', @Description = N'Last error message; record IDs only, never patient data.';
 EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'jobQueue', @ColumnName = N'requestedByUserId', @Description = N'User who started the job; the worker acts as this user.';
+EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'jobQueue', @ColumnName = N'requestedProfileId', @Description = N'Profile the queuing session used; null for the master profile. The worker uses the same profile, so a smaller profile limits background work as it limits the screens.';
+EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'jobQueue', @ColumnName = N'requestedViewAsUserId', @Description = N'User the administrator was viewing MERIT as when the job was queued; the worker keeps that view.';
+EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'jobQueue', @ColumnName = N'requestedActingTenantId', @Description = N'Tenant the user was working in when the job was queued; the worker acts there, so new records take that tenant''s data root and settings.';
 EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'jobQueue', @ColumnName = N'resultJson', @Description = N'Result summary for the polling screen.';
 EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'jobQueue', @ColumnName = N'isDeleted', @Description = N'Soft-delete flag. 1 = deleted, 0 = active. This database performs no hard deletes; all reads must filter isDeleted = 0.';
 EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'jobQueue', @ColumnName = N'deletedBy', @Description = N'Login or application user that soft-deleted the row. Stamped by trg_au_updt_jobQueue when isDeleted transitions 0 -> 1. Meaningful only when isDeleted = 1.';

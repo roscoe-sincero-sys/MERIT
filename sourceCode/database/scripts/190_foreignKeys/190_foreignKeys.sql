@@ -627,10 +627,28 @@ BEGIN
         ADD CONSTRAINT FK_dbo_workTask_auth_appUser FOREIGN KEY (assignedToUserId) REFERENCES auth.appUser (appUserId);
 END;
 GO
-IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_dbo_jobQueue_auth_appUser')
+IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_dbo_jobQueue_auth_appUser_requestedByUserId')
 BEGIN
     ALTER TABLE dbo.jobQueue
-        ADD CONSTRAINT FK_dbo_jobQueue_auth_appUser FOREIGN KEY (requestedByUserId) REFERENCES auth.appUser (appUserId);
+        ADD CONSTRAINT FK_dbo_jobQueue_auth_appUser_requestedByUserId FOREIGN KEY (requestedByUserId) REFERENCES auth.appUser (appUserId);
+END;
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_dbo_jobQueue_auth_userProfile')
+BEGIN
+    ALTER TABLE dbo.jobQueue
+        ADD CONSTRAINT FK_dbo_jobQueue_auth_userProfile FOREIGN KEY (requestedProfileId) REFERENCES auth.userProfile (userProfileId);
+END;
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_dbo_jobQueue_auth_appUser_requestedViewAsUserId')
+BEGIN
+    ALTER TABLE dbo.jobQueue
+        ADD CONSTRAINT FK_dbo_jobQueue_auth_appUser_requestedViewAsUserId FOREIGN KEY (requestedViewAsUserId) REFERENCES auth.appUser (appUserId);
+END;
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_dbo_jobQueue_auth_tenant')
+BEGIN
+    ALTER TABLE dbo.jobQueue
+        ADD CONSTRAINT FK_dbo_jobQueue_auth_tenant FOREIGN KEY (requestedActingTenantId) REFERENCES auth.tenant (tenantId);
 END;
 GO
 IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_dbo_extractRun_config_extractLayout')

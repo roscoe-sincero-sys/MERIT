@@ -1011,6 +1011,17 @@
       "started": "2026-10-26",
       "finished": "2026-10-26",
       "notes": "Scenario test BelowTheDataRootANewTenantServesOnlyItsParentsCounties; form lists only the parent's counties"
+    },
+    {
+      "id": "T169",
+      "phase": "12 Quality",
+      "task": "Issue #7: background jobs run under the queuing session's profile, view-as and acting tenant (stored on dbo.jobQueue; JobSessions.OpenAsync)",
+      "ref": "GitHub issue #7",
+      "where": "jobQueue, enqueue procedures, JobWorker, JobSessions",
+      "status": "Done",
+      "started": "2026-10-26",
+      "finished": "2026-10-26",
+      "notes": "Scenario test ABackgroundJobKeepsTheProfileAndTenantOfTheSessionThatQueuedIt; JobSessionTests"
     }
   ]
 }

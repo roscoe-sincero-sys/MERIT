@@ -184,6 +184,10 @@ and a ready run can be marked submitted (`extract.submit`, `dbo.uspMarkExtractSu
   serves and refuses new counties, for every caller: county mappings drive residence-based person access. After a create the web app issues a fresh session scope so the new tenant appears at once.
 - **View as.** An administrator can see another person's access, clipped to the tenants the administrator manages and
   to the administrator's own rights. It is audited under the administrator's name.
+- **Background jobs** keep the security of the session that queued them. `dbo.jobQueue` stores the requester's
+  profile, view-as user and acting tenant, and the worker reopens exactly that scope (`JobSessions.OpenAsync`), so a
+  smaller profile limits background work and a region user's file is processed in the state it was uploaded for. A job
+  whose requester has since lost that tenant fails instead of running elsewhere.
 - **Platform administrators** hold no record permissions, so their sessions see no data. They have one profile and
   cannot switch or view as anyone.
 - `tests/Merit.IntegrationTests/AuthorizationScenarioTests.cs` checks all of this on an EPA Region 3 tree: West
