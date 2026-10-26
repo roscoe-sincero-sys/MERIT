@@ -30,9 +30,20 @@
   .steps { counter-reset: s; list-style: none; padding-left: 0; }
   .steps > li { counter-increment: s; position: relative; padding-left: 2.1em; margin: .45em 0; }
   .steps > li::before { content: counter(s); position: absolute; left: 0; top: .05em; width: 1.5em; height: 1.5em; border-radius: 50%; background: var(--blue2); color: #fff; font-weight: 700; font-size: 9pt; text-align: center; line-height: 1.5em; }
-  figure { margin: .7em 0; break-inside: avoid; }
-  figure img { width: 100%; border: 1px solid #a9aeb1; border-radius: 6px; box-shadow: 0 1px 4px rgba(0,0,0,.12); display: block; max-height: 3.6in; object-fit: cover; object-position: top; }
-  figure.diagram img { width: 90%; margin: 0 auto; max-height: none; object-fit: contain; }
+  figure.shot { margin: .8em 0; break-inside: avoid; }
+  figure.shot img { display: block; max-width: 100%; height: auto; border: 1px solid #a9aeb1; border-radius: 6px; box-shadow: 0 1px 4px rgba(0,0,0,.12); }
+  figure.shot:not(.side) img { margin: 0 auto; }
+  figure.shot:not(.side) figcaption { text-align: center; }
+  figure.shot.diagram img { border-color: #dfe1e2; box-shadow: none; }
+  figure.side { display: flex; gap: .3in; align-items: flex-start; }
+  figure.side img { flex: none; }
+  figure.side figcaption { flex: 1; margin-top: .2em; font-size: 9.5pt; }
+  .keep { break-inside: avoid; }
+  .pair { display: flex; gap: .35in; align-items: flex-start; break-inside: avoid; }
+  .pair > ol { flex: 1; margin-top: .2em; }
+  .pair figure.side { display: block; flex: none; width: min-content; margin-top: .2em; }
+  .pair figure.side img { max-width: none; }
+  .pair figure.side figcaption { margin-top: .3em; font-size: 8.8pt; }
   figcaption { font-size: 8.8pt; color: var(--muted); margin-top: .25em; }
   .ui { font-weight: 700; color: var(--blue); }
   code, pre { font-family: Consolas, monospace; font-size: 9.2pt; background: #f1f3f6; border-radius: 2px; }
@@ -101,12 +112,12 @@
     </div>
   </div>
   <p>MERIT ignores spaces and hyphens in both (<code>21D-0123456</code> and <code>1245 319 599</code> are accepted) and accepts a lower-case <code>d</code>.</p>
-  <figure class="diagram"><img src="../images/guide/diagram-npi-clia-import.png" alt="Workflow diagram: look up identifiers, fill the template, MERIT checks the file, rows to fix go back to the template, ready rows are imported, the registry is updated, held rows are released"><figcaption>The import workflow. Interactive version: <code>docs/npi-clia-import_workflow.html</code>.</figcaption></figure>
+  <figure class="shot diagram"><img src="../images/guide/diagram-npi-clia-import.png" style="width:7.20in" alt="Workflow diagram: look up identifiers, fill the template, MERIT checks the file, rows to fix go back to the template, ready rows are imported, the registry is updated, held rows are released"><figcaption>The import workflow. Interactive version: <code>docs/npi-clia-import_workflow.html</code>.</figcaption></figure>
 </section>
 
 <!-- ============================================================ prepare -->
 <section>
-  <h2 class="newpage">3. Prepare the file</h2>
+  <h2>3. Prepare the file</h2>
   <ol class="steps">
     <li>Open <span class="ui">Reporters</span> and click <span class="ui">Import NPI and CLIA records</span>.</li>
     <li>Click <span class="ui">Download the CSV template</span>. It has the column names and one example of each kind.</li>
@@ -134,13 +145,15 @@ provider,,Okafor,Grace,MD,1543210987,,</pre>
 
 <!-- ============================================================ check -->
 <section>
+  <div class="keep">
   <h2>4. Check the file</h2>
   <ol class="steps">
     <li>On the import page, under <b>Choose the file</b>, click <b>Choose File</b> and pick your CSV.</li>
     <li>Click <span class="ui">Check the file</span>. <b>Nothing is saved yet.</b></li>
     <li>Read the summary: how many rows are <b>ready</b> (by kind) and how many <b>need attention</b>. Each row that needs attention is listed with its line number in the file and what to fix.</li>
   </ol>
-  <figure><img src="../images/guide/06-reporter-check.jpg" alt="Check results: 4 rows ready, 4 need attention, with the line, name and what to fix for each"><figcaption>Checking the practice file: four rows ready, four to fix.</figcaption></figure>
+  <figure class="shot"><img src="../images/guide/06-reporter-check.jpg" style="width:7.20in" alt="Check results: 4 rows ready, 4 need attention, with the line, name and what to fix for each"><figcaption>Checking the practice file: four rows ready, four to fix, each with its line number and what to fix.</figcaption></figure>
+  </div>
   <h3>What the messages mean</h3>
   <table>
     <tr><th>Message</th><th>What to do</th></tr>
@@ -179,19 +192,26 @@ provider,,Okafor,Grace,MD,1543210987,,</pre>
     <li>Tick the rows (or the box at the top of the table for all of them) and click <span class="ui">Release selected</span>.</li>
     <li>MERIT checks them again. Now that the laboratory is known they load, or wait for another cause such as match review.</li>
   </ol>
+  <div class="keep">
   <p>To confirm an entry, search for it on <span class="ui">Reporters</span> by name, CLIA number or NPI.</p>
+  <figure class="shot"><img src="../images/guide/05-reporters.jpg" style="width:5.77in" alt="The Reporters screen with search, filters and the registry table"><figcaption>Reporters: search by name, CLIA number or NPI, and filter by kind. Entries added by the import appear here at once.</figcaption></figure>
+  </div>
 </section>
 
 <!-- ============================================================ one at a time -->
 <section>
-  <h2 class="newpage">7. Adding or correcting one entry</h2>
+  <div class="keep">
+  <h2>7. Adding or correcting one entry</h2>
   <p>For a single new laboratory or a corrected name you do not need a file.</p>
-  <figure><img src="../images/guide/05-reporters.jpg" alt="The Reporters screen with search, filters and the registry table"><figcaption>Reporters: search by name, CLIA number or NPI, and filter by kind. The Add or correct one entry form is below the table.</figcaption></figure>
+  <div class="pair">
   <ol class="steps">
     <li>Open <span class="ui">Reporters</span> and search for the reporter first.</li>
-    <li>Under <b>Add or correct one entry</b>, choose the <b>Kind</b> and fill in the name and identifiers.</li>
+    <li>Under <b>Add or correct one entry</b> (below the list), choose the <b>Kind</b> and fill in the name and identifiers.</li>
     <li>Click <span class="ui">Save entry</span>. The same rules apply as for a file: identifiers are checked, and an entry with the same CLIA number or NPI is updated.</li>
   </ol>
+  <figure class="shot side"><img src="../images/guide/05b-reporter-form.jpg" style="width:2.93in" alt="The Add or correct one entry form: Kind, laboratory or facility name, CLIA number, NPI, provider names, credential, phone and Save entry"><figcaption><b>Add or correct one entry.</b> A laboratory needs its name and CLIA number; a facility its name and an NPI or CLIA number; a provider a last name and NPI. Fields that do not apply to the kind stay blank.</figcaption></figure>
+  </div>
+  </div>
 
   <h2>8. Good practice</h2>
   <ul>
