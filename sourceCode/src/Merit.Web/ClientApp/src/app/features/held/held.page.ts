@@ -46,10 +46,10 @@ const REASON_LABELS: Record<string, string> = {
     @if (store.groups().length === 0) { <p class="merit-empty">Nothing is held.</p> }
     <ul class="groups">
       <li><button type="button" class="usa-button usa-button--unstyled" [attr.aria-pressed]="store.group() === null" (click)="choose(null)">All held rows</button></li>
-      @for (g of store.groups(); track g.reasonCode + (g.reportedValue ?? '') + (g.senderName ?? '')) {
+      @for (g of store.groups(); track groupKey(g)) {
         <li>
-          <button type="button" class="usa-button usa-button--unstyled" [attr.aria-pressed]="store.group() === g" (click)="choose(g)">
-            {{ label(g.reasonCode) }}@if (g.reportedValue) { : <code>{{ g.reportedValue }}</code> } &middot; {{ g.senderName }} &middot; {{ g.rowCount }} row(s)
+          <button type="button" class="usa-button usa-button--unstyled" [attr.aria-pressed]="isChosen(g)" (click)="choose(g)">
+            {{ label(g.reasonCode) }}@if (g.reportedValue) { : <code>{{ g.reportedValue }}</code> } &middot; {{ sender(g) }} &middot; {{ g.rowCount }} row(s)
           </button>
           @if (g.urgentCount > 0) { <span class="urgent">{{ g.urgentCount }} urgent</span> }
           <span class="merit-meta"> waiting since {{ (g.oldestHeldUtc ?? '').substring(0, 10) }}</span>
@@ -58,7 +58,14 @@ const REASON_LABELS: Record<string, string> = {
     </ul>
 
     <h2>Rows</h2>
-    <div class="bulk" role="group" aria-label="Actions on selected rows">
+    <p class="merit-meta" id="held-scope" aria-live="polite">
+      @if (store.group(); as g) {
+        Showing {{ label(g.reasonCode) }}@if (g.reportedValue) { : <code>{{ g.reportedValue }}</code> } from {{ sender(g) }} only.
+      } @else {
+        Showing every held row.
+      }
+    </p>
+    <div class="bulk" role="group" aria-label="Actions on selected rows" aria-describedby="held-scope">
       <button class="usa-button" type="button" [disabled]="store.selected().size === 0" (click)="release()">Release selected</button>
       <label class="usa-label" for="reject-reason">Reject reason</label>
       <input class="usa-input" id="reject-reason" #reason />
@@ -118,6 +125,21 @@ export class HeldPage implements OnInit {
 
   protected label(code: string): string {
     return REASON_LABELS[code] ?? code;
+  }
+
+  /** A group is its reason, reported value and sender together, as the server groups them. */
+  protected groupKey(g: HeldGroupDto): string {
+    return JSON.stringify([g.reasonCode, g.reportedValue, g.senderOrganizationId]);
+  }
+
+  /** Compared by key, so the chosen group stays marked when the list is reloaded after a release or reject. */
+  protected isChosen(g: HeldGroupDto): boolean {
+    const chosen = this.store.group();
+    return chosen !== null && this.groupKey(chosen) === this.groupKey(g);
+  }
+
+  protected sender(g: HeldGroupDto): string {
+    return g.senderName ?? 'an unknown sender';
   }
 
   protected choose(g: HeldGroupDto | null): void {
@@ -190,7 +212,9 @@ export class HeldPage implements OnInit {
   private loadRows(): void {
     const g = this.store.group();
     this.store.loading.set(true);
-    this.api.heldRows({ reason: g?.reasonCode ?? null, value: g?.reportedValue ?? null, batch: this.store.batch(), page: this.store.page(), pageSize: 50 })
+    // A chosen group is asked for exactly: its sender too, and a missing value means "none", not "any" (issue #9).
+    const scope = g ? { reason: g.reasonCode, value: g.reportedValue, sender: g.senderOrganizationId, exact: true } : {};
+    this.api.heldRows({ ...scope, batch: this.store.batch(), page: this.store.page(), pageSize: 50 })
       .subscribe({
         next: r => { this.store.rows.set(r); this.store.loading.set(false); },
         error: e => { this.store.error.set(problemMessage(e)); this.store.loading.set(false); },

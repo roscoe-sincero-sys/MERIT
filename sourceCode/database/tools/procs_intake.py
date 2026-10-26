@@ -239,7 +239,7 @@ SET @Comments = CONCAT (N'Row ', @rowStatus, N'.');
     {
         "schema": "dbo", "name": "uspListHeldGroups", "kind": "read", "grants": WEB, "ticket": "T105",
         "permission": "result.release_hold",
-        "desc": "Held records grouped by cause -- reason, the reported value that caused it, sender and batch -- so that "
+        "desc": "Held records grouped by cause -- reason, the reported value that caused it, and sender -- so that "
                 "fixing one unknown code releases every row held for it. Urgent groups first.",
         "params": "",
         "key": "NULL",
@@ -263,16 +263,27 @@ SELECT h.reasonCode, h.reportedValue, b.senderOrganizationId, o.organizationName
         "permission": "result.release_hold",
         "desc": "One page of held rows, optionally for one cause, with their reasons, the reported values and any "
                 "correction beside them, and how long each has waited. Urgent rows first.",
-        "params": """@reasonCode    VARCHAR (30) = NULL
-, @reportedValue NVARCHAR (200) = NULL
-, @intakeBatchId UNIQUEIDENTIFIER = NULL
-, @pageNumber    INT = 1
-, @pageSize      INT = 50""",
-        "key": "CONCAT (N'reasonCode=', @reasonCode, N', intakeBatchId=', @intakeBatchId, N', pageNumber=', @pageNumber)",
+        "params": """@reasonCode           VARCHAR (30) = NULL
+, @reportedValue        NVARCHAR (200) = NULL
+, @senderOrganizationId UNIQUEIDENTIFIER = NULL
+, @exactGroup           BIT = 0
+, @intakeBatchId        UNIQUEIDENTIFIER = NULL
+, @pageNumber           INT = 1
+, @pageSize             INT = 50""",
+        "key": "CONCAT (N'reasonCode=', @reasonCode, N', senderOrganizationId=', @senderOrganizationId, N', exactGroup=', "
+               "@exactGroup, N', intakeBatchId=', @intakeBatchId, N', pageNumber=', @pageNumber)",
         "validate": """IF @pageNumber < 1 OR @pageSize NOT BETWEEN 1 AND 500
 BEGIN
     ;THROW 50000, N'@pageNumber must be 1 or more and @pageSize between 1 and 500.', 1;
+END;
+
+IF @exactGroup = 1 AND @reasonCode IS NULL
+BEGIN
+    ;THROW 50000, N'@exactGroup needs @reasonCode: it selects one group from uspListHeldGroups.', 1;
 END;""",
+        "notes": "With @exactGroup = 1 the reason, reported value and sender select exactly one group of "
+                 "uspListHeldGroups, and a null value or sender means none rather than any (issue #9). Without it a "
+                 "null filter matches everything, as before.",
         "body": """
 SELECT s.stagingRowId, s.intakeBatchId, b.fileName, o.organizationName AS senderName, s.rowNumber, s.parsedJson,
        s.correctedJson, s.isUrgent, s.heldSinceUtc, s.assignedToUserId, u.displayName AS assignedToName,
@@ -285,9 +296,12 @@ SELECT s.stagingRowId, s.intakeBatchId, b.fileName, o.organizationName AS sender
   LEFT JOIN auth.appUser AS u ON u.appUserId = s.assignedToUserId
  WHERE s.rowStatus = 'held' AND s.isDeleted = 0
    AND (@intakeBatchId IS NULL OR s.intakeBatchId = @intakeBatchId)
+   AND (b.senderOrganizationId = @senderOrganizationId
+        OR (@senderOrganizationId IS NULL AND (@exactGroup = 0 OR b.senderOrganizationId IS NULL)))
    AND (@reasonCode IS NULL OR EXISTS (SELECT 1 FROM dbo.stagingHoldReason AS h WHERE h.stagingRowId = s.stagingRowId
                                           AND h.reasonCode = @reasonCode AND h.isResolved = 0 AND h.isDeleted = 0
-                                          AND (@reportedValue IS NULL OR h.reportedValue = @reportedValue)))
+                                          AND (h.reportedValue = @reportedValue
+                                               OR (@reportedValue IS NULL AND (@exactGroup = 0 OR h.reportedValue IS NULL)))))
  ORDER BY s.isUrgent DESC, s.heldSinceUtc, s.stagingRowId
 OFFSET (@pageNumber - 1) * @pageSize ROWS
  FETCH NEXT @pageSize ROWS ONLY;

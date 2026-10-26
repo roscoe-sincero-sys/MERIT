@@ -36,6 +36,7 @@ public sealed record AssignableUserDto(Guid AppUserId, string DisplayName);
 public sealed record HeldGroupDto(
     string ReasonCode,
     string? ReportedValue,
+    Guid? SenderOrganizationId,
     string? SenderName,
     int RowCount,
     int UrgentCount,

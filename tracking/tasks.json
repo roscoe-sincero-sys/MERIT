@@ -1044,6 +1044,17 @@
       "started": "2026-10-26",
       "finished": "2026-10-26",
       "notes": "RegistryLookupTests; scenario test RegistryLookupsTryTheCliaNumberThenTheNpiThenTheName; 100k-row check: 8,694 to 6 logical reads (CLIA), 8,155 to 3 (NPI)"
+    },
+    {
+      "id": "T172",
+      "phase": "12 Quality",
+      "task": "Issue #9: a chosen held group lists only its own rows: uspListHeldRows takes the sender and an exact-group flag (null value or sender means none), held groups carry the sender's id, the held page asks for the exact group and shows it above the grid",
+      "ref": "GitHub issue #9",
+      "where": "uspListHeldRows, IntakeService.HeldRowsAsync, api/v1/held/rows, held.page.ts",
+      "status": "Done",
+      "started": "2026-10-26",
+      "finished": "2026-10-26",
+      "notes": "HeldRecordsTests: two senders sharing a cause and value; follow-up issue #29 (uspCreateWorkTask cross-tenant references) found on the way"
     }
   ]
 }

@@ -27,6 +27,8 @@ Notes:
 
 Requires permission result.release_hold (auth.udfHasPermission); refuses with 51403 otherwise.
 
+With @exactGroup = 1 the reason, reported value and sender select exactly one group of uspListHeldGroups, and a null value or sender means none rather than any (issue #9). Without it a null filter matches everything, as before.
+
 Rule 8 error-only instrumentation (a procedure that only reads), generated from templates/procedure-readonly.sql by tools/generateProcedures.py. Row-level security applies to every table read
 or written here: SESSION_CONTEXT (N'scopeKey') decides what the caller can see.
 
@@ -47,11 +49,13 @@ Description:	Initial version.
 
 ***********************************************************************************************************************/
 CREATE OR ALTER PROCEDURE dbo.uspListHeldRows
-      @reasonCode    VARCHAR (30) = NULL
-      , @reportedValue NVARCHAR (200) = NULL
-      , @intakeBatchId UNIQUEIDENTIFIER = NULL
-      , @pageNumber    INT = 1
-      , @pageSize      INT = 50
+      @reasonCode           VARCHAR (30) = NULL
+      , @reportedValue        NVARCHAR (200) = NULL
+      , @senderOrganizationId UNIQUEIDENTIFIER = NULL
+      , @exactGroup           BIT = 0
+      , @intakeBatchId        UNIQUEIDENTIFIER = NULL
+      , @pageNumber           INT = 1
+      , @pageSize             INT = 50
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -72,7 +76,7 @@ BEGIN
           , @ErrorLine      INT            = NULL;
 
     -- Identifiers and counts ONLY. Never free-text search terms or patient data.
-    SET @KeyParameters = CONCAT (N'reasonCode=', @reasonCode, N', intakeBatchId=', @intakeBatchId, N', pageNumber=', @pageNumber);
+    SET @KeyParameters = CONCAT (N'reasonCode=', @reasonCode, N', senderOrganizationId=', @senderOrganizationId, N', exactGroup=', @exactGroup, N', intakeBatchId=', @intakeBatchId, N', pageNumber=', @pageNumber);
 
     SET @ContextMessage = N'Error-only instrumented read: no start row is opened, so @ExecutionLogId is NULL by design.';
 
@@ -86,6 +90,11 @@ BEGIN
         IF @pageNumber < 1 OR @pageSize NOT BETWEEN 1 AND 500
         BEGIN
             ;THROW 50000, N'@pageNumber must be 1 or more and @pageSize between 1 and 500.', 1;
+        END;
+
+        IF @exactGroup = 1 AND @reasonCode IS NULL
+        BEGIN
+            ;THROW 50000, N'@exactGroup needs @reasonCode: it selects one group from uspListHeldGroups.', 1;
         END;
 
         -- =========================================================================================
@@ -103,9 +112,12 @@ BEGIN
           LEFT JOIN auth.appUser AS u ON u.appUserId = s.assignedToUserId
          WHERE s.rowStatus = 'held' AND s.isDeleted = 0
            AND (@intakeBatchId IS NULL OR s.intakeBatchId = @intakeBatchId)
+           AND (b.senderOrganizationId = @senderOrganizationId
+                OR (@senderOrganizationId IS NULL AND (@exactGroup = 0 OR b.senderOrganizationId IS NULL)))
            AND (@reasonCode IS NULL OR EXISTS (SELECT 1 FROM dbo.stagingHoldReason AS h WHERE h.stagingRowId = s.stagingRowId
                                                   AND h.reasonCode = @reasonCode AND h.isResolved = 0 AND h.isDeleted = 0
-                                                  AND (@reportedValue IS NULL OR h.reportedValue = @reportedValue)))
+                                                  AND (h.reportedValue = @reportedValue
+                                                       OR (@reportedValue IS NULL AND (@exactGroup = 0 OR h.reportedValue IS NULL)))))
          ORDER BY s.isUrgent DESC, s.heldSinceUtc, s.stagingRowId
         OFFSET (@pageNumber - 1) * @pageSize ROWS
          FETCH NEXT @pageSize ROWS ONLY;

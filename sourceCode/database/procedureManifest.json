@@ -2224,6 +2224,18 @@
     "isOutput": false
    },
    {
+    "name": "senderOrganizationId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "exactGroup",
+    "type": "BIT",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
     "name": "intakeBatchId",
     "type": "UNIQUEIDENTIFIER",
     "hasDefault": true,

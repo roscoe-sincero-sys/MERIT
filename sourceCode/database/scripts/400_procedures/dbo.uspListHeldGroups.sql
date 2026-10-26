@@ -13,7 +13,7 @@ CreateDate:   2026-10-24
 ========================================================================================================================
 Description:
 
-Held records grouped by cause -- reason, the reported value that caused it, sender and batch -- so that fixing one unknown code releases every row held for it. Urgent groups first.
+Held records grouped by cause -- reason, the reported value that caused it, and sender -- so that fixing one unknown code releases every row held for it. Urgent groups first.
 
 ========================================================================================================================
 Requirements and Key Dependencies:
@@ -133,7 +133,7 @@ EXEC util.uspSetObjectDescription
       @SchemaName  = N'dbo'
     , @ObjectType  = N'PROCEDURE'
     , @ObjectName  = N'uspListHeldGroups'
-    , @Description = N'Held records grouped by cause -- reason, the reported value that caused it, sender and batch -- so that fixing one unknown code releases every row held for it. Urgent groups first.';
+    , @Description = N'Held records grouped by cause -- reason, the reported value that caused it, and sender -- so that fixing one unknown code releases every row held for it. Urgent groups first.';
 GO
 
 IF DATABASE_PRINCIPAL_ID (N'meritWebRole') IS NOT NULL

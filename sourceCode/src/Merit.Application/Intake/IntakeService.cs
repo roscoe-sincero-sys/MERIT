@@ -57,11 +57,22 @@ public sealed class IntakeService(IIntakeData intake, IWorkData work, Services.A
         return await intake.ListHeldGroupsAsync(ct).ConfigureAwait(false);
     }
 
-    public async Task<IReadOnlyList<HeldRowRow>> HeldRowsAsync(string? reasonCode, string? reportedValue, Guid? batchId, int pageNumber,
-                                                              int pageSize, CancellationToken ct = default)
+    /// <summary>
+    /// Held rows, for every cause or for one group. A group is a reason, reported value and sender together, so with
+    /// <paramref name="exactGroup"/> a null value or sender means "none", and bulk actions on the page stay inside the group.
+    /// </summary>
+    public async Task<IReadOnlyList<HeldRowRow>> HeldRowsAsync(string? reasonCode, string? reportedValue, Guid? senderOrganizationId,
+                                                              bool exactGroup, Guid? batchId, int pageNumber, int pageSize,
+                                                              CancellationToken ct = default)
     {
         session.Require(Permissions.ResultReleaseHold);
-        var rows = await intake.ListHeldRowsAsync(reasonCode, reportedValue, batchId, pageNumber, pageSize, ct).ConfigureAwait(false);
+        if (exactGroup && string.IsNullOrWhiteSpace(reasonCode))
+        {
+            throw new ValidationException("reason", "Choose a held group: its reason is required.");
+        }
+
+        var rows = await intake.ListHeldRowsAsync(reasonCode, reportedValue, senderOrganizationId, exactGroup, batchId, pageNumber, pageSize, ct)
+            .ConfigureAwait(false);
         await audit.ListedAsync("stagingRow", rows.Count, ct).ConfigureAwait(false);
         return rows;
     }
