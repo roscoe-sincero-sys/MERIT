@@ -43,13 +43,13 @@ export interface GridSort {
       <table cdk-table [dataSource]="rows()" [trackBy]="trackRow" class="usa-table usa-table--borderless usa-table--compact" [attr.aria-label]="caption()" [attr.aria-busy]="loading()">
         @if (selectable()) {
           <ng-container cdkColumnDef="__select">
-            <th cdk-header-cell *cdkHeaderCellDef scope="col">
+            <th cdk-header-cell *cdkHeaderCellDef scope="col" class="grid-select">
               <div class="usa-checkbox">
                 <input class="usa-checkbox__input" type="checkbox" [id]="gridId() + '-all'" [checked]="allSelected()" (change)="toggleAll()" />
                 <label class="usa-checkbox__label" [for]="gridId() + '-all'"><span class="usa-sr-only">Select all on this page</span></label>
               </div>
             </th>
-            <td cdk-cell *cdkCellDef="let row; let i = index">
+            <td cdk-cell *cdkCellDef="let row; let i = index" class="grid-select">
               <div class="usa-checkbox">
                 <input class="usa-checkbox__input" type="checkbox" [id]="gridId() + '-sel-' + i" [checked]="selected().has(rowKey()(row))" (change)="toggle(row)" />
                 <label class="usa-checkbox__label" [for]="gridId() + '-sel-' + i"><span class="usa-sr-only">Select row {{ i + 1 }}</span></label>
@@ -99,6 +99,12 @@ export interface GridSort {
     .sort-button { color: inherit; font-weight: 700; text-decoration: none; }
     tr[cdk-row]:focus { outline: 3px solid #2491ff; outline-offset: -3px; }
     .grid-row--selected td { background: #d9e8f6; }
+    /* USWDS gives checkbox labels a form margin and a 2rem text indent; in a cell the box alone is centred on the row. */
+    th[cdk-header-cell], td[cdk-cell] { vertical-align: middle; }
+    .grid-select { width: 2.75rem; padding-top: 0; padding-bottom: 0; }
+    .grid-select .usa-checkbox { background: transparent; }
+    .grid-select .usa-checkbox__label { margin-top: 0; padding-left: 0; min-height: 2rem; width: 2rem; display: flex; align-items: center; }
+    .grid-select .usa-checkbox__label::before { margin-left: 0; }
     .grid-badge { display: inline-block; margin-left: .25rem; padding: 0 .4rem; border-radius: 1rem; background: #b50909; color: #fff; font-size: .75rem; font-weight: 700; }
     .grid-empty { color: #565c65; font-style: italic; }
     .grid-pager { display: flex; align-items: center; gap: 1rem; margin-top: .5rem; }

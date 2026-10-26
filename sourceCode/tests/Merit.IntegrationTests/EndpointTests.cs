@@ -108,6 +108,23 @@ public sealed class EndpointTests(MeritFixture fixture, ITestOutputHelper output
     }
 
     [SqlFact]
+    public async Task TheSignInPageAndItsStylesheetsLoadBeforeSigningIn()
+    {
+        // Issue #3: the fallback policy once redirected the static files to sign-in, so the sign-in page rendered unstyled.
+        using var client = fixture.Anonymous();
+        var page = await client.NoRedirect.GetAsync("/account/signin");
+        string html = await page.Content.ReadAsStringAsync();
+        Assert.Equal(HttpStatusCode.OK, page.StatusCode);
+        var assets = System.Text.RegularExpressions.Regex.Matches(html, "(?:href|src)=\"(/(?:css|js|lib)/[^\"]+)\"").Select(m => m.Groups[1].Value).ToList();
+        Assert.NotEmpty(assets);
+        foreach (var asset in assets)
+        {
+            var response = await client.NoRedirect.GetAsync(asset);
+            Assert.True(response.StatusCode == HttpStatusCode.OK, $"{asset} -> {(int)response.StatusCode}");
+        }
+    }
+
+    [SqlFact]
     public async Task EveryPageRendersInFullAndAsAnHtmxPartial()
     {
         var supervisor = await fixture.SignedInAsync("supervisor");

@@ -2,9 +2,9 @@
 @{
     ViewData["Title"] = "Sign in";
 }
-<div class="grid-row">
-    <div class="grid-col-12 tablet:grid-col-8 desktop:grid-col-6">
-        <h1>Sign in to MERIT</h1>
+<div class="merit-signin">
+    <section class="merit-signin__card" aria-labelledby="signin-heading">
+        <h1 id="signin-heading">Sign in to MERIT</h1>
         @if (Model.Message is not null)
         {
             <div class="usa-alert usa-alert--error usa-alert--slim" role="alert"><div class="usa-alert__body"><p class="usa-alert__text">@Model.Message</p></div></div>
@@ -21,8 +21,17 @@
                 <span class="usa-error-message" asp-validation-for="Password"></span>
                 <input class="usa-input" asp-for="Password" autocomplete="current-password" />
             </div>
-            <button class="usa-button" type="submit">Continue</button>
+            <button class="usa-button merit-signin__submit" type="submit">Continue</button>
         </form>
-        <p class="merit-meta">After your password you will be asked for a code from your authenticator app. Multi-factor authentication is required for every account.</p>
-    </div>
+        <p class="merit-signin__mfa">After your password you will be asked for a code from your authenticator app. Multi-factor authentication is required for every account.</p>
+    </section>
+    <aside class="merit-signin__about" aria-labelledby="about-heading">
+        <h2 id="about-heading">One registry for metals exposure</h2>
+        <ul>
+            <li>Laboratory results for lead, arsenic, mercury and cadmium, matched to one record per person.</li>
+            <li>Cases, follow-up tasks and home, child-care and workplace investigations.</li>
+            <li>CDC CBLS and NIOSH ABLES extracts without names or addresses.</li>
+        </ul>
+        <p>Every view, change and export of a person, result or case is recorded.</p>
+    </aside>
 </div>

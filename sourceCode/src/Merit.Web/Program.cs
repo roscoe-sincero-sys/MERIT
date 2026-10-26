@@ -186,7 +186,8 @@ app.UseAuthentication();
 app.UseMiddleware<SecurityHeadersMiddleware>();
 app.UseAuthorization();
 
-app.MapStaticAssets();
+// Stylesheets, scripts, fonts and icons hold no data, and the sign-in page needs them before anyone is signed in.
+app.MapStaticAssets().AllowAnonymous();
 app.MapOpenApi("/openapi/{documentName}.json").RequireAuthorization(Permissions.SignedIn);
 app.MapHealthChecks("/health").AllowAnonymous();
 app.MapControllers();
