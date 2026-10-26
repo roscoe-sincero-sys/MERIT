@@ -46,6 +46,14 @@ main.merit-main { max-width: 80rem; margin: 0 auto; padding: 1rem 1rem 3rem; }
 .merit-inline-form .usa-form { max-width: none; }
 .merit-form-row { display: flex; flex-wrap: wrap; gap: 0 1rem; }
 .merit-form-row > .usa-form-group { flex: 1 1 12rem; margin-top: .75rem; }
+/* USWDS caps .usa-form at 20rem, which folded every filter row and grid form into one 320 px column (issue #18). */
+.usa-form.merit-form-row, .usa-form.merit-grid-2 { max-width: none; }
+.merit-form-row > .usa-button { align-self: flex-end; }
+
+/* Reporters: only the chosen kind's fields. Without :has() every field shows, and the server checks them either way. */
+.merit-grid-2 > .merit-form-actions { grid-column: 1 / -1; }
+.merit-reporter-form:has(#Kind option[value="provider"]:checked) .merit-org-only,
+.merit-reporter-form:has(#Kind option:not([value="provider"]):checked) .merit-provider-only { display: none; }
 .merit-form-row .usa-input, .merit-form-row .usa-select, .merit-form-row .usa-textarea { max-width: none; }
 .usa-table { width: 100%; }
 .merit-table-wrap { overflow-x: auto; }
@@ -125,6 +133,10 @@ dialog.merit-dialog::backdrop { background: rgba(0,0,0,.5); }
 /* Card headings can be a file name with no spaces: let it break anywhere rather than run past the card (issue #16). */
 .usa-card__heading { overflow-wrap: anywhere; }
 .merit-card__file { font-size: 1.15rem; }
+
+/* A card's buttons in a row of their own, so none is the body's last child (USWDS strips its bottom padding) (issue #17). */
+.merit-card-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; margin-top: .75rem; }
+.merit-card-actions .usa-button { display: inline-block; margin: 0; overflow-wrap: anywhere; }
 
 /* Sign-in and second-factor pages: a card on a soft band, with a short description beside it on wide screens. */
 .merit-signin { display: grid; grid-template-columns: minmax(0, 28rem) minmax(0, 24rem); gap: 2rem 3rem; align-items: start;

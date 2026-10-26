@@ -37,7 +37,7 @@
     <section class="merit-section" aria-labelledby="add-h">
         <h2 id="add-h">Add or correct one entry</h2>
         <p class="merit-meta">An entry with the same CLIA number (laboratories and facilities) or NPI (providers) is updated, not duplicated. Blank fields keep what is stored.</p>
-        <form class="usa-form merit-grid-2" method="post" action="/reporters">
+        <form class="usa-form merit-grid-2 merit-reporter-form" method="post" action="/reporters">
             @Html.AntiForgeryToken()
             <div class="usa-form-group"><label class="usa-label" for="Kind">Kind</label>
                 <select class="usa-select" id="Kind" name="Kind">
@@ -45,18 +45,18 @@
                     <option value="facility" selected="@(f.Kind == "facility")">Facility (needs NPI or CLIA)</option>
                     <option value="provider" selected="@(f.Kind == "provider")">Provider (needs NPI)</option>
                 </select></div>
-            <div class="usa-form-group"><label class="usa-label" for="Name">Laboratory or facility name</label><input class="usa-input" id="Name" name="Name" value="@f.Name" maxlength="120" /></div>
-            <div class="usa-form-group"><label class="usa-label" for="Clia">CLIA number</label>
+            <div class="usa-form-group merit-org-only"><label class="usa-label" for="Name">Laboratory or facility name</label><input class="usa-input" id="Name" name="Name" value="@f.Name" maxlength="120" /></div>
+            <div class="usa-form-group merit-org-only"><label class="usa-label" for="Clia">CLIA number</label>
                 <div class="usa-hint" id="clia-hint">Two digits, D, seven digits: 21D0123456.</div>
                 <input class="usa-input" id="Clia" name="Clia" value="@f.Clia" maxlength="12" aria-describedby="clia-hint" /></div>
             <div class="usa-form-group"><label class="usa-label" for="Npi">NPI</label>
                 <div class="usa-hint" id="npi-hint">Ten digits; MERIT checks the last digit.</div>
                 <input class="usa-input" id="Npi" name="Npi" value="@f.Npi" maxlength="12" inputmode="numeric" aria-describedby="npi-hint" /></div>
-            <div class="usa-form-group"><label class="usa-label" for="LastName">Provider last name</label><input class="usa-input" id="LastName" name="LastName" value="@f.LastName" maxlength="60" /></div>
-            <div class="usa-form-group"><label class="usa-label" for="FirstName">Provider first name</label><input class="usa-input" id="FirstName" name="FirstName" value="@f.FirstName" maxlength="60" /></div>
-            <div class="usa-form-group"><label class="usa-label" for="Credential">Credential</label><input class="usa-input" id="Credential" name="Credential" value="@f.Credential" maxlength="20" /></div>
+            <div class="usa-form-group merit-provider-only"><label class="usa-label" for="LastName">Provider last name</label><input class="usa-input" id="LastName" name="LastName" value="@f.LastName" maxlength="60" /></div>
+            <div class="usa-form-group merit-provider-only"><label class="usa-label" for="FirstName">Provider first name</label><input class="usa-input" id="FirstName" name="FirstName" value="@f.FirstName" maxlength="60" /></div>
+            <div class="usa-form-group merit-provider-only"><label class="usa-label" for="Credential">Credential</label><input class="usa-input" id="Credential" name="Credential" value="@f.Credential" maxlength="20" /></div>
             <div class="usa-form-group"><label class="usa-label" for="Phone">Phone</label><input class="usa-input" id="Phone" name="Phone" value="@f.Phone" maxlength="30" /></div>
-            <div><button class="usa-button" type="submit">Save entry</button></div>
+            <div class="merit-form-actions"><button class="usa-button" type="submit">Save entry</button></div>
         </form>
     </section>
 }

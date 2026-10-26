@@ -1121,6 +1121,50 @@
       "started": "2026-10-26",
       "finished": "2026-10-26",
       "notes": "e2e layout.spec.ts"
+    },
+    {
+      "id": "T179",
+      "phase": "12 Quality",
+      "task": "Issue #13: Case timeliness report counts only follow-up activity types and reports cases not followed up yet",
+      "ref": "GitHub issue #13",
+      "where": "uspReportCaseTimeliness, ReviewServices",
+      "status": "Done",
+      "started": "2026-10-26",
+      "finished": "2026-10-26",
+      "notes": "CaseTimelinessCountsOnlyFollowUpWork"
+    },
+    {
+      "id": "T180",
+      "phase": "12 Quality",
+      "task": "Issue #19: Search results show open cases as linked case chips (shared _CaseChip partial with the person header); uspSearch returns them as JSON",
+      "ref": "GitHub issue #19",
+      "where": "uspSearch, Views/Search/_Results.cshtml, Views/Shared/_CaseChip.cshtml",
+      "status": "Done",
+      "started": "2026-10-26",
+      "finished": "2026-10-26",
+      "notes": "EndpointTests.SearchShowsOpenCasesAsChipsLinkingToTheCase"
+    },
+    {
+      "id": "T181",
+      "phase": "12 Quality",
+      "task": "Issue #17: Extract run card actions in their own row; Download label breaks file names after underscores (FileNames.Breakable)",
+      "ref": "GitHub issue #17",
+      "where": "Views/Extracts/_Runs.cshtml, merit.css, FileNames.cs",
+      "status": "Done",
+      "started": "2026-10-26",
+      "finished": "2026-10-26",
+      "notes": "e2e layout.spec.ts"
+    },
+    {
+      "id": "T182",
+      "phase": "12 Quality",
+      "task": "Issue #18: Row and grid forms no longer capped at 20rem; Reporters add form in columns, showing only the chosen kind's fields",
+      "ref": "GitHub issue #18",
+      "where": "merit.css, Views/Reporters/Index.cshtml",
+      "status": "Done",
+      "started": "2026-10-26",
+      "finished": "2026-10-26",
+      "notes": "e2e layout.spec.ts"
     }
   ]
 }

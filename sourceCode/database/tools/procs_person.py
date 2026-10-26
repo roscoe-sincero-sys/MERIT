@@ -71,9 +71,12 @@ END;
 
 SELECT TOP (@maxRows) p.personId, p.lastName, p.firstName, p.middleName, p.dob, p.sex, x.matchedOn,
        cur.countyName AS currentCounty,
-       (SELECT STRING_AGG (CONCAT (a.code, N':', c.classification), N', ')
+       (SELECT c.exposureCaseId, c.caseNumber, a.code AS analyteCode, a.displayName AS analyteName, c.classification,
+               c.caseStatus, c.population
           FROM dbo.exposureCase AS c JOIN config.analyte AS a ON a.analyteId = c.analyteId
-         WHERE c.personId = p.personId AND c.isDeleted = 0 AND c.caseStatus <> 'closed') AS openCases
+         WHERE c.personId = p.personId AND c.isDeleted = 0 AND c.caseStatus <> 'closed'
+         ORDER BY c.openedDate
+           FOR JSON PATH) AS openCasesJson
   FROM @persons AS x
   JOIN dbo.person AS p ON p.personId = x.personId
   OUTER APPLY (SELECT TOP (1) sj.subJurisdictionName AS countyName

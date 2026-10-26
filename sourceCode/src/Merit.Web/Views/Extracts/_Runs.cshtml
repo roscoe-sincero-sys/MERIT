@@ -23,13 +23,19 @@
                             </p>
                         }
                         @if (r.LastError is not null && r.RunStatus is not ("ready" or "submitted")) { <p class="merit-meta">@r.LastError</p> }
-                        @if (r.RunStatus is "ready" or "submitted") { <a class="usa-button usa-button--outline" href="/extracts/@r.ExtractRunId/download">Download @r.FileName</a> }
-                        @if (r.RunStatus == "ready" && CurrentSession.Has(Permissions.ExtractSubmit))
+                        @if (r.RunStatus is "ready" or "submitted")
                         {
-                            <form class="display-inline" hx-post="/extracts/@r.ExtractRunId/submitted" hx-target="#extract-runs" hx-swap="outerHTML"
-                                  hx-confirm="Mark this file as sent to @(r.ExtractType == "CBLS" ? "CDC" : "NIOSH")? Do this after the upload succeeds.">
-                                <button class="usa-button" type="submit">Mark submitted<span class="usa-sr-only"> @r.ExtractType @Options.Date(r.PeriodStart)</span></button>
-                            </form>
+                            @* The actions sit in their own row: as the body's last child, a button lost its bottom padding to USWDS (issue #17). *@
+                            <div class="merit-card-actions">
+                                <a class="usa-button usa-button--outline" href="/extracts/@r.ExtractRunId/download">Download @FileNames.Breakable(r.FileName)</a>
+                                @if (r.RunStatus == "ready" && CurrentSession.Has(Permissions.ExtractSubmit))
+                                {
+                                    <form hx-post="/extracts/@r.ExtractRunId/submitted" hx-target="#extract-runs" hx-swap="outerHTML"
+                                          hx-confirm="Mark this file as sent to @(r.ExtractType == "CBLS" ? "CDC" : "NIOSH")? Do this after the upload succeeds.">
+                                        <button class="usa-button" type="submit">Mark submitted<span class="usa-sr-only"> @r.ExtractType @Options.Date(r.PeriodStart)</span></button>
+                                    </form>
+                                }
+                            </div>
                         }
                     </div>
                 </div>

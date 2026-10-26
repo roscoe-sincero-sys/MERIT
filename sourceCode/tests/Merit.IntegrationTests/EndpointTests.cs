@@ -206,6 +206,16 @@ public sealed class EndpointTests(MeritFixture fixture, ITestOutputHelper output
     }
 
     [SqlFact]
+    public async Task SearchShowsOpenCasesAsChipsLinkingToTheCase()
+    {
+        // Issue #19: the Open cases column showed the raw "PB:confirmed".
+        var supervisor = await fixture.SignedInAsync("supervisor");
+        var html = await supervisor.Http.GetStringAsync("/search?q=Rivera");
+        Assert.DoesNotContain("PB:", html, StringComparison.Ordinal);
+        Assert.Matches($$"""<a class="merit-badge merit-badge--\w+" href="/cases/{{fixture.Ids.MiaCaseId}}"><abbr title="[^"]+">PB</abbr> &middot; [A-Z][a-z]+ &middot; {{fixture.Ids.MiaCaseNumber}}</a>""", html);
+    }
+
+    [SqlFact]
     public async Task ResponsesCarryTheContentSecurityPolicyWithANonce()
     {
         var supervisor = await fixture.SignedInAsync("supervisor");
