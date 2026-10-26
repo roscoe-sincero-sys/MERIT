@@ -257,7 +257,12 @@ public interface IIntakeData
 
     Task<IReadOnlyList<HeldGroupRow>> ListHeldGroupsAsync(CancellationToken ct = default);
 
-    Task<IReadOnlyList<HeldRowRow>> ListHeldRowsAsync(string? reasonCode, string? reportedValue, Guid? intakeBatchId, int pageNumber, int pageSize, CancellationToken ct = default);
+    /// <summary>
+    /// One page of held rows. With <paramref name="exactGroup"/> the reason, value and sender pick exactly one held group,
+    /// and a null value or sender means none; without it a null filter matches every row.
+    /// </summary>
+    Task<IReadOnlyList<HeldRowRow>> ListHeldRowsAsync(string? reasonCode, string? reportedValue, Guid? senderOrganizationId, bool exactGroup,
+                                                      Guid? intakeBatchId, int pageNumber, int pageSize, CancellationToken ct = default);
 
     Task SaveCorrectionAsync(Guid stagingRowId, string correctedJson, CancellationToken ct = default);
 

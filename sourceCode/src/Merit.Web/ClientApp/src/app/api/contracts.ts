@@ -60,6 +60,7 @@ export interface AssignableUserDto {
 export interface HeldGroupDto {
   reasonCode: string;
   reportedValue: string | null;
+  senderOrganizationId: string | null;
   senderName: string | null;
   rowCount: number;
   urgentCount: number;

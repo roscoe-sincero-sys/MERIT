@@ -70,17 +70,21 @@ public sealed class HeldRecordsController(IntakeService intake) : ControllerBase
     [HttpGet("groups")]
     [Authorize(Policy = Permissions.ResultReleaseHold)]
     public async Task<IReadOnlyList<HeldGroupDto>> Groups(CancellationToken ct)
-        => (await intake.HeldGroupsAsync(ct)).Select(g => new HeldGroupDto(g.ReasonCode, g.ReportedValue, g.SenderName, g.HeldRowCount,
+        => (await intake.HeldGroupsAsync(ct)).Select(g => new HeldGroupDto(g.ReasonCode, g.ReportedValue, g.SenderOrganizationId, g.SenderName, g.HeldRowCount,
             g.UrgentCount, g.OldestHeldUtc, g.BatchCount, g.SampleMessage)).ToList();
 
+    /// <summary>
+    /// Held rows. <c>exact=true</c> with <c>reason</c>, <c>value</c> and <c>sender</c> lists one group from <c>groups</c>,
+    /// where a missing value or sender means the group has none.
+    /// </summary>
     [HttpGet("rows")]
     [Authorize(Policy = Permissions.ResultReleaseHold)]
-    public async Task<PagedResult<HeldRowDto>> Rows(string? reason, string? value, Guid? batch, int page = 1, int pageSize = 50,
-                                                    CancellationToken ct = default)
+    public async Task<PagedResult<HeldRowDto>> Rows(string? reason, string? value, Guid? sender, bool exact = false, Guid? batch = null,
+                                                    int page = 1, int pageSize = 50, CancellationToken ct = default)
     {
         page = Math.Max(page, 1);
         pageSize = Math.Clamp(pageSize, 1, 500);
-        var rows = await intake.HeldRowsAsync(reason, value, batch, page, pageSize, ct);
+        var rows = await intake.HeldRowsAsync(reason, value, sender, exact, batch, page, pageSize, ct);
         return new PagedResult<HeldRowDto>(rows.Select(r => new HeldRowDto(r.StagingRowId, r.IntakeBatchId, r.FileName, r.SenderName,
                 r.RowNumber, Parse(r.ParsedJson), Parse(r.CorrectedJson), r.IsUrgent, r.HeldSinceUtc, r.AssignedToName, r.Reasons)).ToList(),
             rows.FirstOrDefault()?.TotalCount ?? 0, page, pageSize);

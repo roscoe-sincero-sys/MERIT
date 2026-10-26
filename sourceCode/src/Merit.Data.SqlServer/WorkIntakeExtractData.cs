@@ -111,9 +111,10 @@ public sealed class IntakeData(Db db) : IIntakeData
     public Task<IReadOnlyList<HeldGroupRow>> ListHeldGroupsAsync(CancellationToken ct = default)
         => db.QueryAsync<HeldGroupRow>("dbo.uspListHeldGroups", null, ct);
 
-    public Task<IReadOnlyList<HeldRowRow>> ListHeldRowsAsync(string? reasonCode, string? reportedValue, Guid? intakeBatchId, int pageNumber,
-                                                            int pageSize, CancellationToken ct = default)
-        => db.QueryAsync<HeldRowRow>("dbo.uspListHeldRows", new { reasonCode, reportedValue, intakeBatchId, pageNumber, pageSize }, ct);
+    public Task<IReadOnlyList<HeldRowRow>> ListHeldRowsAsync(string? reasonCode, string? reportedValue, Guid? senderOrganizationId, bool exactGroup,
+                                                             Guid? intakeBatchId, int pageNumber, int pageSize, CancellationToken ct = default)
+        => db.QueryAsync<HeldRowRow>("dbo.uspListHeldRows",
+            new { reasonCode, reportedValue, senderOrganizationId, exactGroup, intakeBatchId, pageNumber, pageSize }, ct);
 
     public Task SaveCorrectionAsync(Guid stagingRowId, string correctedJson, CancellationToken ct = default)
         => db.ExecuteAsync("dbo.uspSaveStagingCorrection", new { stagingRowId, correctedJson }, ct);
