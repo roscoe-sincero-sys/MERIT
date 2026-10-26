@@ -129,8 +129,8 @@ public sealed class RegistryService(IPlaceData places, ICurrentSession session)
     {
         var problems = new List<string>();
         string? kind = input.Kind?.Trim().ToLowerInvariant();
-        string? npi = Digits(input.Npi);
-        string? clia = ProviderIdentifiers.NormalizeClia(input.Clia?.Replace("-", string.Empty).Replace(" ", string.Empty));
+        string? npi = ProviderIdentifiers.NormalizeNpi(input.Npi);
+        string? clia = ProviderIdentifiers.NormalizeClia(input.Clia);
 
         if (kind is null || !Kinds.Contains(kind))
         {
@@ -191,17 +191,6 @@ public sealed class RegistryService(IPlaceData places, ICurrentSession session)
            + "laboratory,Chesapeake Reference Laboratory,,,,,21D0123456,410-555-0100\r\n"
            + "facility,Harbor Pediatrics,,,,1234567893,,410-555-0142\r\n"
            + "provider,,Rivera,Ana,MD,1245319599,,\r\n";
-
-    private static string? Digits(string? s)
-    {
-        if (string.IsNullOrWhiteSpace(s))
-        {
-            return null;
-        }
-
-        string d = new(s.Where(c => !char.IsWhiteSpace(c) && c != '-').ToArray());
-        return d.Length == 0 ? null : d;
-    }
 
     private static string? Trim(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
 }

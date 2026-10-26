@@ -44,6 +44,26 @@ public static class ProviderIdentifiers
            && (clia[2] == 'D' || clia[2] == 'd')
            && clia[3..].All(char.IsAsciiDigit);
 
-    public static string? NormalizeClia(string? clia)
-        => string.IsNullOrWhiteSpace(clia) ? null : clia.Trim().ToUpperInvariant();
+    /// <summary>
+    /// The one form a CLIA number is stored and looked up in: spaces and hyphens removed, upper case, so 21d-0123456 and
+    /// "21D 0123456" both match the registry's 21D0123456. Anything else is left for <see cref="IsValidClia"/> to refuse.
+    /// </summary>
+    public static string? NormalizeClia(string? clia) => WithoutSeparators(clia)?.ToUpperInvariant();
+
+    /// <summary>
+    /// The one form an NPI is stored and looked up in: spaces and hyphens removed, so "1234 567 893" and 1234-567-893 match
+    /// 1234567893. Other characters are kept, so <see cref="IsValidNpi"/> refuses them rather than a stray letter vanishing.
+    /// </summary>
+    public static string? NormalizeNpi(string? npi) => WithoutSeparators(npi);
+
+    private static string? WithoutSeparators(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        string kept = new(value.Where(c => !char.IsWhiteSpace(c) && c != '-').ToArray());
+        return kept.Length == 0 ? null : kept;
+    }
 }

@@ -141,6 +141,33 @@ public sealed class ProviderIdentifierTests
     [InlineData("21X0012345", false)]
     [InlineData("21D001234", false)]
     public void CliaFormat(string clia, bool valid) => Assert.Equal(valid, ProviderIdentifiers.IsValidClia(clia));
+
+    // Issue #12: the registry and intake share one normalization, so a formatted identifier in a lab file still matches.
+    [Theory]
+    [InlineData("21D0456789", "21D0456789")]
+    [InlineData("21D-0456789", "21D0456789")]
+    [InlineData(" 21d 0456789 ", "21D0456789")]
+    [InlineData("  ", null)]
+    [InlineData(null, null)]
+    public void CliaNumbersAreNormalizedOneWay(string? reported, string? stored) => Assert.Equal(stored, ProviderIdentifiers.NormalizeClia(reported));
+
+    [Theory]
+    [InlineData("1234567893", "1234567893")]
+    [InlineData("1234 567 893", "1234567893")]
+    [InlineData("123-456-7893", "1234567893")]
+    [InlineData("12345678AB", "12345678AB")]
+    [InlineData(" - ", null)]
+    public void NpisAreNormalizedOneWay(string? reported, string? stored) => Assert.Equal(stored, ProviderIdentifiers.NormalizeNpi(reported));
+
+    [Fact]
+    public void TheRegistryAndIntakeStoreTheSameForm()
+    {
+        var (row, problems) = Merit.Application.Services.RegistryService.Check(1,
+            new("laboratory", "Chesapeake Reference Laboratory", null, null, null, "1234 567 893", "21d-0456789", null));
+        Assert.Empty(problems);
+        Assert.Equal(ProviderIdentifiers.NormalizeClia("21D 0456789"), row!.Clia);
+        Assert.Equal(ProviderIdentifiers.NormalizeNpi("1234-567-893"), row.Npi);
+    }
 }
 
 public sealed class TimeOrderedIdTests
