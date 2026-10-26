@@ -978,6 +978,28 @@
       "started": "2026-10-25",
       "finished": "2026-10-25",
       "notes": "Real screenshots in docs/images/guide; sources in docs/guides"
+    },
+    {
+      "id": "T166",
+      "phase": "12 Quality",
+      "task": "Retake the user guide screenshots after the #3 fixes; print every image at one scale with whole-element crops; add the capture, sizing and print tools",
+      "ref": "Request 2026-10-26",
+      "where": "docs/guides, docs/images/guide",
+      "status": "Done",
+      "started": "2026-10-26",
+      "finished": "2026-10-26",
+      "notes": "PR #5; Daily Operations 26 pages, NPI/CLIA 8 pages"
+    },
+    {
+      "id": "T167",
+      "phase": "12 Quality",
+      "task": "Code review of sourceCode: verify findings and log them as GitHub issues with recommendations",
+      "ref": "Request 2026-10-26",
+      "where": "GitHub issues #6-#21",
+      "status": "Done",
+      "started": "2026-10-26",
+      "finished": "2026-10-26",
+      "notes": "16 issues: 3 security (#6 county mapping, #7 job session scope, #8 sign-in rate limit), 8 bugs, 1 performance, 4 UI/maintainability"
     }
   ]
 }
