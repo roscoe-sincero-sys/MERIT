@@ -3,7 +3,13 @@
     ViewData["Title"] = "Intake";
 }
 <h1>Intake</h1>
-@if (Model.Message is not null)
+@if (Model.Message is not null && Model.DuplicateOf is Guid earlier)
+{
+    <div class="usa-alert usa-alert--warning usa-alert--slim" role="alert"><div class="usa-alert__body"><p class="usa-alert__text">@Model.Message
+        <a class="usa-link" href="#batch-@earlier">Show that batch</a>. If the laboratory sent it again on purpose, choose the file again and tick
+        <strong>This is a genuine re-send</strong>.</p></div></div>
+}
+else if (Model.Message is not null)
 {
     <div class="usa-alert usa-alert--info usa-alert--slim" role="status"><div class="usa-alert__body"><p class="usa-alert__text">@Model.Message</p></div></div>
 }
@@ -17,6 +23,13 @@
                 @foreach (var p in Model.Profiles) { <option value="@p.IntakeProfileId">@p.SenderName &mdash; @p.ProfileName (v@p.ProfileVersion, @p.FileType)</option> }
             </select></div>
         <div class="usa-form-group"><label class="usa-label" for="file">File</label><input class="usa-file-input" id="file" name="file" type="file" accept=".csv,.txt,.tsv" required /></div>
+        @if (Model.DuplicateOf is not null)
+        {
+            <div class="usa-checkbox">
+                <input class="usa-checkbox__input" id="uploadAgain" name="uploadAgain" type="checkbox" value="true" />
+                <label class="usa-checkbox__label" for="uploadAgain">This is a genuine re-send: process it again</label>
+            </div>
+        }
         <button class="usa-button" type="submit">Upload</button>
     </form>
 </section>

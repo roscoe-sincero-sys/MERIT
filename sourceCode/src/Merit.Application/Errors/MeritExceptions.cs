@@ -47,6 +47,24 @@ public sealed class BusinessRuleException : MeritException
     }
 }
 
+/// <summary>The same file was already received for the same intake profile; uploading it again needs an explicit choice.</summary>
+public sealed class FileAlreadyReceivedException : MeritException
+{
+    public FileAlreadyReceivedException(Guid intakeBatchId, string? fileName, DateTime receivedUtc)
+        : base("This file was already received.")
+    {
+        IntakeBatchId = intakeBatchId;
+        FileName = fileName;
+        ReceivedUtc = receivedUtc;
+    }
+
+    public Guid IntakeBatchId { get; }
+
+    public string? FileName { get; }
+
+    public DateTime ReceivedUtc { get; }
+}
+
 /// <summary>Input failed validation; carries field-level messages for the form.</summary>
 public sealed class ValidationException : MeritException
 {

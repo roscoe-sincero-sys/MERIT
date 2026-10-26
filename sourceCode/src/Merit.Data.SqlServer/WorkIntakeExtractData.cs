@@ -74,8 +74,12 @@ public sealed class IntakeData(Db db) : IIntakeData
     public Task<IntakeProfileRow?> GetProfileAsync(Guid intakeProfileId, CancellationToken ct = default)
         => db.QuerySingleAsync<IntakeProfileRow>("dbo.uspGetIntakeProfile", new { intakeProfileId }, ct);
 
-    public Task CreateBatchAsync(Guid intakeBatchId, Guid intakeProfileId, string fileName, string rawContent, Guid jobId, CancellationToken ct = default)
-        => db.ExecuteAsync("dbo.uspCreateIntakeBatch", new { intakeBatchId, intakeProfileId, fileName, rawContent, jobId }, ct);
+    public Task CreateBatchAsync(Guid intakeBatchId, Guid intakeProfileId, string fileName, string rawContent, string contentSha256, Guid jobId,
+                                 CancellationToken ct = default)
+        => db.ExecuteAsync("dbo.uspCreateIntakeBatch", new { intakeBatchId, intakeProfileId, fileName, rawContent, jobId, contentSha256 }, ct);
+
+    public Task<ReceivedBatchRow?> FindBatchByContentAsync(Guid intakeProfileId, string contentSha256, CancellationToken ct = default)
+        => db.QuerySingleAsync<ReceivedBatchRow>("dbo.uspFindIntakeBatchByContent", new { intakeProfileId, contentSha256 }, ct);
 
     public Task<IReadOnlyList<IntakeBatchRow>> ListBatchesAsync(int maxRows, CancellationToken ct = default)
         => db.QueryAsync<IntakeBatchRow>("dbo.uspListIntakeBatches", new { maxRows }, ct);

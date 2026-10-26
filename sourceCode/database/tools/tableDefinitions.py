@@ -926,6 +926,8 @@ TABLES = [
               check="sourceChannel IN ('upload', 'sftp', 'feed', 'portal', 'manual')"),
             c("fileName", "NVARCHAR (260)", "Original file name."),
             c("rawContent", "NVARCHAR (MAX)", "Raw file or message exactly as received. Never edited."),
+            c("contentSha256", "CHAR (64)", "SHA-256 of the content as received (UTF-8), in hex: finds the same file "
+              "uploaded twice for the same profile. Null for batches received before it was recorded."),
             c("receivedUtc", "DATETIME2 (3)", "UTC time the agency received it.", null=False),
             c("batchStatus", "VARCHAR (20)", "received, parsing, paused, loaded or failed.", null=False,
               default="'received'", check="batchStatus IN ('received', 'parsing', 'paused', 'loaded', 'failed')"),
@@ -938,7 +940,9 @@ TABLES = [
         ],
         "fks": [("intakeProfileId", "dbo.intakeProfile", "intakeProfileId"),
                 ("senderOrganizationId", "dbo.organization", "organizationId")],
-        "indexes": [],
+        # Led by the hash: row-level security gives the optimizer no tenant to seek on (see dbo.organization).
+        "indexes": [{"name": "IX_dbo_intakeBatch_contentSha256_intakeProfileId", "cols": "contentSha256, intakeProfileId",
+                     "filter": "isDeleted = 0 AND contentSha256 IS NOT NULL"}],
     },
     {
         "schema": "dbo", "name": "labResult", "rls": "person", "personCol": "personId",

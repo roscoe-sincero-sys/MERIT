@@ -575,7 +575,9 @@ public sealed class UserFormModel
     public IReadOnlyList<SelectOption> Tenants { get; set; } = [];
 }
 
-public sealed record IntakeModel(IReadOnlyList<IntakeProfileListRow> Profiles, IReadOnlyList<IntakeBatchRow> Batches, string? Message);
+/// <param name="DuplicateOf">The batch that already holds the file just uploaded, when the upload was refused as a repeat.</param>
+public sealed record IntakeModel(IReadOnlyList<IntakeProfileListRow> Profiles, IReadOnlyList<IntakeBatchRow> Batches, string? Message,
+                                 Guid? DuplicateOf = null);
 
 public sealed record ExtractsModel(IReadOnlyList<ExtractRunRow> Runs, bool AnyRunning, int Year, int Quarter);
 

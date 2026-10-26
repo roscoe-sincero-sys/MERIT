@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using Merit.Application.Data;
 using Merit.Application.Errors;
@@ -20,24 +22,38 @@ public sealed class IntakeService(IIntakeData intake, IWorkData work, Services.A
         return await intake.ListProfilesAsync(ct).ConfigureAwait(false);
     }
 
-    /// <summary>Stores the file unchanged and queues the intake job; returns the batch id the screen polls.</summary>
-    public async Task<Guid> UploadAsync(Guid intakeProfileId, string fileName, string content, CancellationToken ct = default)
+    /// <summary>
+    /// Stores the file unchanged and queues the intake job; returns the batch id the screen polls. A file already received
+    /// for the same profile is refused with <see cref="FileAlreadyReceivedException"/>, so a mistaken second upload does
+    /// not hold every row twice (issue #20); <paramref name="uploadAgain"/> accepts a laboratory's genuine re-send.
+    /// </summary>
+    public async Task<Guid> UploadAsync(Guid intakeProfileId, string fileName, string content, bool uploadAgain = false,
+                                        CancellationToken ct = default)
     {
         session.Require(Permissions.IntakeUpload);
         var profile = await intake.GetProfileAsync(intakeProfileId, ct).ConfigureAwait(false)
                       ?? throw new ValidationException("IntakeProfileId", "Choose the sender's intake profile.");
         var v = new Validator();
         v.When(string.IsNullOrWhiteSpace(content), "File", "The file is empty.");
-        v.When(content.Length > MaxFileBytes, "File", "The file is larger than 20 MB; split it or send it through the secure file drop.");
+        v.When(Encoding.UTF8.GetByteCount(content) > MaxFileBytes, "File", "The file is larger than 20 MB; split it or send it through the secure file drop.");
         v.When(profile.FileType is not ("csv" or "tsv" or "pipe"), "IntakeProfileId",
             $"This release parses delimited files; the profile is for {profile.FileType}.");
         v.ThrowIfInvalid();
 
+        string hash = ContentHash(content);
+        if (!uploadAgain && await intake.FindBatchByContentAsync(intakeProfileId, hash, ct).ConfigureAwait(false) is { } earlier)
+        {
+            throw new FileAlreadyReceivedException(earlier.IntakeBatchId, earlier.FileName, earlier.ReceivedUtc);
+        }
+
         Guid batchId = TimeOrderedId.New();
-        await intake.CreateBatchAsync(batchId, intakeProfileId, Path.GetFileName(fileName), content, TimeOrderedId.New(), ct)
+        await intake.CreateBatchAsync(batchId, intakeProfileId, Path.GetFileName(fileName), content, hash, TimeOrderedId.New(), ct)
             .ConfigureAwait(false);
         return batchId;
     }
+
+    /// <summary>The file's fingerprint: SHA-256 of its UTF-8 bytes, upper-case hex.</summary>
+    public static string ContentHash(string content) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(content)));
 
     public async Task<IReadOnlyList<IntakeBatchRow>> BatchesAsync(CancellationToken ct = default)
     {
