@@ -136,31 +136,31 @@ public sealed class AuthorizationScenarioTests(MeritFixture fixture)
     public async Task BelowTheDataRootANewTenantServesOnlyItsParentsCounties()
     {
         // Issue #6: counties give residence access to the people who live there, so a county administrator who may add
-        // tenants must not map one to another county, nor add counties to the state.
+        // tenants must not map one to another county, nor add counties to the state. Morgan County is used only here.
         Build();
         string s = Suffix().ToUpperInvariant();
-        var jefCfg = await ScopeAsync("jefcfg");
+        var morCfg = await ScopeAsync("morcfg");
         var wv = await ScopeAsync("wvadmin");
 
-        // Jefferson serves 037: a program under it may serve 037, or no county at all.
-        await RunAsync(jefCfg, "config.uspCreateChildTenant", new()
-            { ["tenantCode"] = "R3-WV-JEF-LEAD-" + s, ["tenantName"] = "Jefferson lead program " + s, ["tenantType"] = "program", ["parentTenantCode"] = "R3-WV-JEF", ["countyFipsList"] = "037" });
-        await RunAsync(jefCfg, "config.uspCreateChildTenant", new()
-            { ["tenantCode"] = "R3-WV-JEF-OCC-" + s, ["tenantName"] = "Jefferson occupational " + s, ["tenantType"] = "program", ["parentTenantCode"] = "R3-WV-JEF" });
+        // Morgan serves 065: a program under it may serve 065, or no county at all.
+        await RunAsync(morCfg, "config.uspCreateChildTenant", new()
+            { ["tenantCode"] = "R3-WV-MOR-LEAD-" + s, ["tenantName"] = "Morgan lead program " + s, ["tenantType"] = "program", ["parentTenantCode"] = "R3-WV-MOR", ["countyFipsList"] = "065" });
+        await RunAsync(morCfg, "config.uspCreateChildTenant", new()
+            { ["tenantCode"] = "R3-WV-MOR-OCC-" + s, ["tenantName"] = "Morgan occupational " + s, ["tenantType"] = "program", ["parentTenantCode"] = "R3-WV-MOR" });
 
-        // Not Berkeley's 003, alone or alongside its own, and not a county new to West Virginia.
-        foreach (var counties in new[] { "003", "037,003" })
+        // Not Jefferson's 037, alone or alongside its own, and not a county new to West Virginia.
+        foreach (var counties in new[] { "037", "065,037" })
         {
-            Assert.Equal(51403, (await Assert.ThrowsAsync<SqlException>(() => RunAsync(jefCfg, "config.uspCreateChildTenant", new()
-                { ["tenantCode"] = "R3-WV-JEF-X-" + s, ["tenantName"] = "Reach " + s, ["tenantType"] = "program", ["parentTenantCode"] = "R3-WV-JEF", ["countyFipsList"] = counties }))).Number);
+            Assert.Equal(51403, (await Assert.ThrowsAsync<SqlException>(() => RunAsync(morCfg, "config.uspCreateChildTenant", new()
+                { ["tenantCode"] = "R3-WV-MOR-X-" + s, ["tenantName"] = "Reach " + s, ["tenantType"] = "program", ["parentTenantCode"] = "R3-WV-MOR", ["countyFipsList"] = counties }))).Number);
         }
 
-        Assert.Equal(51403, (await Assert.ThrowsAsync<SqlException>(() => RunAsync(jefCfg, "config.uspCreateChildTenant", new()
-            { ["tenantCode"] = "R3-WV-JEF-Y-" + s, ["tenantName"] = "New county " + s, ["tenantType"] = "program", ["parentTenantCode"] = "R3-WV-JEF", ["countiesJson"] = """[{"fips":"077","name":"Preston County"}]""" }))).Number);
+        Assert.Equal(51403, (await Assert.ThrowsAsync<SqlException>(() => RunAsync(morCfg, "config.uspCreateChildTenant", new()
+            { ["tenantCode"] = "R3-WV-MOR-Y-" + s, ["tenantName"] = "New county " + s, ["tenantType"] = "program", ["parentTenantCode"] = "R3-WV-MOR", ["countiesJson"] = """[{"fips":"077","name":"Preston County"}]""" }))).Number);
 
-        // The rule belongs to the tree, so the state administrator meets it too under Jefferson ...
+        // The rule belongs to the tree, so the state administrator meets it too under Morgan ...
         Assert.Equal(51403, (await Assert.ThrowsAsync<SqlException>(() => RunAsync(wv, "config.uspCreateChildTenant", new()
-            { ["tenantCode"] = "R3-WV-JEF-Z-" + s, ["tenantName"] = "Berkeley via Jefferson " + s, ["tenantType"] = "program", ["parentTenantCode"] = "R3-WV-JEF", ["countyFipsList"] = "003" }))).Number);
+            { ["tenantCode"] = "R3-WV-MOR-Z-" + s, ["tenantName"] = "Berkeley via Morgan " + s, ["tenantType"] = "program", ["parentTenantCode"] = "R3-WV-MOR", ["countyFipsList"] = "003" }))).Number);
 
         // ... while under the state itself any county may be served, and new counties added.
         await RunAsync(wv, "config.uspCreateChildTenant", new()
@@ -169,7 +169,7 @@ public sealed class AuthorizationScenarioTests(MeritFixture fixture)
             { ["tenantCode"] = "R3-WV-PRE-" + s, ["tenantName"] = "Preston " + s, ["tenantType"] = "jurisdiction", ["parentTenantCode"] = "R3-WV", ["countiesJson"] = """[{"fips":"077","name":"Preston County"}]""" });
 
         // Nothing the refused calls asked for was created.
-        Assert.DoesNotContain((await RowsAsync(wv, "auth.uspListTenants", [])).Select(r => (string)r["tenantName"]!), n => n.StartsWith("Reach ") || n.StartsWith("New county ") || n.StartsWith("Berkeley via Jefferson "));
+        Assert.DoesNotContain((await RowsAsync(wv, "auth.uspListTenants", [])).Select(r => (string)r["tenantName"]!), n => n.StartsWith("Reach ") || n.StartsWith("New county ") || n.StartsWith("Berkeley via Morgan "));
     }
 
     // ------------------------------------------------------------------------------------------------ 8 jurisdiction admins
@@ -344,6 +344,7 @@ public sealed class AuthorizationScenarioTests(MeritFixture fixture)
 
             Exec("config.uspCreateChildTenant", new() { ["tenantCode"] = "R3-WV-JEF", ["tenantName"] = "Jefferson County Health Department", ["tenantType"] = "jurisdiction", ["parentTenantCode"] = "R3-WV", ["countyFipsList"] = "037" });
             Exec("config.uspCreateChildTenant", new() { ["tenantCode"] = "R3-WV-BER", ["tenantName"] = "Berkeley County Health Department", ["tenantType"] = "jurisdiction", ["parentTenantCode"] = "R3-WV", ["countyFipsList"] = "003" });
+            Exec("config.uspCreateChildTenant", new() { ["tenantCode"] = "R3-WV-MOR", ["tenantName"] = "Morgan County Health Department", ["tenantType"] = "jurisdiction", ["parentTenantCode"] = "R3-WV", ["countyFipsList"] = "065" });
 
             // People: user, home, grants (role root, role, tenant, access).
             var people = new (string User, string Home, (string Root, string Role, string Tenant)[] Grants)[]
@@ -353,7 +354,7 @@ public sealed class AuthorizationScenarioTests(MeritFixture fixture)
                 ("wvadmin", "R3-WV", [("R3-WV", "administrator", "R3-WV"), ("R3-WV", "supervisor", "R3-WV")]),
                 ("wvstaff", "R3-WV", [("R3-WV", "caseManager", "R3-WV")]),
                 ("jefadmin", "R3-WV-JEF", [("R3-WV", "userAdministrator", "R3-WV-JEF"), ("R3-WV", "caseManager", "R3-WV-JEF")]),
-                ("jefcfg", "R3-WV-JEF", [("R3-WV", "administrator", "R3-WV-JEF")]),
+                ("morcfg", "R3-WV-MOR", [("R3-WV", "administrator", "R3-WV-MOR")]),
                 ("beradmin", "R3-WV-BER", [("R3-WV", "userAdministrator", "R3-WV-BER"), ("R3-WV", "caseManager", "R3-WV-BER")]),
                 ("jefstaff", "R3-WV-JEF", [("R3-WV", "caseManager", "R3-WV-JEF")]),
                 ("jbstaff", "R3-WV-JEF", [("R3-WV", "caseManager", "R3-WV-JEF"), ("R3-WV", "caseManager", "R3-WV-BER")]),
