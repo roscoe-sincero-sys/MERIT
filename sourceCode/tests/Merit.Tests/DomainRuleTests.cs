@@ -185,6 +185,14 @@ public sealed class TenantRulesTests
     }
 
     [Theory]
+    [InlineData(true, "state", true)]          // under the data root: any of its counties, and new ones
+    [InlineData(false, "jurisdiction", false)] // under a county: only the county's own
+    [InlineData(false, "program", false)]
+    [InlineData(false, "region", true)]        // a new data root under a region chooses its own counties
+    public void OnlyTheDataRootChoosesAnyCounty(bool parentIsDataRoot, string parentType, bool expected)
+        => Assert.Equal(expected, TenantRules.MayChooseAnyCounty(parentIsDataRoot, parentType));
+
+    [Theory]
     [InlineData("WV-JEFFERSON", true)]
     [InlineData("R3", true)]
     [InlineData("wv-jefferson", false)]

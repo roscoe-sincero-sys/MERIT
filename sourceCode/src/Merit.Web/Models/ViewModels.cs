@@ -615,6 +615,9 @@ public sealed class TenantFormModel
     public IReadOnlyList<TenantListRow> Tree { get; set; } = [];
 
     public IReadOnlyList<SubJurisdictionRow> ExistingCounties { get; set; } = [];
+
+    /// <summary>False below the data root: the new tenant serves only the parent's counties and cannot add new ones.</summary>
+    public bool MayChooseAnyCounty { get; set; } = true;
 }
 
 public sealed class ReporterFormModel

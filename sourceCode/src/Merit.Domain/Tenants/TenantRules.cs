@@ -20,6 +20,14 @@ public static class TenantRules
     /// <summary>A new tenant under this parent is its own data root (new records, roles and settings).</summary>
     public static bool CreatesDataRoot(string parentType) => parentType is "platform" or "region";
 
+    /// <summary>
+    /// Whether a new tenant under this parent may serve any county of the data root and add new ones. Below the data
+    /// root a tenant serves only counties its parent serves, and new counties are added under the root: counties give
+    /// residence access to the people who live there.
+    /// </summary>
+    public static bool MayChooseAnyCounty(bool parentIsDataRoot, string parentType)
+        => parentIsDataRoot || CreatesDataRoot(parentType);
+
     /// <summary>States and tribes carry a two-letter postal code (ABLES StateRep); FIPS is optional for tribes.</summary>
     public static bool NeedsPostalCode(string tenantType) => tenantType is "state" or "tribe";
 

@@ -214,6 +214,8 @@ public sealed class AdminService(IAccountData accounts, AccountService accountSe
             "StatePostalCode", "Enter the two-letter postal code.");
         v.When(stateFips is not null && (stateFips.Length != 2 || !stateFips.All(char.IsAsciiDigit)), "StateFips", "A state FIPS code is two digits.");
         v.When(countyFips.Any(f => !TenantRules.IsValidCountyFips(f)), "CountyFipsList", "County FIPS codes are three digits, for example 037.");
+        v.When(newCounties.Count > 0 && !TenantRules.MayChooseAnyCounty(parent.TenantId == parent.RootTenantId, parent.TenantType),
+            "NewCounties", $"New counties are added under the state, tribe or other data root, not under {parent.TenantName}.");
         v.When(badLines.Count > 0, "NewCounties",
             $"Write each new county as its FIPS code then its name, for example \"037 Jefferson County\". Check: {string.Join("; ", badLines)}.");
         v.When(tenants.Any(t => string.Equals(t.TenantCode, code, StringComparison.OrdinalIgnoreCase) && t.ParentTenantId != parent.TenantId),
