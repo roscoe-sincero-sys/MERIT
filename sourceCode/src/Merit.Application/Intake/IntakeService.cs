@@ -77,7 +77,10 @@ public sealed class IntakeService(IIntakeData intake, IWorkData work, Services.A
         return rows;
     }
 
-    /// <summary>Edit in place: the correction is kept beside the reported values, which never change.</summary>
+    /// <summary>
+    /// Edit in place: corrections are kept beside the reported values, which never change. The fields given are merged
+    /// into what is stored; a field given as null is cleared, and fields left out are kept.
+    /// </summary>
     public async Task CorrectAsync(Guid stagingRowId, IReadOnlyDictionary<string, string?> corrections, CancellationToken ct = default)
     {
         session.Require(Permissions.ResultReleaseHold);

@@ -264,6 +264,7 @@ public interface IIntakeData
     Task<IReadOnlyList<HeldRowRow>> ListHeldRowsAsync(string? reasonCode, string? reportedValue, Guid? senderOrganizationId, bool exactGroup,
                                                       Guid? intakeBatchId, int pageNumber, int pageSize, CancellationToken ct = default);
 
+    /// <summary>Merges a patch (JSON object) into a held row's corrections: null clears a field, missing fields are kept.</summary>
     Task SaveCorrectionAsync(Guid stagingRowId, string correctedJson, CancellationToken ct = default);
 
     Task<int> ReleaseRowsAsync(IReadOnlyList<Guid> stagingRowIds, CancellationToken ct = default);
