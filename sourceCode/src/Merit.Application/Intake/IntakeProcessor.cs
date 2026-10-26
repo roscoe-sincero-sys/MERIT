@@ -113,6 +113,7 @@ public sealed partial class IntakeProcessor(
         }
 
         var rows = await intake.GetRowsForProcessingAsync(batchId, releasedOnly, ct).ConfigureAwait(false);
+        var registry = new RegistryLookups(places);
         int loaded = 0, held = 0;
         var formats = (profile.DateFormats ?? "yyyy-MM-dd,MM/dd/yyyy,M/d/yyyy")
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
@@ -122,7 +123,7 @@ public sealed partial class IntakeProcessor(
             ct.ThrowIfCancellationRequested();
             try
             {
-                bool ok = await ProcessRowAsync(batch, profile, row, formats, ct).ConfigureAwait(false);
+                bool ok = await ProcessRowAsync(batch, profile, row, formats, registry, ct).ConfigureAwait(false);
                 if (ok)
                 {
                     loaded++;
@@ -148,7 +149,7 @@ public sealed partial class IntakeProcessor(
     }
 
     private async Task<bool> ProcessRowAsync(IntakeBatchRow batch, IntakeProfileRow profile, StagingRowForProcessing row,
-                                             string[] formats, CancellationToken ct)
+                                             string[] formats, RegistryLookups registry, CancellationToken ct)
     {
         var f = JsonSerializer.Deserialize<Dictionary<string, string?>>(row.ParsedJson) ?? [];
         if (!string.IsNullOrWhiteSpace(row.CorrectedJson))
@@ -168,8 +169,7 @@ public sealed partial class IntakeProcessor(
 
         // ---- sender and laboratory
         string? clia = ProviderIdentifiers.NormalizeClia(Get("labCliaNumber"));
-        var lab = await places.ResolveOrganizationAsync(clia, null, null, ct).ConfigureAwait(false);
-        Guid? labId = lab?.OrganizationId ?? profile.SenderOrganizationId;
+        Guid? labId = await registry.LaboratoryAsync(clia, ct).ConfigureAwait(false) ?? profile.SenderOrganizationId;
         if (labId is null)
         {
             holds.Add(new HoldReason("unknownSender", "labCliaNumber", "The performing laboratory is not in the reporter registry.", clia));
@@ -309,7 +309,7 @@ public sealed partial class IntakeProcessor(
         string? npi = Get("orderingProviderNpi");
         if (ProviderIdentifiers.IsValidNpi(npi))
         {
-            providerId = (await places.SearchProvidersAsync(npi!, 1, ct).ConfigureAwait(false)).FirstOrDefault(p => p.Npi == npi)?.ProviderId;
+            providerId = await registry.ProviderAsync(npi!, ct).ConfigureAwait(false);
         }
 
         // ---- duplicates and corrections

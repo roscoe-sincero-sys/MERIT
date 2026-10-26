@@ -1,4 +1,5 @@
 using System.Data;
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -206,6 +207,50 @@ public sealed class AuthorizationScenarioTests(MeritFixture fixture)
         // Viewing as someone is kept too.
         var viewing = await ScopeAsync("wvadmin", viewAs: "wvstaff");
         Assert.Equal(await UserIdAsync("wvstaff"), (await StoredJobContextAsync(await QueueJobAsync(viewing))).ViewAs);
+    }
+
+    [SqlFact]
+    public async Task RegistryLookupsTryTheCliaNumberThenTheNpiThenTheName()
+    {
+        // Issue #14: one ORed query scanned the organizations; the lookups are now tried one identifier at a time.
+        var md = await ScopeAsync("supervisor");
+        string s = Suffix().ToUpperInvariant();
+        string clia = "24D" + Random.Shared.Next(0, 10_000_000).ToString("D7", CultureInfo.InvariantCulture);
+        string otherClia = "24D" + Random.Shared.Next(0, 10_000_000).ToString("D7", CultureInfo.InvariantCulture);
+        string labNpi = "1" + Random.Shared.NextInt64(0, 1_000_000_000).ToString("D9", CultureInfo.InvariantCulture);
+        string providerNpi = "1" + Random.Shared.NextInt64(0, 1_000_000_000).ToString("D9", CultureInfo.InvariantCulture);
+        string nameKey = "LOOKUPLAB" + s;
+
+        var added = Assert.Single(await RowsAsync(md, "dbo.uspImportReporters", new()
+        {
+            ["rowsJson"] = $$"""
+                [{"rowNumber":1,"kind":"laboratory","name":"Lookup lab {{s}}","nameKey":"{{nameKey}}","clia":"{{clia}}","npi":"{{labNpi}}"},
+                 {"rowNumber":2,"kind":"provider","name":"Lookup {{s}}","nameKey":"LOOKUP{{s}}","lastName":"Lookup{{s}}","npi":"{{providerNpi}}"}]
+                """,
+        }));
+        Assert.Equal(2, added["addedCount"]);
+
+        async Task<Guid?> ResolveAsync(string? cliaNumber, string? npi, string? key)
+            => (await RowsAsync(md, "dbo.uspResolveOrganization", new() { ["cliaNumber"] = cliaNumber, ["npi"] = npi, ["nameKey"] = key }))
+                .Select(r => (Guid?)r["organizationId"]).SingleOrDefault();
+
+        var lab = await ResolveAsync(clia, null, null);
+        Assert.NotNull(lab);
+        Assert.Equal(lab, await ResolveAsync(otherClia, labNpi, null));        // unknown CLIA: the NPI is tried next
+        Assert.Equal(lab, await ResolveAsync(otherClia, null, nameKey));       // then the name
+        Assert.Null(await ResolveAsync(otherClia, null, null));
+
+        // A later file with only the NPI updates the same laboratory instead of adding another.
+        var again = Assert.Single(await RowsAsync(md, "dbo.uspImportReporters", new()
+        {
+            ["rowsJson"] = $$"""[{"rowNumber":1,"kind":"laboratory","name":"Lookup lab {{s}} renamed","nameKey":"{{nameKey}}","npi":"{{labNpi}}"}]""",
+        }));
+        Assert.Equal((0, 1), ((int)again["addedCount"]!, (int)again["updatedCount"]!));
+
+        // The ordering provider is found by its exact NPI; a blank or unknown NPI finds nobody.
+        var provider = Assert.Single(await RowsAsync(md, "dbo.uspGetProviderByNpi", new() { ["npi"] = providerNpi }));
+        Assert.Equal("Lookup" + s, provider["lastName"]);
+        Assert.Empty(await RowsAsync(md, "dbo.uspGetProviderByNpi", new() { ["npi"] = labNpi }));
     }
 
     private sealed record JobContext(Guid User, Guid? Profile, Guid? ViewAs, Guid? Acting);

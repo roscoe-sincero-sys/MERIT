@@ -27,6 +27,8 @@ Notes:
 
 Requires permission result.view (auth.udfHasPermission); refuses with 51403 otherwise.
 
+The identifiers are tried in order, CLIA, then NPI, then name, each as its own index seek; one query ORing them scanned the table. The oldest match wins when an identifier is shared.
+
 Rule 8 error-only instrumentation (a procedure that only reads), generated from templates/procedure-readonly.sql by tools/generateProcedures.py. Row-level security applies to every table read
 or written here: SESSION_CONTEXT (N'scopeKey') decides what the caller can see.
 
@@ -85,13 +87,29 @@ BEGIN
         -- ===== The procedure's own work starts here. Everything above and below is boilerplate. ==
         -- =========================================================================================
 
-        SELECT TOP (1) organizationId, organizationName, cliaNumber, npi
+        DECLARE @organizationId UNIQUEIDENTIFIER;
+
+        IF @cliaNumber IS NOT NULL
+            SELECT TOP (1) @organizationId = organizationId
+              FROM dbo.organization
+             WHERE isDeleted = 0 AND cliaNumber IS NOT NULL AND cliaNumber = @cliaNumber
+             ORDER BY createdDateUtc, organizationId;
+
+        IF @organizationId IS NULL AND @npi IS NOT NULL
+            SELECT TOP (1) @organizationId = organizationId
+              FROM dbo.organization
+             WHERE isDeleted = 0 AND npi IS NOT NULL AND npi = @npi
+             ORDER BY createdDateUtc, organizationId;
+
+        IF @organizationId IS NULL AND @nameKey IS NOT NULL
+            SELECT TOP (1) @organizationId = organizationId
+              FROM dbo.organization
+             WHERE isDeleted = 0 AND organizationNameKey = @nameKey
+             ORDER BY createdDateUtc, organizationId;
+
+        SELECT organizationId, organizationName, cliaNumber, npi
           FROM dbo.organization
-         WHERE isDeleted = 0
-           AND ((@cliaNumber IS NOT NULL AND cliaNumber = @cliaNumber)
-             OR (@npi IS NOT NULL AND npi = @npi)
-             OR (@nameKey IS NOT NULL AND organizationNameKey = @nameKey))
-         ORDER BY CASE WHEN cliaNumber = @cliaNumber THEN 0 WHEN npi = @npi THEN 1 ELSE 2 END;
+         WHERE organizationId = @organizationId;
 
         -- =========================================================================================
         -- ===== End of the procedure's own work. ===================================================
