@@ -295,6 +295,57 @@ public sealed class AuthorizationScenarioTests(MeritFixture fixture)
         Assert.Equal(51422, refused.Number);
     }
 
+    [SqlFact]
+    public async Task CaseTimelinessCountsOnlyFollowUpWork()
+    {
+        // Issue #13: every case gets a status-change activity on its open date, so "days to first follow-up" was always 0.
+        // The demo's July case (opened 2026-07-25) has no follow-up of its own.
+        var md = await ScopeAsync("supervisor");
+        async Task<Dictionary<string, object?>> JulyAsync()
+            => Assert.Single(await RowsAsync(md, "dbo.uspReportCaseTimeliness", new() { ["fromDate"] = new DateTime(2026, 7, 1), ["toDate"] = new DateTime(2026, 7, 31) }));
+
+        var before = await JulyAsync();
+        Assert.Null(before["medianDaysToFollowUp"]);
+        Assert.Equal((0, 1), ((int)before["followedUpWithin7"]!, (int)before["notFollowedUpYet"]!));
+
+        var added = new List<Guid>();
+        try
+        {
+            await using var c = new SqlConnection(TestEnvironment.AdminConnectionString());
+            await c.OpenAsync();
+            // A note on day 2 is not follow-up; the first contact attempt is on day 10.
+            foreach (var (type, date) in new[] { ("note", new DateTime(2026, 7, 27)), ("contactAttempt", new DateTime(2026, 8, 4)) })
+            {
+                var id = Guid.NewGuid();
+                added.Add(id);
+                await using var cmd = new SqlCommand("""
+                    INSERT dbo.caseActivity (caseActivityId, rootTenantId, owningTenantId, exposureCaseId, activityType, activityDate)
+                    SELECT @id, rootTenantId, owningTenantId, exposureCaseId, @type, @date
+                      FROM dbo.exposureCase WHERE openedDate = '2026-07-25' AND isDeleted = 0;
+                    """, c);
+                cmd.Parameters.AddWithValue("@id", id);
+                cmd.Parameters.AddWithValue("@type", type);
+                cmd.Parameters.AddWithValue("@date", date);
+                Assert.Equal(1, await cmd.ExecuteNonQueryAsync());
+            }
+
+            var after = await JulyAsync();
+            Assert.Equal(10m, after["medianDaysToFollowUp"]);
+            Assert.Equal((0, 0), ((int)after["followedUpWithin7"]!, (int)after["notFollowedUpYet"]!));
+        }
+        finally
+        {
+            await using var c = new SqlConnection(TestEnvironment.AdminConnectionString());
+            await c.OpenAsync();
+            foreach (var id in added)
+            {
+                await using var cmd = new SqlCommand("DELETE dbo.caseActivity WHERE caseActivityId = @id", c);
+                cmd.Parameters.AddWithValue("@id", id);
+                await cmd.ExecuteNonQueryAsync();
+            }
+        }
+    }
+
     private sealed record JobContext(Guid User, Guid? Profile, Guid? ViewAs, Guid? Acting);
 
     /// <summary>Queues a job far in the future, so no worker picks it up.</summary>

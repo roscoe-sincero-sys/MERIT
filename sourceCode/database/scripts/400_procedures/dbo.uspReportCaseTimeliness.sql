@@ -13,7 +13,7 @@ CreateDate:   2026-10-24
 ========================================================================================================================
 Description:
 
-Case timeliness by month opened: median days from collection to receipt of the qualifying result, from receipt to the case opening, and from opening to the first follow-up activity, with the number of cases followed up within seven days.
+Case timeliness by month opened: median days from collection to receipt of the qualifying result, from receipt to the case opening, and from opening to the first follow-up activity, with the number of cases followed up within seven days and the number not followed up yet.
 
 ========================================================================================================================
 Requirements and Key Dependencies:
@@ -26,6 +26,8 @@ logs.uspStartExecutionLogging and logs.uspRecordExecutionError (scripts/000_infr
 Notes:
 
 Requires permission case.view (auth.udfHasPermission); refuses with 51403 otherwise.
+
+Follow-up means work with the family or provider: a contact attempt, letter, education, referral or medical management. Status changes (every case gets one on its open date) and notes are not follow-up; counting them made the median 0 every month (issue #13). A case with no follow-up yet is counted on its own, not as 0 days, and is left out of the median.
 
 Rule 8 error-only instrumentation (a procedure that only reads), generated from templates/procedure-readonly.sql by tools/generateProcedures.py. Row-level security applies to every table read
 or written here: SESSION_CONTEXT (N'scopeKey') decides what the caller can see.
@@ -95,7 +97,9 @@ BEGIN
                    DATEDIFF (DAY, q.collectedDate, CAST (q.receivedUtc AS DATE)) AS daysToReceipt,
                    DATEDIFF (DAY, CAST (q.receivedUtc AS DATE), c.openedDate) AS daysToOpen,
                    DATEDIFF (DAY, c.openedDate, (SELECT MIN (ca.activityDate) FROM dbo.caseActivity AS ca
-                                                  WHERE ca.exposureCaseId = c.exposureCaseId AND ca.isDeleted = 0)) AS daysToFollowUp
+                                                  WHERE ca.exposureCaseId = c.exposureCaseId AND ca.isDeleted = 0
+                                                    AND ca.activityType IN ('contactAttempt', 'letter', 'education', 'referral',
+                                                                            'medicalManagement'))) AS daysToFollowUp
               FROM dbo.exposureCase AS c
               JOIN dbo.labResult AS q ON q.labResultId = c.qualifyingLabResultId
              WHERE c.isDeleted = 0 AND c.openedDate BETWEEN @fromDate AND @toDate
@@ -108,7 +112,8 @@ BEGIN
                    AS medianDaysToOpen,
                CAST (PERCENTILE_CONT (0.5) WITHIN GROUP (ORDER BY daysToFollowUp) OVER (PARTITION BY monthStart) AS DECIMAL (9, 1))
                    AS medianDaysToFollowUp,
-               SUM (CASE WHEN daysToFollowUp <= 7 THEN 1 ELSE 0 END) OVER (PARTITION BY monthStart) AS followedUpWithin7
+               SUM (CASE WHEN daysToFollowUp <= 7 THEN 1 ELSE 0 END) OVER (PARTITION BY monthStart) AS followedUpWithin7,
+               SUM (CASE WHEN daysToFollowUp IS NULL THEN 1 ELSE 0 END) OVER (PARTITION BY monthStart) AS notFollowedUpYet
           FROM perCase
          ORDER BY periodMonth;
 
@@ -149,7 +154,7 @@ EXEC util.uspSetObjectDescription
       @SchemaName  = N'dbo'
     , @ObjectType  = N'PROCEDURE'
     , @ObjectName  = N'uspReportCaseTimeliness'
-    , @Description = N'Case timeliness by month opened: median days from collection to receipt of the qualifying result, from receipt to the case opening, and from opening to the first follow-up activity, with the number of cases followed up within seven days.';
+    , @Description = N'Case timeliness by month opened: median days from collection to receipt of the qualifying result, from receipt to the case opening, and from opening to the first follow-up activity, with the number of cases followed up within seven days and the number not followed up yet.';
 GO
 
 IF DATABASE_PRINCIPAL_ID (N'meritWebRole') IS NOT NULL
