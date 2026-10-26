@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.HttpOverrides;
 using Merit.Application;
 using Merit.Application.Security;
 using Merit.Application.Services;
@@ -145,17 +146,31 @@ services.AddControllersWithViews(o =>
 services.AddProblemDetails();
 services.AddOpenApi("v1", o => o.ShouldInclude = d => d.RelativePath?.StartsWith("api/", StringComparison.OrdinalIgnoreCase) == true);
 services.AddHealthChecks();
-services.AddRateLimiter(o =>
+services.AddRateLimiter(SignInRateLimits.Configure);
+
+// Behind a reverse proxy the connection's address is the proxy's: trust X-Forwarded-For only from the proxies listed
+// here, so sign-in limits and audit records see the client's address.
+string[] knownProxies = builder.Configuration.GetSection("Merit:ForwardedHeaders:KnownProxies").Get<string[]>() ?? [];
+if (knownProxies.Length > 0)
 {
-    o.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-    o.AddFixedWindowLimiter("signin", w =>
+    services.Configure<ForwardedHeadersOptions>(o =>
     {
-        w.PermitLimit = builder.Configuration.GetValue("Merit:SignInAttemptsPerMinute", 10);
-        w.Window = TimeSpan.FromMinutes(1);
+        o.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+        o.KnownNetworks.Clear();
+        o.KnownProxies.Clear();
+        foreach (var proxy in knownProxies)
+        {
+            o.KnownProxies.Add(System.Net.IPAddress.Parse(proxy));
+        }
     });
-});
+}
 
 var app = builder.Build();
+
+if (knownProxies.Length > 0)
+{
+    app.UseForwardedHeaders();
+}
 
 if (!app.Environment.IsDevelopment())
 {
@@ -181,9 +196,9 @@ app.UseStaticFiles(new StaticFileOptions
 });
 
 app.UseRouting();
-app.UseRateLimiter();
 app.UseAuthentication();
 app.UseMiddleware<SecurityHeadersMiddleware>();
+app.UseRateLimiter();    // after the security headers, so the "too many attempts" page carries its CSP nonce
 app.UseAuthorization();
 
 // Stylesheets, scripts, fonts and icons hold no data, and the sign-in page needs them before anyone is signed in.

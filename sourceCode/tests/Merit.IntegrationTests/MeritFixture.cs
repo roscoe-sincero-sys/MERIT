@@ -54,6 +54,7 @@ public sealed partial class MeritFixture : IDisposable
             b.UseEnvironment("Development");
             b.UseSetting("ConnectionStrings:Merit", TestEnvironment.WebConnectionString);
             b.UseSetting("Merit:SignInAttemptsPerMinute", "10000");
+            b.UseSetting("Merit:MfaAttemptsPerMinute", "10000");
             b.UseSetting("DataProtection:KeyPath", Path.Combine(Path.GetTempPath(), "merit-it-keys"));
         });
     }
