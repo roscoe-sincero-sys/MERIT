@@ -30,6 +30,12 @@ public interface ICurrentSession
     /// <summary>The profile the session uses: "Master profile", a profile the user made, or "Viewing as ...".</summary>
     string? ProfileName => null;
 
+    /// <summary>The user's own profile the session uses; null for the master profile.</summary>
+    Guid? ProfileId => null;
+
+    /// <summary>The person whose access an administrator is viewing MERIT with; null otherwise.</summary>
+    Guid? ViewAsUserId => null;
+
     /// <summary>The person whose access an administrator is viewing MERIT with; null otherwise.</summary>
     string? ViewAsDisplayName => null;
 

@@ -16,11 +16,9 @@ namespace Merit.Web.Controllers;
 /// manage. Every switch creates a new database session scope and ends the old one.
 /// </summary>
 [Route("account")]
-public sealed class ProfilesController(ProfileService profiles, AdminService admin, AccountService accounts, ICurrentSession session)
+public sealed class ProfilesController(ProfileService profiles, AdminService admin, SessionRenewal sessions, ICurrentSession session)
     : Controller
 {
-    internal static readonly TimeSpan SessionLifetime = TimeSpan.FromHours(12);
-
     [HttpGet("profiles")]
     [Authorize(Policy = Permissions.SignedIn)]
     public async Task<IActionResult> Index(CancellationToken ct)
@@ -28,7 +26,7 @@ public sealed class ProfilesController(ProfileService profiles, AdminService adm
         var mine = await profiles.MineAsync(ct);
         var viewAs = session.Has(Permissions.TenantAdminister) ? await admin.ViewAsCandidatesAsync(ct) : [];
         var tenants = await admin.TenantsAsync(ct);
-        return View(new ProfilesPageModel(mine, session.ProfileName ?? "Master profile", (session as WebCurrentSession)?.ProfileId,
+        return View(new ProfilesPageModel(mine, session.ProfileName ?? "Master profile", session.ProfileId,
             session.ViewAsDisplayName, session.IsPlatformAdmin, session.ActingTenantId, tenants, viewAs, TempData["profileMessage"] as string,
             TempData["profileError"] as string));
     }
@@ -100,16 +98,9 @@ public sealed class ProfilesController(ProfileService profiles, AdminService adm
 
     private async Task<IActionResult> NewScopeAsync(Guid? userProfileId, Guid? viewAsUserId, Guid? actingTenantId, string next, CancellationToken ct)
     {
-        var me = session.RequireUserId();
         try
         {
-            var scope = await accounts.CreateSessionAsync(me, SessionLifetime, userProfileId, viewAsUserId, actingTenantId, ct);
-            if (session.ScopeKey is Guid old)
-            {
-                await accounts.SignOutAsync(old, ct);
-            }
-
-            await SessionCookie.SignInAsync(HttpContext, scope.Scope);
+            await sessions.RenewAsync(HttpContext, userProfileId, viewAsUserId, actingTenantId, ct);
             return LocalRedirect(next);
         }
         catch (MeritException ex)

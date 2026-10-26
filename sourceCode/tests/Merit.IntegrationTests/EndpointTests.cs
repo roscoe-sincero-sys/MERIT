@@ -216,6 +216,48 @@ public sealed class EndpointTests(MeritFixture fixture, ITestOutputHelper output
     }
 
     [SqlFact]
+    public async Task ASessionRenewalReplacesTheScopeWithTheConfiguredLifetime()
+    {
+        // Issue #21: sign-in, profile switches and the tenant refresh renew the session through one SessionRenewal.
+        var supervisor = await fixture.SignedInAsync("supervisor");
+        var page = await supervisor.Http.GetStringAsync("/account/profiles");
+        var before = await LatestScopeAsync("supervisor");
+
+        var response = await supervisor.Http.PostAsync("/account/view-as/end", MeritClient.Form(page));
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await supervisor.NoRedirect.GetAsync("/api/v1/me")).StatusCode);
+
+        var after = await LatestScopeAsync("supervisor");
+        Assert.NotEqual(before.Id, after.Id);
+        Assert.InRange(after.Expires - after.Created, TimeSpan.FromHours(12) - TimeSpan.FromMinutes(1), TimeSpan.FromHours(12) + TimeSpan.FromMinutes(1));
+        Assert.NotNull((await ScopeAsync(before.Id)).Revoked);
+    }
+
+    private static async Task<(Guid Id, DateTime Created, DateTime Expires, DateTime? Revoked)> LatestScopeAsync(string userName)
+    {
+        await using var c = new Microsoft.Data.SqlClient.SqlConnection(TestEnvironment.AdminConnectionString());
+        await c.OpenAsync();
+        await using var cmd = new Microsoft.Data.SqlClient.SqlCommand("""
+            SELECT TOP (1) s.sessionScopeId FROM auth.sessionScope AS s JOIN auth.appUser AS u ON u.appUserId = s.appUserId
+             WHERE u.userName = @u ORDER BY s.createdDateUtc DESC
+            """, c);
+        cmd.Parameters.AddWithValue("@u", userName);
+        return await ScopeAsync((Guid)(await cmd.ExecuteScalarAsync())!);
+    }
+
+    private static async Task<(Guid Id, DateTime Created, DateTime Expires, DateTime? Revoked)> ScopeAsync(Guid id)
+    {
+        await using var c = new Microsoft.Data.SqlClient.SqlConnection(TestEnvironment.AdminConnectionString());
+        await c.OpenAsync();
+        await using var cmd = new Microsoft.Data.SqlClient.SqlCommand(
+            "SELECT createdDateUtc, expiresUtc, revokedUtc FROM auth.sessionScope WHERE sessionScopeId = @id", c);
+        cmd.Parameters.AddWithValue("@id", id);
+        await using var r = await cmd.ExecuteReaderAsync();
+        Assert.True(await r.ReadAsync());
+        return (id, r.GetDateTime(0), r.GetDateTime(1), r.IsDBNull(2) ? null : r.GetDateTime(2));
+    }
+
+    [SqlFact]
     public async Task ResponsesCarryTheContentSecurityPolicyWithANonce()
     {
         var supervisor = await fixture.SignedInAsync("supervisor");
