@@ -551,6 +551,21 @@ SELECT TOP (@maxRows) pv.providerId, pv.npi, pv.lastName, pv.firstName, pv.crede
 """,
     },
     {
+        "schema": "dbo", "name": "uspGetProviderByNpi", "kind": "read", "grants": BOTH, "ticket": "T171",
+        "permission": "person.view",
+        "desc": "The provider with exactly this NPI, for linking the ordering provider on an incoming result. A seek on "
+                "IX_dbo_provider_npi_rootTenantId; uspSearchProviders is the type-ahead.",
+        "params": "@npi VARCHAR (10)",
+        "key": "CONCAT (N'npi=', @npi)",
+        "body": """
+SELECT pv.providerId, pv.npi, pv.lastName, pv.firstName, pv.credential, pv.registryStatus,
+       l.city AS practiceCity, l.state AS practiceState
+  FROM dbo.provider AS pv
+  LEFT JOIN dbo.location AS l ON l.locationId = pv.practiceLocationId
+ WHERE pv.isDeleted = 0 AND pv.npi IS NOT NULL AND pv.npi = @npi;
+""",
+    },
+    {
         "schema": "dbo", "name": "uspSaveProvider", "kind": "write", "grants": BOTH, "ticket": "T043",
         "permission": "person.edit",
         "desc": "Adds or changes an individual practitioner. An NPI, when given, is unique within the root tenant and has "
@@ -656,14 +671,21 @@ SELECT j.rowNumber, j.reporterKind, j.reporterName, j.nameKey, j.lastName, NULLI
  WHERE j.reporterKind IN ('laboratory', 'facility', 'provider');
 
 -- ------------------------------------------------------------------------------------------ organizations
+-- CLIA first, then NPI for the rows still unmatched: each is a seek on its own index, where one ORed condition
+-- scanned the organizations for every row.
 UPDATE r SET existingId = m.organizationId
   FROM @rows AS r
  CROSS APPLY (SELECT TOP (1) o.organizationId FROM dbo.organization AS o
-               WHERE o.isDeleted = 0
-                 AND ((r.cliaNumber IS NOT NULL AND o.cliaNumber = r.cliaNumber)
-                   OR (r.npi IS NOT NULL AND o.npi = r.npi))
-               ORDER BY CASE WHEN o.cliaNumber = r.cliaNumber THEN 0 ELSE 1 END) AS m
- WHERE r.reporterKind IN ('laboratory', 'facility');
+               WHERE o.isDeleted = 0 AND o.cliaNumber IS NOT NULL AND o.cliaNumber = r.cliaNumber
+               ORDER BY o.createdDateUtc, o.organizationId) AS m
+ WHERE r.reporterKind IN ('laboratory', 'facility') AND r.cliaNumber IS NOT NULL;
+
+UPDATE r SET existingId = m.organizationId
+  FROM @rows AS r
+ CROSS APPLY (SELECT TOP (1) o.organizationId FROM dbo.organization AS o
+               WHERE o.isDeleted = 0 AND o.npi IS NOT NULL AND o.npi = r.npi
+               ORDER BY o.createdDateUtc, o.organizationId) AS m
+ WHERE r.reporterKind IN ('laboratory', 'facility') AND r.existingId IS NULL AND r.npi IS NOT NULL;
 
 UPDATE o
    SET organizationName = r.reporterName, organizationNameKey = r.nameKey, npi = COALESCE (r.npi, o.npi),

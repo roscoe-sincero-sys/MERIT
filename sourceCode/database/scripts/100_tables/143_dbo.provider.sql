@@ -101,6 +101,16 @@ BEGIN
         WHERE isDeleted = 0 AND npi IS NOT NULL;
 END;
 GO
+IF NOT EXISTS (SELECT 1
+                 FROM sys.indexes
+                WHERE name      = N'IX_dbo_provider_npi_rootTenantId'
+                  AND object_id = OBJECT_ID (N'dbo.provider'))
+BEGIN
+    CREATE INDEX IX_dbo_provider_npi_rootTenantId
+        ON dbo.provider (npi, rootTenantId)
+        WHERE isDeleted = 0 AND npi IS NOT NULL;
+END;
+GO
 
 -- -------------------------------------------------------------------------------------------
 -- 5. The audit trigger. Not optional: a DEFAULT fires on INSERT only, so without it every UPDATE

@@ -165,6 +165,9 @@ public sealed class PlaceData(Db db) : IPlaceData
     public Task<IReadOnlyList<ProviderSearchRow>> SearchProvidersAsync(string text, int maxRows, CancellationToken ct = default)
         => db.QueryAsync<ProviderSearchRow>("dbo.uspSearchProviders", new { text, maxRows }, ct);
 
+    public Task<ProviderSearchRow?> GetProviderByNpiAsync(string npi, CancellationToken ct = default)
+        => db.QuerySingleAsync<ProviderSearchRow>("dbo.uspGetProviderByNpi", new { npi }, ct);
+
     public Task SaveProviderAsync(Guid providerId, string? npi, string lastName, string? firstName, string? credential, Guid? practiceLocationId,
                                   CancellationToken ct = default)
         => db.ExecuteAsync("dbo.uspSaveProvider", new { providerId, npi, lastName, firstName, credential, practiceLocationId }, ct);

@@ -1998,6 +1998,23 @@
   ]
  },
  {
+  "name": "dbo.uspGetProviderByNpi",
+  "kind": "read",
+  "grants": [
+   "meritWebRole",
+   "meritWorkerRole"
+  ],
+  "permission": "person.view",
+  "params": [
+   {
+    "name": "npi",
+    "type": "VARCHAR (10)",
+    "hasDefault": false,
+    "isOutput": false
+   }
+  ]
+ },
+ {
   "name": "dbo.uspGetQueueCounts",
   "kind": "read",
   "grants": [

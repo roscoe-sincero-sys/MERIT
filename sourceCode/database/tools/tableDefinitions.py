@@ -666,7 +666,14 @@ TABLES = [
         ],
         "fks": [("parentOrganizationId", "dbo.organization", "organizationId")],
         "indexes": [{"name": "IX_dbo_organization_rootTenantId_organizationNameKey",
-                     "cols": "rootTenantId, organizationNameKey"}],
+                     "cols": "rootTenantId, organizationNameKey"},
+                    # Intake looks the performing laboratory up by CLIA on every row, and the registry import matches
+                    # on CLIA, then NPI (issue #14). These lead with the identifier: the row-level security predicate
+                    # does not give the optimizer a rootTenantId to seek on, so an index led by rootTenantId is scanned.
+                    {"name": "IX_dbo_organization_cliaNumber_rootTenantId", "cols": "cliaNumber, rootTenantId",
+                     "filter": "isDeleted = 0 AND cliaNumber IS NOT NULL"},
+                    {"name": "IX_dbo_organization_npi_rootTenantId", "cols": "npi, rootTenantId",
+                     "filter": "isDeleted = 0 AND npi IS NOT NULL"}],
     },
     {
         "schema": "dbo", "name": "organizationType", "rls": "root",
@@ -871,7 +878,11 @@ TABLES = [
         ],
         "fks": [("practiceLocationId", "dbo.location", "locationId")],
         "indexes": [{"name": "UX_dbo_provider_rootTenantId_npi", "cols": "rootTenantId, npi", "unique": True,
-                     "filter": "npi IS NOT NULL"}],
+                     "filter": "npi IS NOT NULL"},
+                    # The lookup by NPI (uspGetProviderByNpi, uspImportReporters) seeks here; the unique index above,
+                    # led by rootTenantId, can only be scanned under row-level security (issue #14).
+                    {"name": "IX_dbo_provider_npi_rootTenantId", "cols": "npi, rootTenantId",
+                     "filter": "isDeleted = 0 AND npi IS NOT NULL"}],
     },
     # ------------------------------------------------------------------------------------------------ intake, results
     {
