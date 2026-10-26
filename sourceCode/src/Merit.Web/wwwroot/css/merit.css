@@ -122,8 +122,9 @@ dialog.merit-dialog::backdrop { background: rgba(0,0,0,.5); }
 .merit-tree .merit-tree { margin-left: 1.25rem; }
 .merit-tree li { margin-bottom: 0.25rem; }
 
-/* USWDS drops the right border of search inputs for its attached search button; a search field in a form has no button. */
-.usa-form .usa-input[type=search] { border-right: 1px solid #565c65; }
+/* Card headings can be a file name with no spaces: let it break anywhere rather than run past the card (issue #16). */
+.usa-card__heading { overflow-wrap: anywhere; }
+.merit-card__file { font-size: 1.15rem; }
 
 /* Sign-in and second-factor pages: a card on a soft band, with a short description beside it on wide screens. */
 .merit-signin { display: grid; grid-template-columns: minmax(0, 28rem) minmax(0, 24rem); gap: 2rem 3rem; align-items: start;
