@@ -193,7 +193,9 @@ dotnet run --project src/Merit.Web         # terminal 2: https://localhost:7243
 | `ConnectionStrings:Merit` (`ConnectionStrings__Merit`) | placeholder | Web, Worker | SQL Server connection. Web uses the `meritWeb` login; Worker uses `meritWorker`. Both are EXECUTE-only. |
 | `Session:IdleTimeoutMinutes` | `20` | Web | Sign-out after inactivity. |
 | `DataProtection:KeyPath` | app data folder | Web | Where ASP.NET Core data-protection keys are kept. They protect MFA secrets and cookies, so share them across web servers. |
-| `Merit:SignInAttemptsPerMinute` | `10` | Web | Sign-in rate limit. |
+| `Merit:SignInAttemptsPerMinute` | `30` | Web | Password attempts allowed per client address in any minute. Over the limit the client sees a **Too many attempts** page (HTTP 429 with `Retry-After`). Other clients are not affected, and repeated wrong passwords still lock the account after 5 tries. |
+| `Merit:MfaAttemptsPerMinute` | `30` | Web | The same limit for the authenticator-code and enrollment steps, counted separately. |
+| `Merit:ForwardedHeaders:KnownProxies` | empty | Web | Addresses of reverse proxies whose `X-Forwarded-For` is trusted. Set it behind a proxy or load balancer, or every client shares the proxy's address and its limit. |
 | `Urls` | `http://localhost:5280` | Worker | Health endpoints `/health` and `/health/queues`. |
 | `Worker:PollSeconds` | `2` | Worker | How often the worker looks for queued jobs. |
 | `Worker:ClusterDetection:RunAsUserName` | empty (off) | Worker | Account that scheduled cluster detection runs as. |
@@ -218,6 +220,7 @@ on the **Configuration** screens.
 | --- | --- |
 | `MERIT_IT_SERVER`, `MERIT_IT_DATABASE`, `MERIT_IT_WEB_PASSWORD`, `MERIT_IT_SKIP_DEPLOY` | Integration test server and database (the default database is `MERIT_IT`). |
 | `MERIT_E2E_URL`, `MERIT_E2E_SERVER`, `MERIT_E2E_DATABASE`, `MERIT_E2E_CHANNEL` | End-to-end test target and browser. |
+| `Merit__SignInAttemptsPerMinute`, `Merit__MfaAttemptsPerMinute` | Set on the web app (not the test runner) to raise the sign-in limits when end-to-end runs are repeated in quick succession from one machine. The integration tests set their own limits. |
 
 ---
 

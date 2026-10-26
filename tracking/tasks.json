@@ -1022,6 +1022,28 @@
       "started": "2026-10-26",
       "finished": "2026-10-26",
       "notes": "Scenario test ABackgroundJobKeepsTheProfileAndTenantOfTheSessionThatQueuedIt; JobSessionTests"
+    },
+    {
+      "id": "T170",
+      "phase": "12 Quality",
+      "task": "Issue #8: sign-in rate limits per client address (sliding window; password and code steps counted separately), Too many attempts page with Retry-After, configurable limits, trusted reverse proxies for X-Forwarded-For",
+      "ref": "GitHub issue #8",
+      "where": "sourceCode/src/Merit.Web/Infrastructure/SignInRateLimits.cs",
+      "status": "Done",
+      "started": "2026-10-26",
+      "finished": "2026-10-26",
+      "notes": "SignInRateLimitTests: one client over the limit does not hold up another; rejected forms count"
+    },
+    {
+      "id": "T171",
+      "phase": "12 Quality",
+      "task": "Issue #14: intake registry lookups by index seek and once per batch: identifier-first filtered indexes on organization CLIA/NPI and provider NPI, uspResolveOrganization and uspImportReporters try CLIA then NPI then name, new uspGetProviderByNpi, RegistryLookups cache in IntakeProcessor",
+      "ref": "GitHub issue #14",
+      "where": "organization, provider, uspResolveOrganization, uspImportReporters, uspGetProviderByNpi, RegistryLookups",
+      "status": "Done",
+      "started": "2026-10-26",
+      "finished": "2026-10-26",
+      "notes": "RegistryLookupTests; scenario test RegistryLookupsTryTheCliaNumberThenTheNpiThenTheName; 100k-row check: 8,694 to 6 logical reads (CLIA), 8,155 to 3 (NPI)"
     }
   ]
 }

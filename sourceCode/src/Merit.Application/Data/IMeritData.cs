@@ -139,6 +139,9 @@ public interface IPlaceData
 
     Task<IReadOnlyList<ProviderSearchRow>> SearchProvidersAsync(string text, int maxRows, CancellationToken ct = default);
 
+    /// <summary>The provider with exactly this NPI, or null; an index seek, unlike the type-ahead search.</summary>
+    Task<ProviderSearchRow?> GetProviderByNpiAsync(string npi, CancellationToken ct = default);
+
     Task SaveProviderAsync(Guid providerId, string? npi, string lastName, string? firstName, string? credential, Guid? practiceLocationId, CancellationToken ct = default);
 
     Task<OrganizationResolveRow?> ResolveOrganizationAsync(string? cliaNumber, string? npi, string? nameKey, CancellationToken ct = default);

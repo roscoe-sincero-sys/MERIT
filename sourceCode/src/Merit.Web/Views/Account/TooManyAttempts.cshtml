@@ -1,0 +1,14 @@
+@model int
+@{
+    ViewData["Title"] = "Too many attempts";
+}
+<div class="merit-signin merit-signin--single">
+    <section class="merit-signin__card" aria-labelledby="too-many-heading">
+        <h1 id="too-many-heading">Too many attempts</h1>
+        <div class="usa-alert usa-alert--warning usa-alert--slim" role="alert"><div class="usa-alert__body">
+            <p class="usa-alert__text">Too many sign-in attempts came from your network in the last minute. Wait @Model second@(Model == 1 ? "" : "s"), then try again.</p>
+        </div></div>
+        <p><a class="usa-button merit-signin__submit" href="/account/signin">Back to sign in</a></p>
+        <p class="merit-signin__mfa">Repeated wrong passwords or codes also lock the account for a while. If you are locked out, ask your administrator.</p>
+    </section>
+</div>

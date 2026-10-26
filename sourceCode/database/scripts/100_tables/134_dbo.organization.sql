@@ -107,6 +107,26 @@ BEGIN
         ON dbo.organization (rootTenantId, organizationNameKey);
 END;
 GO
+IF NOT EXISTS (SELECT 1
+                 FROM sys.indexes
+                WHERE name      = N'IX_dbo_organization_cliaNumber_rootTenantId'
+                  AND object_id = OBJECT_ID (N'dbo.organization'))
+BEGIN
+    CREATE INDEX IX_dbo_organization_cliaNumber_rootTenantId
+        ON dbo.organization (cliaNumber, rootTenantId)
+        WHERE isDeleted = 0 AND cliaNumber IS NOT NULL;
+END;
+GO
+IF NOT EXISTS (SELECT 1
+                 FROM sys.indexes
+                WHERE name      = N'IX_dbo_organization_npi_rootTenantId'
+                  AND object_id = OBJECT_ID (N'dbo.organization'))
+BEGIN
+    CREATE INDEX IX_dbo_organization_npi_rootTenantId
+        ON dbo.organization (npi, rootTenantId)
+        WHERE isDeleted = 0 AND npi IS NOT NULL;
+END;
+GO
 
 -- -------------------------------------------------------------------------------------------
 -- 5. The audit trigger. Not optional: a DEFAULT fires on INSERT only, so without it every UPDATE
