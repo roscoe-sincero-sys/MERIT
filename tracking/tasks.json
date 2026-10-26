@@ -1066,6 +1066,61 @@
       "started": "2026-10-26",
       "finished": "2026-10-26",
       "notes": "ATaskCanLinkOnlyRecordsTheCallerCanSee; the suite reproduced the gap on every run before the fix"
+    },
+    {
+      "id": "T174",
+      "phase": "12 Quality",
+      "task": "Issue #12: one NPI and CLIA normalization (spaces and hyphens removed, CLIA upper case) shared by the registry and intake",
+      "ref": "GitHub issue #12",
+      "where": "ProviderIdentifiers, RegistryService, IntakeProcessor",
+      "status": "Done",
+      "started": "2026-10-26",
+      "finished": "2026-10-26",
+      "notes": "ProviderIdentifierTests"
+    },
+    {
+      "id": "T175",
+      "phase": "12 Quality",
+      "task": "Issue #11: one organization per CLIA number and per NPI: file check by identifier whatever the type, import groups shared identifiers into one organization, uspSaveOrganization refuses duplicates, unique indexes (generateTables dropIndexes)",
+      "ref": "GitHub issue #11",
+      "where": "RegistryService.CheckFile, uspImportReporters, uspSaveOrganization, dbo.organization",
+      "status": "Done",
+      "started": "2026-10-26",
+      "finished": "2026-10-26",
+      "notes": "RegistryCheckTests; OneImportMakesOneOrganizationPerIdentifier"
+    },
+    {
+      "id": "T176",
+      "phase": "12 Quality",
+      "task": "Issue #10: held-row corrections merge as a patch on the server; the page sends only changed fields and refreshes the open row",
+      "ref": "GitHub issue #10",
+      "where": "uspSaveStagingCorrection, held.page.ts",
+      "status": "Done",
+      "started": "2026-10-26",
+      "finished": "2026-10-26",
+      "notes": "HeldRecordsTests.ASecondCorrectionKeepsTheFirst"
+    },
+    {
+      "id": "T177",
+      "phase": "12 Quality",
+      "task": "Issue #15: Reporters filter is a plain text input (role searchbox), USWDS search-box override removed",
+      "ref": "GitHub issue #15",
+      "where": "Views/Reporters/Index.cshtml, merit.css",
+      "status": "Done",
+      "started": "2026-10-26",
+      "finished": "2026-10-26",
+      "notes": "e2e layout.spec.ts"
+    },
+    {
+      "id": "T178",
+      "phase": "12 Quality",
+      "task": "Issue #16: batch card file names break after underscores, dots and hyphens; card headings wrap anywhere as a last resort",
+      "ref": "GitHub issue #16",
+      "where": "Views/Intake/_Batches.cshtml, merit.css",
+      "status": "Done",
+      "started": "2026-10-26",
+      "finished": "2026-10-26",
+      "notes": "e2e layout.spec.ts"
     }
   ]
 }

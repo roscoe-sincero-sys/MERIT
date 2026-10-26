@@ -88,15 +88,20 @@ public sealed class RegistryService(IPlaceData places, ICurrentSession session)
             var (row, problems) = Check(line, input);
             if (row is not null)
             {
-                string key = $"{row.Kind}|{row.Clia ?? row.Npi}";
-                if (seen.TryGetValue(key, out int first))
+                // Laboratories and facilities are both organizations, so a CLIA number or NPI names one organization
+                // whatever the row's type (issue #11); providers are a separate registry, keyed by NPI.
+                string scope = row.Kind == "provider" ? "provider" : "organization";
+                var keys = new[] { ("CLIA number", row.Clia), ("NPI", row.Npi) }
+                    .Where(k => k.Item2 is not null).Select(k => (Label: k.Item1, Key: $"{scope}|{k.Item1}|{k.Item2}")).ToList();
+                var repeat = keys.FirstOrDefault(k => seen.ContainsKey(k.Key));
+                if (repeat.Key is not null)
                 {
-                    problems.Add($"Same {(row.Clia is not null ? "CLIA number" : "NPI")} as line {first}; only the first is loaded.");
+                    problems.Add($"Same {repeat.Label} as line {seen[repeat.Key]}; only the first is loaded.");
                     row = null;
                 }
                 else
                 {
-                    seen[key] = line;
+                    keys.ForEach(k => seen[k.Key] = line);
                 }
             }
 
@@ -129,8 +134,8 @@ public sealed class RegistryService(IPlaceData places, ICurrentSession session)
     {
         var problems = new List<string>();
         string? kind = input.Kind?.Trim().ToLowerInvariant();
-        string? npi = Digits(input.Npi);
-        string? clia = ProviderIdentifiers.NormalizeClia(input.Clia?.Replace("-", string.Empty).Replace(" ", string.Empty));
+        string? npi = ProviderIdentifiers.NormalizeNpi(input.Npi);
+        string? clia = ProviderIdentifiers.NormalizeClia(input.Clia);
 
         if (kind is null || !Kinds.Contains(kind))
         {
@@ -191,17 +196,6 @@ public sealed class RegistryService(IPlaceData places, ICurrentSession session)
            + "laboratory,Chesapeake Reference Laboratory,,,,,21D0123456,410-555-0100\r\n"
            + "facility,Harbor Pediatrics,,,,1234567893,,410-555-0142\r\n"
            + "provider,,Rivera,Ana,MD,1245319599,,\r\n";
-
-    private static string? Digits(string? s)
-    {
-        if (string.IsNullOrWhiteSpace(s))
-        {
-            return null;
-        }
-
-        string d = new(s.Where(c => !char.IsWhiteSpace(c) && c != '-').ToArray());
-        return d.Length == 0 ? null : d;
-    }
 
     private static string? Trim(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
 }

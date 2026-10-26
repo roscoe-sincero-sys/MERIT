@@ -13,7 +13,7 @@ CreateDate:   2026-10-24
 ========================================================================================================================
 Description:
 
-Saves a correction to a held row, kept beside the reported values. The parsed row and any result's as-reported snapshot are never changed.
+Saves corrections to a held row, kept beside the reported values. The parsed row and any result's as-reported snapshot are never changed.
 
 ========================================================================================================================
 Requirements and Key Dependencies:
@@ -26,6 +26,8 @@ logs.uspStartExecutionLogging and logs.uspRecordExecutionError (scripts/000_infr
 Notes:
 
 Requires permission result.release_hold (auth.udfHasPermission); refuses with 51403 otherwise.
+
+@correctedJson is a patch merged into the row's corrections: each field it names is set, a field set to null is removed (the reported value applies again), and fields it leaves out are kept. Replacing the whole object let a second correction erase the first (issue #10).
 
 Rule 8 full instrumentation, generated from templates/procedure.sql by tools/generateProcedures.py. Row-level security applies to every table read
 or written here: SESSION_CONTEXT (N'scopeKey') decides what the caller can see.
@@ -89,7 +91,7 @@ BEGIN
             ;THROW 51403, N'You do not have permission to do this (result.release_hold).', 1;
         END;
 
-        IF ISJSON (@correctedJson) = 0
+        IF ISJSON (@correctedJson) = 0 OR LEFT (LTRIM (@correctedJson), 1) <> N'{'
         BEGIN
             ;THROW 50000, N'@correctedJson must be a JSON object.', 1;
         END;
@@ -100,8 +102,16 @@ BEGIN
         -- ===== The procedure's own work starts here. Everything above and below is boilerplate. ==
         -- =========================================================================================
 
-        UPDATE dbo.stagingRow SET correctedJson = @correctedJson
-         WHERE stagingRowId = @stagingRowId AND rowStatus = 'held' AND isDeleted = 0;
+        UPDATE s
+           SET correctedJson = (SELECT N'{' + STRING_AGG (CONCAT (N'"', STRING_ESCAPE (m.[key], 'json'), N'":"',
+                                                                STRING_ESCAPE (m.[value], 'json'), N'"'), N',') + N'}'
+                                  FROM (SELECT COALESCE (p.[key], e.[key]) AS [key],
+                                               CASE WHEN p.[key] IS NOT NULL THEN p.[value] ELSE e.[value] END AS [value]
+                                          FROM OPENJSON (COALESCE (s.correctedJson, N'{}')) AS e
+                                          FULL JOIN OPENJSON (@correctedJson) AS p ON p.[key] = e.[key]) AS m
+                                 WHERE m.[value] IS NOT NULL)
+          FROM dbo.stagingRow AS s
+         WHERE s.stagingRowId = @stagingRowId AND s.rowStatus = 'held' AND s.isDeleted = 0;
 
         SET @Comments = CONCAT (@@ROWCOUNT, N' row(s) corrected.');
 
@@ -186,7 +196,7 @@ EXEC util.uspSetObjectDescription
       @SchemaName  = N'dbo'
     , @ObjectType  = N'PROCEDURE'
     , @ObjectName  = N'uspSaveStagingCorrection'
-    , @Description = N'Saves a correction to a held row, kept beside the reported values. The parsed row and any result''s as-reported snapshot are never changed.';
+    , @Description = N'Saves corrections to a held row, kept beside the reported values. The parsed row and any result''s as-reported snapshot are never changed.';
 GO
 
 IF DATABASE_PRINCIPAL_ID (N'meritWebRole') IS NOT NULL

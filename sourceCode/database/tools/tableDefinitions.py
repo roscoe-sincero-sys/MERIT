@@ -667,13 +667,17 @@ TABLES = [
         "fks": [("parentOrganizationId", "dbo.organization", "organizationId")],
         "indexes": [{"name": "IX_dbo_organization_rootTenantId_organizationNameKey",
                      "cols": "rootTenantId, organizationNameKey"},
-                    # Intake looks the performing laboratory up by CLIA on every row, and the registry import matches
-                    # on CLIA, then NPI (issue #14). These lead with the identifier: the row-level security predicate
-                    # does not give the optimizer a rootTenantId to seek on, so an index led by rootTenantId is scanned.
-                    {"name": "IX_dbo_organization_cliaNumber_rootTenantId", "cols": "cliaNumber, rootTenantId",
-                     "filter": "isDeleted = 0 AND cliaNumber IS NOT NULL"},
-                    {"name": "IX_dbo_organization_npi_rootTenantId", "cols": "npi, rootTenantId",
-                     "filter": "isDeleted = 0 AND npi IS NOT NULL"}],
+                    # One organization per CLIA number and per NPI in a data root (issue #11), whatever its types: a
+                    # laboratory that also orders tests is one organization with two types. Intake looks the
+                    # laboratory up by CLIA on every row, and the registry import matches on CLIA, then NPI (issue
+                    # #14). These lead with the identifier: the row-level security predicate does not give the
+                    # optimizer a rootTenantId to seek on, so an index led by rootTenantId is scanned.
+                    {"name": "UX_dbo_organization_cliaNumber_rootTenantId", "cols": "cliaNumber, rootTenantId",
+                     "unique": True, "filter": "cliaNumber IS NOT NULL"},
+                    {"name": "UX_dbo_organization_npi_rootTenantId", "cols": "npi, rootTenantId",
+                     "unique": True, "filter": "npi IS NOT NULL"}],
+        # The non-unique versions from issue #14, replaced by the unique indexes above.
+        "dropIndexes": ["IX_dbo_organization_cliaNumber_rootTenantId", "IX_dbo_organization_npi_rootTenantId"],
     },
     {
         "schema": "dbo", "name": "organizationType", "rls": "root",

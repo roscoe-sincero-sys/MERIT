@@ -253,6 +253,48 @@ public sealed class AuthorizationScenarioTests(MeritFixture fixture)
         Assert.Empty(await RowsAsync(md, "dbo.uspGetProviderByNpi", new() { ["npi"] = labNpi }));
     }
 
+    [SqlFact]
+    public async Task OneImportMakesOneOrganizationPerIdentifier()
+    {
+        // Issue #11: laboratories and facilities are both organizations. Rows that share a CLIA number or an NPI, directly
+        // or through another row, become one organization with each row's type, never two.
+        var md = await ScopeAsync("supervisor");
+        string s = Suffix().ToUpperInvariant();
+        string clia = "24D" + Random.Shared.Next(0, 10_000_000).ToString("D7", CultureInfo.InvariantCulture);
+        string npi = "1" + Random.Shared.NextInt64(0, 1_000_000_000).ToString("D9", CultureInfo.InvariantCulture);
+
+        var counts = Assert.Single(await RowsAsync(md, "dbo.uspImportReporters", new()
+        {
+            ["rowsJson"] = $$"""
+                [{"rowNumber":1,"kind":"laboratory","name":"Shared lab {{s}}","nameKey":"SHAREDLAB{{s}}","clia":"{{clia}}"},
+                 {"rowNumber":2,"kind":"facility","name":"Shared clinic {{s}}","nameKey":"SHAREDCLINIC{{s}}","clia":"{{clia}}","npi":"{{npi}}"},
+                 {"rowNumber":3,"kind":"facility","name":"Shared practice {{s}}","nameKey":"SHAREDPRACTICE{{s}}","npi":"{{npi}}"}]
+                """,
+        }));
+        Assert.Equal((1, 2), ((int)counts["addedCount"]!, (int)counts["updatedCount"]!));
+
+        await using var c = new SqlConnection(TestEnvironment.AdminConnectionString());
+        await c.OpenAsync();
+        await using var cmd = new SqlCommand("""
+            SELECT o.organizationName, o.cliaNumber, o.npi,
+                   (SELECT STRING_AGG (t.organizationTypeCode, ',') WITHIN GROUP (ORDER BY t.organizationTypeCode)
+                      FROM dbo.organizationType AS t WHERE t.organizationId = o.organizationId AND t.isDeleted = 0) AS types
+              FROM dbo.organization AS o WHERE (o.cliaNumber = @clia OR o.npi = @npi) AND o.isDeleted = 0
+            """, c);
+        cmd.Parameters.AddWithValue("@clia", clia);
+        cmd.Parameters.AddWithValue("@npi", npi);
+        await using var r = await cmd.ExecuteReaderAsync();
+        Assert.True(await r.ReadAsync());
+        Assert.Equal(("Shared lab " + s, clia, npi, "laboratory,providerPractice"), (r.GetString(0), r.GetString(1), r.GetString(2), r.GetString(3)));
+        Assert.False(await r.ReadAsync());
+        await r.CloseAsync();
+
+        // Saving another organization with the same CLIA number is refused by name, not by a constraint error.
+        var refused = await Assert.ThrowsAsync<SqlException>(() => RunAsync(md, "dbo.uspSaveOrganization", new()
+            { ["organizationId"] = Guid.NewGuid(), ["organizationName"] = "Copy " + s, ["organizationNameKey"] = "COPY" + s, ["cliaNumber"] = clia }));
+        Assert.Equal(51422, refused.Number);
+    }
+
     private sealed record JobContext(Guid User, Guid? Profile, Guid? ViewAs, Guid? Acting);
 
     /// <summary>Queues a job far in the future, so no worker picks it up.</summary>

@@ -310,18 +310,29 @@ OFFSET (@pageNumber - 1) * @pageSize ROWS
     {
         "schema": "dbo", "name": "uspSaveStagingCorrection", "kind": "write", "grants": WEB, "ticket": "T105",
         "permission": "result.release_hold",
-        "desc": "Saves a correction to a held row, kept beside the reported values. The parsed row and any result's "
+        "desc": "Saves corrections to a held row, kept beside the reported values. The parsed row and any result's "
                 "as-reported snapshot are never changed.",
         "params": """@stagingRowId  UNIQUEIDENTIFIER
 , @correctedJson NVARCHAR (MAX)""",
         "key": "CONCAT (N'stagingRowId=', @stagingRowId)",
-        "validate": """IF ISJSON (@correctedJson) = 0
+        "validate": """IF ISJSON (@correctedJson) = 0 OR LEFT (LTRIM (@correctedJson), 1) <> N'{'
 BEGIN
     ;THROW 50000, N'@correctedJson must be a JSON object.', 1;
 END;""",
+        "notes": "@correctedJson is a patch merged into the row's corrections: each field it names is set, a field set to "
+                 "null is removed (the reported value applies again), and fields it leaves out are kept. Replacing the "
+                 "whole object let a second correction erase the first (issue #10).",
         "body": """
-UPDATE dbo.stagingRow SET correctedJson = @correctedJson
- WHERE stagingRowId = @stagingRowId AND rowStatus = 'held' AND isDeleted = 0;
+UPDATE s
+   SET correctedJson = (SELECT N'{' + STRING_AGG (CONCAT (N'"', STRING_ESCAPE (m.[key], 'json'), N'":"',
+                                                        STRING_ESCAPE (m.[value], 'json'), N'"'), N',') + N'}'
+                          FROM (SELECT COALESCE (p.[key], e.[key]) AS [key],
+                                       CASE WHEN p.[key] IS NOT NULL THEN p.[value] ELSE e.[value] END AS [value]
+                                  FROM OPENJSON (COALESCE (s.correctedJson, N'{}')) AS e
+                                  FULL JOIN OPENJSON (@correctedJson) AS p ON p.[key] = e.[key]) AS m
+                         WHERE m.[value] IS NOT NULL)
+  FROM dbo.stagingRow AS s
+ WHERE s.stagingRowId = @stagingRowId AND s.rowStatus = 'held' AND s.isDeleted = 0;
 
 SET @Comments = CONCAT (@@ROWCOUNT, N' row(s) corrected.');
 """,

@@ -171,8 +171,9 @@ export class HeldPage implements OnInit {
     this.fixes[key] = v === '' ? null : v;
   }
 
+  /** Sends only the fields changed since the row was opened; the server merges them into what is stored (issue #10). */
   protected saveFix(r: HeldRowDto): void {
-    this.api.correctHeld(r.stagingRowId, { ...r.corrected, ...this.fixes }).subscribe({
+    this.api.correctHeld(r.stagingRowId, { ...this.fixes }).subscribe({
       next: () => { this.store.message.set('Correction saved beside the reported values. Release the row to load it.'); this.fixes = {}; this.loadRows(); },
       error: e => this.store.error.set(problemMessage(e)),
     });
@@ -216,7 +217,13 @@ export class HeldPage implements OnInit {
     const scope = g ? { reason: g.reasonCode, value: g.reportedValue, sender: g.senderOrganizationId, exact: true } : {};
     this.api.heldRows({ ...scope, batch: this.store.batch(), page: this.store.page(), pageSize: 50 })
       .subscribe({
-        next: r => { this.store.rows.set(r); this.store.loading.set(false); },
+        next: r => {
+          this.store.rows.set(r);
+          // Keep the open row in step with what is stored, so its correction boxes show the saved values.
+          const open = this.store.focusRow();
+          this.store.focusRow.set(open ? (r.items.find(x => x.stagingRowId === open.stagingRowId) ?? null) : null);
+          this.store.loading.set(false);
+        },
         error: e => { this.store.error.set(problemMessage(e)); this.store.loading.set(false); },
       });
   }

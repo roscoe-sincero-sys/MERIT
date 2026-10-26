@@ -20,7 +20,8 @@
 <form class="usa-form merit-form-row" method="get" action="/reporters" hx-get="/reporters" hx-target="#reporter-list" hx-swap="outerHTML"
       hx-trigger="change, keyup changed delay:400ms from:#q" hx-push-url="true">
     <div class="usa-form-group"><label class="usa-label" for="q">Name, CLIA number or NPI</label>
-        <input class="usa-input" id="q" name="q" type="search" value="@Model.Query" autocomplete="off" /></div>
+        @* A filter, not a USWDS search component: type="search" picks up that component's styles (issue #15). *@
+        <input class="usa-input" id="q" name="q" type="text" role="searchbox" enterkeyhint="search" value="@Model.Query" autocomplete="off" /></div>
     <div class="usa-form-group"><label class="usa-label" for="kind">Kind</label>
         <select class="usa-select" id="kind" name="kind">
             <option value="" selected="@(Model.Kind is null)">All</option>

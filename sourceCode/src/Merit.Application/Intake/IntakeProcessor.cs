@@ -306,7 +306,8 @@ public sealed partial class IntakeProcessor(
         await HandleGuardianAsync(personId.Value, Get("guardianName"), dob, ct).ConfigureAwait(false);
 
         Guid? providerId = null;
-        string? npi = Get("orderingProviderNpi");
+        // The same normalization as the registry, so a formatted NPI in the file still links (issue #12).
+        string? npi = ProviderIdentifiers.NormalizeNpi(Get("orderingProviderNpi"));
         if (ProviderIdentifiers.IsValidNpi(npi))
         {
             providerId = await registry.ProviderAsync(npi!, ct).ConfigureAwait(false);

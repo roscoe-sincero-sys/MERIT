@@ -59,22 +59,52 @@ public sealed class HeldRecordsTests(MeritFixture fixture)
         }
         finally
         {
-            // Removed, not soft-deleted: the test database keeps its data between runs, and other suites pick their
-            // out-of-scope targets from whatever staging rows exist.
-            await using var c = new SqlConnection(TestEnvironment.AdminConnectionString());
-            await c.OpenAsync();
-            await using var cmd = new SqlCommand("""
-                DECLARE @b TABLE (intakeBatchId UNIQUEIDENTIFIER);
-                INSERT @b SELECT intakeBatchId FROM dbo.intakeBatch WHERE senderOrganizationId IN (@a, @bLab);
-                DELETE h FROM dbo.stagingHoldReason AS h JOIN dbo.stagingRow AS s ON s.stagingRowId = h.stagingRowId
-                 WHERE s.intakeBatchId IN (SELECT intakeBatchId FROM @b);
-                DELETE dbo.stagingRow WHERE intakeBatchId IN (SELECT intakeBatchId FROM @b);
-                DELETE dbo.intakeBatch WHERE intakeBatchId IN (SELECT intakeBatchId FROM @b);
-                DELETE dbo.organization WHERE organizationId IN (@a, @bLab);
-                """, c);
-            cmd.Parameters.AddWithValue("@a", labA);
-            cmd.Parameters.AddWithValue("@bLab", labB);
-            await cmd.ExecuteNonQueryAsync();
+            await RemoveAsync(labA, labB);
+        }
+    }
+
+    [SqlFact]
+    public async Task ASecondCorrectionKeepsTheFirst()
+    {
+        // Issue #10: each save replaced the row's corrections, so correcting the unit erased the corrected test code.
+        string code = "T10-" + Guid.NewGuid().ToString("N")[..6].ToUpperInvariant();
+        var lab = Guid.NewGuid();
+        var rows = new List<Guid>();
+        try
+        {
+            await using (var c = new SqlConnection(TestEnvironment.AdminConnectionString()))
+            {
+                await c.OpenAsync();
+                await HoldAsync(c, lab, "Lab " + code, [("unknownTestCode", code)], rows);
+            }
+
+            var supervisor = await fixture.SignedInAsync("supervisor");
+            async Task CorrectAsync(object corrections)
+            {
+                var response = await supervisor.NoRedirect.PutAsync($"/api/v1/held/rows/{rows[0]}/correction",
+                    new StringContent(JsonSerializer.Serialize(new { corrections }), System.Text.Encoding.UTF8, "application/json"));
+                Assert.True(response.StatusCode == HttpStatusCode.NoContent, $"{(int)response.StatusCode}: {await response.Content.ReadAsStringAsync()}");
+            }
+
+            async Task<Dictionary<string, string?>> CorrectedAsync()
+            {
+                using var page = await JsonAsync(supervisor, $"/api/v1/held/rows?reason=unknownTestCode&value={code}&sender={lab}&exact=true");
+                var row = Assert.Single(page.RootElement.GetProperty("items").EnumerateArray());
+                return row.GetProperty("corrected").Deserialize<Dictionary<string, string?>>()!;
+            }
+
+            Assert.Empty(await CorrectedAsync());               // as the page does: a read first, which also sets the XSRF cookie
+            await CorrectAsync(new { loinc = "5671-3" });
+            await CorrectAsync(new { unit = "ug/dL" });
+            Assert.Equal(new Dictionary<string, string?> { ["loinc"] = "5671-3", ["unit"] = "ug/dL" }, await CorrectedAsync());
+
+            // Clearing a box removes that correction only; the reported value applies again.
+            await CorrectAsync(new Dictionary<string, string?> { ["loinc"] = null });
+            Assert.Equal(new Dictionary<string, string?> { ["unit"] = "ug/dL" }, await CorrectedAsync());
+        }
+        finally
+        {
+            await RemoveAsync(lab);
         }
     }
 
@@ -117,6 +147,26 @@ public sealed class HeldRecordsTests(MeritFixture fixture)
             cmd.Parameters.AddWithValue("@value", (object?)holds[i].Value ?? DBNull.Value);
             await cmd.ExecuteNonQueryAsync();
         }
+    }
+
+    /// <summary>
+    /// Removes the test's senders and everything held from them. Removed, not soft-deleted: the test database keeps its
+    /// data between runs, and other suites pick their out-of-scope targets from whatever staging rows exist.
+    /// </summary>
+    private static async Task RemoveAsync(params Guid[] senders)
+    {
+        await using var c = new SqlConnection(TestEnvironment.AdminConnectionString());
+        await c.OpenAsync();
+        await using var cmd = new SqlCommand($"""
+            DECLARE @b TABLE (intakeBatchId UNIQUEIDENTIFIER);
+            INSERT @b SELECT intakeBatchId FROM dbo.intakeBatch WHERE senderOrganizationId IN ({string.Join(',', senders.Select(g => $"'{g}'"))});
+            DELETE h FROM dbo.stagingHoldReason AS h JOIN dbo.stagingRow AS s ON s.stagingRowId = h.stagingRowId
+             WHERE s.intakeBatchId IN (SELECT intakeBatchId FROM @b);
+            DELETE dbo.stagingRow WHERE intakeBatchId IN (SELECT intakeBatchId FROM @b);
+            DELETE dbo.intakeBatch WHERE intakeBatchId IN (SELECT intakeBatchId FROM @b);
+            DELETE dbo.organization WHERE organizationId IN ({string.Join(',', senders.Select(g => $"'{g}'"))});
+            """, c);
+        await cmd.ExecuteNonQueryAsync();
     }
 
     private static async Task<JsonDocument> JsonAsync(MeritClient client, string url)
