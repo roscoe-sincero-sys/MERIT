@@ -1,0 +1,3 @@
+@model Merit.Application.Data.OpenCaseChipRow
+@* One open case as a chip linking to it: analyte, classification in words, case number. The person header and search use it. *@
+<a class="merit-badge merit-badge--@Model.Classification" href="/cases/@Model.ExposureCaseId"><abbr title="@Model.AnalyteName">@Model.AnalyteCode</abbr> &middot; @Options.Humanize(Model.Classification) &middot; @Model.CaseNumber</a>

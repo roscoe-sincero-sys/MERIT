@@ -20,7 +20,15 @@ public sealed class SearchPersonRow
 
     public string? CurrentCounty { get; init; }
 
-    public string? OpenCases { get; init; }
+    /// <summary>The person's open cases as uspSearch returns them: a JSON array of the fields of <see cref="OpenCaseChipRow"/>.</summary>
+    public string? OpenCasesJson { get; init; }
+
+    /// <summary>The open cases, shown as the same chips as the person page header (issue #19).</summary>
+    public IReadOnlyList<OpenCaseChipRow> OpenCases => string.IsNullOrEmpty(OpenCasesJson)
+        ? []
+        : System.Text.Json.JsonSerializer.Deserialize<List<OpenCaseChipRow>>(OpenCasesJson, CaseJson) ?? [];
+
+    private static readonly System.Text.Json.JsonSerializerOptions CaseJson = new() { PropertyNameCaseInsensitive = true };
 }
 
 public sealed class SearchCaseRow

@@ -48,7 +48,7 @@
             Open cases:
             @foreach (var c in h.OpenCases)
             {
-                <a class="merit-badge merit-badge--@c.Classification" href="/cases/@c.ExposureCaseId">@c.AnalyteCode &middot; @Options.Humanize(c.Classification) &middot; @c.CaseNumber</a>
+                <partial name="_CaseChip" model="c" />
             }
         </p>
     }
