@@ -114,10 +114,16 @@ BEGIN
         VALUES (@intakeBatchId, @root, @acting, @intakeProfileId, @sender, 'upload', @fileName, @rawContent, SYSUTCDATETIME (),
                 'received', @user);
 
+        DECLARE @jobProfile UNIQUEIDENTIFIER, @jobViewAs UNIQUEIDENTIFIER, @jobActing UNIQUEIDENTIFIER;
+        SELECT @jobProfile = userProfileId, @jobViewAs = viewAsUserId, @jobActing = actingTenantId
+          FROM auth.sessionScope
+         WHERE sessionScopeId = TRY_CAST (SESSION_CONTEXT (N'scopeKey') AS UNIQUEIDENTIFIER) AND isDeleted = 0;
+
         INSERT dbo.jobQueue (jobId, rootTenantId, owningTenantId, jobType, payloadJson, payloadVersion, availableUtc,
-                             requestedByUserId)
+                             requestedByUserId, requestedProfileId, requestedViewAsUserId, requestedActingTenantId)
         VALUES (@jobId, @root, @acting, 'intakeBatch',
-                CONCAT (N'{"intakeBatchId":"', @intakeBatchId, N'","releasedOnly":false}'), 1, SYSUTCDATETIME (), @user);
+                CONCAT (N'{"intakeBatchId":"', @intakeBatchId, N'","releasedOnly":false}'), 1, SYSUTCDATETIME (), @user,
+                @jobProfile, @jobViewAs, @jobActing);
 
         SET @Comments = N'Batch received and queued.';
 

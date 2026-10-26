@@ -8,6 +8,15 @@ NEWID = ("CAST (CAST (NEWID () AS BINARY (10)) + CAST (DATEDIFF_BIG (MILLISECOND
 
 WEB = ["meritWebRole"]
 WORKER = ["meritWorkerRole"]
+
+# The queuing session's profile, view-as user and acting tenant, stored on every job so the worker runs it under the
+# same security as the request that started it (issue #7).
+JOB_SCOPE = """DECLARE @jobProfile UNIQUEIDENTIFIER, @jobViewAs UNIQUEIDENTIFIER, @jobActing UNIQUEIDENTIFIER;
+SELECT @jobProfile = userProfileId, @jobViewAs = viewAsUserId, @jobActing = actingTenantId
+  FROM auth.sessionScope
+ WHERE sessionScopeId = TRY_CAST (SESSION_CONTEXT (N'scopeKey') AS UNIQUEIDENTIFIER) AND isDeleted = 0;"""
+JOB_SCOPE_COLUMNS = "requestedProfileId, requestedViewAsUserId, requestedActingTenantId"
+JOB_SCOPE_VALUES = "@jobProfile, @jobViewAs, @jobActing"
 BOTH = ["meritWebRole", "meritWorkerRole"]
 
 # Rejects a missing or stale row version on an UPDATE. Use after the UPDATE: @@ROWCOUNT = 0 means the row changed or is

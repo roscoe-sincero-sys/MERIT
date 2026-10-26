@@ -1,5 +1,5 @@
 """Work queues, tasks, dashboard, background job queue, cluster detection and the audit ledger."""
-from procs_common import NEWID, WEB, WORKER, BOTH, CONCURRENCY
+from procs_common import NEWID, WEB, WORKER, BOTH, CONCURRENCY, JOB_SCOPE, JOB_SCOPE_COLUMNS, JOB_SCOPE_VALUES
 
 QUEUE_NAMES = """('unmatchedResult', N'Unmatched results'), ('unknownCode', N'Unknown LOINC codes or units'),
         ('pausedBatch', N'Paused intake batches'), ('addressReview', N'Address review'),
@@ -233,9 +233,10 @@ SELECT @@ROWCOUNT AS updatedCount;
 BEGIN
     ;THROW 50000, N'@payloadJson must be JSON.', 1;
 END;""",
-        "body": """
+        "body": f"""
 DECLARE @root UNIQUEIDENTIFIER = auth.udfSessionRootTenantId ();
 DECLARE @user UNIQUEIDENTIFIER = auth.udfSessionUserId ();
+{JOB_SCOPE}
 
 IF @root IS NULL OR @user IS NULL
 BEGIN
@@ -243,9 +244,9 @@ BEGIN
 END;
 
 INSERT dbo.jobQueue (jobId, rootTenantId, owningTenantId, jobType, payloadJson, payloadVersion, availableUtc,
-                     requestedByUserId)
+                     requestedByUserId, {JOB_SCOPE_COLUMNS})
 VALUES (@jobId, @root, auth.udfSessionActingTenantId (), @jobType, @payloadJson, @payloadVersion,
-        COALESCE (@availableUtc, SYSUTCDATETIME ()), @user);
+        COALESCE (@availableUtc, SYSUTCDATETIME ()), @user, {JOB_SCOPE_VALUES});
 
 SET @Comments = N'Job queued.';
 """,
@@ -287,7 +288,7 @@ OUTPUT inserted.jobId INTO @claimed
   JOIN candidate AS n ON n.jobId = j.jobId;
 
 SELECT j.jobId, j.rootTenantId, j.owningTenantId, j.jobType, j.payloadJson, j.payloadVersion, j.attempts, j.maxAttempts,
-       j.requestedByUserId
+       j.requestedByUserId, j.requestedProfileId, j.requestedViewAsUserId, j.requestedActingTenantId
   FROM dbo.jobQueue AS j JOIN @claimed AS c ON c.jobId = j.jobId;
 
 SET @Comments = CONCAT ((SELECT COUNT (*) FROM @claimed), N' job(s) claimed.');

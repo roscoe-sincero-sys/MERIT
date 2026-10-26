@@ -172,6 +172,92 @@ public sealed class AuthorizationScenarioTests(MeritFixture fixture)
         Assert.DoesNotContain((await RowsAsync(wv, "auth.uspListTenants", [])).Select(r => (string)r["tenantName"]!), n => n.StartsWith("Reach ") || n.StartsWith("New county ") || n.StartsWith("Berkeley via Morgan "));
     }
 
+    [SqlFact]
+    public async Task ABackgroundJobKeepsTheProfileAndTenantOfTheSessionThatQueuedIt()
+    {
+        // Issue #7: the worker used to rebuild the session from the user alone (master profile, highest tenant).
+        Build();
+        var pennsylvania = await TenantAsync("R3-PA");
+        var westVirginia = await TenantAsync("R3-WV");
+
+        // A region administrator working in Pennsylvania queues a job.
+        var inPa = await ScopeAsync("r3admin", acting: "R3-PA");
+        Assert.Equal(pennsylvania, inPa.ActingTenantId);
+        var job = await QueueJobAsync(inPa);
+        var stored = await StoredJobContextAsync(job);
+        Assert.Equal(pennsylvania, stored.Acting);
+        Assert.Null(stored.Profile);
+
+        // The worker's session from the stored context is in Pennsylvania's data root; from the user alone it was the region's.
+        Assert.Equal(pennsylvania, (await WorkerScopeAsync(stored)).Root);
+        Assert.Equal(await TenantAsync("EPA-R3"), (await WorkerScopeAsync(stored with { Acting = null })).Root);
+
+        // A smaller profile (West Virginia only) is kept: the job's session covers West Virginia and not Pennsylvania.
+        var master = await ScopeAsync("r3admin");
+        var wvOnly = Key("profile:r3admin:wv-" + Suffix());
+        await SaveProfileAsync(master, wvOnly, "West Virginia only", [new(westVirginia, await RoleAsync("EPA-R3", "supervisor"), true, "full")]);
+        var inProfile = await ScopeAsync("r3admin", profile: wvOnly);
+        var profileJob = await StoredJobContextAsync(await QueueJobAsync(inProfile));
+        Assert.Equal(wvOnly, profileJob.Profile);
+        var tenants = (await WorkerScopeAsync(profileJob)).Tenants;
+        Assert.Contains(westVirginia, tenants);
+        Assert.DoesNotContain(pennsylvania, tenants);
+
+        // Viewing as someone is kept too.
+        var viewing = await ScopeAsync("wvadmin", viewAs: "wvstaff");
+        Assert.Equal(await UserIdAsync("wvstaff"), (await StoredJobContextAsync(await QueueJobAsync(viewing))).ViewAs);
+    }
+
+    private sealed record JobContext(Guid User, Guid? Profile, Guid? ViewAs, Guid? Acting);
+
+    /// <summary>Queues a job far in the future, so no worker picks it up.</summary>
+    private static async Task<Guid> QueueJobAsync(Session s)
+    {
+        var jobId = Guid.NewGuid();
+        await RunAsync(s, "dbo.uspEnqueueJob", new()
+            { ["jobId"] = jobId, ["jobType"] = "clusterDetection", ["payloadJson"] = "{}", ["availableUtc"] = new DateTime(2099, 1, 1) });
+        return jobId;
+    }
+
+    private static async Task<JobContext> StoredJobContextAsync(Guid jobId)
+    {
+        await using var c = new SqlConnection(TestEnvironment.AdminConnectionString());
+        await c.OpenAsync();
+        await using var cmd = new SqlCommand(
+            "SELECT requestedByUserId, requestedProfileId, requestedViewAsUserId, requestedActingTenantId FROM dbo.jobQueue WHERE jobId = @id", c);
+        cmd.Parameters.AddWithValue("@id", jobId);
+        await using var r = await cmd.ExecuteReaderAsync();
+        Assert.True(await r.ReadAsync());
+        Guid? G(int i) => r.IsDBNull(i) ? null : r.GetGuid(i);
+        return new JobContext(r.GetGuid(0), G(1), G(2), G(3));
+    }
+
+    /// <summary>The session the worker opens for a job: what JobSessions.OpenAsync passes to uspCreateSessionScope.</summary>
+    private static async Task<(Guid Root, HashSet<Guid> Tenants)> WorkerScopeAsync(JobContext job)
+    {
+        await using var c = new SqlConnection(TestEnvironment.WebConnectionString);
+        await c.OpenAsync();
+        await using var cmd = new SqlCommand("auth.uspCreateSessionScope", c) { CommandType = CommandType.StoredProcedure };
+        cmd.Parameters.AddWithValue("@sessionScopeId", Guid.NewGuid());
+        cmd.Parameters.AddWithValue("@appUserId", job.User);
+        cmd.Parameters.AddWithValue("@expiresUtc", DateTime.UtcNow.AddMinutes(10));
+        cmd.Parameters.AddWithValue("@userProfileId", (object?)job.Profile ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@viewAsUserId", (object?)job.ViewAs ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@actingTenantId", (object?)job.Acting ?? DBNull.Value);
+        await using var r = await cmd.ExecuteReaderAsync();
+        Assert.True(await r.ReadAsync());
+        Guid root = r.GetGuid(r.GetOrdinal("rootTenantId"));
+        var tenants = new HashSet<Guid>();
+        await r.NextResultAsync();                       // permissions
+        await r.NextResultAsync();                       // tenants with their access level
+        while (await r.ReadAsync())
+        {
+            tenants.Add(r.GetGuid(r.GetOrdinal("tenantId")));
+        }
+
+        return (root, tenants);
+    }
+
     // ------------------------------------------------------------------------------------------------ 8 jurisdiction admins
 
     [SqlFact]
@@ -483,7 +569,7 @@ public sealed class AuthorizationScenarioTests(MeritFixture fixture)
     }
 
     /// <summary>A session scope as sign-in or a profile switch creates it, through the procedure, as the web login.</summary>
-    private static async Task<Session> ScopeAsync(string userName, Guid? profile = null, string? viewAs = null)
+    private static async Task<Session> ScopeAsync(string userName, Guid? profile = null, string? viewAs = null, string? acting = null)
     {
         var user = await UserIdAsync(userName);
         var scope = Guid.NewGuid();
@@ -495,12 +581,13 @@ public sealed class AuthorizationScenarioTests(MeritFixture fixture)
         cmd.Parameters.AddWithValue("@expiresUtc", DateTime.UtcNow.AddMinutes(10));
         cmd.Parameters.AddWithValue("@userProfileId", (object?)profile ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@viewAsUserId", viewAs is null ? DBNull.Value : await UserIdAsync(viewAs));
-        Guid? acting = null;
+        cmd.Parameters.AddWithValue("@actingTenantId", acting is null ? DBNull.Value : await TenantAsync(acting));
+        Guid? actingTenant = null;
         await using (var r = await cmd.ExecuteReaderAsync())
         {
             if (await r.ReadAsync())
             {
-                acting = r.GetGuid(r.GetOrdinal("actingTenantId"));
+                actingTenant = r.GetGuid(r.GetOrdinal("actingTenantId"));
             }
 
             while (await r.NextResultAsync())
@@ -508,7 +595,7 @@ public sealed class AuthorizationScenarioTests(MeritFixture fixture)
             }
         }
 
-        return new Session(scope, user, acting);
+        return new Session(scope, user, actingTenant);
     }
 
     private static async Task<List<Dictionary<string, object?>>> RowsAsync(Session s, string procedure, Dictionary<string, object?> args)

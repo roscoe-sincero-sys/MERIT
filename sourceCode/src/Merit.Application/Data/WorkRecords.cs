@@ -152,6 +152,15 @@ public sealed class ClaimedJobRow
     public int MaxAttempts { get; init; }
 
     public Guid RequestedByUserId { get; init; }
+
+    /// <summary>The queuing session's profile; null for the master profile.</summary>
+    public Guid? RequestedProfileId { get; init; }
+
+    /// <summary>The user the administrator was viewing MERIT as when the job was queued.</summary>
+    public Guid? RequestedViewAsUserId { get; init; }
+
+    /// <summary>The tenant the user was working in when the job was queued.</summary>
+    public Guid? RequestedActingTenantId { get; init; }
 }
 
 public sealed class JobRow

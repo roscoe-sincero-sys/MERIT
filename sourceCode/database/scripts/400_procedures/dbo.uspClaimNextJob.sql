@@ -117,7 +117,7 @@ BEGIN
           JOIN candidate AS n ON n.jobId = j.jobId;
 
         SELECT j.jobId, j.rootTenantId, j.owningTenantId, j.jobType, j.payloadJson, j.payloadVersion, j.attempts, j.maxAttempts,
-               j.requestedByUserId
+               j.requestedByUserId, j.requestedProfileId, j.requestedViewAsUserId, j.requestedActingTenantId
           FROM dbo.jobQueue AS j JOIN @claimed AS c ON c.jobId = j.jobId;
 
         SET @Comments = CONCAT ((SELECT COUNT (*) FROM @claimed), N' job(s) claimed.');
