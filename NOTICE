@@ -1,0 +1,19 @@
+MERIT: Metals Exposure Registry and Investigation Tracking
+Copyright 2026 roscoe-sincero-sys and the MERIT contributors
+
+This product includes software developed as the MERIT project:
+https://github.com/roscoe-sincero-sys/MERIT
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not
+use this software except in compliance with the License. A copy of the License
+is in the LICENSE file and at http://www.apache.org/licenses/LICENSE-2.0
+
+Distributions of this software, or of works based on it, must keep this NOTICE
+file and the copyright notice above.
+
+Third-party components bundled in sourceCode/src/Merit.Web/wwwroot/lib (htmx,
+the U.S. Web Design System) and packages restored at build time remain under
+their own licenses.
+
+All people, addresses and results in the demonstration data and samples are
+synthetic.

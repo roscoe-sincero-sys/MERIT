@@ -297,8 +297,9 @@ A separate `CONTRIBUTING.md` can expand on this when the project opens to outsid
 
 ## License and acknowledgments
 
-**License:** none has been chosen yet. Until a license file is added, all rights are reserved by the project owner.
-Agencies adopting MERIT should agree on terms first. Apache 2.0 or MIT are common choices for public-sector software.
+**License:** [Apache License 2.0](LICENSE). Anyone may use, modify and distribute it, including commercially. It comes
+with no warranty, and redistributions must keep the copyright notice and the project's [NOTICE](NOTICE) file, which
+credits the source.
 
 **Built with:**
 - **Server and data:**
