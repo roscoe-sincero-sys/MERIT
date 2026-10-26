@@ -25,7 +25,7 @@ logs.uspStartExecutionLogging and logs.uspRecordExecutionError (scripts/000_infr
 ========================================================================================================================
 Notes:
 
-The owner is the case's owner when a case is given, else @owningTenantId, else the caller's acting tenant.
+The owner is the case's owner when a case is given, else @owningTenantId, else the caller's acting tenant. Every linked record must be one the caller can see: the checks run under row-level security, so another tenant's person, case, result, investigation or staging row is refused as not found and its id is never stored on a task in the caller's queue (issue #29).
 
 Rule 8 full instrumentation, generated from templates/procedure.sql by tools/generateProcedures.py. Row-level security applies to every table read
 or written here: SESSION_CONTEXT (N'scopeKey') decides what the caller can see.
@@ -99,6 +99,15 @@ BEGIN
         -- =========================================================================================
         -- ===== The procedure's own work starts here. Everything above and below is boilerplate. ==
         -- =========================================================================================
+
+        IF (@personId IS NOT NULL AND NOT EXISTS (SELECT 1 FROM dbo.person WHERE personId = @personId))
+           OR (@exposureCaseId IS NOT NULL AND NOT EXISTS (SELECT 1 FROM dbo.exposureCase WHERE exposureCaseId = @exposureCaseId))
+           OR (@labResultId IS NOT NULL AND NOT EXISTS (SELECT 1 FROM dbo.labResult WHERE labResultId = @labResultId))
+           OR (@investigationId IS NOT NULL AND NOT EXISTS (SELECT 1 FROM dbo.investigation WHERE investigationId = @investigationId))
+           OR (@stagingRowId IS NOT NULL AND NOT EXISTS (SELECT 1 FROM dbo.stagingRow WHERE stagingRowId = @stagingRowId))
+        BEGIN
+            ;THROW 51404, N'A record linked to the task was not found.', 1;
+        END;
 
         DECLARE @root UNIQUEIDENTIFIER = auth.udfSessionRootTenantId ();
         DECLARE @owner UNIQUEIDENTIFIER = COALESCE ((SELECT owningTenantId FROM dbo.exposureCase WHERE exposureCaseId = @exposureCaseId),
