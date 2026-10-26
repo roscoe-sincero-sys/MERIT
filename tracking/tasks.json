@@ -1055,6 +1055,17 @@
       "started": "2026-10-26",
       "finished": "2026-10-26",
       "notes": "HeldRecordsTests: two senders sharing a cause and value; follow-up issue #29 (uspCreateWorkTask cross-tenant references) found on the way"
+    },
+    {
+      "id": "T173",
+      "phase": "12 Quality",
+      "task": "Issue #29: uspCreateWorkTask refuses links to records the caller cannot see (51404); the cross-tenant suite aims at real records only (seeded staging row and cluster, no random-id fallback) and checks every write for hidden ids stored in the caller's own rows",
+      "ref": "GitHub issue #29",
+      "where": "uspCreateWorkTask, CrossTenantTests.cs",
+      "status": "Done",
+      "started": "2026-10-26",
+      "finished": "2026-10-26",
+      "notes": "ATaskCanLinkOnlyRecordsTheCallerCanSee; the suite reproduced the gap on every run before the fix"
     }
   ]
 }

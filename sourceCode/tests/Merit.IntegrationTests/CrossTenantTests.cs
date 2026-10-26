@@ -97,6 +97,7 @@ public sealed class CrossTenantProcedureTests(MeritFixture fixture, ITestOutputH
         var caller = await UserIdAsync("cmbaltco");
         var scope = await NewScopeAsync(caller);
         var visible = await VisibleTenantsAsync(scope);
+        await SeedTargetsAsync();
         var targets = await TargetsAsync(visible);
         var secrets = await SecretIdsAsync(visible);
         var before = await SnapshotAsync(visible, targets.Persons);
@@ -108,9 +109,11 @@ public sealed class CrossTenantProcedureTests(MeritFixture fixture, ITestOutputH
 
         var leaks = new List<string>();
         int calls = 0, refused = 0;
+        var references = await ReferenceColumnsAsync();
         foreach (var proc in WebProcedures())
         {
             var (values, sql) = Call(proc, targets);
+            var started = await DatabaseUtcAsync();
             try
             {
                 var cells = await ExecuteAsync(await NewScopeAsync(caller), sql, values);
@@ -127,6 +130,16 @@ public sealed class CrossTenantProcedureTests(MeritFixture fixture, ITestOutputH
                 calls++;
                 refused++;
             }
+
+            // A write that succeeds must not have stored a hidden record's id in one of the caller's own rows (issue #29):
+            // a later list would hand the id back, and the row would point at a record the caller cannot open.
+            if (proc.Kind == "write")
+            {
+                foreach (var stored in await StoredReferencesAsync(references, visible, started, secrets))
+                {
+                    leaks.Add($"{proc.Name} stored {stored}, a record outside the caller's tenants.");
+                }
+            }
         }
 
         var after = await SnapshotAsync(visible, targets.Persons);
@@ -135,6 +148,57 @@ public sealed class CrossTenantProcedureTests(MeritFixture fixture, ITestOutputH
         Assert.True(calls - refused >= calls / 3, $"Only {calls - refused} of {calls} calls ran; the suite is not exercising the procedures.");
         Assert.True(leaks.Count == 0, string.Join('\n', leaks.Distinct()));
         Assert.True(changed.Count == 0, "Out-of-scope rows changed in: " + string.Join(", ", changed));
+    }
+
+    [SqlFact]
+    public async Task ATaskCanLinkOnlyRecordsTheCallerCanSee()
+    {
+        // Issue #29: a county user could create a task in its own queue pointing at another county's person, case and result.
+        var caller = await UserIdAsync("cmbaltco");
+        var ids = fixture.Ids;
+        await SeedTargetsAsync();
+        foreach (var (name, value) in new (string, object)[]
+                 {
+                     ("personId", ids.MiaPersonId), ("exposureCaseId", ids.MiaCaseId), ("labResultId", ids.MiaLabResultId),
+                     ("stagingRowId", SeedStagingRow),
+                 })
+        {
+            var refused = await Assert.ThrowsAsync<SqlException>(() => ExecuteAsync(caller, name, value));
+            Assert.Equal(51404, refused.Number);
+        }
+
+        // A person the county can see (through person access, as county records are shared) is still linked.
+        Guid own;
+        await using (var c = await AdminAsync())
+        await using (var cmd = new SqlCommand("SELECT TOP (1) personId FROM dbo.personAccess WHERE tenantId = @t AND isDeleted = 0", c))
+        {
+            cmd.Parameters.AddWithValue("@t", ids.BaltimoreCountyTenantId);
+            own = (Guid)(await cmd.ExecuteScalarAsync())!;
+        }
+
+        var task = Guid.NewGuid();
+        try
+        {
+            await ExecuteAsync(caller, "personId", own, task);
+            await using var c = await AdminAsync();
+            await using var cmd = new SqlCommand("SELECT personId FROM dbo.workTask WHERE workTaskId = @w", c);
+            cmd.Parameters.AddWithValue("@w", task);
+            Assert.Equal(own, await cmd.ExecuteScalarAsync());
+        }
+        finally
+        {
+            await using var c = await AdminAsync();
+            await using var cmd = new SqlCommand("DELETE dbo.workTask WHERE workTaskId = @w", c);
+            cmd.Parameters.AddWithValue("@w", task);
+            await cmd.ExecuteNonQueryAsync();
+        }
+
+        async Task ExecuteAsync(Guid user, string link, object id, Guid? taskId = null)
+            => await CrossTenantProcedureTests.ExecuteAsync(await NewScopeAsync(user), "dbo.uspCreateWorkTask", new Dictionary<string, object?>
+            {
+                ["workTaskId"] = taskId ?? Guid.NewGuid(), ["queueCode"] = "addressReview", ["title"] = "Linked record " + Guid.NewGuid(),
+                [link] = id,
+            });
     }
 
     /// <summary>Self-check: the same scan, run as the statewide supervisor, does find county-hidden ids, so it can see a leak.</summary>
@@ -331,7 +395,39 @@ public sealed class CrossTenantProcedureTests(MeritFixture fixture, ITestOutputH
     private static string InList(IReadOnlyCollection<Guid> ids)
         => ids.Count == 0 ? "'00000000-0000-0000-0000-000000000000'" : string.Join(',', ids.Select(i => $"'{i}'"));
 
-    /// <summary>Out-of-scope records to aim every id parameter at.</summary>
+    // Fixed ids, so the seeded targets are added once and never pile up in the test database.
+    private static readonly Guid SeedBatch = new("c29c29c2-0000-4000-8000-0000000000b1");
+    private static readonly Guid SeedStagingRow = new("c29c29c2-0000-4000-8000-0000000000a1");
+    private static readonly Guid SeedCluster = new("c29c29c2-0000-4000-8000-0000000000c1");
+
+    /// <summary>
+    /// The demo data has no staging row or cluster outside Baltimore County. Without one, a procedure taking that id got
+    /// a made-up value, the foreign key refused it, and the refusal passed as safe (issue #29). These state-program
+    /// records give every id parameter a real target.
+    /// </summary>
+    private static async Task SeedTargetsAsync()
+    {
+        await using var c = await AdminAsync();
+        await using var cmd = new SqlCommand("""
+            DECLARE @state UNIQUEIDENTIFIER = (SELECT tenantId FROM auth.tenant WHERE tenantCode = 'MD-LEAD');
+            IF NOT EXISTS (SELECT 1 FROM dbo.intakeBatch WHERE intakeBatchId = @batch)
+                INSERT dbo.intakeBatch (intakeBatchId, rootTenantId, owningTenantId, sourceChannel, fileName, receivedUtc, batchStatus)
+                VALUES (@batch, @state, @state, 'upload', N'cross-tenant-target.csv', SYSUTCDATETIME (), 'loaded');
+            IF NOT EXISTS (SELECT 1 FROM dbo.stagingRow WHERE stagingRowId = @row)
+                INSERT dbo.stagingRow (stagingRowId, rootTenantId, owningTenantId, intakeBatchId, rowNumber, parsedJson, rowStatus,
+                                       isUrgent, heldSinceUtc)
+                VALUES (@row, @state, @state, @batch, 1, N'{"lastName":"Target"}', 'held', 0, SYSUTCDATETIME ());
+            IF NOT EXISTS (SELECT 1 FROM dbo.cluster WHERE clusterId = @cluster)
+                INSERT dbo.cluster (clusterId, rootTenantId, owningTenantId, clusterType, sharedKey, title, windowStart, windowEnd)
+                VALUES (@cluster, @state, @state, 'location', NEWID (), N'Cross-tenant target cluster', '2026-01-01', '2026-03-31');
+            """, c);
+        cmd.Parameters.AddWithValue("@batch", SeedBatch);
+        cmd.Parameters.AddWithValue("@row", SeedStagingRow);
+        cmd.Parameters.AddWithValue("@cluster", SeedCluster);
+        await cmd.ExecuteNonQueryAsync();
+    }
+
+    /// <summary>Out-of-scope records to aim every id parameter at. Every one is a real record, or the test fails.</summary>
     private static async Task<Targets> TargetsAsync(HashSet<Guid> visible)
     {
         string notMine = $"NOT IN ({InList(visible)})";
@@ -343,8 +439,9 @@ public sealed class CrossTenantProcedureTests(MeritFixture fixture, ITestOutputH
         await using var c = await AdminAsync();
         async Task<Guid> One(string sql)
         {
+            // No made-up fallback: a random id fails its foreign key, and that refusal would pass for a safe one.
             await using var cmd = new SqlCommand(sql, c);
-            return await cmd.ExecuteScalarAsync() is Guid g ? g : Guid.NewGuid();
+            return await cmd.ExecuteScalarAsync() is Guid g ? g : throw new InvalidOperationException($"No out-of-scope record for: {sql}");
         }
 
         async Task<List<Guid>> Many(string sql)
@@ -361,8 +458,9 @@ public sealed class CrossTenantProcedureTests(MeritFixture fixture, ITestOutputH
         }
 
         var persons = await Many($"SELECT p.personId FROM dbo.person AS p WHERE {hiddenPerson}");
+        Assert.NotEmpty(persons);
         return new Targets(
-            persons.FirstOrDefault(),
+            persons[0],
             await One($"SELECT TOP (1) exposureCaseId FROM dbo.exposureCase WHERE owningTenantId {notMine} ORDER BY openedDate"),
             await One($"SELECT TOP (1) r.labResultId FROM dbo.labResult AS r JOIN dbo.person AS p ON p.personId = r.personId WHERE {hiddenPerson}"),
             await One($"SELECT TOP (1) investigationId FROM dbo.investigation WHERE owningTenantId {notMine}"),
@@ -372,6 +470,65 @@ public sealed class CrossTenantProcedureTests(MeritFixture fixture, ITestOutputH
             await One($"SELECT TOP (1) pl.personLocationId FROM dbo.personLocation AS pl JOIN dbo.person AS p ON p.personId = pl.personId WHERE {hiddenPerson}"),
             await Many($"SELECT TOP (20) workTaskId FROM dbo.workTask WHERE owningTenantId {notMine}"),
             persons);
+    }
+
+    private static async Task<DateTime> DatabaseUtcAsync()
+    {
+        await using var c = await AdminAsync();
+        await using var cmd = new SqlCommand("SELECT SYSUTCDATETIME ()", c);
+        return (DateTime)(await cmd.ExecuteScalarAsync())!;
+    }
+
+    /// <summary>Foreign keys from a tenant-owned table to a tenant-owned table: the places a write can store a record's id.</summary>
+    private static async Task<List<(string Table, string Column)>> ReferenceColumnsAsync()
+    {
+        await using var c = await AdminAsync();
+        var protectedTables = (await PolicyTablesAsync(c)).Select(t => t.Table).ToHashSet(StringComparer.Ordinal);
+        await using var cmd = new SqlCommand("""
+            SELECT QUOTENAME (OBJECT_SCHEMA_NAME (fkc.parent_object_id)) + N'.' + QUOTENAME (OBJECT_NAME (fkc.parent_object_id)),
+                   COL_NAME (fkc.parent_object_id, fkc.parent_column_id),
+                   QUOTENAME (OBJECT_SCHEMA_NAME (fkc.referenced_object_id)) + N'.' + QUOTENAME (OBJECT_NAME (fkc.referenced_object_id))
+              FROM sys.foreign_key_columns AS fkc
+             WHERE COL_NAME (fkc.parent_object_id, fkc.parent_column_id) NOT IN (N'rootTenantId', N'owningTenantId');
+            """, c);
+        var list = new List<(string, string)>();
+        await using var r = await cmd.ExecuteReaderAsync();
+        while (await r.ReadAsync())
+        {
+            if (protectedTables.Contains(r.GetString(0)) && protectedTables.Contains(r.GetString(2)))
+            {
+                list.Add((r.GetString(0), r.GetString(1)));
+            }
+        }
+
+        return list;
+    }
+
+    /// <summary>Hidden ids found in the caller's own rows added or changed since <paramref name="since"/>.</summary>
+    private static async Task<List<string>> StoredReferencesAsync(List<(string Table, string Column)> references, HashSet<Guid> visible,
+                                                                  DateTime since, HashSet<object> secrets)
+    {
+        await using var c = await AdminAsync();
+        var found = new List<string>();
+        foreach (var (table, column) in references)
+        {
+            await using var cmd = new SqlCommand($"""
+                SELECT DISTINCT t.[{column}] FROM {table} AS t
+                 WHERE t.owningTenantId IN ({InList(visible)}) AND t.[{column}] IS NOT NULL
+                   AND (t.createdDateUtc >= @since OR t.modifiedDateUtc >= @since)
+                """, c);
+            cmd.Parameters.AddWithValue("@since", since);
+            await using var r = await cmd.ExecuteReaderAsync();
+            while (await r.ReadAsync())
+            {
+                if (secrets.Contains(r.GetGuid(0)))
+                {
+                    found.Add($"{table}.{column} = {r.GetGuid(0)}");
+                }
+            }
+        }
+
+        return found;
     }
 
     /// <summary>Every primary key of a row-level-security table that the caller must not see.</summary>
