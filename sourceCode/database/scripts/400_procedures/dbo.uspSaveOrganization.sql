@@ -109,6 +109,19 @@ BEGIN
 
         DECLARE @root UNIQUEIDENTIFIER = auth.udfSessionRootTenantId ();
 
+        -- One organization per CLIA number and per NPI (issue #11); the unique indexes enforce it, this says which.
+        IF @cliaNumber IS NOT NULL AND EXISTS (SELECT 1 FROM dbo.organization
+                                                WHERE cliaNumber = @cliaNumber AND organizationId <> @organizationId AND isDeleted = 0)
+        BEGIN
+            ;THROW 51422, N'An organization with that CLIA number already exists.', 1;
+        END;
+
+        IF @npi IS NOT NULL AND EXISTS (SELECT 1 FROM dbo.organization
+                                         WHERE npi = @npi AND organizationId <> @organizationId AND isDeleted = 0)
+        BEGIN
+            ;THROW 51422, N'An organization with that NPI already exists.', 1;
+        END;
+
         IF EXISTS (SELECT 1 FROM dbo.organization WHERE organizationId = @organizationId)
         BEGIN
             UPDATE dbo.organization

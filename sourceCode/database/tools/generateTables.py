@@ -162,6 +162,16 @@ GO""")
         else:
             flt = f"\n        WHERE {ix['filter']}" if ix.get("filter") else ""
             idx.append((ix["name"], f"CREATE INDEX {ix['name']}\n        ON {full} ({ix['cols']}){flt};"))
+    # An index replaced by another is dropped first, so a database deployed before the change ends up with the same set.
+    for name in t.get("dropIndexes", []):
+        out.append(f"""IF EXISTS (SELECT 1
+             FROM sys.indexes
+            WHERE name      = N'{name}'
+              AND object_id = OBJECT_ID (N'{full}'))
+BEGIN
+    DROP INDEX {name} ON {full};
+END;
+GO""")
     for name, stmt in idx:
         out.append(f"""IF NOT EXISTS (SELECT 1
                  FROM sys.indexes

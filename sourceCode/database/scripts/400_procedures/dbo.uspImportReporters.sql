@@ -27,7 +27,7 @@ Notes:
 
 Requires permission registry.edit (auth.udfHasPermission); refuses with 51403 otherwise.
 
-The application has already checked identifier formats (NPI Luhn check digit, CLIA pattern) and removed duplicate rows; this procedure trusts the shape and decides only add versus update.
+The application has already checked identifier formats (NPI Luhn check digit, CLIA pattern) and removed duplicate rows; this procedure trusts the shape and decides only add versus update. Laboratories and facilities are both organizations, so unmatched rows that share a CLIA number or an NPI, directly or through another row, become one new organization with each row's type (issue #11).
 
 Rule 8 full instrumentation, generated from templates/procedure.sql by tools/generateProcedures.py. Row-level security applies to every table read
 or written here: SESSION_CONTEXT (N'scopeKey') decides what the caller can see.
@@ -105,7 +105,7 @@ BEGIN
         DECLARE @rows TABLE (rowNumber INT PRIMARY KEY, reporterKind VARCHAR (20), reporterName NVARCHAR (120),
                              nameKey NVARCHAR (120), lastName NVARCHAR (60), firstName NVARCHAR (60), credential NVARCHAR (20),
                              npi VARCHAR (10), cliaNumber VARCHAR (10), phone NVARCHAR (30), existingId UNIQUEIDENTIFIER,
-                             newId UNIQUEIDENTIFIER);
+                             newId UNIQUEIDENTIFIER, groupRow INT);
 
         INSERT @rows (rowNumber, reporterKind, reporterName, nameKey, lastName, firstName, credential, npi, cliaNumber, phone)
         SELECT j.rowNumber, j.reporterKind, j.reporterName, j.nameKey, j.lastName, NULLIF (j.firstName, N''),
@@ -140,23 +140,47 @@ BEGIN
           FROM dbo.organization AS o
           JOIN @rows AS r ON r.existingId = o.organizationId;
 
-        UPDATE @rows SET newId = CAST (CAST (NEWID () AS BINARY (10)) + CAST (DATEDIFF_BIG (MILLISECOND, '19700101', SYSUTCDATETIME ()) AS BINARY (6)) AS UNIQUEIDENTIFIER) WHERE existingId IS NULL;
+        UPDATE @rows SET newId = CAST (CAST (NEWID () AS BINARY (10)) + CAST (DATEDIFF_BIG (MILLISECOND, '19700101', SYSUTCDATETIME ()) AS BINARY (6)) AS UNIQUEIDENTIFIER), groupRow = rowNumber WHERE existingId IS NULL;
 
-        INSERT dbo.organization (organizationId, rootTenantId, owningTenantId, organizationName, organizationNameKey, npi,
-                                 cliaNumber, phone, isActive)
-        SELECT r.newId, @root, @root, r.reporterName, r.nameKey, r.npi, r.cliaNumber, r.phone, 1
+        -- Unmatched organization rows that share a CLIA number or an NPI, directly or through a chain of rows, form one group
+        -- led by its first row: one new organization per identifier, never two (issue #11).
+        DECLARE @moved INT = 1;
+        WHILE @moved > 0
+        BEGIN
+            UPDATE r SET groupRow = m.groupRow
+              FROM @rows AS r
+             CROSS APPLY (SELECT MIN (o.groupRow) AS groupRow FROM @rows AS o
+                           WHERE o.existingId IS NULL AND o.reporterKind IN ('laboratory', 'facility')
+                             AND ((o.cliaNumber = r.cliaNumber) OR (o.npi = r.npi))) AS m
+             WHERE r.existingId IS NULL AND r.reporterKind IN ('laboratory', 'facility') AND m.groupRow < r.groupRow;
+            SET @moved = @@ROWCOUNT;
+        END;
+
+        UPDATE r SET newId = l.newId
           FROM @rows AS r
+          JOIN @rows AS l ON l.rowNumber = r.groupRow
          WHERE r.existingId IS NULL AND r.reporterKind IN ('laboratory', 'facility');
 
+        -- The group's first row names the organization; the identifiers come from whichever rows carry them.
+        INSERT dbo.organization (organizationId, rootTenantId, owningTenantId, organizationName, organizationNameKey, npi,
+                                 cliaNumber, phone, isActive)
+        SELECT l.newId, @root, @root, l.reporterName, l.nameKey,
+               COALESCE (l.npi, (SELECT MIN (g.npi) FROM @rows AS g WHERE g.groupRow = l.rowNumber AND g.reporterKind IN ('laboratory', 'facility'))),
+               COALESCE (l.cliaNumber, (SELECT MIN (g.cliaNumber) FROM @rows AS g WHERE g.groupRow = l.rowNumber AND g.reporterKind IN ('laboratory', 'facility'))),
+               COALESCE (l.phone, (SELECT MIN (g.phone) FROM @rows AS g WHERE g.groupRow = l.rowNumber AND g.reporterKind IN ('laboratory', 'facility'))), 1
+          FROM @rows AS l
+         WHERE l.existingId IS NULL AND l.reporterKind IN ('laboratory', 'facility') AND l.groupRow = l.rowNumber;
+        DECLARE @addedOrganizations INT = @@ROWCOUNT;
+
         INSERT dbo.organizationType (organizationTypeId, rootTenantId, owningTenantId, organizationId, organizationTypeCode)
-        SELECT CAST (CAST (NEWID () AS BINARY (10)) + CAST (DATEDIFF_BIG (MILLISECOND, '19700101', SYSUTCDATETIME ()) AS BINARY (6)) AS UNIQUEIDENTIFIER), @root, @root, COALESCE (r.existingId, r.newId),
-               CASE r.reporterKind WHEN 'laboratory' THEN 'laboratory' ELSE 'providerPractice' END
-          FROM @rows AS r
-         WHERE r.reporterKind IN ('laboratory', 'facility')
-           AND NOT EXISTS (SELECT 1 FROM dbo.organizationType AS t
-                            WHERE t.organizationId = COALESCE (r.existingId, r.newId) AND t.isDeleted = 0
-                              AND t.organizationTypeCode = CASE r.reporterKind WHEN 'laboratory' THEN 'laboratory'
-                                                                               ELSE 'providerPractice' END);
+        SELECT CAST (CAST (NEWID () AS BINARY (10)) + CAST (DATEDIFF_BIG (MILLISECOND, '19700101', SYSUTCDATETIME ()) AS BINARY (6)) AS UNIQUEIDENTIFIER), @root, @root, d.organizationId, d.organizationTypeCode
+          FROM (SELECT DISTINCT COALESCE (r.existingId, r.newId) AS organizationId,
+                       CASE r.reporterKind WHEN 'laboratory' THEN 'laboratory' ELSE 'providerPractice' END AS organizationTypeCode
+                  FROM @rows AS r
+                 WHERE r.reporterKind IN ('laboratory', 'facility')) AS d
+         WHERE NOT EXISTS (SELECT 1 FROM dbo.organizationType AS t
+                            WHERE t.organizationId = d.organizationId AND t.isDeleted = 0
+                              AND t.organizationTypeCode = d.organizationTypeCode);
 
         -- ------------------------------------------------------------------------------------------ providers
         UPDATE r SET existingId = pv.providerId
@@ -170,13 +194,17 @@ BEGIN
           FROM dbo.provider AS pv
           JOIN @rows AS r ON r.existingId = pv.providerId AND r.reporterKind = 'provider';
 
+        -- One new provider per NPI: the first row wins.
         INSERT dbo.provider (providerId, rootTenantId, owningTenantId, npi, lastName, firstName, credential)
         SELECT r.newId, @root, @root, r.npi, r.lastName, r.firstName, r.credential
           FROM @rows AS r
-         WHERE r.existingId IS NULL AND r.reporterKind = 'provider';
+         WHERE r.existingId IS NULL AND r.reporterKind = 'provider'
+           AND NOT EXISTS (SELECT 1 FROM @rows AS e WHERE e.reporterKind = 'provider' AND e.existingId IS NULL AND e.npi = r.npi
+                                                      AND e.rowNumber < r.rowNumber);
 
-        DECLARE @added INT = (SELECT COUNT (*) FROM @rows WHERE existingId IS NULL);
-        DECLARE @updated INT = (SELECT COUNT (*) FROM @rows WHERE existingId IS NOT NULL);
+        -- Added counts the new registry entries; every other row updated one, including rows merged into a new organization.
+        DECLARE @added INT = @addedOrganizations + @@ROWCOUNT;
+        DECLARE @updated INT = (SELECT COUNT (*) FROM @rows) - @added;
         SELECT @added AS addedCount, @updated AS updatedCount;
 
         SET @Comments = CONCAT (N'Registry import: ', @added, N' added, ', @updated, N' updated.');

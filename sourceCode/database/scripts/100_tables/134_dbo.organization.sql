@@ -89,6 +89,22 @@ GO
 -- 4. Indexes. The clustered index leads with rootTenantId so each state's rows sit together and the
 --    row-level security predicate stays cheap. Unique indexes are filtered on isDeleted = 0.
 -- -------------------------------------------------------------------------------------------
+IF EXISTS (SELECT 1
+             FROM sys.indexes
+            WHERE name      = N'IX_dbo_organization_cliaNumber_rootTenantId'
+              AND object_id = OBJECT_ID (N'dbo.organization'))
+BEGIN
+    DROP INDEX IX_dbo_organization_cliaNumber_rootTenantId ON dbo.organization;
+END;
+GO
+IF EXISTS (SELECT 1
+             FROM sys.indexes
+            WHERE name      = N'IX_dbo_organization_npi_rootTenantId'
+              AND object_id = OBJECT_ID (N'dbo.organization'))
+BEGIN
+    DROP INDEX IX_dbo_organization_npi_rootTenantId ON dbo.organization;
+END;
+GO
 IF NOT EXISTS (SELECT 1
                  FROM sys.indexes
                 WHERE name      = N'IX_dbo_organization_rootTenantId_organizationId'
@@ -109,20 +125,20 @@ END;
 GO
 IF NOT EXISTS (SELECT 1
                  FROM sys.indexes
-                WHERE name      = N'IX_dbo_organization_cliaNumber_rootTenantId'
+                WHERE name      = N'UX_dbo_organization_cliaNumber_rootTenantId'
                   AND object_id = OBJECT_ID (N'dbo.organization'))
 BEGIN
-    CREATE INDEX IX_dbo_organization_cliaNumber_rootTenantId
+    CREATE UNIQUE INDEX UX_dbo_organization_cliaNumber_rootTenantId
         ON dbo.organization (cliaNumber, rootTenantId)
         WHERE isDeleted = 0 AND cliaNumber IS NOT NULL;
 END;
 GO
 IF NOT EXISTS (SELECT 1
                  FROM sys.indexes
-                WHERE name      = N'IX_dbo_organization_npi_rootTenantId'
+                WHERE name      = N'UX_dbo_organization_npi_rootTenantId'
                   AND object_id = OBJECT_ID (N'dbo.organization'))
 BEGIN
-    CREATE INDEX IX_dbo_organization_npi_rootTenantId
+    CREATE UNIQUE INDEX UX_dbo_organization_npi_rootTenantId
         ON dbo.organization (npi, rootTenantId)
         WHERE isDeleted = 0 AND npi IS NOT NULL;
 END;
