@@ -273,7 +273,7 @@ public sealed partial class IntakeProcessor(
                 holds.Add(new HoldReason("uncertainMatch", "lastName",
                     placeholder
                         ? "Placeholder first name (for example BABY BOY): never linked automatically. Review the match."
-                        : $"{candidates.Count} possible match(es) need review; strict matching links only on exact name, DOB and sex.",
+                        : $"{(candidates.Count == 1 ? "1 possible match needs" : $"{candidates.Count} possible matches need")} review; strict matching links only on exact name, DOB and sex.",
                     null));
             }
         }

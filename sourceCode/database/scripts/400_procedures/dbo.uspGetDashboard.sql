@@ -93,16 +93,34 @@ BEGIN
                (SELECT COUNT (*) FROM dbo.stagingRow WHERE rowStatus = 'held' AND isUrgent = 1 AND isDeleted = 0) AS urgentHeld,
                (SELECT COUNT (*) FROM dbo.exposureCase WHERE caseStatus <> 'closed' AND isDeleted = 0) AS openCasesInScope;
 
-        SELECT TOP (10) x.itemType, x.itemId, x.title, x.detail, x.dueDate, x.waitingSinceUtc, x.personId, x.exposureCaseId
-          FROM (SELECT 'heldRecord' AS itemType, s.stagingRowId AS itemId, N'Elevated result held at intake' AS title,
+        -- A held result is named by the patient and the result as reported, corrections applied, so each row says which record
+        -- it is (issue #40); its batch and sender narrow the held records it links to.
+        SELECT TOP (10) x.itemType, x.itemId, x.title, x.detail, x.dueDate, x.waitingSinceUtc, x.personId, x.exposureCaseId,
+               x.intakeBatchId, x.senderName
+          FROM (SELECT 'heldRecord' AS itemType, s.stagingRowId AS itemId,
+                       COALESCE (NULLIF (CONCAT_WS (N': ', NULLIF (CONCAT_WS (N', ', f.lastName, f.firstName), N''),
+                                                    NULLIF (CONCAT_WS (N' ', a.displayName, f.resultValue, f.resultUnit), N'')), N''),
+                                 N'Elevated result held at intake') AS title,
                        (SELECT TOP (1) reasonMessage FROM dbo.stagingHoldReason AS h WHERE h.stagingRowId = s.stagingRowId
                           AND h.isDeleted = 0 AND h.isResolved = 0) AS detail, CAST (NULL AS DATE) AS dueDate,
                        s.heldSinceUtc AS waitingSinceUtc, CAST (NULL AS UNIQUEIDENTIFIER) AS personId,
-                       CAST (NULL AS UNIQUEIDENTIFIER) AS exposureCaseId, 0 AS sortKey
+                       CAST (NULL AS UNIQUEIDENTIFIER) AS exposureCaseId, s.intakeBatchId, o.organizationName AS senderName,
+                       0 AS sortKey
                   FROM dbo.stagingRow AS s
+                  JOIN dbo.intakeBatch AS b ON b.intakeBatchId = s.intakeBatchId
+                  LEFT JOIN dbo.organization AS o ON o.organizationId = b.senderOrganizationId
+                 CROSS APPLY (SELECT COALESCE (JSON_VALUE (s.correctedJson, '$.lastName'), JSON_VALUE (s.parsedJson, '$.lastName')) AS lastName,
+                                     COALESCE (JSON_VALUE (s.correctedJson, '$.firstName'), JSON_VALUE (s.parsedJson, '$.firstName')) AS firstName,
+                                     COALESCE (JSON_VALUE (s.correctedJson, '$.loinc'), JSON_VALUE (s.parsedJson, '$.loinc')) AS loinc,
+                                     COALESCE (JSON_VALUE (s.correctedJson, '$.value'), JSON_VALUE (s.parsedJson, '$.value')) AS resultValue,
+                                     COALESCE (JSON_VALUE (s.correctedJson, '$.unit'), JSON_VALUE (s.parsedJson, '$.unit')) AS resultUnit) AS f
+                  LEFT JOIN config.loincCode AS l ON l.loincCode = f.loinc AND l.isDeleted = 0
+                  LEFT JOIN config.analyteSpecimen AS sp ON sp.analyteSpecimenId = l.analyteSpecimenId
+                  LEFT JOIN config.analyte AS a ON a.analyteId = sp.analyteId
                  WHERE s.rowStatus = 'held' AND s.isUrgent = 1 AND s.isDeleted = 0
                 UNION ALL
-                SELECT 'task', w.workTaskId, w.title, w.detail, w.dueDate, w.createdDateUtc, w.personId, w.exposureCaseId, 1
+                SELECT 'task', w.workTaskId, w.title, w.detail, w.dueDate, w.createdDateUtc, w.personId, w.exposureCaseId,
+                       CAST (NULL AS UNIQUEIDENTIFIER), CAST (NULL AS NVARCHAR (120)), 1
                   FROM dbo.workTask AS w
                  WHERE w.taskStatus = 'open' AND w.isDeleted = 0 AND (w.isUrgent = 1 OR w.dueDate < @today)) AS x
          ORDER BY x.sortKey, x.waitingSinceUtc;

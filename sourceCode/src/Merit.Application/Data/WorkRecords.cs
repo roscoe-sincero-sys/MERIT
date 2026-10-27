@@ -49,6 +49,12 @@ public sealed class DashboardItemRow
     public Guid? PersonId { get; init; }
 
     public Guid? ExposureCaseId { get; init; }
+
+    /// <summary>For a held record: its batch, to narrow Held records to it.</summary>
+    public Guid? IntakeBatchId { get; init; }
+
+    /// <summary>For a held record: the laboratory that sent it.</summary>
+    public string? SenderName { get; init; }
 }
 
 public sealed class DashboardCaseRow
