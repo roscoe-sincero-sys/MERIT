@@ -14,7 +14,7 @@ public sealed record RoutedAction(string Method, string Pattern, string Controll
 /// shape, and every API read, against the deployed test database.
 /// </summary>
 [Collection(MeritCollection.Name)]
-public sealed class EndpointTests(MeritFixture fixture, ITestOutputHelper output)
+public sealed partial class EndpointTests(MeritFixture fixture, ITestOutputHelper output)
 {
     // Actions a signed-out person must reach: sign-in, the denied page, the error page.
     private static readonly HashSet<string> Anonymous = new(StringComparer.Ordinal)
@@ -165,6 +165,12 @@ public sealed class EndpointTests(MeritFixture fixture, ITestOutputHelper output
                 failures.Add($"partial {a.Url} returned the whole page instead of the partial");
             }
 
+            // Razor reads "v@p.ProfileVersion" as an email address and prints it (issue #26).
+            foreach (var shown in new[] { fullHtml, partialHtml }.SelectMany(h => UnrenderedRazor().Matches(h)).Select(m => m.Value).Distinct())
+            {
+                failures.Add($"page    {a.Url} shows unrendered Razor: {shown}");
+            }
+
             checkedCount++;
         }
 
@@ -266,6 +272,13 @@ public sealed class EndpointTests(MeritFixture fixture, ITestOutputHelper output
         Assert.Contains("'nonce-", csp, StringComparison.Ordinal);
         Assert.DoesNotContain("unsafe-inline", csp, StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// A Razor expression printed as text: "@" right after a letter or digit, then a C# member access such as
+    /// p.ProfileVersion or Model.Name. Email addresses (lower-case domains) do not match.
+    /// </summary>
+    [System.Text.RegularExpressions.GeneratedRegex(@"(?<=[A-Za-z0-9])@[A-Za-z_]\w*\.[A-Z]\w*")]
+    private static partial System.Text.RegularExpressions.Regex UnrenderedRazor();
 
     /// <summary>Person page sections and the place dialogs are the htmx partial endpoints: htmx swaps only the section.</summary>
     private static bool IsHtmxSection(string pattern)
