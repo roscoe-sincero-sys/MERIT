@@ -1,3 +1,4 @@
+using System.Buffers.Text;
 using System.Security.Cryptography;
 using System.Text.Json;
 using Microsoft.AspNetCore.Antiforgery;
@@ -64,10 +65,15 @@ public static class Htmx
         => state.TryGetValue(key, out var entry) && entry.Errors.Count > 0 ? entry.Errors[0].ErrorMessage : string.Empty;
 }
 
-/// <summary>Per-request Content Security Policy nonce, shared by script tags, Angular (ngCspNonce) and hx-nonce.</summary>
+/// <summary>
+/// Per-request Content Security Policy nonce, shared by script tags, Angular (ngCspNonce) and hx-nonce. Base64url, not
+/// base64: Razor writes "+" in an attribute as "&amp;#x2B;", and hx-csp matches the header's nonce against the raw text
+/// of a partial response, so a nonce with "+" stripped every htmx element in about one response in three (issue #53).
+/// Base64url's letters, digits, "-" and "_" pass through HTML encoding unchanged and are valid in a CSP nonce-source.
+/// </summary>
 public sealed class CspNonce
 {
-    public string Value { get; } = Convert.ToBase64String(RandomNumberGenerator.GetBytes(18));
+    public string Value { get; } = Base64Url.EncodeToString(RandomNumberGenerator.GetBytes(18));
 }
 
 /// <summary>
