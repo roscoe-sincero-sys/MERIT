@@ -1308,6 +1308,39 @@
       "started": "2026-10-27",
       "finished": "2026-10-27",
       "notes": "e2e at 390 px: header folds, no main page wider than the screen"
+    },
+    {
+      "id": "T196",
+      "phase": "12 Quality",
+      "task": "Required fields marked; server errors shown as a USWDS error summary on Add a person and Enter a result",
+      "ref": "Issue #46",
+      "where": "FormErrors; _ErrorSummary; _PersonForm; _ResultForm; _ResultFields; _Combobox; merit.js",
+      "status": "Done",
+      "started": "2026-10-27",
+      "finished": "2026-10-27",
+      "notes": "Forms novalidate; summary in form order, linked and focused; result page post kept its errors; nonce bug found and logged as #53"
+    },
+    {
+      "id": "T197",
+      "phase": "12 Quality",
+      "task": "Focus ring hidden on script-focused headings for mouse users",
+      "ref": "Issue #51",
+      "where": "merit.css [tabindex=-1]:focus:not(:focus-visible)",
+      "status": "Done",
+      "started": "2026-10-27",
+      "finished": "2026-10-27",
+      "notes": "Keyboard focus keeps the ring"
+    },
+    {
+      "id": "T198",
+      "phase": "12 Quality",
+      "task": "Timeline axis labelled by span: years, months or days; no two-digit year",
+      "ref": "Issue #49",
+      "where": "features/timeline/timeline.page.ts axisTicks",
+      "status": "Done",
+      "started": "2026-10-27",
+      "finished": "2026-10-27",
+      "notes": "e2e checks label shape against the visible range"
     }
   ]
 }
