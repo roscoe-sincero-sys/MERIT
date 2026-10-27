@@ -1385,6 +1385,17 @@
       "started": "2026-10-27",
       "finished": "2026-10-27",
       "notes": "Outlines served by MERIT (no tile service); Maryland's from Census TIGERweb in the demo"
+    },
+    {
+      "id": "T203",
+      "phase": "12 Quality",
+      "task": "Cases list: filters, search, sortable columns, one-click unassigned",
+      "ref": "Issue #50",
+      "where": "dbo.uspListExposureCases; dbo.uspListCaseOwners; Views/Cases/Index, _CaseList; CaseFilterModel",
+      "status": "Done",
+      "started": "2026-10-27",
+      "finished": "2026-10-27",
+      "notes": "Assigned (me, nobody, a person), classification, population, analyte, owner, case number or last name; sort by case, person, classification, opened"
     }
   ]
 }
