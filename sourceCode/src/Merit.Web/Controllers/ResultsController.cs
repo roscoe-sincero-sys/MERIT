@@ -14,7 +14,7 @@ namespace Merit.Web.Controllers;
 /// Result entry (htmx): fields cascade from the analyte lookup, one partial per change, so users only see what applies;
 /// on save the form shows the canonical value and whether any threshold was crossed, from the server rules.
 /// </summary>
-public sealed class ResultsController(ResultService results, PersonService people, IReferenceDataProvider reference) : Controller
+public sealed class ResultsController(IClock clock, ResultService results, PersonService people, IReferenceDataProvider reference) : Controller
 {
     [HttpGet("people/{personId:guid}/results/new")]
     [Authorize(Policy = Permissions.ResultEdit)]
@@ -25,7 +25,7 @@ public sealed class ResultsController(ResultService results, PersonService peopl
         {
             PersonId = personId,
             PersonName = $"{header.Person.FirstName} {header.Person.LastName}".Trim(),
-            CollectedDate = DateOnly.FromDateTime(DateTime.UtcNow),
+            CollectedDate = clock.Today,
         };
         return View(await FormAsync(form, ct));
     }

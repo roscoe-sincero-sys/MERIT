@@ -55,6 +55,7 @@ CREATE OR ALTER PROCEDURE config.uspInstallRootTenant
       , @tenantType       VARCHAR (30) = 'state'
       , @parentTenantCode VARCHAR (30) = NULL
       , @countiesJson     NVARCHAR (MAX) = N'[]'
+      , @timeZone         VARCHAR (64) = NULL
 WITH EXECUTE AS OWNER
 AS
 BEGIN
@@ -114,8 +115,13 @@ BEGIN
 
         IF NOT EXISTS (SELECT 1 FROM auth.tenant WHERE tenantId = @root)
         BEGIN
-            INSERT auth.tenant (tenantId, parentTenantId, rootTenantId, tenantCode, tenantName, tenantType, statePostalCode)
-            VALUES (@root, @parent, @root, @tenantCode, @tenantName, @tenantType, @statePostalCode);
+            INSERT auth.tenant (tenantId, parentTenantId, rootTenantId, tenantCode, tenantName, tenantType, statePostalCode, timeZone)
+            VALUES (@root, @parent, @root, @tenantCode, @tenantName, @tenantType, @statePostalCode, @timeZone);
+        END
+        ELSE IF @timeZone IS NOT NULL
+        BEGIN
+            -- A re-run fills in a zone the root does not have yet (issue #36); one already chosen is kept.
+            UPDATE auth.tenant SET timeZone = @timeZone WHERE tenantId = @root AND timeZone IS NULL;
         END;
 
         -- Closure: self, plus every ancestor of the parent one level further away.

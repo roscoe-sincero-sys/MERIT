@@ -21,7 +21,7 @@ public sealed class MeController(ICurrentSession session) : ControllerBase
     [HttpGet]
     [Authorize(Policy = Permissions.SignedIn)]
     public MeDto Get() => new(session.UserName ?? string.Empty, session.DisplayName ?? string.Empty, session.ActingTenantName,
-        session.Permissions.Order(StringComparer.Ordinal).ToList());
+        session.Permissions.Order(StringComparer.Ordinal).ToList(), JurisdictionTimeZones.IanaId(session.TimeZoneId));
 }
 
 [ApiController]
@@ -63,9 +63,20 @@ public sealed class QueuesController(QueueService queues, CaseService cases) : C
         => (await cases.AssignableUsersAsync(ct)).Select(u => new AssignableUserDto(u.AppUserId, u.DisplayName)).ToList();
 }
 
+/// <summary>The words for stored codes and file fields (issues #37 and #38), so the client shows the same names as the pages.</summary>
+[ApiController]
+[Route("api/v1/reference")]
+public sealed class ReferenceLabelsController(IReferenceDataProvider reference) : ControllerBase
+{
+    [HttpGet("labels")]
+    [Authorize(Policy = Permissions.SignedIn)]
+    public async Task<LabelsDto> Labels(CancellationToken ct)
+        => new((await reference.GetAsync(ct)).Names.Codes, DisplayNames.Fields, DisplayNames.StagingFields.Select(f => f.Key).ToList());
+}
+
 [ApiController]
 [Route("api/v1/held")]
-public sealed class HeldRecordsController(IntakeService intake) : ControllerBase
+public sealed class HeldRecordsController(IntakeService intake, IReferenceDataProvider reference) : ControllerBase
 {
     [HttpGet("groups")]
     [Authorize(Policy = Permissions.ResultReleaseHold)]
@@ -85,8 +96,9 @@ public sealed class HeldRecordsController(IntakeService intake) : ControllerBase
         page = Math.Max(page, 1);
         pageSize = Math.Clamp(pageSize, 1, 500);
         var rows = await intake.HeldRowsAsync(reason, value, sender, exact, batch, page, pageSize, ct);
+        var names = (await reference.GetAsync(ct)).Names;
         return new PagedResult<HeldRowDto>(rows.Select(r => new HeldRowDto(r.StagingRowId, r.IntakeBatchId, r.FileName, r.SenderName,
-                r.RowNumber, Parse(r.ParsedJson), Parse(r.CorrectedJson), r.IsUrgent, r.HeldSinceUtc, r.AssignedToName, r.Reasons)).ToList(),
+                r.RowNumber, Parse(r.ParsedJson), Parse(r.CorrectedJson), r.IsUrgent, r.HeldSinceUtc, r.AssignedToName, ReasonText(r.Reasons, names))).ToList(),
             rows.FirstOrDefault()?.TotalCount ?? 0, page, pageSize);
     }
 
@@ -112,6 +124,14 @@ public sealed class HeldRecordsController(IntakeService intake) : ControllerBase
         => string.IsNullOrWhiteSpace(json)
             ? new Dictionary<string, string?>()
             : JsonSerializer.Deserialize<Dictionary<string, string?>>(json) ?? [];
+
+    /// <summary>"uncertainMatch: …" as "Uncertain person match: …" (issue #37); the procedure joins a row's reasons with " | ".</summary>
+    private static string? ReasonText(string? reasons, DisplayNames names)
+        => reasons is null ? null : string.Join(" | ", reasons.Split(" | ").Select(part =>
+        {
+            int colon = part.IndexOf(": ", StringComparison.Ordinal);
+            return colon > 0 ? $"{names.Of(part[..colon])}: {part[(colon + 2)..]}" : part;
+        }));
 }
 
 [ApiController]

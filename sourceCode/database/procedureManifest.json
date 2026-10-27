@@ -542,6 +542,12 @@
     "type": "NVARCHAR (MAX)",
     "hasDefault": true,
     "isOutput": false
+   },
+   {
+    "name": "timeZone",
+    "type": "VARCHAR (64)",
+    "hasDefault": true,
+    "isOutput": false
    }
   ]
  },
@@ -723,6 +729,12 @@
    {
     "name": "countiesJson",
     "type": "NVARCHAR (MAX)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "timeZone",
+    "type": "VARCHAR (64)",
     "hasDefault": true,
     "isOutput": false
    }

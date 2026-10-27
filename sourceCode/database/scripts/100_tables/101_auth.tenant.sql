@@ -27,6 +27,7 @@ BEGIN
         tenantName                 NVARCHAR (120)    NOT NULL,
         tenantType                 VARCHAR (30)      NOT NULL,
         statePostalCode            CHAR (2)          NULL,
+        timeZone                   VARCHAR (64)      NULL,
         isActive                   BIT               NOT NULL CONSTRAINT DF_auth_tenant_isActive DEFAULT (1),
 
         -- Standard audit columns. Soft delete only. Convention: DF_<schema>_<tableName>_<fieldName>.
@@ -51,6 +52,8 @@ IF COL_LENGTH (N'auth.tenant', N'parentTenantId') IS NULL
     ALTER TABLE auth.tenant ADD parentTenantId             UNIQUEIDENTIFIER  NULL;
 IF COL_LENGTH (N'auth.tenant', N'statePostalCode') IS NULL
     ALTER TABLE auth.tenant ADD statePostalCode            CHAR (2)          NULL;
+IF COL_LENGTH (N'auth.tenant', N'timeZone') IS NULL
+    ALTER TABLE auth.tenant ADD timeZone                   VARCHAR (64)      NULL;
 IF COL_LENGTH (N'auth.tenant', N'isActive') IS NULL
     ALTER TABLE auth.tenant ADD isActive                   BIT               NOT NULL CONSTRAINT DF_auth_tenant_isActive DEFAULT (1);
 GO
@@ -170,6 +173,7 @@ EXEC util.uspSetObjectDescription @SchemaName = N'auth', @ObjectType = N'TABLE',
 EXEC util.uspSetObjectDescription @SchemaName = N'auth', @ObjectType = N'TABLE', @ObjectName = N'tenant', @ColumnName = N'tenantName', @Description = N'Display name of the agency or program.';
 EXEC util.uspSetObjectDescription @SchemaName = N'auth', @ObjectType = N'TABLE', @ObjectName = N'tenant', @ColumnName = N'tenantType', @Description = N'platform, region, state, tribe, program or jurisdiction.';
 EXEC util.uspSetObjectDescription @SchemaName = N'auth', @ObjectType = N'TABLE', @ObjectName = N'tenant', @ColumnName = N'statePostalCode', @Description = N'Two-letter postal code, e.g. MD; NULL for the platform and regions.';
+EXEC util.uspSetObjectDescription @SchemaName = N'auth', @ObjectType = N'TABLE', @ObjectName = N'tenant', @ColumnName = N'timeZone', @Description = N'For a data root: its Windows time zone name (sys.time_zone_info), e.g. Eastern Standard Time. Dates such as today follow it; NULL means Eastern Standard Time.';
 EXEC util.uspSetObjectDescription @SchemaName = N'auth', @ObjectType = N'TABLE', @ObjectName = N'tenant', @ColumnName = N'isActive', @Description = N'1 while the tenant can sign users in.';
 EXEC util.uspSetObjectDescription @SchemaName = N'auth', @ObjectType = N'TABLE', @ObjectName = N'tenant', @ColumnName = N'isDeleted', @Description = N'Soft-delete flag. 1 = deleted, 0 = active. This database performs no hard deletes; all reads must filter isDeleted = 0.';
 EXEC util.uspSetObjectDescription @SchemaName = N'auth', @ObjectType = N'TABLE', @ObjectName = N'tenant', @ColumnName = N'deletedBy', @Description = N'Login or application user that soft-deleted the row. Stamped by trg_au_updt_tenant when isDeleted transitions 0 -> 1. Meaningful only when isDeleted = 1.';

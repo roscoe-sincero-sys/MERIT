@@ -602,6 +602,9 @@ public sealed class TenantFormModel
 
     public string? StateFips { get; set; }
 
+    /// <summary>For a new data root: its time zone (Windows name); dates such as today follow it.</summary>
+    public string? TimeZone { get; set; } = Merit.Application.Security.JurisdictionTimeZones.Default;
+
     public string? CountyFipsList { get; set; }
 
     public string? NewCounties { get; set; }

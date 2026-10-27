@@ -33,6 +33,13 @@ test('work queues: select a task with the keyboard and the bulk actions turn on'
   await page.locator('table input[type=checkbox]').nth(1).focus();
   await page.keyboard.press('Space');
   await expect(assign).toBeEnabled();
+  // Assigning to someone else waits until a person is chosen: the list starts on no one (issue #41).
+  const assignTo = page.getByRole('button', { name: 'Assign', exact: true });
+  const person = page.getByLabel('Assign to');
+  await expect(person).toHaveValue('');
+  await expect(assignTo).toBeDisabled();
+  await person.selectOption({ index: 1 });
+  await expect(assignTo).toBeEnabled();
 });
 
 test('match review moves through the queue with J and K', async ({ asUser }) => {

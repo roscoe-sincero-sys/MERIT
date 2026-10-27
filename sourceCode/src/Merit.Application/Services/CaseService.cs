@@ -13,7 +13,7 @@ public sealed record InvestigationRequest(Guid ExposureCaseId, string Investigat
                                           Guid? WorksiteLocationId, Guid? EmploymentId, Guid? JoinInvestigationId);
 
 /// <summary>Case management: one person's elevated exposure to one analyte, from opening to closure.</summary>
-public sealed class CaseService(ICaseData cases, IWorkData work, IAccountData accounts, ISettingsProvider settings,
+public sealed class CaseService(IClock clock, ICaseData cases, IWorkData work, IAccountData accounts, ISettingsProvider settings,
                                 AuditService audit, ICurrentSession session)
 {
     private static readonly string[] ClosureReasons =
@@ -63,7 +63,7 @@ public sealed class CaseService(ICaseData cases, IWorkData work, IAccountData ac
     {
         session.Require(Permissions.CaseEdit);
         new Validator().Required("ActivityType", input.ActivityType, "Activity type")
-            .When(input.ActivityDate > DateOnly.FromDateTime(DateTime.UtcNow), "ActivityDate", "The date cannot be in the future.")
+            .When(input.ActivityDate > clock.Today, "ActivityDate", "The date cannot be in the future.")
             .MaxLength("Note", input.Note, 2000, "Note")
             .ThrowIfInvalid();
         int failed = await cases.SaveActivityAsync(TimeOrderedId.New(), input.ExposureCaseId, input.ActivityType, input.ActivityDate,
@@ -76,7 +76,7 @@ public sealed class CaseService(ICaseData cases, IWorkData work, IAccountData ac
         {
             await work.CreateTaskAsync(new WorkTaskCreate(TimeOrderedId.New(), "letterDue", "Send a letter",
                 $"{failed} contact attempts have not reached anyone (the jurisdiction sends a letter after {limit}).", null,
-                input.ExposureCaseId, null, null, null, false, DateOnly.FromDateTime(DateTime.UtcNow).AddDays(7)), ct).ConfigureAwait(false);
+                input.ExposureCaseId, null, null, null, false, clock.Today.AddDays(7)), ct).ConfigureAwait(false);
             return "A letter task was queued.";
         }
 
@@ -89,7 +89,7 @@ public sealed class CaseService(ICaseData cases, IWorkData work, IAccountData ac
         session.Require(Permissions.CaseEdit);
         new Validator().When(closureReason is null || !ClosureReasons.Contains(closureReason), "ClosureReason", "Choose a closure reason.")
             .Required("ClosedDate", closedDate, "Closed date")
-            .When(closedDate > DateOnly.FromDateTime(DateTime.UtcNow), "ClosedDate", "The date cannot be in the future.")
+            .When(closedDate > clock.Today, "ClosedDate", "The date cannot be in the future.")
             .ThrowIfInvalid();
         await cases.CloseCaseAsync(exposureCaseId, closureReason!, closedDate!.Value, note, rowVersion, ct).ConfigureAwait(false);
         await audit.ChangedAsync("exposureCase", exposureCaseId, ct).ConfigureAwait(false);
@@ -123,14 +123,14 @@ public sealed class CaseService(ICaseData cases, IWorkData work, IAccountData ac
             request.InvestigationType == "workplace" ? null : request.LocationId,
             request.InvestigationType == "workplace" ? request.OrganizationId : null,
             request.InvestigationType == "workplace" ? request.WorksiteLocationId : null, null, request.ExposureCaseId,
-            request.EmploymentId, DateOnly.FromDateTime(DateTime.UtcNow)), ct).ConfigureAwait(false);
+            request.EmploymentId, clock.Today), ct).ConfigureAwait(false);
         await audit.CreatedAsync("investigation", id, ct).ConfigureAwait(false);
         return id;
     }
 }
 
 /// <summary>Investigations: one target each, possibly serving several cases, with environmental samples.</summary>
-public sealed class InvestigationService(ICaseData cases, AuditService audit, ICurrentSession session)
+public sealed class InvestigationService(IClock clock, ICaseData cases, AuditService audit, ICurrentSession session)
 {
     private static readonly string[] Statuses = ["requested", "scheduled", "inProgress", "findingsIssued", "remediation", "cleared", "closed"];
 
@@ -169,7 +169,7 @@ public sealed class InvestigationService(ICaseData cases, AuditService audit, IC
         session.Require(Permissions.InvestigationEdit);
         new Validator().Required("SampleType", sample.SampleType, "Sample type").Required("Unit", sample.Unit, "Unit")
             .When(sample.SampleValue < 0, "SampleValue", "The value cannot be negative.")
-            .When(sample.SampleDate > DateOnly.FromDateTime(DateTime.UtcNow), "SampleDate", "The date cannot be in the future.")
+            .When(sample.SampleDate > clock.Today, "SampleDate", "The date cannot be in the future.")
             .ThrowIfInvalid();
         if (sample.EnvironmentalSampleId == Guid.Empty)
         {

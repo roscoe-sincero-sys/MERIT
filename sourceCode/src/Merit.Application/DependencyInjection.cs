@@ -2,8 +2,10 @@ using Merit.Application.Extracts;
 using Merit.Application.Intake;
 using Merit.Application.Jobs;
 using Merit.Application.Reference;
+using Merit.Application.Security;
 using Merit.Application.Services;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace Merit.Application;
 
@@ -16,6 +18,8 @@ public static class DependencyInjection
         services.AddScoped<IReferenceDataProvider, ReferenceDataProvider>();
         services.AddScoped<IThresholdProvider, ThresholdProvider>();
         services.AddScoped<ISettingsProvider, SettingsProvider>();
+        services.TryAddSingleton(TimeProvider.System);
+        services.AddScoped<IClock, JurisdictionClock>();
 
         services.AddScoped<AccountService>();
         services.AddScoped<AuditService>();

@@ -91,7 +91,7 @@ public sealed class AccountController(AccountService accounts, QrCodes qr, Sessi
 
         try
         {
-            var codes = await accounts.CompleteEnrollmentAsync(userId, secret, model.Code ?? string.Empty, ct);
+            var codes = await accounts.CompleteEnrollmentAsync(userId, secret, model.Code ?? string.Empty, ClientAddress(), ct);
             await CompleteSignInAsync(userId, ct);
             return View("RecoveryCodes", new RecoveryCodesModel(codes));
         }

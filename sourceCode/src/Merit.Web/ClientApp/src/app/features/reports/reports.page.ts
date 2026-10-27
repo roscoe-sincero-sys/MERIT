@@ -3,6 +3,7 @@ import { Router } from '@angular/router';
 import { ApiClient, problemMessage } from '../../api/api-client';
 import { AnalyteOptionDto, ReportCell, ReportDto, ReportSummaryDto } from '../../api/contracts';
 import { ChartSeries, SeriesChartComponent } from '../../shared/chart/series-chart.component';
+import { Display } from '../../shared/display.service';
 
 @Injectable()
 export class ReportsStore {
@@ -75,7 +76,7 @@ export class ReportsStore {
                                 [colorKeys]="chart().colorKeys" [valueLabel]="label(r, measureKey())" [percent]="isPercent(r, measureKey())" />
             <div class="scroll" tabindex="0" role="region" aria-labelledby="table-caption">
               <table class="usa-table usa-table--borderless usa-table--compact usa-table--striped">
-                <caption id="table-caption">{{ r.title }}, {{ r.fromDate }} to {{ r.toDate }}</caption>
+                <caption id="table-caption">{{ r.title }}, {{ display.date(r.fromDate) }} to {{ display.date(r.toDate) }}</caption>
                 <thead><tr>@for (c of r.columns; track c.key) { <th scope="col" [class.num]="c.kind === 'number' || c.kind === 'percent'">{{ c.label }}</th> }</tr></thead>
                 <tbody>
                   @for (row of r.rows; track $index) {
@@ -94,19 +95,20 @@ export class ReportsStore {
     </div>
   `,
   styles: `
-    .layout { display: grid; grid-template-columns: minmax(12rem, 18rem) 1fr; gap: 1.5rem; }
+    .layout { display: grid; grid-template-columns: minmax(12rem, 18rem) minmax(0, 1fr); gap: 1.5rem; }
     .filters { display: flex; flex-wrap: wrap; gap: .5rem 1rem; align-items: end; margin-bottom: 1rem; }
     .filters .usa-input, .filters .usa-select, .measure .usa-select { max-width: 14rem; }
     .exports { display: flex; gap: .5rem; margin-left: auto; }
     .measure { margin-bottom: .5rem; }
     .scroll { overflow-x: auto; }
     .num { text-align: right; font-variant-numeric: tabular-nums; }
-    @media (max-width: 64em) { .layout { grid-template-columns: 1fr; } }
+    @media (max-width: 64em) { .layout { grid-template-columns: minmax(0, 1fr); } }
   `,
 })
 export class ReportsPage implements OnInit {
   protected readonly store = inject(ReportsStore);
   private readonly api = inject(ApiClient);
+  protected readonly display = inject(Display);
   private readonly router = inject(Router);
   readonly codeParam = input<string | undefined>(undefined, { alias: 'code' });
 
@@ -128,7 +130,7 @@ export class ReportsPage implements OnInit {
     const groups = gi < 0 ? [this.measureKey()] : [...new Set(r.rows.map(row => String(row[gi] ?? '')))].sort();
     const series = groups.map(g => ({
       key: g,
-      label: gi < 0 ? this.label(r, g) : g,
+      label: gi < 0 ? this.label(r, g) : this.display.ifCode(g),
       values: categories.map(cat => {
         const cells = r.rows.filter(row => String(row[xi] ?? '') === cat && (gi < 0 || String(row[gi] ?? '') === g))
           .map(row => row[mi]).filter((v): v is number => typeof v === 'number');
@@ -189,7 +191,9 @@ export class ReportsPage implements OnInit {
       const text = Number.isInteger(v) ? v.toLocaleString('en-US') : v.toLocaleString('en-US', { maximumFractionDigits: 1 });
       return kind === 'percent' ? text + '%' : text;
     }
-    return String(v);
+    if (kind === 'month') return this.display.month(String(v));
+    // A stored code (a population, a classification) shows its words; any other text as it is (issue #37).
+    return kind === 'text' ? this.display.ifCode(String(v)) : String(v);
   }
 
   private run(code: string): void {

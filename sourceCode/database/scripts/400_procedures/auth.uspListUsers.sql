@@ -97,14 +97,14 @@ BEGIN
                   JOIN auth.role   AS r ON r.roleId = ua.roleId
                   JOIN auth.tenant AS t ON t.tenantId = ua.tenantId
                  WHERE ua.appUserId = u.appUserId AND ua.isDeleted = 0
-                   AND (ua.endDate IS NULL OR ua.endDate >= CAST (SYSUTCDATETIME () AS DATE))) AS assignments
+                   AND (ua.endDate IS NULL OR ua.endDate >= auth.udfSessionToday ())) AS assignments
           FROM auth.appUser AS u
           LEFT JOIN auth.tenant AS h ON h.tenantId = u.homeTenantId
          WHERE u.isDeleted = 0
            AND (EXISTS (SELECT 1 FROM @admin AS a WHERE a.tenantId = u.homeTenantId)
                 OR EXISTS (SELECT 1 FROM auth.userAssignment AS ua JOIN @admin AS a ON a.tenantId = ua.tenantId
                             WHERE ua.appUserId = u.appUserId AND ua.isDeleted = 0
-                              AND (ua.endDate IS NULL OR ua.endDate >= CAST (SYSUTCDATETIME () AS DATE))))
+                              AND (ua.endDate IS NULL OR ua.endDate >= auth.udfSessionToday ())))
          ORDER BY u.displayName;
 
         -- =========================================================================================

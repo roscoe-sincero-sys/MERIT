@@ -14,7 +14,7 @@
                                 <label class="usa-sr-only" for="v-@s.SettingKey">Value of @s.SettingKey</label>
                                 <input class="usa-input @(s.SettingValue == "NOTSET" ? "usa-input--error" : "")" id="v-@s.SettingKey" name="settingValue" value="@s.SettingValue" />
                                 <label class="usa-sr-only" for="d-@s.SettingKey">Effective from</label>
-                                <input class="usa-input" id="d-@s.SettingKey" name="effectiveFrom" type="date" value="@Options.Iso(DateOnly.FromDateTime(DateTime.UtcNow))" />
+                                <input class="usa-input" id="d-@s.SettingKey" name="effectiveFrom" type="date" value="@Options.Iso(Clock.Today)" />
                                 <button class="usa-button usa-button--outline usa-button--small" type="submit">Change</button>
                             </form>
                         }

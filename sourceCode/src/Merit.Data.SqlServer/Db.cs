@@ -26,7 +26,10 @@ public sealed class Db(IOptions<MeritDatabaseOptions> options, ICurrentSession s
         "EXEC sys.sp_set_session_context @key = N'scopeKey', @value = @scopeKey, @read_only = 1;" +
         "EXEC sys.sp_set_session_context @key = N'appUserId', @value = @appUserId, @read_only = 1;" +
         "EXEC sys.sp_set_session_context @key = N'AppUser', @value = @appUser, @read_only = 1;" +
-        "EXEC sys.sp_set_session_context @key = N'actingTenantId', @value = @actingTenantId, @read_only = 1;";
+        "EXEC sys.sp_set_session_context @key = N'actingTenantId', @value = @actingTenantId, @read_only = 1;" +
+        // The jurisdiction's time zone, for auth.udfSessionToday (issue #36). Only a signed-in session sets it: a sign-in
+        // leaves it open, and auth.uspCreateSessionScope sets it from the user's data root.
+        "IF @timeZone IS NOT NULL EXEC sys.sp_set_session_context @key = N'timeZone', @value = @timeZone, @read_only = 1;";
 
     static Db()
     {
@@ -48,6 +51,7 @@ public sealed class Db(IOptions<MeritDatabaseOptions> options, ICurrentSession s
                 appUserId = session.UserId,
                 appUser = session.AuditName,
                 actingTenantId = session.ActingTenantId,
+                timeZone = session.TimeZoneId,
             }, commandTimeout: Timeout, cancellationToken: ct)).ConfigureAwait(false);
         }
 

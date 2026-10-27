@@ -105,6 +105,15 @@ BEGIN
             ;THROW 51404, N'The account is not active.', 1;
         END;
 
+        -- Grants are dated today in the user's jurisdiction (issue #36). A signed-in caller's connection already carries the
+        -- zone; a sign-in does not yet, so it is set here from the user's data root.
+        IF SESSION_CONTEXT (N'timeZone') IS NULL
+        BEGIN
+            DECLARE @zone VARCHAR (64) = (SELECT r.timeZone FROM auth.appUser AS u JOIN auth.tenant AS r ON r.tenantId = u.rootTenantId
+                                           WHERE u.appUserId = @appUserId);
+            EXEC sys.sp_set_session_context @key = N'timeZone', @value = @zone;
+        END;
+
         IF @userProfileId IS NOT NULL
            AND EXISTS (SELECT 1 FROM auth.userProfile WHERE userProfileId = @userProfileId AND isMaster = 1)
         BEGIN
@@ -235,6 +244,7 @@ BEGIN
              , @acting                        AS actingTenantId
              , t.tenantName                   AS actingTenantName
              , r.statePostalCode
+             , COALESCE (r.timeZone, 'Eastern Standard Time') AS timeZone
              , u.securityStamp
              , @expiresUtc                    AS expiresUtc
              , @userProfileId                 AS userProfileId

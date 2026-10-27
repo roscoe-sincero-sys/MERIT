@@ -42,7 +42,10 @@
                                 }
                                 else if (i.ItemType == "heldRecord")
                                 {
-                                    <a class="usa-link" href="/app/held">@i.Title</a> <span class="merit-badge merit-badge--urgent">Urgent</span>
+                                    @* Named by the patient and result as reported, so each row says which record it is (issue #40). *@
+                                    <a class="usa-link" href="/app/held@(i.IntakeBatchId is Guid bid ? $"?batch={bid}" : "")">@i.Title</a>
+                                    <span class="merit-badge merit-badge--urgent">Urgent</span>
+                                    <br /><span class="merit-meta">Held at intake@(i.SenderName is null ? "" : $" from {i.SenderName}")</span>
                                 }
                                 else
                                 {
@@ -50,8 +53,8 @@
                                 }
                             </td>
                             <td>@i.Detail</td>
-                            <td>@Options.Date(i.DueDate)</td>
-                            <td>@Options.Date(i.WaitingSinceUtc)</td>
+                            <td class="merit-nowrap">@Options.Date(i.DueDate)</td>
+                            <td class="merit-nowrap">@Options.Date(i.WaitingSinceUtc)</td>
                         </tr>
                     }
                 </tbody>

@@ -17,6 +17,25 @@
         return match ? decodeURIComponent(match.substring(name.length + 1)) : null;
     }
 
+    // ------------------------------------------------------------------------------------------ phone menu
+    // Below 40em the menu and the user block fold behind the Menu button (issue #47); Escape closes it.
+    const header = document.querySelector(".merit-header");
+    const menuButton = header && header.querySelector(".merit-menu-button");
+    if (menuButton) {
+        header.classList.add("merit-header--js");
+        const setOpen = open => {
+            header.classList.toggle("merit-header--open", open);
+            menuButton.setAttribute("aria-expanded", String(open));
+        };
+        menuButton.addEventListener("click", () => setOpen(!header.classList.contains("merit-header--open")));
+        header.addEventListener("keydown", evt => {
+            if (evt.key === "Escape" && header.classList.contains("merit-header--open")) {
+                setOpen(false);
+                menuButton.focus();
+            }
+        });
+    }
+
     // ------------------------------------------------------------------------------------------ antiforgery
     // Both clients send the token in X-XSRF-TOKEN, read from the XSRF-TOKEN cookie.
     document.addEventListener("htmx:config:request", evt => {

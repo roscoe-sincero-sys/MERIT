@@ -3,5 +3,8 @@
     ViewData["Title"] = Model.Title;
 }
 <h1>@Model.Title</h1>
-<partial name="_Alert" model="Model" />
+@* The title is the page heading; the alert carries only the message, so it is not said twice. *@
+<div class="usa-alert usa-alert--@Model.Kind usa-alert--slim" role="alert">
+    <div class="usa-alert__body"><p class="usa-alert__text">@Model.Message</p></div>
+</div>
 <p><a class="usa-link" href="/">Return to the home page</a></p>

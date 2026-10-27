@@ -1,9 +1,10 @@
-import { ChangeDetectionStrategy, Component, inject, input, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input, OnInit, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { ApiClient, problemMessage } from '../../api/api-client';
 import { BulkTaskActionRequest, WorkTaskDto } from '../../api/contracts';
 import { DataGridComponent, GridColumn, GridSort } from '../../shared/grid/data-grid.component';
 import { QueuesStore } from './queues.store';
+import { Display } from '../../shared/display.service';
 
 /** Work queues: the shared grid over tasks of every queue, with bulk assign, complete and dismiss. Route component. */
 @Component({
@@ -45,10 +46,12 @@ import { QueuesStore } from './queues.store';
         <div class="bulk" role="group" aria-label="Bulk actions on selected tasks">
           <button class="usa-button usa-button--outline" type="button" [disabled]="store.selected().size === 0" (click)="bulk('assignToMe')">Assign to me</button>
           <label class="usa-sr-only" for="assignee">Assign to</label>
-          <select class="usa-select" id="assignee" #assignee>
+          <!-- No one is chosen until the user chooses, so Assign never goes to whoever is first in the list (issue #41). -->
+          <select class="usa-select assignee" id="assignee" [value]="assignee()" [title]="assigneeName()" (change)="assignee.set($any($event.target).value)">
+            <option value="">Choose a person&hellip;</option>
             @for (u of store.users(); track u.appUserId) { <option [value]="u.appUserId">{{ u.displayName }}</option> }
           </select>
-          <button class="usa-button usa-button--outline" type="button" [disabled]="store.selected().size === 0" (click)="bulk('assign', assignee.value)">Assign</button>
+          <button class="usa-button usa-button--outline" type="button" [disabled]="store.selected().size === 0 || !assignee()" (click)="bulk('assign', assignee())">Assign</button>
           <button class="usa-button" type="button" [disabled]="store.selected().size === 0" (click)="bulk('complete')">Complete</button>
           <button class="usa-button usa-button--secondary" type="button" [disabled]="store.selected().size === 0" (click)="bulk('dismiss')">Dismiss</button>
         </div>
@@ -60,15 +63,17 @@ import { QueuesStore } from './queues.store';
     </div>
   `,
   styles: `
-    .layout { display: grid; grid-template-columns: minmax(12rem, 18rem) 1fr; gap: 1.5rem; }
+    .layout { display: grid; grid-template-columns: minmax(12rem, 18rem) minmax(0, 1fr); gap: 1.5rem; }
     .filters, .bulk { display: flex; flex-wrap: wrap; align-items: end; gap: .5rem 1rem; margin-bottom: .75rem; }
     .filters .usa-select, .bulk .usa-select { max-width: 14rem; margin-top: 0; }
-    @media (max-width: 64em) { .layout { grid-template-columns: 1fr; } }
+    .bulk .usa-select.assignee { max-width: 22rem; }
+    @media (max-width: 64em) { .layout { grid-template-columns: minmax(0, 1fr); } }
   `,
 })
 export class QueuesPage implements OnInit {
   protected readonly store = inject(QueuesStore);
   private readonly api = inject(ApiClient);
+  protected readonly display = inject(Display);
   private readonly router = inject(Router);
 
   /** Query-string inputs, so a dashboard tile can link straight to a queue. */
@@ -81,10 +86,10 @@ export class QueuesPage implements OnInit {
     { key: 'title', label: 'Task', sortable: true, cell: t => t.title, badge: t => (t.isUrgent ? 'Urgent' : null) },
     { key: 'queueCode', label: 'Queue', sortable: true, cell: t => this.queueName(t.queueCode) },
     { key: 'person', label: 'Person', cell: t => t.personName ?? '', link: t => (t.personId ? `/people/${t.personId}` : null) },
-    { key: 'case', label: 'Case', cell: t => t.caseNumber ?? '', link: t => (t.exposureCaseId ? `/cases/${t.exposureCaseId}` : null) },
-    { key: 'dueDate', label: 'Due', sortable: true, cell: t => t.dueDate ?? '' },
+    { key: 'case', label: 'Case', nowrap: true, cell: t => t.caseNumber ?? '', link: t => (t.exposureCaseId ? `/cases/${t.exposureCaseId}` : null) },
+    { key: 'dueDate', label: 'Due', sortable: true, nowrap: true, cell: t => this.display.date(t.dueDate) },
     { key: 'assigned', label: 'Assigned', cell: t => t.assignedToName ?? '' },
-    { key: 'createdDateUtc', label: 'Created', sortable: true, cell: t => t.createdUtc.substring(0, 10) },
+    { key: 'createdDateUtc', label: 'Created', sortable: true, nowrap: true, cell: t => this.display.dateOf(t.createdUtc) },
     { key: 'detail', label: 'Detail', hidden: true, cell: t => t.detail ?? '' },
   ];
 
@@ -133,12 +138,21 @@ export class QueuesPage implements OnInit {
     this.load();
   }
 
+  /** The person chosen in the assignee list, or empty: nobody is chosen until the user chooses. */
+  protected readonly assignee = signal('');
+  protected readonly assigneeName = computed(() => this.store.users().find(u => u.appUserId === this.assignee())?.displayName ?? '');
+
   protected bulk(action: BulkTaskActionRequest['action'], assignTo?: string): void {
     const ids = [...this.store.selected()];
+    const to = this.assigneeName();
     this.store.error.set(null);
     this.api.bulkTasks({ taskIds: ids, action, assignToUserId: assignTo ?? null, note: null }).subscribe({
       next: r => {
-        this.store.message.set(`${r.updated} task(s) updated.`);
+        // Say what happened and, for an assignment, to whom.
+        const tasks = r.updated === 1 ? '1 task' : `${r.updated} tasks`;
+        this.store.message.set(action === 'assign' ? `${tasks} assigned to ${to}.` : action === 'assignToMe' ? `${tasks} assigned to you.`
+          : action === 'complete' ? `${tasks} completed.` : `${tasks} dismissed.`);
+        this.assignee.set('');
         this.store.selected.set(new Set<string>());
         this.api.queues().subscribe(q => this.store.queues.set(q));
         this.load();

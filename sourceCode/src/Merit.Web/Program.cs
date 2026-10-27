@@ -179,6 +179,10 @@ if (!app.Environment.IsDevelopment())
     app.UseHsts();
 }
 
+// An error status with no body (an address that matches no page, a refused method) shows a MERIT page instead of the
+// browser's blank one (issue #43). The API keeps its own problem responses.
+app.UseWhen(http => !http.Request.Path.StartsWithSegments("/api"), branch => branch.UseStatusCodePagesWithReExecute("/home/status/{0}"));
+
 app.UseHttpsRedirection();
 
 // The Angular build under wwwroot/app is also served straight from disk, so a client rebuild (npm run build) is picked up
@@ -198,6 +202,18 @@ app.UseStaticFiles(new StaticFileOptions
 
 app.UseRouting();
 app.UseAuthentication();
+app.Use(async (http, next) =>
+{
+    // Times on this request's pages follow the session's jurisdiction (issue #36), and codes show as words (issue #37).
+    DisplayTime.Zone = http.RequestServices.GetRequiredService<IClock>().Zone;
+    if (http.User.Identity?.IsAuthenticated == true)
+    {
+        DisplayTime.Names = (await http.RequestServices.GetRequiredService<Merit.Application.Reference.IReferenceDataProvider>()
+            .GetAsync(http.RequestAborted)).Names;
+    }
+
+    await next(http);
+});
 app.UseMiddleware<SecurityHeadersMiddleware>();
 app.UseRateLimiter();    // after the security headers, so the "too many attempts" page carries its CSP nonce
 app.UseAuthorization();

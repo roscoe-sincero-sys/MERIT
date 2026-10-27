@@ -68,18 +68,25 @@ public sealed class AccountService(IAccountData data, IPasswordHasher hasher, IS
         return new MfaEnrollmentStart(Totp.ToBase32(secret), Totp.ProvisioningUri(Issuer, userName, secret));
     }
 
-    /// <summary>Verifies the first code from the new authenticator and stores the secret; returns one-time recovery codes.</summary>
-    public async Task<IReadOnlyList<string>> CompleteEnrollmentAsync(Guid appUserId, string secretBase32, string code, CancellationToken ct = default)
+    /// <summary>
+    /// Verifies the first code from the new authenticator and stores the secret; returns one-time recovery codes. This is
+    /// the person's first sign-in, so its outcome is recorded like any code step (issue #44): a good code sets the last
+    /// sign-in and writes the sign-in audit event, a wrong one counts toward the lockout.
+    /// </summary>
+    public async Task<IReadOnlyList<string>> CompleteEnrollmentAsync(Guid appUserId, string secretBase32, string code, string? clientAddress = null,
+                                                                     CancellationToken ct = default)
     {
         byte[] secret = Totp.FromBase32(secretBase32);
         if (!Totp.Verify(secret, code, DateTimeOffset.UtcNow))
         {
+            await data.RecordSignInResultAsync(appUserId, false, MaxFailedAttempts, LockoutMinutes, clientAddress, ct).ConfigureAwait(false);
             throw new ValidationException("Code", "That code did not match. Check the time on your device and try the current code.");
         }
 
         var codes = Enumerable.Range(0, 10).Select(_ => NewRecoveryCode()).ToList();
         await data.SaveMfaEnrollmentAsync(appUserId, protector.Protect(secretBase32), codes.Select(hasher.Hash).ToList(), ct)
             .ConfigureAwait(false);
+        await data.RecordSignInResultAsync(appUserId, true, MaxFailedAttempts, LockoutMinutes, clientAddress, ct).ConfigureAwait(false);
         return codes;
     }
 

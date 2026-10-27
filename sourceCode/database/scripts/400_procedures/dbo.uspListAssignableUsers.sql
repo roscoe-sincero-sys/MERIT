@@ -81,7 +81,7 @@ BEGIN
         SELECT DISTINCT u.appUserId, u.displayName
           FROM auth.appUser AS u
           JOIN auth.userAssignment AS ua ON ua.appUserId = u.appUserId AND ua.isDeleted = 0
-                                        AND (ua.endDate IS NULL OR ua.endDate >= CAST (SYSUTCDATETIME () AS DATE))
+                                        AND (ua.endDate IS NULL OR ua.endDate >= auth.udfSessionToday ())
           JOIN auth.sessionScopeTenant AS st ON st.tenantId = ua.tenantId AND st.sessionScopeId = @scope
          WHERE u.isActive = 1 AND u.isDeleted = 0
          ORDER BY u.displayName;

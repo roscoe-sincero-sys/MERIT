@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, inject, Injectable, OnInit, signal } from '@angular/core';
 import { ApiClient, problemMessage } from '../../api/api-client';
 import { AnalyteOptionDto, PagedResult, ResultListItemDto } from '../../api/contracts';
+import { Display } from '../../shared/display.service';
 import { DataGridComponent, GridColumn, GridSort } from '../../shared/grid/data-grid.component';
 
 @Injectable()
@@ -49,19 +50,21 @@ export class ResultsStore {
 export class ResultsPage implements OnInit {
   protected readonly store = inject(ResultsStore);
   private readonly api = inject(ApiClient);
+  private readonly display = inject(Display);
   protected readonly key = (r: ResultListItemDto): string => r.labResultId;
 
   protected readonly columns: GridColumn<ResultListItemDto>[] = [
-    { key: 'collectedDate', label: 'Collected', sortable: true, cell: r => r.collectedDate, link: r => `/results/${r.labResultId}` },
+    { key: 'collectedDate', label: 'Collected', sortable: true, nowrap: true, cell: r => this.display.date(r.collectedDate), link: r => `/results/${r.labResultId}` },
     { key: 'lastName', label: 'Person', sortable: true, cell: r => r.personName ?? '(unmatched)', link: r => (r.personId ? `/people/${r.personId}` : null) },
-    { key: 'analyteCode', label: 'Analyte', sortable: true, cell: r => `${r.analyteCode} ${r.specimen}` },
+    { key: 'analyteCode', label: 'Analyte', sortable: true, cell: r => `${this.display.of(r.analyteCode)}, ${this.display.of(r.specimen).toLowerCase()}` },
     { key: 'valueCanonical', label: 'Value', sortable: true, cell: r => `${r.operator === '=' ? '' : r.operator}${r.valueCanonical ?? ''} ${r.unitCanonical}`, badge: r => (r.isIndeterminate ? 'Indeterminate' : null) },
-    { key: 'sampleType', label: 'Sample', cell: r => r.sampleType ?? '' },
-    { key: 'population', label: 'Population', cell: r => r.population },
-    { key: 'status', label: 'Status', cell: r => (r.resultRowStatus === 'valid' ? r.resultStatus : `${r.resultStatus} (${r.resultRowStatus})`) },
+    { key: 'sampleType', label: 'Sample', cell: r => this.display.of(r.sampleType) },
+    { key: 'population', label: 'Population', cell: r => this.display.of(r.population) },
+    { key: 'status', label: 'Status', cell: r => (r.resultRowStatus === 'valid' ? this.display.of(r.resultStatus)
+      : `${this.display.of(r.resultStatus)} (${this.display.of(r.resultRowStatus).toLowerCase()})`) },
     { key: 'labName', label: 'Lab', cell: r => r.labName ?? '' },
-    { key: 'receivedUtc', label: 'Received', sortable: true, hidden: true, cell: r => r.receivedUtc.substring(0, 10) },
-    { key: 'testMethod', label: 'Method', hidden: true, cell: r => r.testMethod ?? '' },
+    { key: 'receivedUtc', label: 'Received', sortable: true, hidden: true, nowrap: true, cell: r => this.display.dateOf(r.receivedUtc) },
+    { key: 'testMethod', label: 'Method', hidden: true, cell: r => this.display.of(r.testMethod) },
   ];
 
   ngOnInit(): void {

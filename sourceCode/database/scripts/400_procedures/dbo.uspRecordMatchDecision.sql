@@ -159,7 +159,7 @@ BEGIN
                                  dueDate)
             SELECT CAST (CAST (NEWID () AS BINARY (10)) + CAST (DATEDIFF_BIG (MILLISECOND, '19700101', SYSUTCDATETIME ()) AS BINARY (6)) AS UNIQUEIDENTIFIER), @root, s.owningTenantId, 'matchReview', N'Person match: reviewer not sure',
                    COALESCE (@note, N'A reviewer could not decide whether this record is an existing person.'), s.stagingRowId,
-                   s.isUrgent, DATEADD (DAY, CASE WHEN s.isUrgent = 1 THEN 1 ELSE 5 END, CAST (SYSUTCDATETIME () AS DATE))
+                   s.isUrgent, DATEADD (DAY, CASE WHEN s.isUrgent = 1 THEN 1 ELSE 5 END, auth.udfSessionToday ())
               FROM dbo.stagingRow AS s WHERE s.stagingRowId = @stagingRowId;
         END;
 

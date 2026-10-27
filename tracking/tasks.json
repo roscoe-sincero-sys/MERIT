@@ -1209,6 +1209,105 @@
       "started": "2026-10-26",
       "finished": "2026-10-26",
       "notes": "Check flags /intake on the old view and no other page"
+    },
+    {
+      "id": "T187",
+      "phase": "12 Quality",
+      "task": "UX review of the running application (34 screens at 1280 and 390 px, three roles, forms, errors, axe): 16 issues filed, #36 to #51",
+      "ref": "GitHub issues #36-#51",
+      "where": "Issues labelled ux; screenshots on the issue-assets branch (ux_review/)",
+      "status": "Done",
+      "started": "2026-10-26",
+      "finished": "2026-10-26",
+      "notes": "axe: no violations at 1280 px; main findings: UTC dates, raw codes, phone layout, first sign-in not recorded"
+    },
+    {
+      "id": "T188",
+      "phase": "12 Quality",
+      "task": "Dates and \"today\" in the jurisdiction's time zone, not UTC",
+      "ref": "Issue #36",
+      "where": "auth.tenant.timeZone; JurisdictionClock (IClock); auth.udfSessionToday; session claim merit:tz; DisplayTime; /api/v1/me timeZone",
+      "status": "Done",
+      "started": "2026-10-27",
+      "finished": "2026-10-27",
+      "notes": "Tenant form picks the zone; SQL today via session context; default Eastern"
+    },
+    {
+      "id": "T189",
+      "phase": "12 Quality",
+      "task": "Codes and file fields shown as words on the result pages and the Angular client",
+      "ref": "Issues #37, #38",
+      "where": "DisplayNames; GET /api/v1/reference/labels; Angular Display service; Results/Details field labels",
+      "status": "Done",
+      "started": "2026-10-27",
+      "finished": "2026-10-27",
+      "notes": "Lookup display names, analytes, system codes and staging field labels in one place"
+    },
+    {
+      "id": "T190",
+      "phase": "12 Quality",
+      "task": "One date format in the Angular client; case numbers and dates stay on one line",
+      "ref": "Issue #39",
+      "where": "Display.date/dateOf/month; GridColumn.nowrap; merit-nowrap in Razor lists",
+      "status": "Done",
+      "started": "2026-10-27",
+      "finished": "2026-10-27",
+      "notes": "e2e: no line breaks inside case numbers or dates, no ISO dates in the queue"
+    },
+    {
+      "id": "T191",
+      "phase": "12 Quality",
+      "task": "Home names each urgent held record and links to its batch",
+      "ref": "Issue #40",
+      "where": "uspGetDashboard held rows; Home view; IntakeProcessor message",
+      "status": "Done",
+      "started": "2026-10-27",
+      "finished": "2026-10-27",
+      "notes": "Title is person and analyte with value; \"Held at intake from <sender>\""
+    },
+    {
+      "id": "T192",
+      "phase": "12 Quality",
+      "task": "Queue bulk assign waits for a chosen person and names them",
+      "ref": "Issue #41",
+      "where": "features/queues/queues.page.ts",
+      "status": "Done",
+      "started": "2026-10-27",
+      "finished": "2026-10-27",
+      "notes": "List starts on \"Choose a person...\"; Assign disabled until chosen; message names the assignee"
+    },
+    {
+      "id": "T193",
+      "phase": "12 Quality",
+      "task": "Unknown addresses and other status codes show a MERIT page",
+      "ref": "Issue #43",
+      "where": "HomeController.Status; UseStatusCodePagesWithReExecute outside /api",
+      "status": "Done",
+      "started": "2026-10-27",
+      "finished": "2026-10-27",
+      "notes": "404, 403, 405/415 and 5xx pages; all methods, no antiforgery on the status page"
+    },
+    {
+      "id": "T194",
+      "phase": "12 Quality",
+      "task": "First sign-in after enrolment is recorded",
+      "ref": "Issue #44",
+      "where": "AccountService.CompleteEnrollmentAsync; Users page shows Never",
+      "status": "Done",
+      "started": "2026-10-27",
+      "finished": "2026-10-27",
+      "notes": "Integration test FirstSignInTests"
+    },
+    {
+      "id": "T195",
+      "phase": "12 Quality",
+      "task": "Phone width: Menu button, usable search, no sideways scroll",
+      "ref": "Issue #47",
+      "where": "_Layout header; merit.css; merit.js; queues, reports and cluster layouts",
+      "status": "Done",
+      "started": "2026-10-27",
+      "finished": "2026-10-27",
+      "notes": "e2e at 390 px: header folds, no main page wider than the screen"
     }
   ]
 }

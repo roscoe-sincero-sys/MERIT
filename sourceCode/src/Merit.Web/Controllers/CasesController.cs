@@ -12,7 +12,7 @@ namespace Merit.Web.Controllers;
 
 /// <summary>Case pages (htmx): forms and activity logs.</summary>
 [Route("cases")]
-public sealed class CasesController(CaseService cases, PersonService people, IReferenceDataProvider reference, ICurrentSession session)
+public sealed class CasesController(IClock clock, CaseService cases, PersonService people, IReferenceDataProvider reference, ICurrentSession session)
     : Controller
 {
     [HttpGet("")]
@@ -67,7 +67,7 @@ public sealed class CasesController(CaseService cases, PersonService people, IRe
         try
         {
             message = await cases.LogActivityAsync(new ActivityInput(id, activityType,
-                activityDate ?? DateOnly.FromDateTime(DateTime.UtcNow), contactPersonId, outcome, note), ct);
+                activityDate ?? clock.Today, contactPersonId, outcome, note), ct);
         }
         catch (ValidationException ex)
         {
@@ -145,7 +145,7 @@ public sealed class CasesController(CaseService cases, PersonService people, IRe
     private async Task<InvestigationRequestModel> RequestFormAsync(CaseDetail detail, InvestigationRequestModel form, CancellationToken ct)
     {
         var places = await people.GetPageAsync(detail.Case.PersonId, ct);
-        var targets = places.Places.Where(p => p.EndDate is null || p.EndDate >= DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-365))
+        var targets = places.Places.Where(p => p.EndDate is null || p.EndDate >= clock.Today.AddDays(-365))
             .Select(p => new SelectOption($"loc:{p.LocationId}", $"{Options.Humanize(p.Role)}: {p.AddressLabel}", form.Target == $"loc:{p.LocationId}"))
             .ToList();
         targets.AddRange(places.Employment.Select(e => new SelectOption($"job:{e.EmploymentId}:{e.OrganizationId}:{e.WorksiteLocationId}",

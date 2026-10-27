@@ -104,7 +104,7 @@ BEGIN
 
         DECLARE @personId UNIQUEIDENTIFIER, @root UNIQUEIDENTIFIER, @owner UNIQUEIDENTIFIER, @population VARCHAR (10),
                 @category VARCHAR (20), @code VARCHAR (8), @caseNumber VARCHAR (20);
-        DECLARE @today DATE = CAST (SYSUTCDATETIME () AS DATE);
+        DECLARE @today DATE = auth.udfSessionToday ();
 
         SELECT @personId = c.personId, @root = c.rootTenantId, @owner = c.owningTenantId, @population = c.population,
                @category = c.exposureCategory, @code = a.code, @caseNumber = c.caseNumber

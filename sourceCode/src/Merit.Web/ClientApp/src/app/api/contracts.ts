@@ -13,6 +13,8 @@ export interface MeDto {
   displayName: string;
   actingTenantName: string | null;
   permissions: string[];
+  /** The jurisdiction's IANA time zone. */
+  timeZone: string;
 }
 
 export interface QueueCountDto {
@@ -67,6 +69,12 @@ export interface HeldGroupDto {
   oldestHeldUtc: string | null;
   batchCount: number;
   sampleMessage: string | null;
+}
+
+export interface LabelsDto {
+  codes: Record<string, string>;
+  fields: Record<string, string>;
+  fieldOrder: string[];
 }
 
 export interface HeldRowDto {

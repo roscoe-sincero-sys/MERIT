@@ -37,7 +37,7 @@ public sealed class TenantsController(AdminService admin, ConfigService config, 
         try
         {
             await admin.CreateTenantAsync(new TenantInput(form.ParentTenantId, form.TenantCode, form.TenantName, form.TenantType,
-                form.StatePostalCode, form.StateFips, form.CountyFipsList, form.NewCounties), ct);
+                form.StatePostalCode, form.StateFips, form.CountyFipsList, form.NewCounties, form.TimeZone), ct);
         }
         catch (ValidationException ex)
         {

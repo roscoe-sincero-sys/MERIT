@@ -23,7 +23,9 @@
             <a class="merit-brand" href="/">MERIT<small>Metals Exposure Registry and Investigation Tracking</small></a>
             @if (signedIn)
             {
-                <nav aria-label="Primary">
+                @* On a phone the menu and the user block fold behind this button; merit.js shows it (issue #47). *@
+                <button class="usa-button usa-button--outline usa-button--inverse merit-menu-button" type="button" aria-expanded="false" aria-controls="merit-nav merit-user">Menu</button>
+                <nav id="merit-nav" class="merit-header__nav" aria-label="Primary">
                     <ul class="merit-nav">
                         @if (CurrentSession.Has(Permissions.TaskView)) { <li><a href="/" aria-current="@Current("/")">Home</a></li> }
                         @if (CurrentSession.Has(Permissions.TaskView)) { <li><a href="/app/queues" aria-current="@Current("/app/queues")">Work queues</a></li> }
@@ -47,11 +49,11 @@
                 {
                     <form class="merit-header__search" role="search" method="get" action="/search">
                         <label class="usa-sr-only" for="header-search">Search people, cases and accession numbers</label>
-                        <input class="usa-input" id="header-search" name="q" type="search" placeholder="Name, DOB, address, case or accession number" />
+                        <input class="usa-input" id="header-search" name="q" type="search" placeholder="Name, DOB, case or accession" />
                         <button class="usa-button usa-button--accent-cool" type="submit">Search</button>
                     </form>
                 }
-                <div class="merit-header__user">
+                <div id="merit-user" class="merit-header__user">
                     <span>@CurrentSession.DisplayName<br /><small>@CurrentSession.ActingTenantName</small><br />
                         <a class="merit-header__profile" href="/account/profiles">Profile: @(CurrentSession.ProfileName ?? "Master profile")<span class="usa-sr-only"> (switch profile)</span></a></span>
                     <form method="post" action="/account/signout">

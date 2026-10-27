@@ -3,7 +3,7 @@ import { inject, Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import {
   AnalyteOptionDto, AssignableUserDto, BulkActionResponse, BulkTaskActionRequest, CaseMapPointDto, ClusterDto, ClusterListItemDto,
-  ClusterMemberRequest, ClusterUpdateRequest, HeldActionRequest, HeldGroupDto, HeldRowDto, MatchDecisionRequest, MatchDecisionResponse,
+  ClusterMemberRequest, ClusterUpdateRequest, HeldActionRequest, HeldGroupDto, HeldRowDto, LabelsDto, MatchDecisionRequest, MatchDecisionResponse,
   MatchQueueItemDto, MatchReviewDto, MeDto, PagedResult, PersonTimelineDto, QueueCountDto, ReportDto, ReportSummaryDto,
   ResultListItemDto, WorkTaskDto,
 } from './contracts';
@@ -15,6 +15,10 @@ type Query = Record<string, string | number | boolean | null | undefined>;
 export class ApiClient {
   private readonly http = inject(HttpClient);
   private readonly base = '/api/v1';
+
+  labels(): Observable<LabelsDto> {
+    return this.http.get<LabelsDto>(`${this.base}/reference/labels`);
+  }
 
   me(): Observable<MeDto> {
     return this.http.get<MeDto>(`${this.base}/me`);

@@ -205,6 +205,12 @@ dotnet run --project src/Merit.Web         # terminal 2: https://localhost:7243
 Program settings such as levels, case definitions and extract options are kept per state in the database. Change them
 on the **Configuration** screens.
 
+**Time zone.** Each data root (a state, tribe, region or stand-alone jurisdiction) has a time zone, chosen on
+**Tenants** when the root is created. Everything dated "today" follows it, in the application and in the procedures:
+cases opened, activities, form defaults, report periods. So does every time shown on screen. Times are stored in UTC. A
+root created before this setting is on Eastern time; to change it, set `auth.tenant.timeZone` for the root to a name from
+`sys.time_zone_info` (for example `Central Standard Time`), and users pick it up at their next sign-in.
+
 **`Deploy-MeritDatabase.ps1` flags:**
 
 | Flag | Meaning |

@@ -146,7 +146,7 @@ BEGIN
           FROM dbo.personRelationship AS r
           JOIN dbo.person AS cp ON cp.personId = r.relatedPersonId
          WHERE r.personId = @personId AND r.isDeleted = 0 AND r.isPrimaryContact = 1
-           AND (r.endDate IS NULL OR r.endDate >= CAST (SYSUTCDATETIME () AS DATE));
+           AND (r.endDate IS NULL OR r.endDate >= auth.udfSessionToday ());
 
         -- =========================================================================================
         -- ===== End of the procedure's own work. ===================================================

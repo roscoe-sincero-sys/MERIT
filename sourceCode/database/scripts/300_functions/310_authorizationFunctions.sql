@@ -67,8 +67,8 @@ RETURN
       JOIN auth.permission     AS pm ON pm.permissionId = rp.permissionId AND pm.isDeleted = 0
      WHERE ua.appUserId = @appUserId
        AND ua.isDeleted = 0
-       AND ua.startDate <= CAST (SYSUTCDATETIME () AS DATE)
-       AND (ua.endDate IS NULL OR ua.endDate >= CAST (SYSUTCDATETIME () AS DATE))
+       AND ua.startDate <= auth.udfSessionToday ()
+       AND (ua.endDate IS NULL OR ua.endDate >= auth.udfSessionToday ())
        AND (ua.accessLevel <> 'read' OR pm.accessLevel = 'read')
      GROUP BY tc.descendantTenantId, pm.permissionCode, pm.accessLevel;
 GO

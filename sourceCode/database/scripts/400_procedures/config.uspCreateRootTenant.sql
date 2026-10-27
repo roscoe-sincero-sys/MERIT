@@ -55,6 +55,7 @@ CREATE OR ALTER PROCEDURE config.uspCreateRootTenant
       , @tenantType       VARCHAR (30) = 'state'
       , @parentTenantCode VARCHAR (30) = NULL
       , @countiesJson     NVARCHAR (MAX) = N'[]'
+      , @timeZone         VARCHAR (64) = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -124,6 +125,10 @@ BEGIN
         BEGIN
             ;THROW 51422, N'A state or tribe needs its two-letter postal code.', 1;
         END;
+        IF @timeZone IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sys.time_zone_info WHERE name = @timeZone)
+        BEGIN
+            ;THROW 51422, N'Choose the time zone from the list.', 1;
+        END;
 
         BEGIN TRANSACTION;
 
@@ -133,7 +138,7 @@ BEGIN
 
         EXEC config.uspInstallRootTenant @tenantCode = @tenantCode, @tenantName = @tenantName, @statePostalCode = @statePostalCode,
              @stateFips = @stateFips, @effectiveFrom = @effectiveFrom, @tenantType = @tenantType,
-             @parentTenantCode = @parentTenantCode, @countiesJson = @countiesJson;
+             @parentTenantCode = @parentTenantCode, @countiesJson = @countiesJson, @timeZone = @timeZone;
 
         SET @Comments = N'Root tenant created.';
 

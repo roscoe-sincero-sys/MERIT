@@ -77,7 +77,7 @@ BEGIN
         -- ===== The procedure's own work starts here. Everything above and below is boilerplate. ==
         -- =========================================================================================
 
-        DECLARE @d DATE = COALESCE (@asOfDate, CAST (SYSUTCDATETIME () AS DATE));
+        DECLARE @d DATE = COALESCE (@asOfDate, auth.udfSessionToday ());
 
         SELECT s.jurisdictionSettingId, s.settingKey, s.settingValue, s.effectiveFrom, s.effectiveTo, s.settingDescription,
                s.modifiedBy, s.modifiedDateUtc

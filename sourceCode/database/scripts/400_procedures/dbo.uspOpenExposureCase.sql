@@ -104,7 +104,7 @@ BEGIN
         -- =========================================================================================
 
         DECLARE @root UNIQUEIDENTIFIER = (SELECT rootTenantId FROM dbo.person WHERE personId = @personId);
-        DECLARE @today DATE = CAST (SYSUTCDATETIME () AS DATE);
+        DECLARE @today DATE = auth.udfSessionToday ();
         DECLARE @owner UNIQUEIDENTIFIER;
 
         IF EXISTS (SELECT 1 FROM dbo.exposureCase WITH (UPDLOCK, HOLDLOCK)

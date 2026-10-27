@@ -27,6 +27,11 @@ public sealed class ReferenceData
 
     public ReferenceDataSet Set { get; }
 
+    /// <summary>The words for stored codes (issue #37), built once per cached copy.</summary>
+    public DisplayNames Names => names ??= new DisplayNames(this);
+
+    private DisplayNames? names;
+
     public IEnumerable<AnalyteRow> ActiveAnalytes => Set.Analytes.Where(a => a.IsActive).OrderBy(a => a.SortOrder);
 
     public AnalyteRow? Analyte(string code) => analytesByCode.GetValueOrDefault(code);

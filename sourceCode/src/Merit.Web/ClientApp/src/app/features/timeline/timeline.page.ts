@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, Injectable, input, OnInit, output, signal } from '@angular/core';
 import { ApiClient, problemMessage } from '../../api/api-client';
 import { PersonTimelineDto, TimelineEventDto } from '../../api/contracts';
+import { Display } from '../../shared/display.service';
 
 const DAY = 86_400_000;
 const LANES: { kind: TimelineEventDto['kind']; label: string }[] = [
@@ -157,13 +158,13 @@ export class TimelineStore {
         <div class="usa-summary-box" role="status">
           <div class="usa-summary-box__body">
             <h2 class="usa-summary-box__heading">{{ s.label }}</h2>
-            <p>{{ s.date }}@if (s.endDate) { to {{ s.endDate }} } &middot; {{ s.kind }}@if (s.detail) { &middot; {{ s.detail }} }</p>
+            <p>{{ display.date(s.date) }}@if (s.endDate) { to {{ display.date(s.endDate) }} } &middot; {{ s.kind }}@if (s.detail) { &middot; {{ s.detail }} }</p>
           </div>
         </div>
       }
       <h2>All events</h2>
       <ol class="usa-list">
-        @for (e of t.events; track $index) { <li>{{ e.date }}@if (e.endDate) { &ndash; {{ e.endDate }} }: {{ e.label }}</li> }
+        @for (e of t.events; track $index) { <li>{{ display.date(e.date) }}@if (e.endDate) { &ndash; {{ display.date(e.endDate) }} }: {{ e.label }}</li> }
       </ol>
     } @else if (store.error(); as e) {
       <div class="usa-alert usa-alert--error usa-alert--slim" role="alert"><div class="usa-alert__body"><p class="usa-alert__text">{{ e }}</p></div></div>
@@ -176,6 +177,7 @@ export class TimelineStore {
 export class TimelinePage implements OnInit {
   protected readonly store = inject(TimelineStore);
   private readonly api = inject(ApiClient);
+  protected readonly display = inject(Display);
   readonly personId = input.required<string>();
   private full = { from: 0, to: 0 };
 
@@ -213,6 +215,6 @@ export class TimelinePage implements OnInit {
   }
 
   protected dateText(ms: number): string {
-    return new Date(ms).toISOString().substring(0, 10);
+    return this.display.date(new Date(ms).toISOString());
   }
 }

@@ -37,6 +37,36 @@ public sealed class HomeController(QueueService queues, ICurrentSession session)
     [AllowAnonymous]
     public IActionResult Error() => View("Error", new AlertModel("error", "Something went wrong",
         $"The request could not be completed. Reference {HttpContext.TraceIdentifier}."));
+
+    /// <summary>
+    /// The page for an error status that came back with no body, such as an address that matches no page (issue #43):
+    /// re-executed by the status-code pages middleware, so the browser never shows its own blank error page.
+    /// </summary>
+    // Re-execution keeps the failed request's method, so the page answers any of them; it changes nothing, so it needs
+    // no antiforgery token (a refused token is one of the statuses it shows).
+    [HttpGet("/home/status/{code:int}")]
+    [HttpPost("/home/status/{code:int}")]
+    [HttpPut("/home/status/{code:int}")]
+    [HttpPatch("/home/status/{code:int}")]
+    [HttpDelete("/home/status/{code:int}")]
+    [AllowAnonymous]
+    [IgnoreAntiforgeryToken]
+    public IActionResult Status(int code)
+    {
+        Response.StatusCode = code is >= 400 and <= 599 ? code : StatusCodes.Status500InternalServerError;
+        var alert = code switch
+        {
+            404 => new AlertModel("warning", "Page not found",
+                "This address is not part of MERIT, or it has moved. Check the address, or start again from Home or the search box."),
+            403 => new AlertModel("warning", "Not permitted", "Your profile does not allow this page."),
+            405 or 415 => new AlertModel("warning", "That did not work",
+                "The page cannot be used that way. Go back and try again from the screen's own buttons."),
+            >= 500 => new AlertModel("error", "Something went wrong",
+                $"The request could not be completed. Reference {HttpContext.TraceIdentifier}."),
+            _ => new AlertModel("warning", "That did not work", "The request could not be completed. Go back and try again."),
+        };
+        return View("Error", alert);
+    }
 }
 
 /// <summary>Global search by name, DOB, address, organization, accession or case number.</summary>

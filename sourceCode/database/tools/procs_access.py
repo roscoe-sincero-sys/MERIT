@@ -80,6 +80,15 @@ BEGIN
     ;THROW 51404, N'The account is not active.', 1;
 END;
 
+-- Grants are dated today in the user's jurisdiction (issue #36). A signed-in caller's connection already carries the
+-- zone; a sign-in does not yet, so it is set here from the user's data root.
+IF SESSION_CONTEXT (N'timeZone') IS NULL
+BEGIN
+    DECLARE @zone VARCHAR (64) = (SELECT r.timeZone FROM auth.appUser AS u JOIN auth.tenant AS r ON r.tenantId = u.rootTenantId
+                                   WHERE u.appUserId = @appUserId);
+    EXEC sys.sp_set_session_context @key = N'timeZone', @value = @zone;
+END;
+
 IF @userProfileId IS NOT NULL
    AND EXISTS (SELECT 1 FROM auth.userProfile WHERE userProfileId = @userProfileId AND isMaster = 1)
 BEGIN
@@ -210,6 +219,7 @@ SELECT @sessionScopeId                AS sessionScopeId
      , @acting                        AS actingTenantId
      , t.tenantName                   AS actingTenantName
      , r.statePostalCode
+     , COALESCE (r.timeZone, 'Eastern Standard Time') AS timeZone
      , u.securityStamp
      , @expiresUtc                    AS expiresUtc
      , @userProfileId                 AS userProfileId
@@ -256,14 +266,14 @@ SELECT u.appUserId, u.userName, u.displayName, u.email, u.isActive, u.mfaEnabled
           JOIN auth.role   AS r ON r.roleId = ua.roleId
           JOIN auth.tenant AS t ON t.tenantId = ua.tenantId
          WHERE ua.appUserId = u.appUserId AND ua.isDeleted = 0
-           AND (ua.endDate IS NULL OR ua.endDate >= CAST (SYSUTCDATETIME () AS DATE))) AS assignments
+           AND (ua.endDate IS NULL OR ua.endDate >= auth.udfSessionToday ())) AS assignments
   FROM auth.appUser AS u
   LEFT JOIN auth.tenant AS h ON h.tenantId = u.homeTenantId
  WHERE u.isDeleted = 0
    AND (EXISTS (SELECT 1 FROM @admin AS a WHERE a.tenantId = u.homeTenantId)
         OR EXISTS (SELECT 1 FROM auth.userAssignment AS ua JOIN @admin AS a ON a.tenantId = ua.tenantId
                     WHERE ua.appUserId = u.appUserId AND ua.isDeleted = 0
-                      AND (ua.endDate IS NULL OR ua.endDate >= CAST (SYSUTCDATETIME () AS DATE))))
+                      AND (ua.endDate IS NULL OR ua.endDate >= auth.udfSessionToday ())))
  ORDER BY u.displayName;
 """,
     },
@@ -601,8 +611,8 @@ SELECT p.userProfileId, p.profileName, p.profileDescription, p.isMaster, p.isAct
 SELECT p.userProfileId, ua.roleId, r.roleName, ua.tenantId, t.tenantName, ua.includeDescendants, ua.accessLevel
   FROM auth.userProfile    AS p
   JOIN auth.userAssignment AS ua ON ua.appUserId = p.appUserId AND ua.isDeleted = 0
-                                AND ua.startDate <= CAST (SYSUTCDATETIME () AS DATE)
-                                AND (ua.endDate IS NULL OR ua.endDate >= CAST (SYSUTCDATETIME () AS DATE))
+                                AND ua.startDate <= auth.udfSessionToday ()
+                                AND (ua.endDate IS NULL OR ua.endDate >= auth.udfSessionToday ())
   JOIN auth.role   AS r ON r.roleId = ua.roleId
   JOIN auth.tenant AS t ON t.tenantId = ua.tenantId
  WHERE p.appUserId = @me AND p.isMaster = 1 AND p.isDeleted = 0

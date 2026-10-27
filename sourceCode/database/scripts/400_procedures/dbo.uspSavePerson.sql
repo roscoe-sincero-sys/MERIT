@@ -113,7 +113,7 @@ BEGIN
         DECLARE @acting UNIQUEIDENTIFIER = auth.udfSessionActingTenantId ();
         DECLARE @isNew BIT = 0, @dobChanged BIT = 0, @deceasedChanged BIT = 0;
 
-        IF @dob IS NOT NULL AND @dob > CAST (SYSUTCDATETIME () AS DATE)
+        IF @dob IS NOT NULL AND @dob > auth.udfSessionToday ()
         BEGIN
             ;THROW 51422, N'Date of birth cannot be in the future.', 1;
         END;

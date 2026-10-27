@@ -47,6 +47,9 @@ public sealed class SessionScopeSummaryRow
 
     public string StatePostalCode { get; init; } = string.Empty;
 
+    /// <summary>The data root's time zone (Windows name); dates such as today follow it.</summary>
+    public string TimeZone { get; init; } = Security.JurisdictionTimeZones.Default;
+
     public Guid SecurityStamp { get; init; }
 
     public DateTime ExpiresUtc { get; init; }
@@ -273,4 +276,5 @@ public sealed record NewCounty(string Fips, string Name, string Type = "county")
 
 /// <summary>What the database needs to create a tenant. A data root also gets its roles, settings and counties.</summary>
 public sealed record TenantCreate(string TenantCode, string TenantName, string TenantType, string ParentTenantCode, string? StatePostalCode,
-                                  string? StateFips, IReadOnlyList<string> CountyFips, IReadOnlyList<NewCounty> NewCounties);
+                                  string? StateFips, IReadOnlyList<string> CountyFips, IReadOnlyList<NewCounty> NewCounties,
+                                  string? TimeZone = null);

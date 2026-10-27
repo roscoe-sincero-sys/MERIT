@@ -3,6 +3,7 @@ import { ApiClient, problemMessage } from '../../api/api-client';
 import { ClusterDto, ClusterListItemDto, ClusterStatus } from '../../api/contracts';
 import { MapPoint, PointMapComponent } from '../../shared/map/point-map.component';
 import { CLASSIFICATIONS } from '../map/case-map.page';
+import { Display } from '../../shared/display.service';
 
 const TYPE_LABELS: Record<string, string> = {
   location: 'Shared location', building: 'Shared building', childCareSite: 'Child-care site', worksite: 'Shared worksite',
@@ -33,6 +34,7 @@ export class ClustersStore {
       </select>
     </div>
     @if (store.clusters().length === 0) { <p class="merit-empty">No clusters.</p> } @else {
+      <div class="merit-table-wrap" tabindex="0" role="region" aria-label="Clusters; scroll sideways for more columns">
       <table class="usa-table usa-table--borderless">
         <caption class="usa-sr-only">Clusters</caption>
         <thead><tr><th scope="col">Cluster</th><th scope="col">Kind</th><th scope="col">Status</th><th scope="col">Cases</th><th scope="col">Window</th><th scope="col">Owner</th></tr></thead>
@@ -43,12 +45,13 @@ export class ClustersStore {
               <td>{{ typeLabel(c.clusterType) }}</td>
               <td>{{ statusLabel(c.status) }}</td>
               <td>{{ c.memberCount }}</td>
-              <td>{{ c.windowStart }} to {{ c.windowEnd }}</td>
+              <td><span class="merit-nowrap">{{ display.date(c.windowStart) }}</span> to <span class="merit-nowrap">{{ display.date(c.windowEnd) }}</span></td>
               <td>{{ c.owningTenantName }}</td>
             </tr>
           }
         </tbody>
       </table>
+      </div>
     }
   `,
   styles: `.filters { display: flex; gap: 1rem; align-items: end; margin-bottom: 1rem; } .filters .usa-select { max-width: 12rem; margin-top: 0; }`,
@@ -56,6 +59,7 @@ export class ClustersStore {
 export class ClustersPage implements OnInit {
   protected readonly store = inject(ClustersStore);
   private readonly api = inject(ApiClient);
+  protected readonly display = inject(Display);
 
   ngOnInit(): void {
     this.load();
@@ -118,6 +122,7 @@ export class ClusterStore {
       @if (points().length > 0) {
         <merit-point-map [points]="points()" [categories]="classifications" ringLabel="Left the cluster" />
       }
+      <div class="merit-table-wrap" tabindex="0" role="region" aria-label="Cases in the cluster; scroll sideways for more columns">
       <table class="usa-table usa-table--borderless">
         <caption class="usa-sr-only">Cases in the cluster</caption>
         <thead><tr><th scope="col">Case</th><th scope="col">Person</th><th scope="col">Classification</th><th scope="col">Highest</th><th scope="col">Address</th><th scope="col">Joined</th><th scope="col"><span class="usa-sr-only">Action</span></th></tr></thead>
@@ -126,10 +131,10 @@ export class ClusterStore {
             <tr [class.left]="m.leftDate">
               <th scope="row"><a class="usa-link" [href]="'/cases/' + m.exposureCaseId">{{ m.caseNumber }}</a></th>
               <td><a class="usa-link" [href]="'/people/' + m.personId">{{ m.personName }}</a></td>
-              <td>{{ m.analyteCode }} {{ m.classification }} ({{ m.population }})</td>
+              <td>{{ display.of(m.analyteCode) }} &middot; {{ display.of(m.classification) }} ({{ display.of(m.population).toLowerCase() }})</td>
               <td>{{ m.highestValue ?? '—' }} {{ m.highestUnit }}</td>
               <td>{{ m.addressLabel ?? '—' }}</td>
-              <td>{{ m.joinedDate }}@if (m.leftDate) { (left {{ m.leftDate }})}</td>
+              <td class="nowrap">{{ display.date(m.joinedDate) }}@if (m.leftDate) { (left {{ display.date(m.leftDate) }})}</td>
               <td>
                 @if (c.status !== 'closed') {
                   <button class="usa-button usa-button--unstyled" type="button" [disabled]="store.busy()" (click)="member(m.caseNumber, !!m.leftDate)">
@@ -140,6 +145,7 @@ export class ClusterStore {
           }
         </tbody>
       </table>
+      </div>
       @if (c.status !== 'closed') {
         <form class="add" (submit)="add($event)">
           <label class="usa-label" for="cl-case">Add a case by number</label>
@@ -168,6 +174,7 @@ export class ClusterStore {
 export class ClusterPage implements OnInit {
   protected readonly store = inject(ClusterStore);
   private readonly api = inject(ApiClient);
+  protected readonly display = inject(Display);
   readonly clusterId = input.required<string>();
   protected readonly statuses: ClusterStatus[] = ['open', 'underReview', 'closed'];
   protected readonly classifications = CLASSIFICATIONS;
@@ -175,7 +182,7 @@ export class ClusterPage implements OnInit {
   protected readonly points = computed<MapPoint[]>(() => (this.store.cluster()?.members ?? [])
     .filter(m => m.latitude !== null && m.longitude !== null)
     .map(m => ({ id: m.exposureCaseId, latitude: m.latitude!, longitude: m.longitude!, category: m.classification, ringed: !!m.leftDate,
-      label: `${m.caseNumber}: ${m.personName}`, detail: `${m.classification}, opened ${m.openedDate}. ${m.addressLabel ?? ''}` })));
+      label: `${m.caseNumber}: ${m.personName}`, detail: `${this.display.of(m.classification)}, opened ${this.display.date(m.openedDate)}. ${m.addressLabel ?? ''}` })));
 
   ngOnInit(): void {
     this.api.cluster(this.clusterId()).subscribe({ next: c => this.store.cluster.set(c), error: e => this.store.error.set(problemMessage(e)) });

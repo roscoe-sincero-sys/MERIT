@@ -1,6 +1,6 @@
 @model PlacesModel
 @{
-    var today = DateOnly.FromDateTime(DateTime.UtcNow);
+    var today = Clock.Today;
     var current = Model.Rows.Where(r => r.EndDate is null || r.EndDate >= today).ToList();
     var past = Model.Rows.Where(r => r.EndDate is not null && r.EndDate < today).ToList();
 }

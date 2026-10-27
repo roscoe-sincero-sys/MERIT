@@ -59,7 +59,7 @@ public static class PrimaryResidencePlanner
 {
     /// <summary>Plans "Set as primary" for an existing residence row from <paramref name="startDate"/>.</summary>
     public static PlacePlan PlanSetPrimary(IReadOnlyList<PlaceRow> rows, Guid targetRowId, DateOnly startDate,
-                                           string? reason, Func<Guid> newId, bool isAdult = false)
+                                           string? reason, Func<Guid> newId, bool isAdult = false, DateOnly? today = null)
     {
         var errors = new List<string>();
         var warnings = new List<string>();
@@ -138,7 +138,7 @@ public static class PrimaryResidencePlanner
         }
 
         var after = working.Values.ToList();
-        Validate(after, errors, warnings, isAdult);
+        Validate(after, errors, warnings, isAdult, today);
         return new PlacePlan(changes, errors, warnings, CountyOn(rows, startDate), CountyOn(after, startDate));
     }
 
@@ -149,7 +149,7 @@ public static class PrimaryResidencePlanner
     /// with nothing to overlap becomes primary by itself.
     /// </summary>
     public static PlacePlan PlanAddPlace(IReadOnlyList<PlaceRow> rows, PlaceRow newRow, bool? newIsPrimary, string? reason,
-                                         Func<Guid> newId, bool isAdult = false)
+                                         Func<Guid> newId, bool isAdult = false, DateOnly? today = null)
     {
         var errors = new List<string>();
         var warnings = new List<string>();
@@ -172,7 +172,7 @@ public static class PrimaryResidencePlanner
             var only = newRow with { IsPrimary = true, PrimaryReason = reason ?? newRow.PrimaryReason };
             var plan = new List<PlaceChange> { new(ChangeKind.Insert, only, $"{Label(newRow)} added as the primary residence.") };
             var after0 = rows.Append(only).ToList();
-            Validate(after0, errors, warnings, isAdult);
+            Validate(after0, errors, warnings, isAdult, today);
             return new PlacePlan(plan, errors, warnings, CountyOn(rows, newRow.StartDate), CountyOn(after0, newRow.StartDate));
         }
 
@@ -187,7 +187,7 @@ public static class PrimaryResidencePlanner
         {
             var inserted = newRow with { IsPrimary = false, PrimaryReason = null };
             var withNew = rows.Append(inserted).ToList();
-            var sp = PlanSetPrimary(withNew, inserted.PersonLocationId, newRow.StartDate, reason, newId, isAdult);
+            var sp = PlanSetPrimary(withNew, inserted.PersonLocationId, newRow.StartDate, reason, newId, isAdult, today);
             var changes = new List<PlaceChange> { new(ChangeKind.Insert, inserted, $"{Label(newRow)} added.") };
 
             // The set-primary plan updates the row just inserted; fold that update into the insert.
@@ -224,12 +224,14 @@ public static class PrimaryResidencePlanner
         }
 
         var after = working.Values.ToList();
-        Validate(after, errors, warnings, isAdult);
+        Validate(after, errors, warnings, isAdult, today);
         return new PlacePlan(result, errors, warnings, CountyOn(rows, newRow.StartDate), CountyOn(after, newRow.StartDate));
     }
 
     /// <summary>Rules 1-3 over the rows as they would stand, plus the adult two-residence warning (rule 10).</summary>
-    public static void Validate(IReadOnlyList<PlaceRow> rows, List<string> errors, List<string> warnings, bool isAdult)
+    /// <param name="today">The jurisdiction's date, for the "two current residences" warning; the UTC date when omitted.</param>
+    public static void Validate(IReadOnlyList<PlaceRow> rows, List<string> errors, List<string> warnings, bool isAdult,
+                                DateOnly? today = null)
     {
         var residences = rows.Where(r => r.IsResidence).ToList();
         var primaries = residences.Where(r => r.IsPrimary).ToList();
@@ -270,8 +272,8 @@ public static class PrimaryResidencePlanner
 
         if (isAdult)
         {
-            var today = DateOnly.FromDateTime(DateTime.UtcNow);
-            if (residences.Count(r => r.Covers(today)) > 1)
+            var now = today ?? DateOnly.FromDateTime(DateTime.UtcNow);
+            if (residences.Count(r => r.Covers(now)) > 1)
             {
                 warnings.Add("This adult has two current residences. That is allowed (seasonal homes, shelters); check it is right.");
             }

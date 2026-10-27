@@ -129,7 +129,7 @@ SET @Comments = N'Threshold saved.';
 , @includeHistory BIT = 0""",
         "key": "CONCAT (N'asOfDate=', @asOfDate, N', includeHistory=', @includeHistory)",
         "body": """
-DECLARE @d DATE = COALESCE (@asOfDate, CAST (SYSUTCDATETIME () AS DATE));
+DECLARE @d DATE = COALESCE (@asOfDate, auth.udfSessionToday ());
 
 SELECT s.jurisdictionSettingId, s.settingKey, s.settingValue, s.effectiveFrom, s.effectiveTo, s.settingDescription,
        s.modifiedBy, s.modifiedDateUtc

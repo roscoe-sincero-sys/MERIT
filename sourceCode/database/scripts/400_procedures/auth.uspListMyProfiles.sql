@@ -86,8 +86,8 @@ BEGIN
         SELECT p.userProfileId, ua.roleId, r.roleName, ua.tenantId, t.tenantName, ua.includeDescendants, ua.accessLevel
           FROM auth.userProfile    AS p
           JOIN auth.userAssignment AS ua ON ua.appUserId = p.appUserId AND ua.isDeleted = 0
-                                        AND ua.startDate <= CAST (SYSUTCDATETIME () AS DATE)
-                                        AND (ua.endDate IS NULL OR ua.endDate >= CAST (SYSUTCDATETIME () AS DATE))
+                                        AND ua.startDate <= auth.udfSessionToday ()
+                                        AND (ua.endDate IS NULL OR ua.endDate >= auth.udfSessionToday ())
           JOIN auth.role   AS r ON r.roleId = ua.roleId
           JOIN auth.tenant AS t ON t.tenantId = ua.tenantId
          WHERE p.appUserId = @me AND p.isMaster = 1 AND p.isDeleted = 0

@@ -1,6 +1,6 @@
-import { expect, test } from './helpers';
+import { angularReady, expect, test } from './helpers';
 
-// Layout checks at the narrow desktop width the user guides are captured at.
+// Layout checks at the narrow desktop width the user guides are captured at, and at phone width (390 px).
 
 test('intake: a long file name wraps inside its batch card', async ({ asUser }) => {
   const page = await asUser('supervisor');
@@ -56,4 +56,68 @@ test('extracts: a Download button keeps its padding and fits its label', async (
     expect(b.padding).toBeGreaterThan(0);
     expect(b.overflows).toBe(false);
   }
+});
+
+test('case numbers and dates stay on one line in lists', async ({ asUser }) => {
+  const page = await asUser('supervisor');
+  await page.setViewportSize({ width: 1040, height: 900 });
+  // Issue #39: "PB-2026- / 000004" and "2026-11- / 01" broke across lines while text columns had room.
+  for (const [url, selector] of [['/cases', 'main table a[href^="/cases/"]'], ['/app/queues', 'td.nowrap']] as const) {
+    await page.goto(url);
+    await page.locator(selector).first().waitFor();
+    // The text's own lines: distinct line tops of the rectangles its characters occupy.
+    const broken = await page.locator(selector).evaluateAll(els => els.filter(e => {
+      const range = document.createRange();
+      range.selectNodeContents(e);
+      return new Set([...range.getClientRects()].map(r => Math.round(r.top))).size > 1;
+    }).map(e => e.textContent!.trim()));
+    expect(broken, url).toEqual([]);
+  }
+  // One date format: "Oct 27, 2026", not 2026-10-27.
+  await page.goto('/app/queues');
+  await page.locator('td.nowrap').first().waitFor();
+  expect(await page.locator('main table').innerText()).not.toMatch(/\b20\d\d-\d\d-\d\d\b/);
+});
+
+test('phone: the menu folds behind a button and search has its own row', async ({ asUser }) => {
+  const page = await asUser('supervisor');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/');
+  // Issue #47: the box was about 20 px wide beside its button, and the menu wrapped over four lines above the page.
+  const menu = page.getByRole('button', { name: 'Menu' });
+  const nav = page.getByRole('navigation', { name: 'Primary' });
+  await expect(menu).toHaveAttribute('aria-expanded', 'false');
+  await expect(nav).toBeHidden();
+  expect((await page.locator('#header-search').boundingBox())!.width).toBeGreaterThan(200);
+  expect((await page.locator('header.merit-header').boundingBox())!.height).toBeLessThan(160);
+  await menu.click();
+  await expect(menu).toHaveAttribute('aria-expanded', 'true');
+  await expect(nav.getByRole('link', { name: 'Work queues' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(nav).toBeHidden();
+  await expect(menu).toBeFocused();
+});
+
+test('phone: no page scrolls sideways', async ({ asUser }) => {
+  test.setTimeout(120000);
+  const page = await asUser('supervisor');
+  await page.setViewportSize({ width: 390, height: 844 });
+  // Issue #47: Work queues, Clusters, a cluster and Reports were wider than the screen; tables scroll in their own regions.
+  await page.goto('/app/clusters');
+  await angularReady(page);
+  const cluster = await page.locator('main a[href^="/app/clusters/"]').first().getAttribute('href');
+  const pages = ['/', '/app/queues', '/app/held', '/app/match-review', '/app/results', '/cases', '/app/clusters', '/app/map',
+    '/app/reports', '/investigations', '/intake', '/extracts', '/reporters', '/search?q=Rivera', ...(cluster ? [cluster] : [])];
+  const wide: string[] = [];
+  for (const url of pages) {
+    await page.goto(url);
+    if (url.startsWith('/app')) {
+      await angularReady(page);
+      await page.locator('main h1').first().waitFor();
+    }
+    const [scroll, client] = await page.evaluate(() => [document.documentElement.scrollWidth, document.documentElement.clientWidth]);
+    if (scroll > client) wide.push(`${url} is ${scroll} px`);
+  }
+  expect(wide).toEqual([]);
 });

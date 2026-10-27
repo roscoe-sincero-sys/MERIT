@@ -93,7 +93,8 @@ public sealed class HeldRecordsTests(MeritFixture fixture)
                 return row.GetProperty("corrected").Deserialize<Dictionary<string, string?>>()!;
             }
 
-            Assert.Empty(await CorrectedAsync());               // as the page does: a read first, which also sets the XSRF cookie
+            await supervisor.Http.GetStringAsync("/");          // a page sets the XSRF cookie the API's writes need
+            Assert.Empty(await CorrectedAsync());
             await CorrectAsync(new { loinc = "5671-3" });
             await CorrectAsync(new { unit = "ug/dL" });
             Assert.Equal(new Dictionary<string, string?> { ["loinc"] = "5671-3", ["unit"] = "ug/dL" }, await CorrectedAsync());
@@ -101,6 +102,42 @@ public sealed class HeldRecordsTests(MeritFixture fixture)
             // Clearing a box removes that correction only; the reported value applies again.
             await CorrectAsync(new Dictionary<string, string?> { ["loinc"] = null });
             Assert.Equal(new Dictionary<string, string?> { ["unit"] = "ug/dL" }, await CorrectedAsync());
+        }
+        finally
+        {
+            await RemoveAsync(lab);
+        }
+    }
+
+    [SqlFact]
+    public async Task HomeNamesEachUrgentHeldRecord()
+    {
+        // Issue #40: every urgent held row on Home read "Elevated result held at intake", with nothing saying which it was.
+        string tag = Guid.NewGuid().ToString("N")[..6].ToUpperInvariant();
+        var lab = Guid.NewGuid();
+        var rows = new List<Guid>();
+        try
+        {
+            await using (var c = new SqlConnection(TestEnvironment.AdminConnectionString()))
+            {
+                await c.OpenAsync();
+                await HoldAsync(c, lab, "Lab " + tag, [("missingDob", null)], rows);
+                await using var cmd = new SqlCommand("""
+                    UPDATE dbo.stagingRow
+                       SET isUrgent = 1,
+                           parsedJson = CONCAT (N'{"lastName":"Held', @tag, N'","firstName":"Hannah","loinc":"77307-7","value":"48.0","unit":"ug/dL"}')
+                     WHERE stagingRowId = @row;
+                    """, c);
+                cmd.Parameters.AddWithValue("@tag", tag);
+                cmd.Parameters.AddWithValue("@row", rows[0]);
+                await cmd.ExecuteNonQueryAsync();
+            }
+
+            var supervisor = await fixture.SignedInAsync("supervisor");
+            string home = WebUtility.HtmlDecode(await supervisor.Http.GetStringAsync("/"));
+            Assert.Contains($"Held{tag}, Hannah: Lead 48.0 ug/dL", home, StringComparison.Ordinal);
+            Assert.Contains($"Held at intake from Lab {tag}", home, StringComparison.Ordinal);
+            Assert.Matches(@"href=""/app/held\?batch=[0-9a-f-]{36}""", home);
         }
         finally
         {

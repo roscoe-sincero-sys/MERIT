@@ -112,7 +112,7 @@
                 <div class="merit-form-row">
                     <div class="usa-form-group"><label class="usa-label" for="activityType">Activity</label>
                         <select class="usa-select" id="activityType" name="activityType">@foreach (var o in Model.ActivityTypes) { <option value="@o.Value" selected="@o.Selected">@o.Label</option> }</select></div>
-                    <div class="usa-form-group"><label class="usa-label" for="activityDate">Date</label><input class="usa-input" id="activityDate" name="activityDate" type="date" value="@Options.Iso(DateOnly.FromDateTime(DateTime.UtcNow))" /></div>
+                    <div class="usa-form-group"><label class="usa-label" for="activityDate">Date</label><input class="usa-input" id="activityDate" name="activityDate" type="date" value="@Options.Iso(Clock.Today)" /></div>
                     <div class="usa-form-group"><label class="usa-label" for="outcome">Outcome</label>
                         <select class="usa-select" id="outcome" name="outcome">@foreach (var o in Model.Outcomes) { <option value="@o.Value" selected="@o.Selected">@o.Label</option> }</select></div>
                 </div>
@@ -159,7 +159,7 @@
                     <div class="merit-form-row">
                         <div class="usa-form-group"><label class="usa-label" for="closureReason">Reason</label>
                             <select class="usa-select" id="closureReason" name="closureReason" required>@foreach (var o in Model.ClosureReasons) { <option value="@o.Value">@o.Label</option> }</select></div>
-                        <div class="usa-form-group"><label class="usa-label" for="closedDate">Closed date</label><input class="usa-input" id="closedDate" name="closedDate" type="date" value="@Options.Iso(DateOnly.FromDateTime(DateTime.UtcNow))" /></div>
+                        <div class="usa-form-group"><label class="usa-label" for="closedDate">Closed date</label><input class="usa-input" id="closedDate" name="closedDate" type="date" value="@Options.Iso(Clock.Today)" /></div>
                     </div>
                     <div class="usa-form-group"><label class="usa-label" for="closeNote">Note</label><input class="usa-input" id="closeNote" name="note" /></div>
                     <button class="usa-button usa-button--secondary" type="submit">Close case</button>

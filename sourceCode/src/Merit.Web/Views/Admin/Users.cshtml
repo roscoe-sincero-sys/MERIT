@@ -25,7 +25,7 @@
                     <td>@u.HomeTenantName@(u.CanManageAccount ? "" : " (another administrator)")</td>
                     <td>@u.Assignments</td>
                     <td>@(u.MfaEnabled ? "Enrolled" : "Not yet enrolled")</td>
-                    <td>@Options.Date(u.LastSignInUtc)</td>
+                    <td>@(u.LastSignInUtc is null ? "Never" : Options.Date(u.LastSignInUtc))</td>
                     <td>@(u.IsActive ? "Active" : "Disabled")@(u.LockoutEndUtc > DateTime.UtcNow ? " · locked" : "")</td>
                 </tr>
             }

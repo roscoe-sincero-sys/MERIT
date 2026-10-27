@@ -164,8 +164,8 @@ BEGIN
                          JOIN dbo.location AS l ON l.locationId = pl.locationId
                          LEFT JOIN config.subJurisdiction AS sj ON sj.countyFips = l.countyFips AND sj.rootTenantId = p.rootTenantId
                         WHERE pl.personId = p.personId AND pl.isDeleted = 0 AND pl.role = 'residence' AND pl.isPrimary = 1
-                          AND pl.startDate <= CAST (SYSUTCDATETIME () AS DATE)
-                          AND (pl.endDate IS NULL OR pl.endDate >= CAST (SYSUTCDATETIME () AS DATE))) AS cur
+                          AND pl.startDate <= auth.udfSessionToday ()
+                          AND (pl.endDate IS NULL OR pl.endDate >= auth.udfSessionToday ())) AS cur
          ORDER BY p.lastName, p.firstName, p.dob;
 
         SET @found = @@ROWCOUNT;

@@ -25,7 +25,9 @@ public static class Options
 
     public static string Date(DateOnly? d) => d?.ToString("MMM d, yyyy", CultureInfo.InvariantCulture) ?? string.Empty;
 
-    public static string Date(DateTime? d) => d?.ToLocalTime().ToString("MMM d, yyyy h:mm tt", CultureInfo.InvariantCulture) ?? string.Empty;
+    /// <summary>A stored UTC instant as the jurisdiction's date and time (see <see cref="DisplayTime"/>).</summary>
+    public static string Date(DateTime? d) => d is null ? string.Empty
+        : DisplayTime.ToLocal(d.Value).ToString("MMM d, yyyy h:mm tt", CultureInfo.InvariantCulture);
 
     public static string Iso(DateOnly? d) => d?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? string.Empty;
 
@@ -54,33 +56,12 @@ public static class Options
         _ => "Population unknown",
     };
 
+    /// <summary>
+    /// The name of a stored code: its lookup's display name ("icpMs" is "ICP-MS"), a system code's name, or the code split
+    /// from camel case (issue #37). The names come from <see cref="DisplayTime"/>'s per-request reference data.
+    /// </summary>
     public static string Humanize(string? code)
-    {
-        if (string.IsNullOrEmpty(code))
-        {
-            return string.Empty;
-        }
-
-        var sb = new System.Text.StringBuilder();
-        for (int i = 0; i < code.Length; i++)
-        {
-            char c = code[i];
-            if (i == 0)
-            {
-                sb.Append(char.ToUpperInvariant(c));
-            }
-            else if (char.IsUpper(c))
-            {
-                sb.Append(' ').Append(char.ToLowerInvariant(c));
-            }
-            else
-            {
-                sb.Append(c);
-            }
-        }
-
-        return sb.ToString();
-    }
+        => string.IsNullOrEmpty(code) ? string.Empty : DisplayTime.Names?.Of(code) ?? Merit.Application.Reference.DisplayNames.Split(code);
 
     public static readonly (string, string)[] Sexes = [("female", "Female"), ("male", "Male"), ("other", "Other"), ("unknown", "Unknown")];
 
