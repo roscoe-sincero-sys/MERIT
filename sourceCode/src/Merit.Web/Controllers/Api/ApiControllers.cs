@@ -98,7 +98,7 @@ public sealed class HeldRecordsController(IntakeService intake, IReferenceDataPr
         var rows = await intake.HeldRowsAsync(reason, value, sender, exact, batch, page, pageSize, ct);
         var names = (await reference.GetAsync(ct)).Names;
         return new PagedResult<HeldRowDto>(rows.Select(r => new HeldRowDto(r.StagingRowId, r.IntakeBatchId, r.FileName, r.SenderName,
-                r.RowNumber, Parse(r.ParsedJson), Parse(r.CorrectedJson), r.IsUrgent, r.HeldSinceUtc, r.AssignedToName, ReasonText(r.Reasons, names))).ToList(),
+                r.RowNumber, Parse(r.ParsedJson), Parse(r.CorrectedJson), r.IsUrgent, r.HeldSinceUtc, r.AssignedToName, ReasonText(r.Reasons, names), ReasonCodes(r.Reasons))).ToList(),
             rows.FirstOrDefault()?.TotalCount ?? 0, page, pageSize);
     }
 
@@ -124,6 +124,14 @@ public sealed class HeldRecordsController(IntakeService intake, IReferenceDataPr
         => string.IsNullOrWhiteSpace(json)
             ? new Dictionary<string, string?>()
             : JsonSerializer.Deserialize<Dictionary<string, string?>>(json) ?? [];
+
+    /// <summary>The codes alone ("uncertainMatch"), so the client can offer the step that clears each one (issue #42).</summary>
+    private static IReadOnlyList<string> ReasonCodes(string? reasons)
+        => reasons is null ? [] : reasons.Split(" | ").Select(part =>
+        {
+            int colon = part.IndexOf(": ", StringComparison.Ordinal);
+            return colon > 0 ? part[..colon] : part;
+        }).Distinct(StringComparer.Ordinal).ToList();
 
     /// <summary>"uncertainMatch: …" as "Uncertain person match: …" (issue #37); the procedure joins a row's reasons with " | ".</summary>
     private static string? ReasonText(string? reasons, DisplayNames names)

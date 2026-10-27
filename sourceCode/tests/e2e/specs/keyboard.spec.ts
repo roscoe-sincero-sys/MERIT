@@ -57,6 +57,32 @@ test('a heading focused by script shows the ring for keyboard users only', async
   expect(await outline()).not.toBe('none');
 });
 
+test('held records: a row held for an uncertain match leads to Match review, not Release', async ({ asUser }) => {
+  const page = await asUser('supervisor');
+  await page.goto('/app/held');
+  await angularReady(page);
+  // Issue #42: releasing reruns matching, which holds the row again; the decision is made on Match review.
+  const group = page.locator('.groups button', { hasText: /^\s*Uncertain person match/ }).first();
+  test.skip(await group.count() === 0, 'Needs a row held for an uncertain match (the demo data has some).');
+  await group.click();
+  await page.locator('table tbody input[type=checkbox]').first().waitFor();
+  await page.locator('table tbody input[type=checkbox]').first().focus();
+  await page.keyboard.press('Space');
+  await expect(page.getByRole('button', { name: 'Release selected' })).toBeDisabled();
+  await expect(page.locator('#release-match-note')).toContainText('Decide the match first');
+  const review = page.getByRole('link', { name: 'Review the match' }).first();
+  const row = new URL(await review.getAttribute('href') ?? '', 'https://x').searchParams.get('row');
+  // The record it was sent to is the one Match review opens.
+  const opened = page.waitForRequest(r => r.url().endsWith(`/api/v1/match-review/${row}`));
+  await review.focus();
+  await page.keyboard.press('Enter');
+  await opened;
+  expect(new URL(page.url()).pathname).toBe('/app/match-review');
+  expect(new URL(page.url()).searchParams.get('row')).toBe(row);
+  await angularReady(page);
+  await expect(page.locator('nav ol li [aria-current="true"]')).toHaveCount(1);
+});
+
 test('match review moves through the queue with J and K', async ({ asUser }) => {
   const page = await asUser('supervisor');
   await page.goto('/app/match-review');

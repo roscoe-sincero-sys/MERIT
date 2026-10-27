@@ -1,0 +1,7 @@
+@model (Guid Id, string What)
+@inject ICurrentSession CurrentSession
+@* Who viewed or changed this record: the audit log filtered to it (issue #45), for those who may read the log. *@
+@if (CurrentSession.Has(Permissions.AuditView))
+{
+    <p class="merit-meta"><a class="usa-link" href="/admin/audit?entityId=@Model.Id">Audit log for this @Model.What</a></p>
+}

@@ -232,7 +232,9 @@ public interface IWorkData
 
     Task RecordAuditAsync(string eventAction, string entityType, Guid? entityId, int? recordCount, string? clientAddress, CancellationToken ct = default);
 
-    Task<IReadOnlyList<AuditEventRow>> SearchAuditAsync(Guid? appUserId, Guid? entityId, DateTime? fromUtc, int maxRows, CancellationToken ct = default);
+    Task<IReadOnlyList<AuditEventRow>> SearchAuditAsync(AuditQuery query, CancellationToken ct = default);
+
+    Task<IReadOnlyList<AuditUserRow>> ListAuditUsersAsync(CancellationToken ct = default);
 }
 
 public interface IIntakeData

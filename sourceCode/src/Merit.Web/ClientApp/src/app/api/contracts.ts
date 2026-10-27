@@ -89,6 +89,8 @@ export interface HeldRowDto {
   heldSinceUtc: string | null;
   assignedToName: string | null;
   reasons: string | null;
+  /** The hold reasons as codes ("uncertainMatch"). */
+  reasonCodes: string[];
 }
 
 export interface HeldActionRequest {

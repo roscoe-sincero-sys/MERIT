@@ -61,9 +61,21 @@ public sealed class WorkData(Db db) : IWorkData
                                  CancellationToken ct = default)
         => db.ExecuteAsync("logs.uspRecordAuditEvent", new { eventAction, entityType, entityId, recordCount, clientAddress }, ct);
 
-    public Task<IReadOnlyList<AuditEventRow>> SearchAuditAsync(Guid? appUserId, Guid? entityId, DateTime? fromUtc, int maxRows,
-                                                              CancellationToken ct = default)
-        => db.QueryAsync<AuditEventRow>("logs.uspSearchAuditEvents", new { appUserId, entityId, fromUtc, maxRows }, ct);
+    public Task<IReadOnlyList<AuditEventRow>> SearchAuditAsync(AuditQuery query, CancellationToken ct = default)
+        => db.QueryAsync<AuditEventRow>("logs.uspSearchAuditEvents", new
+        {
+            appUserId = query.AppUserId,
+            entityId = query.EntityId,
+            eventAction = query.EventAction,
+            entityType = query.EntityType,
+            fromUtc = query.FromUtc,
+            toUtc = query.ToUtc,
+            pageNumber = query.PageNumber,
+            pageSize = query.PageSize,
+        }, ct);
+
+    public Task<IReadOnlyList<AuditUserRow>> ListAuditUsersAsync(CancellationToken ct = default)
+        => db.QueryAsync<AuditUserRow>("logs.uspListAuditUsers", null, ct);
 }
 
 public sealed class IntakeData(Db db) : IIntakeData

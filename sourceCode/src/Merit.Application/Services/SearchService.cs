@@ -23,10 +23,17 @@ public sealed class AuditService(IWorkData data)
     public Task ListedAsync(string entityType, int rowCount, CancellationToken ct = default)
         => data.RecordAuditAsync("view", entityType, null, rowCount, null, ct);
 
-    public Task<IReadOnlyList<AuditEventRow>> SearchAsync(ICurrentSession session, Guid? appUserId, Guid? entityId, DateTime? fromUtc, CancellationToken ct = default)
+    public Task<IReadOnlyList<AuditEventRow>> SearchAsync(ICurrentSession session, AuditQuery query, CancellationToken ct = default)
     {
         session.Require(Permissions.AuditView);
-        return data.SearchAuditAsync(appUserId, entityId, fromUtc, 200, ct);
+        return data.SearchAuditAsync(query, ct);
+    }
+
+    /// <summary>The users who appear in the ledger, for its user filter.</summary>
+    public Task<IReadOnlyList<AuditUserRow>> UsersAsync(ICurrentSession session, CancellationToken ct = default)
+    {
+        session.Require(Permissions.AuditView);
+        return data.ListAuditUsersAsync(ct);
     }
 }
 

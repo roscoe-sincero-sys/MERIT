@@ -246,10 +246,12 @@ export class MatchReviewPage implements OnInit {
   private readonly api = inject(ApiClient);
   private readonly heading = viewChild<ElementRef<HTMLElement>>('heading');
   readonly escalatedParam = input<string | undefined>(undefined, { alias: 'escalated' });
+  /** A row to open first, from Held records' "Review the match" (issue #42). */
+  readonly rowParam = input<string | undefined>(undefined, { alias: 'row' });
 
   ngOnInit(): void {
     this.store.escalatedOnly.set(this.escalatedParam() === 'true');
-    this.loadQueue(true);
+    this.loadQueue(true, 0, this.rowParam());
   }
 
   protected toggleEscalated(): void {
@@ -335,11 +337,17 @@ export class MatchReviewPage implements OnInit {
     this.loadQueue(false, index);
   }
 
-  private loadQueue(openFirst: boolean, index = 0): void {
+  private loadQueue(openFirst: boolean, index = 0, rowId?: string): void {
     this.api.matchQueue({ escalated: this.store.escalatedOnly(), page: 1, pageSize: 200 }).subscribe({
       next: p => {
         this.store.queue.set(p.items);
         this.store.total.set(p.totalCount);
+        if (rowId) {
+          // The row asked for, even when it is past the first page of the queue or escalated.
+          this.open(rowId);
+          this.heading()?.nativeElement.focus();
+          return;
+        }
         const pick = p.items[Math.min(index, p.items.length - 1)];
         if (pick && (openFirst || pick.stagingRowId !== this.store.currentId() || !this.store.review())) {
           this.open(pick.stagingRowId);

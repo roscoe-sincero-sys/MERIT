@@ -3,6 +3,7 @@
     ViewData["Title"] = Model.FullName;
 }
 <partial name="_Header" model="Model" />
+<partial name="_AuditLink" model='(Model.Person.PersonId, "person")' />
 
 @* Sections in the order the person's population gives them; every section stays visible with an empty state. *@
 @foreach (var s in Model.Sections)

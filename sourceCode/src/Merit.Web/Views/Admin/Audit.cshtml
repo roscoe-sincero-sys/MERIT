@@ -1,22 +1,104 @@
 @model AuditModel
+@inject ICurrentSession CurrentSession
 @{
     ViewData["Title"] = "Audit log";
+    var f = Model.Filter;
+    int first = (f.Page - 1) * Model.PageSize + 1;
+    int last = first + Model.Events.Count - 1;
 }
-<p><a class="usa-link" href="/admin/users">Back to users</a></p>
+@if (CurrentSession.Has(Permissions.TenantAdminister)) { <p><a class="usa-link" href="/admin/users">Back to users</a></p> }
 <h1>Audit log</h1>
 <p class="merit-meta">The tamper-evident ledger of views, changes and exports. It holds IDs, actions, users and times only.</p>
-<form class="usa-form merit-form-row" method="get" action="/admin/audit">
-    <div class="usa-form-group"><label class="usa-label" for="entityId">Record id</label><input class="usa-input" id="entityId" name="entityId" value="@Model.EntityId" /></div>
-    <div class="usa-form-group"><button class="usa-button" type="submit">Search</button></div>
+
+@* Filters (issue #45): who, what, which record, when. A GET form, so a filtered view is a link. *@
+<form class="usa-form merit-form-row merit-audit-filters" method="get" action="/admin/audit">
+    <div class="usa-form-group">
+        <label class="usa-label" for="userId">User</label>
+        <select class="usa-select" id="userId" name="userId">
+            <option value="">Anyone</option>
+            @foreach (var u in Model.Users) { <option value="@u.Value" selected="@u.Selected">@u.Label</option> }
+        </select>
+    </div>
+    <div class="usa-form-group">
+        <label class="usa-label" for="action">Action</label>
+        <select class="usa-select" id="action" name="action">
+            <option value="">Any action</option>
+            @foreach (var a in AuditText.Actions) { <option value="@a.Code" selected="@(a.Code == f.Action)">@a.Label</option> }
+        </select>
+    </div>
+    <div class="usa-form-group">
+        <label class="usa-label" for="recordType">Record type</label>
+        <select class="usa-select" id="recordType" name="recordType">
+            <option value="">Any record</option>
+            @foreach (var t in AuditText.RecordTypes) { <option value="@t.Code" selected="@(t.Code == f.RecordType)">@t.Label</option> }
+        </select>
+    </div>
+    <div class="usa-form-group">
+        <label class="usa-label" for="from">From</label>
+        <input class="usa-input" id="from" name="from" type="date" value="@Options.Iso(f.From)" />
+    </div>
+    <div class="usa-form-group">
+        <label class="usa-label" for="to">To</label>
+        <input class="usa-input" id="to" name="to" type="date" value="@Options.Iso(f.To)" />
+    </div>
+    <div class="usa-form-group">
+        <label class="usa-label" for="entityId">Record id</label>
+        <input class="usa-input" id="entityId" name="entityId" value="@f.EntityId" />
+    </div>
+    <div class="usa-form-group merit-audit-filters__actions">
+        <button class="usa-button" type="submit">Search</button>
+        @if (f.IsFiltered) { <a class="usa-button usa-button--unstyled" href="/admin/audit">Clear filters</a> }
+    </div>
 </form>
-<div class="merit-table-wrap" tabindex="0" role="region" aria-label="Table; scroll sideways for more columns">
-    <table class="usa-table usa-table--borderless usa-table--compact">
-        <thead><tr><th scope="col">When</th><th scope="col">User</th><th scope="col">Action</th><th scope="col">Record</th><th scope="col">Rows</th><th scope="col">Address</th></tr></thead>
-        <tbody>
-            @foreach (var e in Model.Events)
-            {
-                <tr><td>@Options.Date(e.EventUtc)</td><td>@e.DisplayName</td><td>@e.EventAction</td><td>@e.EntityType <span class="merit-meta">@e.EntityId</span></td><td>@e.RecordCount</td><td>@e.ClientAddress</td></tr>
-            }
-        </tbody>
-    </table>
+
+<div class="merit-page-header">
+    <p id="audit-count" aria-live="polite">
+        @if (Model.TotalCount == 0) { <text>No events match.</text> }
+        else { <text>Events @first.ToString("N0")&ndash;@last.ToString("N0") of @Model.TotalCount.ToString("N0"), newest first.</text> }
+    </p>
+    @if (Model.TotalCount > 0)
+    {
+        <a class="usa-button usa-button--outline" href="/admin/audit.csv@(f.Query())">Download CSV@(Model.TotalCount > 10000 ? " (newest 10,000)" : "")</a>
+    }
 </div>
+@if (Model.Events.Count > 0)
+{
+    <div class="merit-table-wrap" tabindex="0" role="region" aria-label="Audit events; scroll sideways for more columns">
+        <table class="usa-table usa-table--borderless usa-table--compact">
+            <caption class="usa-sr-only">Audit events</caption>
+            <thead><tr><th scope="col">When</th><th scope="col">User</th><th scope="col">Action</th><th scope="col">Record</th><th scope="col">Rows</th>
+                @if (Model.ShowAddress) { <th scope="col">Address</th> }</tr></thead>
+            <tbody>
+                @foreach (var e in Model.Events)
+                {
+                    string? href = AuditText.Link(e.EntityType, e.EntityId, CurrentSession);
+                    <tr>
+                        <td class="merit-nowrap">@Options.Date(e.EventUtc)</td>
+                        <td>@(e.DisplayName ?? "Unknown user")</td>
+                        <td>@AuditText.Action(e.EventAction)</td>
+                        <td>
+                            @AuditText.RecordType(e.EntityType)
+                            @if (e.EntityId is Guid id)
+                            {
+                                <br />
+                                if (href is not null) { <a class="usa-link merit-mono merit-meta" href="@href">@id</a> }
+                                else { <span class="merit-mono merit-meta">@id</span> }
+                                <a class="usa-link merit-meta" href="/admin/audit?entityId=@id"><span class="usa-sr-only">Every event for this record</span><span aria-hidden="true">(all events)</span></a>
+                            }
+                        </td>
+                        <td>@e.RecordCount</td>
+                        @if (Model.ShowAddress) { <td>@e.ClientAddress</td> }
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+@if (Model.PageCount > 1)
+{
+    <nav aria-label="Audit log pages" class="merit-pager">
+        @if (f.Page > 1) { <a class="usa-button usa-button--outline" href="/admin/audit@(f.Query(f.Page - 1))">Newer</a> }
+        <span>Page @f.Page of @Model.PageCount</span>
+        @if (f.Page < Model.PageCount) { <a class="usa-button usa-button--outline" href="/admin/audit@(f.Query(f.Page + 1))">Older</a> }
+    </nav>
+}

@@ -4936,6 +4936,15 @@
   ]
  },
  {
+  "name": "logs.uspListAuditUsers",
+  "kind": "read",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": "audit.view",
+  "params": []
+ },
+ {
   "name": "logs.uspRecordAuditEvent",
   "kind": "write",
   "grants": [
@@ -4997,13 +5006,37 @@
     "isOutput": false
    },
    {
+    "name": "eventAction",
+    "type": "VARCHAR (20)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "entityType",
+    "type": "VARCHAR (30)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
     "name": "fromUtc",
     "type": "DATETIME2 (3)",
     "hasDefault": true,
     "isOutput": false
    },
    {
-    "name": "maxRows",
+    "name": "toUtc",
+    "type": "DATETIME2 (3)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "pageNumber",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "pageSize",
     "type": "INT",
     "hasDefault": true,
     "isOutput": false

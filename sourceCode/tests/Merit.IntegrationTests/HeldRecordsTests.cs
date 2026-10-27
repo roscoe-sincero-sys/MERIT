@@ -64,6 +64,34 @@ public sealed class HeldRecordsTests(MeritFixture fixture)
     }
 
     [SqlFact]
+    public async Task EachHeldRowSaysWhichReasonsHoldIt()
+    {
+        // Issue #42: a row held for an uncertain match is decided on Match review; the page needs the codes to say so.
+        var lab = Guid.NewGuid();
+        var rows = new List<Guid>();
+        try
+        {
+            await using (var c = new SqlConnection(TestEnvironment.AdminConnectionString()))
+            {
+                await c.OpenAsync();
+                await HoldAsync(c, lab, "Lab T42 " + lab.ToString("N")[..6], [("uncertainMatch", null), ("missingDob", null)], rows);
+            }
+
+            var supervisor = await fixture.SignedInAsync("supervisor");
+            foreach (var reason in new[] { "uncertainMatch", "missingDob" })
+            {
+                using var page = await JsonAsync(supervisor, $"/api/v1/held/rows?reason={reason}&sender={lab}&exact=true");
+                var row = Assert.Single(page.RootElement.GetProperty("items").EnumerateArray());
+                Assert.Equal([reason], row.GetProperty("reasonCodes").EnumerateArray().Select(r => r.GetString()));
+            }
+        }
+        finally
+        {
+            await RemoveAsync(lab);
+        }
+    }
+
+    [SqlFact]
     public async Task ASecondCorrectionKeepsTheFirst()
     {
         // Issue #10: each save replaced the row's corrections, so correcting the unit erased the corrected test code.
