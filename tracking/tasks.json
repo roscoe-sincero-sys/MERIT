@@ -1165,6 +1165,39 @@
       "started": "2026-10-26",
       "finished": "2026-10-26",
       "notes": "e2e layout.spec.ts"
+    },
+    {
+      "id": "T183",
+      "phase": "12 Quality",
+      "task": "Issue #20: intake refuses a file already received for the same profile (contentSha256 on intakeBatch, uspFindIntakeBatchByContent) unless marked as a genuine re-send; 20 MB limit measured in bytes",
+      "ref": "GitHub issue #20",
+      "where": "intakeBatch, uspCreateIntakeBatch, IntakeService, Intake page",
+      "status": "Done",
+      "started": "2026-10-26",
+      "finished": "2026-10-26",
+      "notes": "IntakeUploadTests"
+    },
+    {
+      "id": "T184",
+      "phase": "12 Quality",
+      "task": "Issue #21: one SessionRenewal for sign-in, profile, view-as and tenant refresh; Session:LifetimeHours; ProfileId and ViewAsUserId on ICurrentSession",
+      "ref": "GitHub issue #21",
+      "where": "SessionRenewal.cs, Account/Profiles/Tenants controllers",
+      "status": "Done",
+      "started": "2026-10-26",
+      "finished": "2026-10-26",
+      "notes": "EndpointTests.ASessionRenewalReplacesTheScopeWithTheConfiguredLifetime"
+    },
+    {
+      "id": "T185",
+      "phase": "12 Quality",
+      "task": "Guide screenshots retaken on a fresh MERIT_GUIDES demo, guide text updated for #10-#13, #18-#20, Daily Operations and NPI/CLIA PDFs reprinted; card lists keep their width",
+      "ref": "User guides",
+      "where": "docs/guides, docs/images/guide, merit.css",
+      "status": "Done",
+      "started": "2026-10-26",
+      "finished": "2026-10-26",
+      "notes": "Capture recipe in docs/guides/README.md"
     }
   ]
 }
