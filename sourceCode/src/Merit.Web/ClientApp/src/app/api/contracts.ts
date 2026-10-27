@@ -69,6 +69,12 @@ export interface HeldGroupDto {
   sampleMessage: string | null;
 }
 
+export interface LabelsDto {
+  codes: Record<string, string>;
+  fields: Record<string, string>;
+  fieldOrder: string[];
+}
+
 export interface HeldRowDto {
   stagingRowId: string;
   intakeBatchId: string;

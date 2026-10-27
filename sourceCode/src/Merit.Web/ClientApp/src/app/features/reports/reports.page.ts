@@ -3,6 +3,7 @@ import { Router } from '@angular/router';
 import { ApiClient, problemMessage } from '../../api/api-client';
 import { AnalyteOptionDto, ReportCell, ReportDto, ReportSummaryDto } from '../../api/contracts';
 import { ChartSeries, SeriesChartComponent } from '../../shared/chart/series-chart.component';
+import { Display } from '../../shared/display.service';
 
 @Injectable()
 export class ReportsStore {
@@ -107,6 +108,7 @@ export class ReportsStore {
 export class ReportsPage implements OnInit {
   protected readonly store = inject(ReportsStore);
   private readonly api = inject(ApiClient);
+  private readonly display = inject(Display);
   private readonly router = inject(Router);
   readonly codeParam = input<string | undefined>(undefined, { alias: 'code' });
 
@@ -128,7 +130,7 @@ export class ReportsPage implements OnInit {
     const groups = gi < 0 ? [this.measureKey()] : [...new Set(r.rows.map(row => String(row[gi] ?? '')))].sort();
     const series = groups.map(g => ({
       key: g,
-      label: gi < 0 ? this.label(r, g) : g,
+      label: gi < 0 ? this.label(r, g) : this.display.ifCode(g),
       values: categories.map(cat => {
         const cells = r.rows.filter(row => String(row[xi] ?? '') === cat && (gi < 0 || String(row[gi] ?? '') === g))
           .map(row => row[mi]).filter((v): v is number => typeof v === 'number');
@@ -189,7 +191,8 @@ export class ReportsPage implements OnInit {
       const text = Number.isInteger(v) ? v.toLocaleString('en-US') : v.toLocaleString('en-US', { maximumFractionDigits: 1 });
       return kind === 'percent' ? text + '%' : text;
     }
-    return String(v);
+    // A stored code (a population, a classification) shows its words; any other text as it is (issue #37).
+    return kind === 'text' ? this.display.ifCode(String(v)) : String(v);
   }
 
   private run(code: string): void {

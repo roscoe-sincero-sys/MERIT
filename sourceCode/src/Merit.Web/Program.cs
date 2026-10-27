@@ -204,8 +204,14 @@ app.UseRouting();
 app.UseAuthentication();
 app.Use(async (http, next) =>
 {
-    // Times on this request's pages follow the session's jurisdiction (issue #36).
+    // Times on this request's pages follow the session's jurisdiction (issue #36), and codes show as words (issue #37).
     DisplayTime.Zone = http.RequestServices.GetRequiredService<IClock>().Zone;
+    if (http.User.Identity?.IsAuthenticated == true)
+    {
+        DisplayTime.Names = (await http.RequestServices.GetRequiredService<Merit.Application.Reference.IReferenceDataProvider>()
+            .GetAsync(http.RequestAborted)).Names;
+    }
+
     await next(http);
 });
 app.UseMiddleware<SecurityHeadersMiddleware>();

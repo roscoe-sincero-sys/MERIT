@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, Injectable, input, OnInit, signal } from '@angular/core';
 import { ApiClient, problemMessage } from '../../api/api-client';
 import { HeldGroupDto, HeldRowDto, PagedResult } from '../../api/contracts';
+import { Display } from '../../shared/display.service';
 import { DataGridComponent, GridColumn } from '../../shared/grid/data-grid.component';
 
 /** Held-records state: groups by cause, the rows of the chosen group, the selection. Signals only. */
@@ -18,13 +19,6 @@ export class HeldStore {
   readonly focusRow = signal<HeldRowDto | null>(null);
   readonly totalHeld = computed(() => this.groups().reduce((n, g) => n + g.rowCount, 0));
 }
-
-const REASON_LABELS: Record<string, string> = {
-  unknownSender: 'Unknown sender', unknownTestCode: 'Unknown test code', unknownUnit: 'Unknown unit',
-  inactiveAnalyte: 'Inactive analyte', missingResultValue: 'Missing result value', missingDob: 'Missing date of birth',
-  unusableAddress: 'Unusable address', possibleDuplicate: 'Possible duplicate', uncertainMatch: 'Uncertain person match',
-  outOfJurisdiction: 'Out of jurisdiction', impossibleDates: 'Impossible dates',
-};
 
 /**
  * Held records, built around fixing causes rather than rows: groups by reason, reported value and sender (urgent first),
@@ -82,8 +76,8 @@ const REASON_LABELS: Record<string, string> = {
           <thead><tr><th scope="col">Field</th><th scope="col">As reported</th><th scope="col">Correction</th></tr></thead>
           <tbody>
             @for (k of fields(r); track k) {
-              <tr><th scope="row">{{ k }}</th><td>{{ r.reported[k] }}</td>
-                <td><label class="usa-sr-only" [for]="'fix-' + k">Correct {{ k }}</label><input class="usa-input" [id]="'fix-' + k" [value]="r.corrected[k] ?? ''" (change)="setFix(k, $event)" /></td></tr>
+              <tr><th scope="row">{{ display.field(k) }}</th><td>{{ r.reported[k] }}</td>
+                <td><label class="usa-sr-only" [for]="'fix-' + k">Correct {{ display.field(k) }}</label><input class="usa-input" [id]="'fix-' + k" [value]="r.corrected[k] ?? ''" (change)="setFix(k, $event)" /></td></tr>
             }
           </tbody>
         </table>
@@ -103,6 +97,7 @@ const REASON_LABELS: Record<string, string> = {
 export class HeldPage implements OnInit {
   protected readonly store = inject(HeldStore);
   private readonly api = inject(ApiClient);
+  protected readonly display = inject(Display);
   readonly batchParam = input<string | undefined>(undefined, { alias: 'batch' });
   private fixes: Record<string, string | null> = {};
 
@@ -124,7 +119,7 @@ export class HeldPage implements OnInit {
   }
 
   protected label(code: string): string {
-    return REASON_LABELS[code] ?? code;
+    return this.display.of(code);
   }
 
   /** A group is its reason, reported value and sender together, as the server groups them. */
@@ -163,7 +158,7 @@ export class HeldPage implements OnInit {
   }
 
   protected fields(r: HeldRowDto): string[] {
-    return Object.keys(r.reported);
+    return this.display.fieldOrder(Object.keys(r.reported));
   }
 
   protected setFix(key: string, event: Event): void {

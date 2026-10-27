@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, Injectable, OnIni
 import { ApiClient, problemMessage } from '../../api/api-client';
 import { AnalyteOptionDto, CaseMapPointDto } from '../../api/contracts';
 import { MapCategory, MapPoint, PointMapComponent } from '../../shared/map/point-map.component';
+import { Display } from '../../shared/display.service';
 
 export const CLASSIFICATIONS: MapCategory[] = [
   { key: 'confirmed', label: 'Confirmed' },
@@ -50,7 +51,7 @@ export class CaseMapStore {
       <div class="usa-summary-box" role="status">
         <div class="usa-summary-box__body">
           <h2 class="usa-summary-box__heading"><a class="usa-link" [href]="'/cases/' + c.exposureCaseId">{{ c.caseNumber }}</a>: {{ c.personName }}</h2>
-          <p>{{ c.analyteCode }} {{ c.population }}, {{ c.classification }}, opened {{ c.openedDate }}@if (c.highestValue !== null) {, highest {{ c.highestValue }} {{ c.highestUnit }}}.
+          <p>{{ display.of(c.analyteCode) }}, {{ display.of(c.population).toLowerCase() }}, {{ display.of(c.classification).toLowerCase() }}, opened {{ c.openedDate }}@if (c.highestValue !== null) {, highest {{ c.highestValue }} {{ c.highestUnit }}}.
             {{ c.addressLabel }}@if (c.inOpenCluster) { &middot; in an open cluster}</p>
         </div>
       </div>
@@ -65,7 +66,7 @@ export class CaseMapStore {
             <tr>
               <td><a class="usa-link" [href]="'/cases/' + c.exposureCaseId">{{ c.caseNumber }}</a></td>
               <td><a class="usa-link" [href]="'/people/' + c.personId">{{ c.personName }}</a></td>
-              <td>{{ c.classification }}@if (c.inOpenCluster) { (cluster)}</td>
+              <td>{{ display.of(c.classification) }}@if (c.inOpenCluster) { (cluster)}</td>
               <td>{{ c.openedDate }}</td>
               <td>{{ c.addressLabel ?? 'No primary residence' }}</td>
               <td>{{ c.latitude === null ? 'No coordinates' : (c.geocodeQuality ?? 'yes') }}</td>
@@ -84,6 +85,7 @@ export class CaseMapStore {
 export class CaseMapPage implements OnInit {
   protected readonly store = inject(CaseMapStore);
   private readonly api = inject(ApiClient);
+  protected readonly display = inject(Display);
   protected readonly categories = CLASSIFICATIONS;
 
   protected readonly points = computed<MapPoint[]>(() => this.store.located().map(c => ({

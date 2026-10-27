@@ -7,6 +7,14 @@ namespace Merit.Web.Infrastructure;
 public static class DisplayTime
 {
     private static readonly AsyncLocal<TimeZoneInfo?> Current = new();
+    private static readonly AsyncLocal<Merit.Application.Reference.DisplayNames?> CurrentNames = new();
+
+    /// <summary>The words for stored codes on this request's pages (issue #37); null before sign-in.</summary>
+    public static Merit.Application.Reference.DisplayNames? Names
+    {
+        get => CurrentNames.Value;
+        set => CurrentNames.Value = value;
+    }
 
     public static TimeZoneInfo Zone
     {

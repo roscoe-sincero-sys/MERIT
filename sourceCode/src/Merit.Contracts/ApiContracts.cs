@@ -6,6 +6,12 @@ namespace Merit.Contracts;
 /// <summary>One page of a server-side paged, sorted, filtered list.</summary>
 public sealed record PagedResult<T>(IReadOnlyList<T> Items, int TotalCount, int PageNumber, int PageSize);
 
+/// <param name="Codes">Stored code to the words shown for it.</param>
+/// <param name="Fields">Laboratory file field key to its label.</param>
+/// <param name="FieldOrder">The order fields are shown in.</param>
+public sealed record LabelsDto(IReadOnlyDictionary<string, string> Codes, IReadOnlyDictionary<string, string> Fields,
+                               IReadOnlyList<string> FieldOrder);
+
 /// <summary>The signed-in user, for the Angular header and permission-aware controls.</summary>
 /// <param name="TimeZone">The jurisdiction's time zone as an IANA name, for showing dates and times in the browser.</param>
 public sealed record MeDto(string UserName, string DisplayName, string? ActingTenantName, IReadOnlyList<string> Permissions,

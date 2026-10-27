@@ -26,7 +26,7 @@
                             &middot; @Options.Humanize(c.WorkflowTemplate) workflow &middot; @c.OwningTenantName
                         </p>
                         <p>Highest: @Options.Value("=", c.HighestValue, c.HighestUnit ?? "") &middot; Assigned: @(c.AssignedToName ?? "unassigned")</p>
-                        <p>@c.OpenTasks open task(s) &middot; @c.Investigations investigation(s) &middot; exposure @Options.Humanize(c.ExposureCategory)</p>
+                        <p>@c.OpenTasks open task(s) &middot; @c.Investigations investigation(s) &middot; Exposure: @Options.Humanize(c.ExposureCategory)</p>
                     </div>
                 </div>
             }

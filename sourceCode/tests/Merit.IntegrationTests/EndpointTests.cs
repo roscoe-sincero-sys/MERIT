@@ -283,6 +283,22 @@ public sealed partial class EndpointTests(MeritFixture fixture, ITestOutputHelpe
     }
 
     [SqlFact]
+    public async Task ResultPagesAndLabelsUseWordsNotCodes()
+    {
+        // Issues #37 and #38: "Icp ms" for ICP-MS, file fields shown as lastName and zip5, and "analyzed ," with no date.
+        var supervisor = await fixture.SignedInAsync("supervisor");
+        string html = System.Net.WebUtility.HtmlDecode(await supervisor.Http.GetStringAsync($"/results/{fixture.Ids.MiaLabResultId}"));
+        Assert.DoesNotContain("Icp ms", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("analyzed ,", html, StringComparison.Ordinal);
+        Assert.DoesNotContain(">lastName<", html, StringComparison.Ordinal);
+
+        using var labels = System.Text.Json.JsonDocument.Parse(await supervisor.Http.GetStringAsync("/api/v1/reference/labels"));
+        Assert.Equal("ICP-MS", labels.RootElement.GetProperty("codes").GetProperty("icpMs").GetString());
+        Assert.Equal("Uncertain person match", labels.RootElement.GetProperty("codes").GetProperty("uncertainMatch").GetString());
+        Assert.Equal("Last name", labels.RootElement.GetProperty("fields").GetProperty("lastName").GetString());
+    }
+
+    [SqlFact]
     public async Task ResponsesCarryTheContentSecurityPolicyWithANonce()
     {
         var supervisor = await fixture.SignedInAsync("supervisor");
