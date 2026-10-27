@@ -179,6 +179,10 @@ if (!app.Environment.IsDevelopment())
     app.UseHsts();
 }
 
+// An error status with no body (an address that matches no page, a refused method) shows a MERIT page instead of the
+// browser's blank one (issue #43). The API keeps its own problem responses.
+app.UseWhen(http => !http.Request.Path.StartsWithSegments("/api"), branch => branch.UseStatusCodePagesWithReExecute("/home/status/{0}"));
+
 app.UseHttpsRedirection();
 
 // The Angular build under wwwroot/app is also served straight from disk, so a client rebuild (npm run build) is picked up

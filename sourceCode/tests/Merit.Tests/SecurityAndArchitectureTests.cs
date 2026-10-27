@@ -92,7 +92,7 @@ public sealed class EndpointInventoryTests
 {
     private static readonly string[] AllowedAnonymous =
     [
-        "AccountController.SignIn", "AccountController.Denied", "HomeController.Error",
+        "AccountController.SignIn", "AccountController.Denied", "HomeController.Error", "HomeController.Status",
     ];
 
     private static IEnumerable<(Type Controller, MethodInfo Action)> Actions()

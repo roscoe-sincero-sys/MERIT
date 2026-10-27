@@ -20,6 +20,7 @@ public sealed partial class EndpointTests(MeritFixture fixture, ITestOutputHelpe
     private static readonly HashSet<string> Anonymous = new(StringComparer.Ordinal)
     {
         "GET Account.SignIn", "POST Account.SignIn", "GET Account.Denied", "GET Home.Error",
+        "GET Home.Status", "POST Home.Status", "PUT Home.Status", "PATCH Home.Status", "DELETE Home.Status",
     };
 
     private IReadOnlyList<RoutedAction> Actions()
@@ -261,6 +262,24 @@ public sealed partial class EndpointTests(MeritFixture fixture, ITestOutputHelpe
         await using var r = await cmd.ExecuteReaderAsync();
         Assert.True(await r.ReadAsync());
         return (id, r.GetDateTime(0), r.GetDateTime(1), r.IsDBNull(2) ? null : r.GetDateTime(2));
+    }
+
+    [SqlFact]
+    public async Task AnAddressThatMatchesNoPageShowsAMeritPage()
+    {
+        // Issue #43: routing's empty 404 used to reach the browser, which showed its own blank error page.
+        var supervisor = await fixture.SignedInAsync("supervisor");
+        var page = await supervisor.NoRedirect.GetAsync("/cases/list/no-such-page");
+        Assert.Equal(HttpStatusCode.NotFound, page.StatusCode);
+        string html = await page.Content.ReadAsStringAsync();
+        Assert.Contains("<html", html, StringComparison.Ordinal);
+        Assert.Contains("Page not found", html, StringComparison.Ordinal);
+        Assert.Contains("href=\"/\"", html, StringComparison.Ordinal);
+
+        // The API keeps answering without the HTML page.
+        var api = await supervisor.NoRedirect.GetAsync("/api/v1/no-such-endpoint");
+        Assert.Equal(HttpStatusCode.NotFound, api.StatusCode);
+        Assert.DoesNotContain("<html", await api.Content.ReadAsStringAsync(), StringComparison.Ordinal);
     }
 
     [SqlFact]
