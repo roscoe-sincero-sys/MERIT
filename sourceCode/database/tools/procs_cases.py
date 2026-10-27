@@ -191,19 +191,37 @@ SELECT TOP (1) r.relatedPersonId AS contactPersonId, cp.lastName, cp.firstName, 
     {
         "schema": "dbo", "name": "uspListExposureCases", "kind": "read", "grants": BOTH, "ticket": "T080",
         "permission": "case.view",
-        "desc": "One page of cases visible to the caller, optionally only open ones, only theirs, or one analyte.",
-        "params": """@openOnly       BIT = 1
-, @assignedToMe   BIT = 0
-, @analyteId      UNIQUEIDENTIFIER = NULL
-, @pageNumber     INT = 1
-, @pageSize       INT = 25""",
-        "key": "CONCAT (N'openOnly=', @openOnly, N', assignedToMe=', @assignedToMe, N', pageNumber=', @pageNumber)",
+        "desc": "One page of cases visible to the caller, filtered by status, analyte, classification, population, owning "
+                "tenant, assignee (me, a person, or nobody) and a case number or last name, sorted by opened date, case "
+                "number, classification or person.",
+        "params": """@openOnly         BIT = 1
+, @assignedToMe     BIT = 0
+, @analyteId        UNIQUEIDENTIFIER = NULL
+, @classification   VARCHAR (12) = NULL
+, @population       VARCHAR (10) = NULL
+, @owningTenantId   UNIQUEIDENTIFIER = NULL
+, @assignedToUserId UNIQUEIDENTIFIER = NULL
+, @unassignedOnly   BIT = 0
+, @search           NVARCHAR (60) = NULL
+, @sort             VARCHAR (20) = 'opened'
+, @descending       BIT = 1
+, @pageNumber       INT = 1
+, @pageSize         INT = 25""",
+        # The search text is a name: it is never logged.
+        "key": "CONCAT (N'openOnly=', @openOnly, N', assignedToMe=', @assignedToMe, N', unassignedOnly=', @unassignedOnly, "
+               "N', classification=', @classification, N', population=', @population, N', sort=', @sort, N', pageNumber=', @pageNumber)",
         "validate": """IF @pageNumber < 1 OR @pageSize NOT BETWEEN 1 AND 500
 BEGIN
     ;THROW 50000, N'@pageNumber must be 1 or more and @pageSize between 1 and 500.', 1;
+END;
+IF @sort NOT IN ('opened', 'case', 'classification', 'person')
+BEGIN
+    ;THROW 50000, N'@sort must be opened, case, classification or person.', 1;
 END;""",
         "body": """
 DECLARE @me UNIQUEIDENTIFIER = auth.udfSessionUserId ();
+-- The search text matches literally: LIKE wildcards in it are escaped.
+DECLARE @like NVARCHAR (200) = REPLACE (REPLACE (REPLACE (NULLIF (LTRIM (RTRIM (@search)), N''), N'[', N'[[]'), N'%', N'[%]'), N'_', N'[_]');
 
 SELECT c.exposureCaseId, c.caseNumber, c.personId, p.lastName, p.firstName, p.dob, a.code AS analyteCode,
        c.population, c.classification, c.caseStatus, c.openedDate, u.displayName AS assignedToName,
@@ -216,10 +234,43 @@ SELECT c.exposureCaseId, c.caseNumber, c.personId, p.lastName, p.firstName, p.do
  WHERE c.isDeleted = 0
    AND (@openOnly = 0 OR c.caseStatus <> 'closed')
    AND (@assignedToMe = 0 OR c.assignedToUserId = @me)
+   AND (@unassignedOnly = 0 OR c.assignedToUserId IS NULL)
+   AND (@assignedToUserId IS NULL OR c.assignedToUserId = @assignedToUserId)
    AND (@analyteId IS NULL OR c.analyteId = @analyteId)
- ORDER BY c.openedDate DESC, c.exposureCaseId
+   AND (@classification IS NULL OR c.classification = @classification)
+   AND (@population IS NULL OR c.population = @population)
+   AND (@owningTenantId IS NULL OR c.owningTenantId = @owningTenantId)
+   AND (@like IS NULL OR c.caseNumber LIKE N'%' + @like + N'%' OR p.lastName LIKE @like + N'%')
+ ORDER BY CASE WHEN @sort = 'opened' AND @descending = 0 THEN c.openedDate END ASC,
+          CASE WHEN @sort = 'opened' AND @descending = 1 THEN c.openedDate END DESC,
+          CASE WHEN @sort = 'case' AND @descending = 0 THEN c.caseNumber END ASC,
+          CASE WHEN @sort = 'case' AND @descending = 1 THEN c.caseNumber END DESC,
+          -- Most serious first when ascending.
+          CASE WHEN @sort = 'classification' AND @descending = 0
+               THEN CASE c.classification WHEN 'confirmed' THEN 1 WHEN 'suspect' THEN 2 ELSE 3 END END ASC,
+          CASE WHEN @sort = 'classification' AND @descending = 1
+               THEN CASE c.classification WHEN 'confirmed' THEN 1 WHEN 'suspect' THEN 2 ELSE 3 END END DESC,
+          CASE WHEN @sort = 'person' AND @descending = 0 THEN p.lastName END ASC,
+          CASE WHEN @sort = 'person' AND @descending = 0 THEN p.firstName END ASC,
+          CASE WHEN @sort = 'person' AND @descending = 1 THEN p.lastName END DESC,
+          CASE WHEN @sort = 'person' AND @descending = 1 THEN p.firstName END DESC,
+          c.openedDate DESC, c.exposureCaseId
 OFFSET (@pageNumber - 1) * @pageSize ROWS
- FETCH NEXT @pageSize ROWS ONLY;
+ FETCH NEXT @pageSize ROWS ONLY
+OPTION (RECOMPILE);
+""",
+    },
+    {
+        "schema": "dbo", "name": "uspListCaseOwners", "kind": "read", "grants": WEB, "ticket": "T080",
+        "permission": "case.view",
+        "desc": "The tenants that own a case the caller can see, by name, for the case list's owner filter.",
+        "params": "",
+        "key": "NULL",
+        "body": """
+SELECT t.tenantId, t.tenantName
+  FROM auth.tenant AS t
+ WHERE EXISTS (SELECT 1 FROM dbo.exposureCase AS c WHERE c.owningTenantId = t.tenantId AND c.isDeleted = 0)
+ ORDER BY t.tenantName, t.tenantId;
 """,
     },
     {

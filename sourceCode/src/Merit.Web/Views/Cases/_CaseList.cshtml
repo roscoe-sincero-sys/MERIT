@@ -1,35 +1,70 @@
 @model CaseListModel
+@{
+    var f = Model.Filter;
+    int first = (Model.PageNumber - 1) * CaseFilterModel.PageSize + 1;
+    int last = first + Model.Rows.Count - 1;
+    int pages = Math.Max(1, (Model.TotalCount + CaseFilterModel.PageSize - 1) / CaseFilterModel.PageSize);
+    // Only the sorted column carries aria-sort: USWDS highlights every column that has it.
+    string? AriaSort(string key) => f.Sort == key ? (f.Desc ? "descending" : "ascending") : null;
+    // A column sorts its natural way first (newest opened, case number up, most serious first, A to Z), then reverses.
+    // Sorting reloads the page, so the filter form keeps the sort for its next change.
+    string SortHref(string key, bool firstDesc) => "/cases" + f.Query(1, key, f.Sort == key ? !f.Desc : firstDesc);
+    string Arrow(string key) => f.Sort != key ? "" : f.Desc ? "▼" : "▲";
+}
 <div id="case-list-body">
-    <p class="merit-meta">@Model.TotalCount case(s)</p>
-    @if (Model.Rows.Count == 0)
+    <p class="merit-meta" aria-live="polite">
+        @if (Model.TotalCount == 0) { <text>No cases match.</text> }
+        else { <text>Cases @first&ndash;@last of @Model.TotalCount</text> }
+    </p>
+    @if (Model.Rows.Count > 0)
     {
-        <p class="merit-empty">No cases match.</p>
-    }
-    else
-    {
-        <div class="merit-table-wrap" tabindex="0" role="region" aria-label="Table; scroll sideways for more columns">
+        <div class="merit-table-wrap" tabindex="0" role="region" aria-label="Cases; scroll sideways for more columns">
             <table class="usa-table usa-table--borderless">
-                <thead><tr><th scope="col">Case</th><th scope="col">Person</th><th scope="col">Analyte</th><th scope="col">Classification</th><th scope="col">Status</th><th scope="col">Opened</th><th scope="col">Assigned</th><th scope="col">Owner</th></tr></thead>
+                <caption class="usa-sr-only">Cases</caption>
+                <thead>
+                    <tr>
+                        <th scope="col" aria-sort="@AriaSort("case")"><a class="merit-sort" href="@SortHref("case", false)">Case <span aria-hidden="true">@Arrow("case")</span></a></th>
+                        <th scope="col" aria-sort="@AriaSort("person")"><a class="merit-sort" href="@SortHref("person", false)">Person <span aria-hidden="true">@Arrow("person")</span></a></th>
+                        <th scope="col">Analyte</th>
+                        <th scope="col" aria-sort="@AriaSort("classification")"><a class="merit-sort" href="@SortHref("classification", false)">Classification <span aria-hidden="true">@Arrow("classification")</span></a></th>
+                        <th scope="col">Status</th>
+                        <th scope="col" aria-sort="@AriaSort("opened")"><a class="merit-sort" href="@SortHref("opened", true)">Opened <span aria-hidden="true">@Arrow("opened")</span></a></th>
+                        <th scope="col">Assigned</th>
+                        <th scope="col">Owner</th>
+                    </tr>
+                </thead>
                 <tbody>
                     @foreach (var c in Model.Rows)
                     {
                         <tr id="case-@c.ExposureCaseId">
                             <td class="merit-nowrap"><a class="usa-link" href="/cases/@c.ExposureCaseId">@c.CaseNumber</a></td>
                             <td><a class="usa-link" href="/people/@c.PersonId">@c.LastName, @c.FirstName</a></td>
-                            <td>@c.AnalyteCode</td>
+                            <td>@Options.Humanize(c.AnalyteCode)</td>
                             <td><span class="merit-badge merit-badge--@c.Classification">@Options.Humanize(c.Classification)</span> <span class="merit-badge merit-badge--@c.Population">@Options.Population(c.Population)</span></td>
                             <td>@Options.Humanize(c.CaseStatus)</td>
                             <td class="merit-nowrap">@Options.Date(c.OpenedDate)</td>
-                            <td>@c.AssignedToName</td>
+                            <td>@(c.AssignedToName ?? "Unassigned")</td>
                             <td>@c.OwningTenantName</td>
                         </tr>
                     }
                 </tbody>
             </table>
         </div>
-        <nav class="merit-form-row" aria-label="Pages">
-            @if (Model.PageNumber > 1) { <a class="usa-link" href="/cases?page=@(Model.PageNumber - 1)&openOnly=@Model.OpenOnly&mine=@Model.AssignedToMe">Previous page</a> }
-            @if (Model.PageNumber * 25 < Model.TotalCount) { <a class="usa-link" href="/cases?page=@(Model.PageNumber + 1)&openOnly=@Model.OpenOnly&mine=@Model.AssignedToMe">Next page</a> }
-        </nav>
+        @if (pages > 1)
+        {
+            <nav class="merit-pager" aria-label="Case list pages">
+                @if (Model.PageNumber > 1)
+                {
+                    string prev = "/cases" + f.Query(Model.PageNumber - 1);
+                    <a class="usa-button usa-button--outline" href="@prev" hx-get="@prev" hx-target="#case-list" hx-swap="innerMorph" hx-push-url="true">Previous page</a>
+                }
+                <span>Page @Model.PageNumber of @pages</span>
+                @if (Model.PageNumber < pages)
+                {
+                    string next = "/cases" + f.Query(Model.PageNumber + 1);
+                    <a class="usa-button usa-button--outline" href="@next" hx-get="@next" hx-target="#case-list" hx-swap="innerMorph" hx-push-url="true">Next page</a>
+                }
+            </nav>
+        }
     }
 </div>

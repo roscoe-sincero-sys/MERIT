@@ -2197,6 +2197,15 @@
   "params": []
  },
  {
+  "name": "dbo.uspListCaseOwners",
+  "kind": "read",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": "case.view",
+  "params": []
+ },
+ {
   "name": "dbo.uspListClusters",
   "kind": "read",
   "grants": [
@@ -2248,6 +2257,54 @@
    {
     "name": "analyteId",
     "type": "UNIQUEIDENTIFIER",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "classification",
+    "type": "VARCHAR (12)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "population",
+    "type": "VARCHAR (10)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "owningTenantId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "assignedToUserId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "unassignedOnly",
+    "type": "BIT",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "search",
+    "type": "NVARCHAR (60)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "sort",
+    "type": "VARCHAR (20)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "descending",
+    "type": "BIT",
     "hasDefault": true,
     "isOutput": false
    },

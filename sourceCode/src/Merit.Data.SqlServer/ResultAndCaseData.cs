@@ -74,9 +74,26 @@ public sealed class CaseData(Db db) : ICaseData
             return c is null ? null : new CaseDetail(c, results, activities, investigations, tasks, contact);
         }, ct);
 
-    public Task<IReadOnlyList<CaseListRow>> ListCasesAsync(bool openOnly, bool assignedToMe, Guid? analyteId, int pageNumber, int pageSize,
-                                                          CancellationToken ct = default)
-        => db.QueryAsync<CaseListRow>("dbo.uspListExposureCases", new { openOnly, assignedToMe, analyteId, pageNumber, pageSize }, ct);
+    public Task<IReadOnlyList<CaseListRow>> ListCasesAsync(CaseListQuery query, CancellationToken ct = default)
+        => db.QueryAsync<CaseListRow>("dbo.uspListExposureCases", new
+        {
+            openOnly = query.OpenOnly,
+            assignedToMe = query.Assigned == "me",
+            unassignedOnly = query.Assigned == "unassigned",
+            assignedToUserId = Guid.TryParse(query.Assigned, out var userId) ? userId : (Guid?)null,
+            analyteId = query.AnalyteId,
+            classification = query.Classification,
+            population = query.Population,
+            owningTenantId = query.OwningTenantId,
+            search = query.Search,
+            sort = query.Sort,
+            descending = query.Descending,
+            pageNumber = query.PageNumber,
+            pageSize = query.PageSize,
+        }, ct);
+
+    public Task<IReadOnlyList<CaseOwnerRow>> ListCaseOwnersAsync(CancellationToken ct = default)
+        => db.QueryAsync<CaseOwnerRow>("dbo.uspListCaseOwners", null, ct);
 
     public Task UpdateCaseAsync(Guid exposureCaseId, Guid? assignedToUserId, string exposureCategory, string caseStatus, byte[] rowVersion,
                                 CancellationToken ct = default)

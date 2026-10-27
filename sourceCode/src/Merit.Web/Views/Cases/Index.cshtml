@@ -1,12 +1,66 @@
 @model CaseListModel
 @{
     ViewData["Title"] = "Cases";
+    var f = Model.Filter;
 }
 <h1>Cases</h1>
-<form class="usa-form merit-form-row" method="get" action="/cases" hx-get="/cases" hx-target="#case-list" hx-swap="innerMorph" hx-trigger="change" hx-push-url="true">
-    <div class="usa-checkbox"><input class="usa-checkbox__input" id="openOnly" type="checkbox" name="openOnly" value="true" @(Model.OpenOnly ? "checked" : "") /><label class="usa-checkbox__label" for="openOnly">Open only</label></div>
-    <input type="hidden" name="openOnly" value="false" />
-    <div class="usa-checkbox"><input class="usa-checkbox__input" id="mine" type="checkbox" name="mine" value="true" @(Model.AssignedToMe ? "checked" : "") /><label class="usa-checkbox__label" for="mine">Assigned to me</label></div>
+@* The supervisor's daily questions, one click each (issue #50). *@
+<p class="merit-section__actions">
+    <a class="usa-button usa-button--outline usa-button--small" href="/cases?assigned=unassigned">Unassigned open cases</a>
+    <a class="usa-button usa-button--outline usa-button--small" href="/cases?assigned=me">My open cases</a>
+</p>
+@* Filters (issue #50). A GET form, so a filtered list is a link; each change refreshes the list in place. *@
+<form class="usa-form merit-form-row merit-case-filters" method="get" action="/cases" hx-get="/cases" hx-target="#case-list" hx-swap="innerMorph"
+      hx-trigger="change, submit" hx-push-url="true">
+    <div class="usa-form-group">
+        <label class="usa-label" for="q">Case number or last name</label>
+        <input class="usa-input" id="q" name="q" type="text" value="@f.Q" maxlength="60" autocomplete="off" />
+    </div>
+    <div class="usa-form-group">
+        <label class="usa-label" for="assigned">Assigned to</label>
+        <select class="usa-select" id="assigned" name="assigned">
+            <option value="">Anyone</option>
+            <option value="me" selected="@(f.AssignedFilter == "me")">Me</option>
+            <option value="unassigned" selected="@(f.AssignedFilter == "unassigned")">Nobody (unassigned)</option>
+            @foreach (var u in Model.Users) { <option value="@u.Value" selected="@u.Selected">@u.Label</option> }
+        </select>
+    </div>
+    <div class="usa-form-group">
+        <label class="usa-label" for="classification">Classification</label>
+        <select class="usa-select" id="classification" name="classification">
+            <option value="">Any</option>
+            @foreach (var c in new[] { "confirmed", "suspect", "notACase" }) { <option value="@c" selected="@(f.Classification == c)">@Options.Humanize(c)</option> }
+        </select>
+    </div>
+    <div class="usa-form-group">
+        <label class="usa-label" for="population">Population</label>
+        <select class="usa-select" id="population" name="population">
+            <option value="">Any</option>
+            @foreach (var p in new[] { "child", "adult", "pregnant", "unknown" }) { <option value="@p" selected="@(f.Population == p)">@Options.Population(p)</option> }
+        </select>
+    </div>
+    <div class="usa-form-group">
+        <label class="usa-label" for="analyteId">Analyte</label>
+        <select class="usa-select" id="analyteId" name="analyteId">
+            <option value="">Any</option>
+            @foreach (var a in Model.Analytes) { <option value="@a.Value" selected="@a.Selected">@a.Label</option> }
+        </select>
+    </div>
+    <div class="usa-form-group">
+        <label class="usa-label" for="owner">Owner</label>
+        <select class="usa-select" id="owner" name="owner">
+            <option value="">Any</option>
+            @foreach (var o in Model.Owners) { <option value="@o.Value" selected="@o.Selected">@o.Label</option> }
+        </select>
+    </div>
+    <div class="usa-form-group merit-case-filters__actions">
+        <div class="usa-checkbox"><input class="usa-checkbox__input" id="openOnly" type="checkbox" name="openOnly" value="true" @(f.OpenOnly ? "checked" : "") /><label class="usa-checkbox__label" for="openOnly">Open only</label></div>
+        <input type="hidden" name="openOnly" value="false" />
+        <input type="hidden" name="sort" value="@f.Sort" />
+        <input type="hidden" name="desc" value="@(f.Desc ? "true" : "false")" />
+        <button class="usa-button" type="submit">Search</button>
+        @if (f.IsFiltered || !f.OpenOnly) { <a class="usa-button usa-button--unstyled" href="/cases">Clear filters</a> }
+    </div>
 </form>
 <div id="case-list">
     <partial name="_CaseList" model="Model" />

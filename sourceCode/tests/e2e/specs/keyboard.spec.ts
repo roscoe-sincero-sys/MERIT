@@ -83,6 +83,34 @@ test('held records: a row held for an uncertain match leads to Match review, not
   await expect(page.locator('nav ol li [aria-current="true"]')).toHaveCount(1);
 });
 
+test('cases: one click to the unassigned, filter and sort with the keyboard', async ({ asUser }) => {
+  const page = await asUser('supervisor');
+  await page.goto('/cases');
+  // Issue #50: two checkboxes and no sort over every case.
+  await page.getByRole('link', { name: 'Unassigned open cases' }).focus();
+  await page.keyboard.press('Enter');
+  await expect(page).toHaveURL(/assigned=unassigned/);
+  await expect(page.locator('#assigned')).toHaveValue('unassigned');
+  const assignedCells = page.locator('#case-list tbody tr td:nth-child(7)');
+  for (const text of await assignedCells.allTextContents()) expect(text.trim()).toBe('Unassigned');
+
+  // A filter refreshes the list in place and keeps the address in step.
+  await page.goto('/cases?openOnly=false');
+  await page.locator('#classification').focus();
+  await page.locator('#classification').selectOption('confirmed');
+  await expect(page).toHaveURL(/classification=confirmed/);
+  await expect(page.locator('#case-list .merit-badge--suspect')).toHaveCount(0);
+
+  // Sorting by case number, from its column heading; the filters stay.
+  await page.getByRole('link', { name: 'Case', exact: true }).focus();
+  await page.keyboard.press('Enter');
+  await expect(page).toHaveURL(/sort=case/);
+  await expect(page.locator('th[aria-sort="ascending"]')).toContainText('Case');
+  await expect(page).toHaveURL(/classification=confirmed/);
+  const numbers = (await page.locator('#case-list tbody td:first-child').allTextContents()).map(t => t.trim());
+  expect(numbers).toEqual([...numbers].sort());
+});
+
 test('match review moves through the queue with J and K', async ({ asUser }) => {
   const page = await asUser('supervisor');
   await page.goto('/app/match-review');

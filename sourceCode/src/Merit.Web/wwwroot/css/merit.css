@@ -159,6 +159,13 @@ dialog.merit-dialog::backdrop { background: rgba(0,0,0,.5); }
 .usa-card__heading { overflow-wrap: anywhere; }
 .merit-card__file { font-size: 1.15rem; }
 
+/* Case list filters and sortable columns (issue #50). */
+.merit-case-filters > .usa-form-group { flex: 1 1 11rem; }
+.merit-case-filters__actions { display: flex; flex-wrap: wrap; align-items: flex-end; gap: .5rem 1rem; }
+.merit-case-filters__actions .usa-checkbox { margin-bottom: .5rem; }
+th .merit-sort { color: inherit; }
+th .merit-sort:hover, th .merit-sort:focus { color: var(--merit-primary); }
+
 /* Audit log filters and pages (issue #45). */
 .merit-audit-filters > .usa-form-group { flex: 1 1 10rem; }
 .merit-audit-filters__actions { display: flex; align-items: flex-end; gap: .5rem 1rem; }
