@@ -39,6 +39,7 @@
   figure.side img { flex: none; }
   figure.side figcaption { flex: 1; margin-top: .2em; font-size: 9.5pt; }
   .keep { break-inside: avoid; }
+  p { break-inside: avoid; }
   .pair { display: flex; gap: .35in; align-items: flex-start; break-inside: avoid; }
   .pair > ol { flex: 1; margin-top: .2em; }
   .pair figure.side { display: block; flex: none; width: min-content; margin-top: .2em; }
@@ -111,7 +112,7 @@
       </ul>
     </div>
   </div>
-  <p>MERIT ignores spaces and hyphens in both (<code>21D-0123456</code> and <code>1245 319 599</code> are accepted) and accepts a lower-case <code>d</code>.</p>
+  <p>MERIT ignores spaces and hyphens in both (<code>21D-0123456</code> and <code>1245 319 599</code> are accepted) and accepts a lower-case <code>d</code>. It reads laboratory files the same way, so a result that carries a CLIA number or NPI written with spaces or hyphens still links to the registered entry.</p>
   <figure class="shot diagram"><img src="../images/guide/diagram-npi-clia-import.png" style="width:7.20in" alt="Workflow diagram: look up identifiers, fill the template, MERIT checks the file, rows to fix go back to the template, ready rows are imported, the registry is updated, held rows are released"><figcaption>The import workflow. Interactive version: <code>docs/npi-clia-import_workflow.html</code>.</figcaption></figure>
 </section>
 
@@ -163,7 +164,7 @@ provider,,Okafor,Grace,MD,1543210987,,</pre>
     <tr><td>A facility needs an NPI or a CLIA number</td><td>Fill in one of them.</td></tr>
     <tr><td>A provider needs an NPI / a last name</td><td>Fill in the missing column. Providers without an NPI cannot be registered.</td></tr>
     <tr><td>Providers have no CLIA number; leave clia blank</td><td>Clear the <code>clia</code> cell, or change <code>type</code> to laboratory.</td></tr>
-    <tr><td>Same NPI (or CLIA number) as line …; only the first is loaded</td><td>The file lists the same reporter twice. Delete the duplicate row, or keep it if the first is correct.</td></tr>
+    <tr><td>Same NPI (or CLIA number) as line …; only the first is loaded</td><td>The file lists the same reporter twice. A laboratory and a facility with the same CLIA number or NPI count as the same organization, whatever the <code>type</code> column says. Delete the duplicate row, or keep it if the first is correct.</td></tr>
     <tr><td>Type must be laboratory, facility or provider</td><td>Check the spelling in the <code>type</code> column.</td></tr>
     <tr><td>… is longer than … characters</td><td>Shorten the name, credential or phone.</td></tr>
   </table>
@@ -194,7 +195,7 @@ provider,,Okafor,Grace,MD,1543210987,,</pre>
   </ol>
   <div class="keep">
   <p>To confirm an entry, search for it on <span class="ui">Reporters</span> by name, CLIA number or NPI.</p>
-  <figure class="shot"><img src="../images/guide/05-reporters.jpg" style="width:5.77in" alt="The Reporters screen with search, filters and the registry table"><figcaption>Reporters: search by name, CLIA number or NPI, and filter by kind. Entries added by the import appear here at once.</figcaption></figure>
+  <figure class="shot"><img src="../images/guide/05-reporters.jpg" style="width:6.55in" alt="The Reporters screen with search, filters and the registry table"><figcaption>Reporters: search by name, CLIA number or NPI, and filter by kind. Entries added by the import appear here at once.</figcaption></figure>
   </div>
 </section>
 
@@ -203,14 +204,12 @@ provider,,Okafor,Grace,MD,1543210987,,</pre>
   <div class="keep">
   <h2>7. Adding or correcting one entry</h2>
   <p>For a single new laboratory or a corrected name you do not need a file.</p>
-  <div class="pair">
   <ol class="steps">
     <li>Open <span class="ui">Reporters</span> and search for the reporter first.</li>
-    <li>Under <b>Add or correct one entry</b> (below the list), choose the <b>Kind</b> and fill in the name and identifiers.</li>
+    <li>Under <b>Add or correct one entry</b> (below the list), choose the <b>Kind</b>. The form shows only that kind's fields; fill in the name and identifiers.</li>
     <li>Click <span class="ui">Save entry</span>. The same rules apply as for a file: identifiers are checked, and an entry with the same CLIA number or NPI is updated.</li>
   </ol>
-  <figure class="shot side"><img src="../images/guide/05b-reporter-form.jpg" style="width:2.93in" alt="The Add or correct one entry form: Kind, laboratory or facility name, CLIA number, NPI, provider names, credential, phone and Save entry"><figcaption><b>Add or correct one entry.</b> A laboratory needs its name and CLIA number; a facility its name and an NPI or CLIA number; a provider a last name and NPI. Fields that do not apply to the kind stay blank.</figcaption></figure>
-  </div>
+  <figure class="shot"><img src="../images/guide/05b-reporter-form.jpg" style="width:7.20in" alt="The Add or correct one entry form for a laboratory: Kind, laboratory or facility name, CLIA number, NPI, phone and Save entry"><figcaption><b>Add or correct one entry.</b> A laboratory needs its name and CLIA number; a facility its name and an NPI or CLIA number; a provider a last name and NPI. The form shows the fields for the kind you choose.</figcaption></figure>
   </div>
 
   <h2>8. Good practice</h2>

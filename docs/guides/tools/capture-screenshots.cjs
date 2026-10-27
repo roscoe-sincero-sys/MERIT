@@ -116,6 +116,8 @@ async function signedIn(page, user) {
 
   await p.goto('/reporters'); await p.waitForLoadState('networkidle');
   await shot(p, '05-reporters', { bottom: 'main table tbody tr >> nth=3', padBottom: ROW });
+  // The add form is a grid of columns (one kind's fields at a time), not a single-column form.
+  await shot(p, '05b-reporter-form', { top: '#add-h', bottom: 'section[aria-labelledby="add-h"]', padBottom: 8 });
 
   if (want('06-reporter-check')) {
     await p.goto('/reporters/import');
@@ -156,8 +158,6 @@ async function signedIn(page, user) {
   await shot(p, '07-person-new', { top: '#dialog-title', bottom: 'main form button[type=submit]' });
   await p.goto(`/people/${personId}/results/new`); await p.waitForLoadState('networkidle');
   await shot(p, '09-result-new', { bottom: 'main button:has-text("Save result")' });
-  await p.goto('/reporters'); await p.waitForLoadState('networkidle');
-  await shot(p, '05b-reporter-form', { top: '#add-h', bottom: 'section[aria-labelledby="add-h"]', padBottom: 8 });
   await ctx.close();
 
   // ------------------------------------------------------------------ administrator

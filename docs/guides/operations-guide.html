@@ -147,14 +147,14 @@
     <li>Watch the batch card under <b>Recent batches</b>. It updates by itself until processing ends.</li>
   </ol>
   <figure class="shot"><img src="../images/guide/02-intake.jpg" style="width:7.20in" alt="The Intake page: Sender and intake profile, File, and Upload"><figcaption>Upload a file: choose the sender, choose the file, then <b>Upload</b>.</figcaption></figure>
-  <figure class="shot side"><img src="../images/guide/02b-batch-card.jpg" style="width:2.15in" alt="A batch card: the file name, Loaded, the laboratory and time, and the counts received, loaded, held and rejected"><figcaption>A batch card under <b>Recent batches</b>: how many rows were <b>received</b>, <b>loaded</b>, <b>held</b> and <b>rejected</b>. Click <b>held</b> to go straight to those rows.</figcaption></figure>
+  <figure class="shot side"><img src="../images/guide/02b-batch-card.jpg" style="width:1.57in" alt="A batch card: the file name, Loaded, the laboratory and time, and the counts received, loaded, held and rejected"><figcaption>A batch card under <b>Recent batches</b>: how many rows were <b>received</b>, <b>loaded</b>, <b>held</b> and <b>rejected</b>. Click <b>held</b> to go straight to those rows.</figcaption></figure>
   <table>
     <tr><th>The card says</th><th>What it means</th><th>What to do</th></tr>
     <tr><td>Loaded</td><td>Every row was checked; good rows are on people's records</td><td>Clear any held rows (next section)</td></tr>
     <tr><td>Processing</td><td>MERIT is still working</td><td>Wait; the card refreshes itself</td></tr>
     <tr><td>Failed</td><td>The file could not be read (wrong format or sender)</td><td>Check you chose the right sender; ask the laboratory for a corrected file</td></tr>
   </table>
-  <div class="box warn"><strong>Do not upload the same file twice.</strong> MERIT recognizes exact duplicate results, but a re-sent file with corrections should come from the laboratory marked as corrected.</div>
+  <div class="box warn"><strong>The same file twice?</strong> MERIT does not process a file it has already received for the same sender: it says when the file arrived, links to that batch, and loads nothing. If the laboratory really sent the same file again, choose it again and tick <b>This is a genuine re-send</b>. Corrected results should come from the laboratory marked as corrected.</div>
 </section>
 
 <!-- ============================================================ 4 held -->
@@ -168,7 +168,7 @@
   <ol class="steps">
     <li>Open <span class="ui">Held records</span> (or click <b>Held intake records</b> on Home).</li>
     <li>Click a group under <b>By cause</b>. Its rows appear under <b>Rows</b>.</li>
-    <li>Fix the cause (table below). To correct one row, tick only that row: type the right value in the <b>Correction</b> column and click <span class="ui">Save correction</span>. The reported value is never changed; the correction sits beside it.</li>
+    <li>Fix the cause (table below). To correct one row, tick only that row: type the right value in the <b>Correction</b> column and click <span class="ui">Save correction</span>. The reported value is never changed; the correction sits beside it. You can correct one field, save, then correct another: every saved correction is kept. To remove a correction, clear its box and save.</li>
     <li>Tick the rows and click <span class="ui">Release selected</span>. MERIT checks them again; rows that now pass are loaded.</li>
     <li>If a row should never load (a test row, or a result for another state), type a <b>Reject reason</b> and click <span class="ui">Reject selected</span>.</li>
   </ol>
@@ -190,7 +190,7 @@
   <div class="keep">
   <h2>5. Match review: is this the same person?</h2>
   <p>MERIT links a result to a person automatically only when name, date of birth and sex agree exactly. When a record looks like someone already in MERIT but not exactly (a nickname, a swapped day and month, a hyphenated name, a possible twin), it waits for you on <span class="ui">Match review</span>. Placeholder names such as "Baby Boy" are never linked automatically.</p>
-  <figure class="shot"><img src="../images/guide/04-match-review.jpg" style="width:5.93in" alt="Person matching review: the waiting records on the left, the incoming record and its candidates field by field"><figcaption>Match review: the waiting records on the left (urgent first); the incoming record and each candidate side by side, field by field, with <b>Why suggested</b> and the decision buttons below.</figcaption></figure>
+  <figure class="shot"><img src="../images/guide/04-match-review.jpg" style="width:6.42in" alt="Person matching review: the waiting records on the left, the incoming record and its candidates field by field"><figcaption>Match review: the waiting records on the left (urgent first); the incoming record and each candidate side by side, field by field, with <b>Why suggested</b> and the decision buttons below.</figcaption></figure>
   </div>
   <table>
     <tr><th>Decision</th><th>Key</th><th>What happens</th></tr>
@@ -208,13 +208,13 @@
   <div class="keep">
   <h2>6. Laboratories, providers, NPI and CLIA</h2>
   <p>The <span class="ui">Reporters</span> screen is MERIT's list of who reports results: <b>laboratories</b> (identified by their CLIA number), <b>facilities</b> that order tests such as clinics and hospitals (by NPI or CLIA number), and individual <b>providers</b> (by NPI). Intake uses it to link each result to its laboratory and ordering provider. A result from a laboratory that is not on the list is held as <b>unknown sender</b>.</p>
-  <figure class="shot"><img src="../images/guide/05-reporters.jpg" style="width:5.77in" alt="The Reporters screen with search, kind filter and the registry table"><figcaption>Reporters: search by name, CLIA number or NPI; filter by kind. People with <i>Edit the reporter registry</i> also see the Add form and <b>Import NPI and CLIA records</b>.</figcaption></figure>
+  <figure class="shot"><img src="../images/guide/05-reporters.jpg" style="width:6.55in" alt="The Reporters screen with search, kind filter and the registry table"><figcaption>Reporters: search by name, CLIA number or NPI; filter by kind. People with <i>Edit the reporter registry</i> also see the Add form and <b>Import NPI and CLIA records</b>.</figcaption></figure>
   </div>
   <h3>Add or correct one entry</h3>
   <ol class="steps">
     <li>Open <span class="ui">Reporters</span> and search first: the entry may already be there.</li>
-    <li>Under <b>Add or correct one entry</b>, choose the <b>Kind</b>, then fill in the name (laboratory or facility) or last and first name (provider), and the CLIA number or NPI.</li>
-    <li>Click <span class="ui">Save entry</span>. An entry with the same CLIA number or NPI is <b>updated</b>, never duplicated.</li>
+    <li>Under <b>Add or correct one entry</b>, choose the <b>Kind</b>. The form shows that kind's fields: the name and CLIA number for a laboratory or facility, the last name, first name and credential for a provider, and the NPI and phone for all.</li>
+    <li>Click <span class="ui">Save entry</span>. An entry with the same CLIA number or NPI is <b>updated</b>, never duplicated. A laboratory and a facility with the same CLIA number or NPI are one organization.</li>
     <li>If rows were held as <i>unknown sender</i>, go to <span class="ui">Held records</span> and release them.</li>
   </ol>
   <div class="box ok"><strong>Many entries at once?</strong> Use <b>Import NPI and CLIA records</b> with a CSV file. The separate guide <i>MERIT User Guide - Importing NPI and CLIA Records</i> walks through it.</div>
@@ -321,7 +321,7 @@
 <section class="flow">
   <div class="keep">
   <h2>11. Searching, results, clusters, map and reports</h2>
-  <figure class="shot"><img src="../images/guide/19-search.jpg" style="width:7.20in" alt="Search results for Rivera: people with date of birth, sex, county, open cases and what matched"><figcaption><b>Search</b> (header): people, cases and accession numbers. <b>Add a person</b> is at the bottom of the results.</figcaption></figure>
+  <figure class="shot"><img src="../images/guide/19-search.jpg" style="width:7.20in" alt="Search results for Rivera: people with date of birth, sex, county, open cases and what matched"><figcaption><b>Search</b> (header): people, cases and accession numbers. Each open case shows its metal, classification and number, and opens the case. <b>Add a person</b> is at the bottom of the results.</figcaption></figure>
   </div>
   <figure class="shot"><img src="../images/guide/18-results.jpg" style="width:7.20in" alt="The Results list with filters and a table of results"><figcaption><b>Results</b>: every result you may see; filter by analyte, collection dates, population and value, and sort by any column.</figcaption></figure>
   <figure class="shot"><img src="../images/guide/14-clusters.jpg" style="width:7.20in" alt="The Clusters list"><figcaption><b>Clusters</b>: cases sharing a building, child-care site or worksite within the detection window. Cases join or leave a cluster; nothing is merged.</figcaption></figure>
@@ -333,7 +333,7 @@
     <tr><th>Report</th><th>Use it to</th></tr>
     <tr><td>Testing counts and rates</td><td>See tests, people tested and results at or above the case level by month and population</td></tr>
     <tr><td>Elevated counts by population and analyte</td><td>Track elevated results for partners and grant reports</td></tr>
-    <tr><td>Case timeliness</td><td>Check how quickly cases are opened, contacted and investigated</td></tr>
+    <tr><td>Case timeliness</td><td>Check how quickly results arrive, cases are opened and families are first followed up (a contact attempt, letter, education, referral or medical management), and how many cases have no follow-up yet</td></tr>
     <tr><td>Investigation outcomes</td><td>Summarize findings, sources and orders</td></tr>
     <tr><td>Reporter timeliness and completeness</td><td>Find laboratories that report late or leave fields blank, and follow up with them</td></tr>
   </table>
