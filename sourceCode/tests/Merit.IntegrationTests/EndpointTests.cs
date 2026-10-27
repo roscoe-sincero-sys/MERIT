@@ -335,6 +335,22 @@ public sealed partial class EndpointTests(MeritFixture fixture, ITestOutputHelpe
         Assert.DoesNotContain("unsafe-inline", csp, StringComparison.Ordinal);
     }
 
+    [SqlFact]
+    public async Task APartialCarriesTheHeadersNonceVerbatim()
+    {
+        // Issue #53: hx-csp rewrites a partial's nonce by matching the header's value in the raw text; a "+" written as
+        // "&#x2B;" never matched, and the swapped-in elements lost their htmx attributes.
+        var supervisor = await fixture.SignedInAsync("supervisor");
+        for (int i = 0; i < 20; i++)
+        {
+            var partial = await supervisor.GetPartialAsync($"/people/{fixture.Ids.MiaPersonId}/edit");
+            string csp = string.Join(' ', partial.Headers.GetValues("Content-Security-Policy"));
+            string nonce = System.Text.RegularExpressions.Regex.Match(csp, "'nonce-([^']+)'").Groups[1].Value;
+            string body = await partial.Content.ReadAsStringAsync();
+            Assert.Contains($"hx-nonce=\"{nonce}\"", body, StringComparison.Ordinal);
+        }
+    }
+
     /// <summary>
     /// A Razor expression printed as text: "@" right after a letter or digit, then a C# member access such as
     /// p.ProfileVersion or Model.Name. Email addresses (lower-case domains) do not match.

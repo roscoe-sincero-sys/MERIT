@@ -1341,6 +1341,17 @@
       "started": "2026-10-27",
       "finished": "2026-10-27",
       "notes": "e2e checks label shape against the visible range"
+    },
+    {
+      "id": "T199",
+      "phase": "12 Quality",
+      "task": "CSP nonce in base64url, so htmx partials keep their htmx attributes",
+      "ref": "Issue #53",
+      "where": "Infrastructure/Htmx.cs CspNonce",
+      "status": "Done",
+      "started": "2026-10-27",
+      "finished": "2026-10-27",
+      "notes": "A '+' was HTML-encoded in hx-nonce and hx-csp stripped about one partial in three; unit and integration tests added"
     }
   ]
 }
