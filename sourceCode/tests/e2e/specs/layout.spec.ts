@@ -121,3 +121,27 @@ test('phone: no page scrolls sideways', async ({ asUser }) => {
   }
   expect(wide).toEqual([]);
 });
+
+test('timeline: axis labels name years, months or days by the span shown', async ({ asUser }) => {
+  const page = await asUser('supervisor');
+  await page.setViewportSize({ width: 1040, height: 900 });
+  const results = await (await page.request.get('/api/v1/results?pageSize=20')).json() as { items: { personId: string | null }[] };
+  const personId = results.items.find(r => r.personId)!.personId!;
+  await page.goto(`/app/people/${personId}/timeline`);
+  await angularReady(page);
+  // Issue #49: six years were labelled "May 21" to "May 26", a two-digit year that reads as six days in May.
+  const range = page.locator('.controls .merit-meta');
+  const check = async () => {
+    const [from, to] = (await range.innerText()).split(' to ').map(t => Date.parse(t));
+    const months = (to - from) / (30 * 86_400_000);
+    const labels = await page.locator('.tick-label').allTextContents();
+    expect(labels.length).toBeGreaterThan(1);
+    const shape = months > 36 ? /^\d{4}$/ : months > 2 ? /^[A-Z][a-z]{2} \d{4}$/ : /^[A-Z][a-z]{2} \d{1,2}$/;
+    for (const l of labels) expect(l, `${months.toFixed(1)} months`).toMatch(shape);
+  };
+  await check();
+  // Zoom in to the shortest span: day labels.
+  for (let i = 0; i < 8; i++) await page.getByRole('button', { name: 'Zoom in' }).click();
+  await check();
+  expect(await page.locator('.tick-label').first().textContent()).toMatch(/^[A-Z][a-z]{2} \d{1,2}$/);
+});

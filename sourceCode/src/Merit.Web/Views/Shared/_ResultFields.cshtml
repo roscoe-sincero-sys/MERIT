@@ -1,4 +1,7 @@
 @model ResultFieldsModel
+@{
+    var state = ViewData.ModelState;
+}
 @* Dependent fields of the result form. Specimen and unit changes re-request this partial with hx-include="closest form". *@
 @if (Model.Specimens.Count == 0)
 {
@@ -7,43 +10,48 @@
 else
 {
     <div class="merit-form-row">
-        <div class="usa-form-group">
-            <label class="usa-label" for="AnalyteSpecimenId">Specimen</label>
-            <select class="usa-select" id="AnalyteSpecimenId" name="AnalyteSpecimenId"
+        <div class="@state.GroupClass("AnalyteSpecimenId")">
+            <label class="usa-label" for="AnalyteSpecimenId">Specimen @FormErrors.RequiredMark</label>
+            @state.ErrorMessage("AnalyteSpecimenId")
+            <select class="usa-select" id="AnalyteSpecimenId" name="AnalyteSpecimenId" aria-describedby="@state.DescribedBy("AnalyteSpecimenId")" aria-invalid="@state.AriaInvalid("AnalyteSpecimenId")"
                     hx-get="/results/fields" hx-target="#result-fields" hx-swap="innerHTML" hx-include="closest form">
                 @foreach (var o in Model.Specimens) { <option value="@o.Value" selected="@o.Selected">@o.Label</option> }
             </select>
         </div>
-        <div class="usa-form-group">
-            <label class="usa-label" for="Unit">Unit</label>
-            <select class="usa-select" id="Unit" name="Unit">
+        <div class="@state.GroupClass("Unit")">
+            <label class="usa-label" for="Unit">Unit @FormErrors.RequiredMark</label>
+            @state.ErrorMessage("Unit")
+            <select class="usa-select" id="Unit" name="Unit" aria-describedby="@state.DescribedBy("Unit")" aria-invalid="@state.AriaInvalid("Unit")">
                 @foreach (var o in Model.Units) { <option value="@o.Value" selected="@o.Selected">@o.Label</option> }
             </select>
             <div class="usa-hint">Compared in @Model.CanonicalUnit.</div>
         </div>
         @if (Model.UsesSampleType)
         {
-            <div class="usa-form-group">
-                <label class="usa-label" for="SampleType">Sample type</label>
-                <select class="usa-select" id="SampleType" name="SampleType">
+            <div class="@state.GroupClass("SampleType")">
+                <label class="usa-label" for="SampleType">Sample type @FormErrors.RequiredMark</label>
+                @state.ErrorMessage("SampleType")
+                <select class="usa-select" id="SampleType" name="SampleType" aria-describedby="@state.DescribedBy("SampleType")" aria-invalid="@state.AriaInvalid("SampleType")">
                     @foreach (var o in Model.SampleTypes) { <option value="@o.Value" selected="@o.Selected">@o.Label</option> }
                 </select>
             </div>
         }
         @if (Model.Speciations.Count > 0)
         {
-            <div class="usa-form-group">
+            <div class="@state.GroupClass("Speciation")">
                 <label class="usa-label" for="Speciation">Speciation</label>
-                <select class="usa-select" id="Speciation" name="Speciation">
+                @state.ErrorMessage("Speciation")
+                <select class="usa-select" id="Speciation" name="Speciation" aria-describedby="@state.DescribedBy("Speciation")" aria-invalid="@state.AriaInvalid("Speciation")">
                     @foreach (var o in Model.Speciations) { <option value="@o.Value" selected="@o.Selected">@o.Label</option> }
                 </select>
             </div>
         }
         @if (Model.RequiresCreatinine)
         {
-            <div class="usa-form-group">
-                <label class="usa-label" for="Creatinine">Creatinine (g/L)</label>
-                <input class="usa-input usa-input--small" id="Creatinine" name="Creatinine" inputmode="decimal" />
+            <div class="@state.GroupClass("Creatinine")">
+                <label class="usa-label" for="Creatinine">Creatinine (g/L) @FormErrors.RequiredMark</label>
+                @state.ErrorMessage("Creatinine")
+                <input class="usa-input usa-input--small" id="Creatinine" name="Creatinine" inputmode="decimal" aria-describedby="@state.DescribedBy("Creatinine")" aria-invalid="@state.AriaInvalid("Creatinine")" />
             </div>
         }
     </div>

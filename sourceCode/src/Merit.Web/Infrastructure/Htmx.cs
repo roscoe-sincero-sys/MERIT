@@ -29,13 +29,7 @@ public static class Htmx
     {
         if (ex is not null)
         {
-            foreach (var (field, messages) in ex.Errors)
-            {
-                foreach (var m in messages)
-                {
-                    controller.ModelState.AddModelError(field, m);
-                }
-            }
+            controller.ModelState.AddErrors(ex);
         }
 
         var result = controller.PartialView(partialName, model);

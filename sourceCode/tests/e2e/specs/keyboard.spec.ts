@@ -42,6 +42,21 @@ test('work queues: select a task with the keyboard and the bulk actions turn on'
   await expect(assignTo).toBeEnabled();
 });
 
+test('a heading focused by script shows the ring for keyboard users only', async ({ asUser }) => {
+  const page = await asUser('supervisor');
+  await page.goto('/app/queues');
+  await angularReady(page);
+  // Issue #51: USWDS rings every :focus, so a clicked or script-focused heading was boxed for mouse users.
+  const heading = page.locator('h1');
+  const outline = () => heading.evaluate(h => getComputedStyle(h).outlineStyle);
+  await heading.click();
+  await expect(heading).toBeFocused();
+  expect(await outline()).toBe('none');
+  await page.keyboard.press('Tab');
+  await heading.evaluate(h => (h as HTMLElement).focus());
+  expect(await outline()).not.toBe('none');
+});
+
 test('match review moves through the queue with J and K', async ({ asUser }) => {
   const page = await asUser('supervisor');
   await page.goto('/app/match-review');

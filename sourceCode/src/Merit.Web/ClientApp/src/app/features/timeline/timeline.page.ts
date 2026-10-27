@@ -12,6 +12,35 @@ const LANES: { kind: TimelineEventDto['kind']; label: string }[] = [
   { kind: 'pregnancy', label: 'Pregnancy' },
 ];
 
+const YEAR = new Intl.DateTimeFormat('en-US', { year: 'numeric', timeZone: 'UTC' });
+const MONTH_YEAR = new Intl.DateTimeFormat('en-US', { month: 'short', year: 'numeric', timeZone: 'UTC' });
+const MONTH_DAY = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+
+/**
+ * Axis ticks labelled by the span shown (issue #49): years ("2021") over several years, "May 2021" over months, and
+ * "May 21" only within a month or two, never a two-digit year, so six years no longer read as six days in May. Ticks
+ * fall on UTC dates, as the event dates do (Date.parse of "2026-05-02" is UTC midnight).
+ */
+export function axisTicks(from: number, to: number): { at: number; label: string }[] {
+  const out: { at: number; label: string }[] = [];
+  const add = (at: number, format: Intl.DateTimeFormat): void => {
+    if (at >= from && at <= to) out.push({ at, label: format.format(at) });
+  };
+  const start = new Date(from);
+  const months = (to - from) / (30 * DAY);
+  if (months > 36) {
+    const step = Math.max(1, Math.ceil(months / 12 / 10));
+    for (let y = start.getUTCFullYear(); Date.UTC(y, 0, 1) <= to; y += step) add(Date.UTC(y, 0, 1), YEAR);
+  } else if (months > 2) {
+    const step = months > 12 ? 3 : 1;
+    const y = start.getUTCFullYear();
+    for (let m = start.getUTCMonth() - (start.getUTCMonth() % step); Date.UTC(y, m, 1) <= to; m += step) add(Date.UTC(y, m, 1), MONTH_YEAR);
+  } else {
+    for (let d = Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate()); d <= to; d += 7 * DAY) add(d, MONTH_DAY);
+  }
+  return out;
+}
+
 interface DrawnEvent {
   e: TimelineEventDto;
   x: number;
@@ -85,21 +114,7 @@ export class TimelineChartComponent {
     return this.left + ((ms - this.from()) / span) * (this.width - this.left - 16);
   }
 
-  protected readonly ticks = computed(() => {
-    const start = new Date(this.from());
-    const end = this.to();
-    const months = (end - this.from()) / (30 * DAY);
-    const step = months > 36 ? 12 : months > 12 ? 3 : 1;
-    const out: { x: number; label: string }[] = [];
-    const d = new Date(start.getFullYear(), start.getMonth(), 1);
-    while (d.getTime() <= end) {
-      if (d.getTime() >= this.from()) {
-        out.push({ x: this.x(d.getTime()), label: d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' }) });
-      }
-      d.setMonth(d.getMonth() + step);
-    }
-    return out;
-  });
+  protected readonly ticks = computed(() => axisTicks(this.from(), this.to()).map(t => ({ x: this.x(t.at), label: t.label })));
 
   protected readonly drawn = computed<DrawnEvent[]>(() => {
     const results = this.events().filter(e => e.kind === 'result' && e.value !== null);

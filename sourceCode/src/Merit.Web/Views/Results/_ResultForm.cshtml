@@ -1,30 +1,31 @@
 @model ResultFormModel
 @{
-    string Err(string key) => ViewData.ModelState.FirstError(key);
-    string Group(string key) => Err(key).Length > 0 ? "usa-form-group usa-form-group--error" : "usa-form-group";
+    var state = ViewData.ModelState;
+    var required = new ViewDataDictionary(ViewData) { ["Required"] = true };
 }
 <div id="result-form">
-    @if (!ViewData.ModelState.IsValid)
-    {
-        <div class="usa-alert usa-alert--error usa-alert--slim" role="alert"><div class="usa-alert__body"><p class="usa-alert__text">Some fields need attention.</p></div></div>
-    }
-    <form class="usa-form usa-form--large" method="post" action="/people/@Model.PersonId/results"
+    <partial name="_ErrorSummary" model='new ErrorSummaryModel(["AnalyteId", "ResultStatus", "AnalyteSpecimenId", "Unit", "SampleType", "Speciation",
+        "Creatinine", "ValueText", "CollectedDate", "AnalyzedDate", "ReportedDate", "LabOrganizationId"],
+        new Dictionary<string, string> { ["LabOrganizationId"] = "LabOrganizationId-text" })' />
+    <form class="usa-form usa-form--large" method="post" action="/people/@Model.PersonId/results" novalidate
           hx-post="/people/@Model.PersonId/results" hx-target="#result-entry" hx-swap="innerHTML"
           hx-status:422="target:#result-form swap:outerHTML">
         @Html.AntiForgeryToken()
+        @FormErrors.RequiredNote
         <div class="merit-form-row">
-            <div class="@Group("AnalyteId")">
-                <label class="usa-label" for="AnalyteId">Analyte</label>
-                <span class="usa-error-message">@Err("AnalyteId")</span>
+            <div class="@state.GroupClass("AnalyteId")">
+                <label class="usa-label" for="AnalyteId">Analyte @FormErrors.RequiredMark</label>
+                @state.ErrorMessage("AnalyteId")
                 @* Cascading drop-downs: each change re-renders the dependent fields from the server. *@
-                <select class="usa-select" id="AnalyteId" name="AnalyteId" required
+                <select class="usa-select" id="AnalyteId" name="AnalyteId" required aria-describedby="@state.DescribedBy("AnalyteId")" aria-invalid="@state.AriaInvalid("AnalyteId")"
                         hx-get="/results/fields" hx-target="#result-fields" hx-swap="innerHTML" hx-include="#result-fields">
                     @foreach (var o in Model.Analytes) { <option value="@o.Value" selected="@o.Selected">@o.Label</option> }
                 </select>
             </div>
-            <div class="@Group("ResultStatus")">
+            <div class="@state.GroupClass("ResultStatus")">
                 <label class="usa-label" for="ResultStatus">Status</label>
-                <select class="usa-select" id="ResultStatus" name="ResultStatus">
+                @state.ErrorMessage("ResultStatus")
+                <select class="usa-select" id="ResultStatus" name="ResultStatus" aria-describedby="@state.DescribedBy("ResultStatus")" aria-invalid="@state.AriaInvalid("ResultStatus")">
                     @foreach (var o in Options.Fixed(Model.ResultStatus, Options.ResultStatuses)) { <option value="@o.Value" selected="@o.Selected">@o.Label</option> }
                 </select>
             </div>
@@ -35,26 +36,27 @@
         </div>
 
         <div class="merit-form-row">
-            <div class="@Group("ValueText")">
-                <label class="usa-label" for="ValueText">Result value</label>
+            <div class="@state.GroupClass("ValueText")">
+                <label class="usa-label" for="ValueText">Result value @FormErrors.RequiredMark</label>
                 <div class="usa-hint" id="value-hint">A number, with &lt; or &gt; for a detection limit: 4.2, &lt;1.0, &gt;65</div>
-                <span class="usa-error-message">@Err("ValueText")</span>
-                <input class="usa-input" id="ValueText" name="ValueText" value="@Model.ValueText" required aria-describedby="value-hint" />
+                @state.ErrorMessage("ValueText")
+                <input class="usa-input" id="ValueText" name="ValueText" value="@Model.ValueText" required
+                       aria-describedby="@state.DescribedBy("ValueText", "value-hint")" aria-invalid="@state.AriaInvalid("ValueText")" />
             </div>
-            <div class="@Group("CollectedDate")">
-                <label class="usa-label" for="CollectedDate">Collected</label>
-                <span class="usa-error-message">@Err("CollectedDate")</span>
-                <input class="usa-input" id="CollectedDate" name="CollectedDate" type="date" value="@Options.Iso(Model.CollectedDate)" required />
+            <div class="@state.GroupClass("CollectedDate")">
+                <label class="usa-label" for="CollectedDate">Collected @FormErrors.RequiredMark</label>
+                @state.ErrorMessage("CollectedDate")
+                <input class="usa-input" id="CollectedDate" name="CollectedDate" type="date" value="@Options.Iso(Model.CollectedDate)" aria-describedby="@state.DescribedBy("CollectedDate")" aria-invalid="@state.AriaInvalid("CollectedDate")" required />
             </div>
-            <div class="@Group("AnalyzedDate")">
+            <div class="@state.GroupClass("AnalyzedDate")">
                 <label class="usa-label" for="AnalyzedDate">Analyzed</label>
-                <span class="usa-error-message">@Err("AnalyzedDate")</span>
-                <input class="usa-input" id="AnalyzedDate" name="AnalyzedDate" type="date" value="@Options.Iso(Model.AnalyzedDate)" />
+                @state.ErrorMessage("AnalyzedDate")
+                <input class="usa-input" id="AnalyzedDate" name="AnalyzedDate" type="date" value="@Options.Iso(Model.AnalyzedDate)" aria-describedby="@state.DescribedBy("AnalyzedDate")" aria-invalid="@state.AriaInvalid("AnalyzedDate")" />
             </div>
-            <div class="@Group("ReportedDate")">
+            <div class="@state.GroupClass("ReportedDate")">
                 <label class="usa-label" for="ReportedDate">Reported</label>
-                <span class="usa-error-message">@Err("ReportedDate")</span>
-                <input class="usa-input" id="ReportedDate" name="ReportedDate" type="date" value="@Options.Iso(Model.ReportedDate)" />
+                @state.ErrorMessage("ReportedDate")
+                <input class="usa-input" id="ReportedDate" name="ReportedDate" type="date" value="@Options.Iso(Model.ReportedDate)" aria-describedby="@state.DescribedBy("ReportedDate")" aria-invalid="@state.AriaInvalid("ReportedDate")" />
             </div>
         </div>
 
@@ -78,13 +80,8 @@
         </div>
 
         <div class="merit-form-row">
-            <div class="@Group("LabOrganizationId")">
-                <span class="usa-error-message">@Err("LabOrganizationId")</span>
-                <partial name="_Combobox" model='("LabOrganizationId", "LabOrganizationId", "Laboratory", "/lookup/organizations?type=laboratory", Model.LabOrganizationId?.ToString(), Model.LabLabel, (string?)"Type part of the lab name or its CLIA number.")' />
-            </div>
-            <div class="usa-form-group">
-                <partial name="_Combobox" model='("OrderingProviderId", "OrderingProviderId", "Ordering provider", "/lookup/providers", Model.OrderingProviderId?.ToString(), Model.ProviderLabel, (string?)"Last name or NPI.")' />
-            </div>
+            <partial name="_Combobox" view-data="required" model='("LabOrganizationId", "LabOrganizationId", "Laboratory", "/lookup/organizations?type=laboratory", Model.LabOrganizationId?.ToString(), Model.LabLabel, (string?)"Type part of the lab name or its CLIA number.")' />
+            <partial name="_Combobox" model='("OrderingProviderId", "OrderingProviderId", "Ordering provider", "/lookup/providers", Model.OrderingProviderId?.ToString(), Model.ProviderLabel, (string?)"Last name or NPI.")' />
         </div>
         <button class="usa-button" type="submit">Save result</button>
         <a class="usa-button usa-button--unstyled" href="/people/@Model.PersonId">Cancel</a>

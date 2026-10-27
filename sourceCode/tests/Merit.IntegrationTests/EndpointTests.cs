@@ -283,6 +283,33 @@ public sealed partial class EndpointTests(MeritFixture fixture, ITestOutputHelpe
     }
 
     [SqlFact]
+    public async Task AFormPostedWithoutScriptListsItsErrorsAtTheTop()
+    {
+        // Issue #46: the forms are novalidate, so the server's messages are the only ones; a whole-page post shows them in
+        // an error summary that links to each field, and beside the field. The result form's page post lost them.
+        var supervisor = await fixture.SignedInAsync("supervisor");
+        string newPerson = await supervisor.Http.GetStringAsync("/people/new");
+        Assert.Contains("novalidate", newPerson, StringComparison.Ordinal);
+        Assert.Contains("<abbr title=\"required\" class=\"usa-hint usa-hint--required\">*</abbr>", newPerson, StringComparison.Ordinal);
+        Assert.DoesNotContain("id=\"error-summary\"", newPerson, StringComparison.Ordinal);
+        Assert.DoesNotContain("<span class=\"usa-error-message\"></span>", newPerson, StringComparison.Ordinal);
+
+        var person = await supervisor.Http.PostAsync("/people/new", MeritClient.Form(newPerson, ("LastName", ""), ("Sex", "unknown"), ("Ethnicity", "unknown")));
+        string html = await person.Content.ReadAsStringAsync();
+        Assert.Contains("id=\"error-summary\"", html, StringComparison.Ordinal);
+        Assert.Contains("<a class=\"usa-link\" href=\"#LastName\">Last name is required.</a>", html, StringComparison.Ordinal);
+        Assert.Contains("<span class=\"usa-error-message\" id=\"LastName-error\">Last name is required.</span>", html, StringComparison.Ordinal);
+        Assert.Contains("aria-describedby=\"LastName-error\" aria-invalid=\"true\"", html, StringComparison.Ordinal);
+
+        string newResult = await supervisor.Http.GetStringAsync($"/people/{fixture.Ids.MiaPersonId}/results/new");
+        var result = await supervisor.Http.PostAsync($"/people/{fixture.Ids.MiaPersonId}/results",
+            MeritClient.Form(newResult, ("ValueText", ""), ("ResultStatus", "final")));
+        html = await result.Content.ReadAsStringAsync();
+        Assert.Contains("<a class=\"usa-link\" href=\"#ValueText\">Result value is required.</a>", html, StringComparison.Ordinal);
+        Assert.Contains("<a class=\"usa-link\" href=\"#LabOrganizationId-text\">Laboratory is required.</a>", html, StringComparison.Ordinal);
+    }
+
+    [SqlFact]
     public async Task ResultPagesAndLabelsUseWordsNotCodes()
     {
         // Issues #37 and #38: "Icp ms" for ICP-MS, file fields shown as lastName and zip5, and "analyzed ," with no date.
