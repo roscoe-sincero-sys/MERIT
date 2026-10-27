@@ -55,7 +55,13 @@ public sealed class ResultsController(IClock clock, ResultService results, Perso
         catch (ValidationException ex)
         {
             var refreshed = await FormAsync(form, ct);
-            return Request.IsHtmx() ? this.Invalid("_ResultForm", refreshed, ex) : View("New", refreshed);
+            if (Request.IsHtmx())
+            {
+                return this.Invalid("_ResultForm", refreshed, ex);
+            }
+
+            ModelState.AddErrors(ex);
+            return View("New", refreshed);
         }
     }
 

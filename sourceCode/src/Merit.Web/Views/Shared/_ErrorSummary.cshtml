@@ -1,0 +1,25 @@
+@model ErrorSummaryModel
+@* The USWDS error summary (issue #46): every message, in form order, each a link to its field. merit.js focuses it. *@
+@{
+    var state = ViewData.ModelState;
+    var keys = Model.Fields.Concat(state.Keys.Where(k => !Model.Fields.Contains(k))).ToList();
+}
+@if (!state.IsValid)
+{
+    <div class="usa-alert usa-alert--error merit-error-summary" id="error-summary" role="alert" tabindex="-1" aria-labelledby="error-summary-heading">
+        <div class="usa-alert__body">
+            <h2 class="usa-alert__heading" id="error-summary-heading">Some fields need attention</h2>
+            <ul class="usa-list">
+                @foreach (var key in keys)
+                {
+                    if (!state.TryGetValue(key, out var entry)) { continue; }
+                    @* Model binding and the service can both report a missing field, in the same words. *@
+                    foreach (var message in entry.Errors.Select(e => e.ErrorMessage).Distinct())
+                    {
+                        <li>@if (Model.Fields.Contains(key)) { <a class="usa-link" href="#@Model.IdOf(key)">@message</a> } else { @message }</li>
+                    }
+                }
+            </ul>
+        </div>
+    </div>
+}

@@ -21,6 +21,9 @@ body { background: #fff; color: var(--merit-ink); }
    (issue #51). */
 [tabindex="-1"]:focus:not(:focus-visible) { outline: none; }
 
+/* The error summary at the top of a form (issue #46). */
+.merit-error-summary .usa-list { margin-bottom: 0; }
+
 /* ---------------------------------------------------------------------------------------------- header and nav */
 .merit-header { background: var(--merit-primary); color: #fff; }
 .merit-header__inner { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem 1.5rem; padding: .75rem 1rem; max-width: 80rem; margin: 0 auto; }

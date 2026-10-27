@@ -11,6 +11,16 @@ public sealed record AlertModel(string Kind, string Title, string Message);
 
 public sealed record SelectOption(string Value, string Label, bool Selected = false);
 
+/// <summary>
+/// The error summary at the top of a form (issue #46): <paramref name="Fields"/> are the form's fields in page order, so
+/// the messages read in the order a person meets them, each linking to its input; <paramref name="Ids"/> names an input
+/// whose id is not its field name (a combobox's visible text box).
+/// </summary>
+public sealed record ErrorSummaryModel(IReadOnlyList<string> Fields, IReadOnlyDictionary<string, string>? Ids = null)
+{
+    public string IdOf(string key) => Ids is not null && Ids.TryGetValue(key, out var id) ? id : key;
+}
+
 // ------------------------------------------------------------------------------------------------ account
 
 public sealed class SignInModel

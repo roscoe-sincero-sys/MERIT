@@ -36,6 +36,11 @@
         });
     }
 
+    // ------------------------------------------------------------------------------------------ error summary
+    // A form posted without htmx comes back as a whole page; its error summary takes focus (issue #46).
+    const summary = document.getElementById("error-summary");
+    if (summary) summary.focus();
+
     // ------------------------------------------------------------------------------------------ antiforgery
     // Both clients send the token in X-XSRF-TOKEN, read from the XSRF-TOKEN cookie.
     document.addEventListener("htmx:config:request", evt => {
@@ -74,7 +79,21 @@
 
     // ------------------------------------------------------------------------------------------ after a swap
     document.addEventListener("htmx:after:swap", evt => {
-        const target = evt.detail && evt.detail.ctx && evt.detail.ctx.target;
+        const ctx = evt.detail && evt.detail.ctx;
+        const target = ctx && ctx.target;
+
+        // An error message in a form gets focus so a screen reader hears it: the error summary first (issue #46). A swap
+        // chosen by hx-status (a 422 re-rendering its form) carries no target, and an outerHTML swap leaves the target
+        // detached, so the new content is looked up in the document.
+        if (ctx && ctx.response && ctx.response.status >= 400) {
+            const scope = target && target.isConnected ? target : document;
+            const error = document.getElementById("error-summary") || scope.querySelector(".usa-error-message:not(:empty), .usa-alert--error");
+            if (error) {
+                error.setAttribute("tabindex", "-1");
+                error.focus();
+            }
+        }
+
         if (!target) return;
 
         // After a swap that replaces the main content, focus moves to the new content's heading.
@@ -92,13 +111,6 @@
             if (dialog && target.childElementCount > 0 && !dialog.open) dialog.showModal();
             const first = target.querySelector("input:not([type=hidden]), select, textarea, button");
             if (first) first.focus();
-        }
-
-        // An error message in a form gets focus so a screen reader hears it.
-        const error = target.querySelector(".usa-error-message:not(:empty), .usa-alert--error");
-        if (error && evt.detail.ctx.response && evt.detail.ctx.response.status >= 400) {
-            error.setAttribute("tabindex", "-1");
-            error.focus();
         }
     });
 

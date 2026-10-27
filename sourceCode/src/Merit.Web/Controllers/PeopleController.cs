@@ -332,14 +332,5 @@ public sealed class PeopleController(IClock clock, PersonService people, PersonP
     private static PersonInput ToInput(PersonFormModel f) => new(f.PersonId, f.LastName, f.FirstName, f.MiddleName, f.Dob, f.DobVerified,
         f.Sex, f.Ethnicity, f.PreferredLanguage, f.DeceasedDate, f.RaceCodes, Options.FromHex(f.RowVersion));
 
-    private void AddErrors(ValidationException ex)
-    {
-        foreach (var (field, messages) in ex.Errors)
-        {
-            foreach (var m in messages)
-            {
-                ModelState.AddModelError(field, m);
-            }
-        }
-    }
+    private void AddErrors(ValidationException ex) => ModelState.AddErrors(ex);
 }
