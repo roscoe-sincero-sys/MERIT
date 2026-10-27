@@ -63,7 +63,8 @@ public sealed record HeldRowDto(
     bool IsUrgent,
     DateTime? HeldSinceUtc,
     string? AssignedToName,
-    string? Reasons);
+    string? Reasons,
+    IReadOnlyList<string> ReasonCodes);
 
 public sealed record HeldActionRequest(IReadOnlyList<Guid> StagingRowIds, string? Reason);
 

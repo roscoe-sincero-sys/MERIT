@@ -18,6 +18,14 @@ export class HeldStore {
   readonly error = signal<string | null>(null);
   readonly focusRow = signal<HeldRowDto | null>(null);
   readonly totalHeld = computed(() => this.groups().reduce((n, g) => n + g.rowCount, 0));
+  /** Selected rows that wait for a match decision: releasing reruns matching, which holds them again (issue #42). */
+  readonly selectedForMatch = computed(() => this.rows().items.filter(r => this.selected().has(r.stagingRowId) && needsMatchReview(r)));
+  readonly releasable = computed(() => [...this.selected()].filter(id => !this.selectedForMatch().some(r => r.stagingRowId === id)));
+}
+
+/** A row held for an uncertain person match is decided on Match review, not released. */
+export function needsMatchReview(r: HeldRowDto): boolean {
+  return r.reasonCodes.includes('uncertainMatch');
 }
 
 /**
@@ -60,11 +68,22 @@ export class HeldStore {
       }
     </p>
     <div class="bulk" role="group" aria-label="Actions on selected rows" aria-describedby="held-scope">
-      <button class="usa-button" type="button" [disabled]="store.selected().size === 0" (click)="release()">Release selected</button>
+      <button class="usa-button" type="button" [disabled]="store.releasable().length === 0" (click)="release()"
+              [attr.aria-describedby]="store.selectedForMatch().length > 0 ? 'release-match-note' : null">Release selected</button>
       <label class="usa-label" for="reject-reason">Reject reason</label>
       <input class="usa-input" id="reject-reason" #reason />
       <button class="usa-button usa-button--secondary" type="button" [disabled]="store.selected().size === 0" (click)="reject(reason.value)">Reject selected</button>
     </div>
+    @if (store.selectedForMatch().length > 0) {
+      <p class="merit-meta" id="release-match-note">
+        @if (store.releasable().length === 0) {
+          Decide the match first: releasing does not choose a person, so the row would be held again.
+        } @else {
+          {{ store.selectedForMatch().length }} of the selected rows wait for a match decision; Release leaves them held.
+        }
+        <a class="usa-link" href="/app/match-review">Open Match review</a>.
+      </p>
+    }
     <merit-data-grid gridId="held" caption="Held rows" [columns]="columns" [rows]="store.rows().items" [total]="store.rows().totalCount"
                      [page]="store.page()" [pageSize]="50" [loading]="store.loading()" [selectable]="true" [selected]="store.selected()"
                      [rowKey]="key" emptyText="No held rows in this group." (pageChange)="onPage($event)" (selectionChange)="onSelect($event)" />
@@ -110,6 +129,9 @@ export class HeldPage implements OnInit {
     { key: 'file', label: 'File and row', cell: r => `${r.fileName ?? ''} #${r.rowNumber}` },
     { key: 'sender', label: 'Sender', cell: r => r.senderName ?? '' },
     { key: 'waiting', label: 'Held since', nowrap: true, cell: r => this.display.dateOf(r.heldSinceUtc) },
+    // The step that clears an uncertain match: deciding it on Match review (issue #42).
+    { key: 'next', label: 'Next step', nowrap: true, cell: r => (needsMatchReview(r) ? 'Review the match' : ''),
+      link: r => (needsMatchReview(r) ? `/app/match-review?row=${r.stagingRowId}` : null) },
   ];
 
   ngOnInit(): void {
@@ -175,8 +197,10 @@ export class HeldPage implements OnInit {
   }
 
   protected release(): void {
-    this.api.releaseHeld({ stagingRowIds: [...this.store.selected()], reason: null }).subscribe({
-      next: r => this.done(`${r.updated} row(s) released; they rerun validation and matching in the background.`),
+    const waiting = this.store.selectedForMatch().length;
+    this.api.releaseHeld({ stagingRowIds: this.store.releasable(), reason: null }).subscribe({
+      next: r => this.done(`${r.updated} row(s) released; they rerun validation and matching in the background.`
+        + (waiting > 0 ? ` ${waiting} left for Match review.` : '')),
       error: e => this.store.error.set(problemMessage(e)),
     });
   }
