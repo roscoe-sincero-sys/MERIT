@@ -54,7 +54,7 @@ export class ResultsPage implements OnInit {
   protected readonly key = (r: ResultListItemDto): string => r.labResultId;
 
   protected readonly columns: GridColumn<ResultListItemDto>[] = [
-    { key: 'collectedDate', label: 'Collected', sortable: true, cell: r => r.collectedDate, link: r => `/results/${r.labResultId}` },
+    { key: 'collectedDate', label: 'Collected', sortable: true, nowrap: true, cell: r => this.display.date(r.collectedDate), link: r => `/results/${r.labResultId}` },
     { key: 'lastName', label: 'Person', sortable: true, cell: r => r.personName ?? '(unmatched)', link: r => (r.personId ? `/people/${r.personId}` : null) },
     { key: 'analyteCode', label: 'Analyte', sortable: true, cell: r => `${this.display.of(r.analyteCode)}, ${this.display.of(r.specimen).toLowerCase()}` },
     { key: 'valueCanonical', label: 'Value', sortable: true, cell: r => `${r.operator === '=' ? '' : r.operator}${r.valueCanonical ?? ''} ${r.unitCanonical}`, badge: r => (r.isIndeterminate ? 'Indeterminate' : null) },
@@ -63,7 +63,7 @@ export class ResultsPage implements OnInit {
     { key: 'status', label: 'Status', cell: r => (r.resultRowStatus === 'valid' ? this.display.of(r.resultStatus)
       : `${this.display.of(r.resultStatus)} (${this.display.of(r.resultRowStatus).toLowerCase()})`) },
     { key: 'labName', label: 'Lab', cell: r => r.labName ?? '' },
-    { key: 'receivedUtc', label: 'Received', sortable: true, hidden: true, cell: r => r.receivedUtc.substring(0, 10) },
+    { key: 'receivedUtc', label: 'Received', sortable: true, hidden: true, nowrap: true, cell: r => this.display.dateOf(r.receivedUtc) },
     { key: 'testMethod', label: 'Method', hidden: true, cell: r => this.display.of(r.testMethod) },
   ];
 

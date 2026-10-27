@@ -13,16 +13,37 @@ export class Display {
   private codes: Record<string, string> = {};
   private fields: Record<string, string> = {};
   private order: string[] = [];
+  private dayFormat = dayFormatIn('America/New_York');
 
   async load(): Promise<void> {
     try {
-      const labels = await firstValueFrom(this.api.labels());
+      const [labels, me] = await Promise.all([firstValueFrom(this.api.labels()), firstValueFrom(this.api.me())]);
       this.codes = labels.codes;
       this.fields = labels.fields;
       this.order = labels.fieldOrder;
+      this.dayFormat = dayFormatIn(me.timeZone);
     } catch {
-      // Signed out or offline: codes fall back to the camel-case split below.
+      // Signed out or offline: codes fall back to the camel-case split below, dates to Eastern time.
     }
+  }
+
+  /** A date-only value ("2026-10-27") as "Oct 27, 2026", the format the server-rendered pages use (issue #39). */
+  date(value: string | null | undefined): string {
+    if (!value) return '';
+    const [y, m, d] = value.substring(0, 10).split('-').map(Number);
+    return DATE_ONLY.format(new Date(Date.UTC(y, m - 1, d)));
+  }
+
+  /** A stored UTC instant as its date in the jurisdiction's time zone (issue #36). */
+  dateOf(instant: string | null | undefined): string {
+    if (!instant) return '';
+    return this.dayFormat.format(new Date(/[zZ]|[+-]\d\d:\d\d$/.test(instant) ? instant : instant + 'Z'));
+  }
+
+  /** A report month ("2026-07") as "Jul 2026". */
+  month(value: string): string {
+    const [y, m] = value.split('-').map(Number);
+    return MONTH.format(new Date(Date.UTC(y, m - 1, 1)));
   }
 
   /** The words for a stored code. */
@@ -45,6 +66,17 @@ export class Display {
   fieldOrder(keys: string[]): string[] {
     const rank = (k: string) => { const i = this.order.indexOf(k); return i < 0 ? Number.MAX_SAFE_INTEGER : i; };
     return [...keys].sort((a, b) => rank(a) - rank(b));
+  }
+}
+
+const DATE_ONLY = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+const MONTH = new Intl.DateTimeFormat('en-US', { month: 'short', year: 'numeric', timeZone: 'UTC' });
+
+function dayFormatIn(timeZone: string): Intl.DateTimeFormat {
+  try {
+    return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone });
+  } catch {
+    return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'America/New_York' });
   }
 }
 

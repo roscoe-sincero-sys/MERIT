@@ -9,6 +9,8 @@ export interface GridColumn<T> {
   cell: (row: T) => string;
   link?: (row: T) => string | null;
   badge?: (row: T) => string | null;
+  /** Identifiers and dates stay on one line; text columns take the wrapping (issue #39). */
+  nowrap?: boolean;
 }
 
 export interface GridSort {
@@ -68,7 +70,7 @@ export interface GridSort {
                 {{ c.label }}
               }
             </th>
-            <td cdk-cell *cdkCellDef="let row">
+            <td cdk-cell *cdkCellDef="let row" [class.nowrap]="c.nowrap">
               @if (c.link && c.link(row); as href) {
                 <a class="usa-link" [href]="href">{{ c.cell(row) }}</a>
               } @else {
@@ -93,6 +95,7 @@ export interface GridSort {
     </nav>
   `,
   styles: `
+    .nowrap { white-space: nowrap; }
     .grid-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; }
     .grid-columns summary { cursor: pointer; }
     .grid-wrap { overflow-x: auto; }

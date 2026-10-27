@@ -14,12 +14,12 @@
                     @foreach (var c in Model.Rows)
                     {
                         <tr id="case-@c.ExposureCaseId">
-                            <td><a class="usa-link" href="/cases/@c.ExposureCaseId">@c.CaseNumber</a></td>
+                            <td class="merit-nowrap"><a class="usa-link" href="/cases/@c.ExposureCaseId">@c.CaseNumber</a></td>
                             <td><a class="usa-link" href="/people/@c.PersonId">@c.LastName, @c.FirstName</a></td>
                             <td>@c.AnalyteCode</td>
                             <td><span class="merit-badge merit-badge--@c.Classification">@Options.Humanize(c.Classification)</span> <span class="merit-badge merit-badge--@c.Population">@Options.Population(c.Population)</span></td>
                             <td>@Options.Humanize(c.CaseStatus)</td>
-                            <td>@Options.Date(c.OpenedDate)</td>
+                            <td class="merit-nowrap">@Options.Date(c.OpenedDate)</td>
                             <td>@c.AssignedToName</td>
                             <td>@c.OwningTenantName</td>
                         </tr>

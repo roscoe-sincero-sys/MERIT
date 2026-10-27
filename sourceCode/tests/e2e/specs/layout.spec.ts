@@ -57,3 +57,24 @@ test('extracts: a Download button keeps its padding and fits its label', async (
     expect(b.overflows).toBe(false);
   }
 });
+
+test('case numbers and dates stay on one line in lists', async ({ asUser }) => {
+  const page = await asUser('supervisor');
+  await page.setViewportSize({ width: 1040, height: 900 });
+  // Issue #39: "PB-2026- / 000004" and "2026-11- / 01" broke across lines while text columns had room.
+  for (const [url, selector] of [['/cases', 'main table a[href^="/cases/"]'], ['/app/queues', 'td.nowrap']] as const) {
+    await page.goto(url);
+    await page.locator(selector).first().waitFor();
+    // The text's own lines: distinct line tops of the rectangles its characters occupy.
+    const broken = await page.locator(selector).evaluateAll(els => els.filter(e => {
+      const range = document.createRange();
+      range.selectNodeContents(e);
+      return new Set([...range.getClientRects()].map(r => Math.round(r.top))).size > 1;
+    }).map(e => e.textContent!.trim()));
+    expect(broken, url).toEqual([]);
+  }
+  // One date format: "Oct 27, 2026", not 2026-10-27.
+  await page.goto('/app/queues');
+  await page.locator('td.nowrap').first().waitFor();
+  expect(await page.locator('main table').innerText()).not.toMatch(/\b20\d\d-\d\d-\d\d\b/);
+});

@@ -46,7 +46,7 @@ export class HeldStore {
             {{ label(g.reasonCode) }}@if (g.reportedValue) { : <code>{{ g.reportedValue }}</code> } &middot; {{ sender(g) }} &middot; {{ g.rowCount }} row(s)
           </button>
           @if (g.urgentCount > 0) { <span class="urgent">{{ g.urgentCount }} urgent</span> }
-          <span class="merit-meta"> waiting since {{ (g.oldestHeldUtc ?? '').substring(0, 10) }}</span>
+          <span class="merit-meta"> waiting since {{ display.dateOf(g.oldestHeldUtc) }}</span>
         </li>
       }
     </ul>
@@ -109,7 +109,7 @@ export class HeldPage implements OnInit {
     { key: 'value', label: 'Result as reported', cell: r => `${r.reported['loinc'] ?? ''} ${r.reported['value'] ?? ''} ${r.reported['unit'] ?? ''}` },
     { key: 'file', label: 'File and row', cell: r => `${r.fileName ?? ''} #${r.rowNumber}` },
     { key: 'sender', label: 'Sender', cell: r => r.senderName ?? '' },
-    { key: 'waiting', label: 'Held since', cell: r => (r.heldSinceUtc ?? '').substring(0, 10) },
+    { key: 'waiting', label: 'Held since', nowrap: true, cell: r => this.display.dateOf(r.heldSinceUtc) },
   ];
 
   ngOnInit(): void {

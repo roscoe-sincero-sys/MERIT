@@ -51,7 +51,7 @@ export class CaseMapStore {
       <div class="usa-summary-box" role="status">
         <div class="usa-summary-box__body">
           <h2 class="usa-summary-box__heading"><a class="usa-link" [href]="'/cases/' + c.exposureCaseId">{{ c.caseNumber }}</a>: {{ c.personName }}</h2>
-          <p>{{ display.of(c.analyteCode) }}, {{ display.of(c.population).toLowerCase() }}, {{ display.of(c.classification).toLowerCase() }}, opened {{ c.openedDate }}@if (c.highestValue !== null) {, highest {{ c.highestValue }} {{ c.highestUnit }}}.
+          <p>{{ display.of(c.analyteCode) }}, {{ display.of(c.population).toLowerCase() }}, {{ display.of(c.classification).toLowerCase() }}, opened {{ display.date(c.openedDate) }}@if (c.highestValue !== null) {, highest {{ c.highestValue }} {{ c.highestUnit }}}.
             {{ c.addressLabel }}@if (c.inOpenCluster) { &middot; in an open cluster}</p>
         </div>
       </div>
@@ -67,7 +67,7 @@ export class CaseMapStore {
               <td><a class="usa-link" [href]="'/cases/' + c.exposureCaseId">{{ c.caseNumber }}</a></td>
               <td><a class="usa-link" [href]="'/people/' + c.personId">{{ c.personName }}</a></td>
               <td>{{ display.of(c.classification) }}@if (c.inOpenCluster) { (cluster)}</td>
-              <td>{{ c.openedDate }}</td>
+              <td class="nowrap">{{ display.date(c.openedDate) }}</td>
               <td>{{ c.addressLabel ?? 'No primary residence' }}</td>
               <td>{{ c.latitude === null ? 'No coordinates' : (c.geocodeQuality ?? 'yes') }}</td>
             </tr>
@@ -91,7 +91,7 @@ export class CaseMapPage implements OnInit {
   protected readonly points = computed<MapPoint[]>(() => this.store.located().map(c => ({
     id: c.exposureCaseId, latitude: c.latitude!, longitude: c.longitude!, category: c.classification, ringed: c.inOpenCluster,
     label: `${c.caseNumber}: ${c.personName}`,
-    detail: `${c.classification}, ${c.population}, opened ${c.openedDate}${c.addressLabel ? '. ' + c.addressLabel : ''}`,
+    detail: `${this.display.of(c.classification)}, ${this.display.of(c.population).toLowerCase()}, opened ${this.display.date(c.openedDate)}${c.addressLabel ? '. ' + c.addressLabel : ''}`,
   })));
 
   protected readonly selectedCase = computed(() => this.store.cases().find(c => c.exposureCaseId === this.store.selected()) ?? null);

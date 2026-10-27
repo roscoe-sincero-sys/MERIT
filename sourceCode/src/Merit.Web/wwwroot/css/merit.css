@@ -136,6 +136,9 @@ dialog.merit-dialog::backdrop { background: rgba(0,0,0,.5); }
 .usa-card__heading { overflow-wrap: anywhere; }
 .merit-card__file { font-size: 1.15rem; }
 
+/* Identifiers and dates stay on one line; text columns take the wrapping (issue #39). */
+.merit-nowrap, td.nowrap { white-space: nowrap; }
+
 /* A card's buttons in a row of their own, so none is the body's last child (USWDS strips its bottom padding) (issue #17). */
 .merit-card-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; margin-top: .75rem; }
 .merit-card-actions .usa-button { display: inline-block; margin: 0; overflow-wrap: anywhere; }

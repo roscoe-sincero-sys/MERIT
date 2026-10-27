@@ -13,6 +13,8 @@ export interface MeDto {
   displayName: string;
   actingTenantName: string | null;
   permissions: string[];
+  /** The jurisdiction's IANA time zone. */
+  timeZone: string;
 }
 
 export interface QueueCountDto {

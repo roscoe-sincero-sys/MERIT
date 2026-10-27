@@ -4,6 +4,7 @@ import { ApiClient, problemMessage } from '../../api/api-client';
 import { BulkTaskActionRequest, WorkTaskDto } from '../../api/contracts';
 import { DataGridComponent, GridColumn, GridSort } from '../../shared/grid/data-grid.component';
 import { QueuesStore } from './queues.store';
+import { Display } from '../../shared/display.service';
 
 /** Work queues: the shared grid over tasks of every queue, with bulk assign, complete and dismiss. Route component. */
 @Component({
@@ -69,6 +70,7 @@ import { QueuesStore } from './queues.store';
 export class QueuesPage implements OnInit {
   protected readonly store = inject(QueuesStore);
   private readonly api = inject(ApiClient);
+  protected readonly display = inject(Display);
   private readonly router = inject(Router);
 
   /** Query-string inputs, so a dashboard tile can link straight to a queue. */
@@ -81,10 +83,10 @@ export class QueuesPage implements OnInit {
     { key: 'title', label: 'Task', sortable: true, cell: t => t.title, badge: t => (t.isUrgent ? 'Urgent' : null) },
     { key: 'queueCode', label: 'Queue', sortable: true, cell: t => this.queueName(t.queueCode) },
     { key: 'person', label: 'Person', cell: t => t.personName ?? '', link: t => (t.personId ? `/people/${t.personId}` : null) },
-    { key: 'case', label: 'Case', cell: t => t.caseNumber ?? '', link: t => (t.exposureCaseId ? `/cases/${t.exposureCaseId}` : null) },
-    { key: 'dueDate', label: 'Due', sortable: true, cell: t => t.dueDate ?? '' },
+    { key: 'case', label: 'Case', nowrap: true, cell: t => t.caseNumber ?? '', link: t => (t.exposureCaseId ? `/cases/${t.exposureCaseId}` : null) },
+    { key: 'dueDate', label: 'Due', sortable: true, nowrap: true, cell: t => this.display.date(t.dueDate) },
     { key: 'assigned', label: 'Assigned', cell: t => t.assignedToName ?? '' },
-    { key: 'createdDateUtc', label: 'Created', sortable: true, cell: t => t.createdUtc.substring(0, 10) },
+    { key: 'createdDateUtc', label: 'Created', sortable: true, nowrap: true, cell: t => this.display.dateOf(t.createdUtc) },
     { key: 'detail', label: 'Detail', hidden: true, cell: t => t.detail ?? '' },
   ];
 

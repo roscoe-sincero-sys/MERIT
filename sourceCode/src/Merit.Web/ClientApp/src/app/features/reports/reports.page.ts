@@ -76,7 +76,7 @@ export class ReportsStore {
                                 [colorKeys]="chart().colorKeys" [valueLabel]="label(r, measureKey())" [percent]="isPercent(r, measureKey())" />
             <div class="scroll" tabindex="0" role="region" aria-labelledby="table-caption">
               <table class="usa-table usa-table--borderless usa-table--compact usa-table--striped">
-                <caption id="table-caption">{{ r.title }}, {{ r.fromDate }} to {{ r.toDate }}</caption>
+                <caption id="table-caption">{{ r.title }}, {{ display.date(r.fromDate) }} to {{ display.date(r.toDate) }}</caption>
                 <thead><tr>@for (c of r.columns; track c.key) { <th scope="col" [class.num]="c.kind === 'number' || c.kind === 'percent'">{{ c.label }}</th> }</tr></thead>
                 <tbody>
                   @for (row of r.rows; track $index) {
@@ -108,7 +108,7 @@ export class ReportsStore {
 export class ReportsPage implements OnInit {
   protected readonly store = inject(ReportsStore);
   private readonly api = inject(ApiClient);
-  private readonly display = inject(Display);
+  protected readonly display = inject(Display);
   private readonly router = inject(Router);
   readonly codeParam = input<string | undefined>(undefined, { alias: 'code' });
 
@@ -191,6 +191,7 @@ export class ReportsPage implements OnInit {
       const text = Number.isInteger(v) ? v.toLocaleString('en-US') : v.toLocaleString('en-US', { maximumFractionDigits: 1 });
       return kind === 'percent' ? text + '%' : text;
     }
+    if (kind === 'month') return this.display.month(String(v));
     // A stored code (a population, a classification) shows its words; any other text as it is (issue #37).
     return kind === 'text' ? this.display.ifCode(String(v)) : String(v);
   }

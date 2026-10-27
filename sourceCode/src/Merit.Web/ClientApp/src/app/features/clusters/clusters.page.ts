@@ -131,7 +131,7 @@ export class ClusterStore {
               <td>{{ display.of(m.analyteCode) }} &middot; {{ display.of(m.classification) }} ({{ display.of(m.population).toLowerCase() }})</td>
               <td>{{ m.highestValue ?? '—' }} {{ m.highestUnit }}</td>
               <td>{{ m.addressLabel ?? '—' }}</td>
-              <td>{{ m.joinedDate }}@if (m.leftDate) { (left {{ m.leftDate }})}</td>
+              <td class="nowrap">{{ display.date(m.joinedDate) }}@if (m.leftDate) { (left {{ display.date(m.leftDate) }})}</td>
               <td>
                 @if (c.status !== 'closed') {
                   <button class="usa-button usa-button--unstyled" type="button" [disabled]="store.busy()" (click)="member(m.caseNumber, !!m.leftDate)">
@@ -178,7 +178,7 @@ export class ClusterPage implements OnInit {
   protected readonly points = computed<MapPoint[]>(() => (this.store.cluster()?.members ?? [])
     .filter(m => m.latitude !== null && m.longitude !== null)
     .map(m => ({ id: m.exposureCaseId, latitude: m.latitude!, longitude: m.longitude!, category: m.classification, ringed: !!m.leftDate,
-      label: `${m.caseNumber}: ${m.personName}`, detail: `${this.display.of(m.classification)}, opened ${m.openedDate}. ${m.addressLabel ?? ''}` })));
+      label: `${m.caseNumber}: ${m.personName}`, detail: `${this.display.of(m.classification)}, opened ${this.display.date(m.openedDate)}. ${m.addressLabel ?? ''}` })));
 
   ngOnInit(): void {
     this.api.cluster(this.clusterId()).subscribe({ next: c => this.store.cluster.set(c), error: e => this.store.error.set(problemMessage(e)) });
