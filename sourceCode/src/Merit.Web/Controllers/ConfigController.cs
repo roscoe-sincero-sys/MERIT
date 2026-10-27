@@ -226,10 +226,67 @@ public sealed class AdminController(IClock clock, AdminService admin, AuditServi
         return RedirectToAction(nameof(EditUser), new { id });
     }
 
+    private const int AuditPageSize = 100;
+    private const int AuditExportRows = 10000;
+
+    /// <summary>The audit ledger, filtered and paged (issue #45). Every filter is in the query string.</summary>
     [HttpGet("audit")]
     [Authorize(Policy = Permissions.AuditView)]
-    public async Task<IActionResult> Audit(Guid? entityId, CancellationToken ct)
-        => View(new AuditModel(await audit.SearchAsync(session, null, entityId, null, ct), entityId));
+    public async Task<IActionResult> Audit([FromQuery] AuditFilterModel filter, CancellationToken ct)
+    {
+        filter.Page = Math.Max(filter.Page, 1);
+        var events = await audit.SearchAsync(session, AuditQuery(filter, filter.Page, AuditPageSize), ct);
+        var users = (await audit.UsersAsync(session, ct))
+            .Select(u => new SelectOption(u.AppUserId.ToString(), u.DisplayName, u.AppUserId == filter.UserId)).ToList();
+        return View(new AuditModel(events, filter, events.FirstOrDefault()?.TotalCount ?? 0, AuditPageSize, users));
+    }
+
+    /// <summary>The filtered view as CSV, up to 10,000 events. The export is itself audited.</summary>
+    [HttpGet("audit.csv")]
+    [Authorize(Policy = Permissions.AuditView)]
+    public async Task<IActionResult> AuditCsv([FromQuery] AuditFilterModel filter, CancellationToken ct)
+    {
+        var events = await audit.SearchAsync(session, AuditQuery(filter, 1, AuditExportRows), ct);
+        await audit.ExportedAsync("auditEvent", null, events.Count, ct);
+        var csv = new System.Text.StringBuilder("When,User,Action,Record type,Record id,Rows,Address\r\n");
+        foreach (var e in events)
+        {
+            csv.AppendJoin(',', new[]
+            {
+                clock.ToLocal(e.EventUtc).ToString("yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture),
+                e.DisplayName, AuditText.Action(e.EventAction), AuditText.RecordType(e.EntityType), e.EntityId?.ToString(),
+                e.RecordCount?.ToString(System.Globalization.CultureInfo.InvariantCulture), e.ClientAddress,
+            }.Select(CsvField)).Append("\r\n");
+        }
+
+        return File(System.Text.Encoding.UTF8.GetBytes(csv.ToString()), "text/csv", $"merit-audit-{clock.Today:yyyy-MM-dd}.csv");
+    }
+
+    /// <summary>The filter as a ledger query: the jurisdiction's first and last days as UTC instants, the last exclusive.</summary>
+    private AuditQuery AuditQuery(AuditFilterModel f, int page, int pageSize)
+    {
+        DateTime? Utc(DateOnly? day) => day is DateOnly d
+            ? TimeZoneInfo.ConvertTimeToUtc(d.ToDateTime(TimeOnly.MinValue, DateTimeKind.Unspecified), clock.Zone)
+            : null;
+        return new AuditQuery(f.UserId, f.EntityId, string.IsNullOrEmpty(f.Action) ? null : f.Action,
+            string.IsNullOrEmpty(f.RecordType) ? null : f.RecordType, Utc(f.From), Utc(f.To?.AddDays(1)), page, pageSize);
+    }
+
+    /// <summary>A CSV field, quoted when needed; a leading =, +, - or @ is defused so a spreadsheet does not run it.</summary>
+    private static string CsvField(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+        {
+            return string.Empty;
+        }
+
+        if (value[0] is '=' or '+' or '-' or '@')
+        {
+            value = "'" + value;
+        }
+
+        return value.IndexOfAny([',', '"', '\r', '\n']) >= 0 ? $"\"{value.Replace("\"", "\"\"", StringComparison.Ordinal)}\"" : value;
+    }
 
     private async Task<UserFormModel> UserFormAsync(UserFormModel form, CancellationToken ct)
     {

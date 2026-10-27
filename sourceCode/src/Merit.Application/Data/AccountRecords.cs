@@ -269,6 +269,20 @@ public sealed class AuditEventRow
     public int? RecordCount { get; init; }
 
     public string? ClientAddress { get; init; }
+
+    /// <summary>Events matching the search, across all pages.</summary>
+    public int TotalCount { get; init; }
+}
+
+/// <summary>An audit search (issue #45): every filter optional; times are UTC, <see cref="ToUtc"/> exclusive.</summary>
+public sealed record AuditQuery(Guid? AppUserId = null, Guid? EntityId = null, string? EventAction = null, string? EntityType = null,
+                                DateTime? FromUtc = null, DateTime? ToUtc = null, int PageNumber = 1, int PageSize = 100);
+
+public sealed class AuditUserRow
+{
+    public Guid AppUserId { get; init; }
+
+    public string DisplayName { get; init; } = string.Empty;
 }
 
 /// <summary>A county or other sub-jurisdiction new to a data root, added while creating a tenant that serves it.</summary>

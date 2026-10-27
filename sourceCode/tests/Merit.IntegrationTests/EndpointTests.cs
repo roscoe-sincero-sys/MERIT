@@ -310,6 +310,41 @@ public sealed partial class EndpointTests(MeritFixture fixture, ITestOutputHelpe
     }
 
     [SqlFact]
+    public async Task TheAuditLogFiltersPagesAndReadsInWords()
+    {
+        // Issue #45: one record-id box over an unpaged list of codes and ids.
+        var supervisor = await fixture.SignedInAsync("supervisor");
+        var mia = fixture.Ids.MiaPersonId;
+        string person = await supervisor.Http.GetStringAsync($"/people/{mia}");              // records a view of Mia
+        Assert.Contains($"href=\"/admin/audit?entityId={mia}\">Audit log for this person</a>", person, StringComparison.Ordinal);
+
+        // This record's views, in words, the record linked to its page; no address column when no row has one.
+        string html = System.Net.WebUtility.HtmlDecode(await supervisor.Http.GetStringAsync($"/admin/audit?entityId={mia}&action=view"));
+        Assert.Contains("<td>Viewed</td>", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("<td>view</td>", html, StringComparison.Ordinal);
+        Assert.Contains($"href=\"/people/{mia}\">{mia}</a>", html, StringComparison.Ordinal);
+        Assert.DoesNotContain(">Address</th>", html, StringComparison.Ordinal);
+        Assert.Matches(@"Events 1.\d+ of [\d,]+, newest first\.", html);
+
+        // Filters: a record type and an action; a day after today has nothing; a later page answers.
+        string signIns = await supervisor.Http.GetStringAsync("/admin/audit?action=signIn&recordType=appUser");
+        Assert.Contains("<td>Signed in</td>", signIns, StringComparison.Ordinal);
+        Assert.DoesNotContain("<td>Viewed</td>", signIns, StringComparison.Ordinal);
+        string tomorrow = DateTime.UtcNow.AddDays(2).ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
+        Assert.Contains("No events match.", await supervisor.Http.GetStringAsync($"/admin/audit?from={tomorrow}"), StringComparison.Ordinal);
+        Assert.Equal(HttpStatusCode.OK, (await supervisor.NoRedirect.GetAsync("/admin/audit?page=2")).StatusCode);
+
+        // The filtered view as CSV, and the export is itself in the ledger.
+        var csv = await supervisor.NoRedirect.GetAsync($"/admin/audit.csv?entityId={mia}&action=view");
+        Assert.Equal("text/csv", csv.Content.Headers.ContentType?.MediaType);
+        var lines = (await csv.Content.ReadAsStringAsync()).Split("\r\n", StringSplitOptions.RemoveEmptyEntries);
+        Assert.Equal("When,User,Action,Record type,Record id,Rows,Address", lines[0]);
+        Assert.All(lines.Skip(1), l => Assert.Contains($",Viewed,Person,{mia},", l, StringComparison.Ordinal));
+        string exports = await supervisor.Http.GetStringAsync("/admin/audit?action=export&recordType=auditEvent");
+        Assert.Contains("<td>Exported</td>", exports, StringComparison.Ordinal);
+    }
+
+    [SqlFact]
     public async Task ResultPagesAndLabelsUseWordsNotCodes()
     {
         // Issues #37 and #38: "Icp ms" for ICP-MS, file fields shown as lastName and zip5, and "analyzed ," with no date.

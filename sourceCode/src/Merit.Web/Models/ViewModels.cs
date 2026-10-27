@@ -591,7 +591,61 @@ public sealed record IntakeModel(IReadOnlyList<IntakeProfileListRow> Profiles, I
 
 public sealed record ExtractsModel(IReadOnlyList<ExtractRunRow> Runs, bool AnyRunning, int Year, int Quarter);
 
-public sealed record AuditModel(IReadOnlyList<AuditEventRow> Events, Guid? EntityId);
+/// <summary>The audit log's filters, bound from the query string, so a filtered view is a link (issue #45).</summary>
+public sealed class AuditFilterModel
+{
+    public Guid? UserId { get; set; }
+
+    public Guid? EntityId { get; set; }
+
+    public string? Action { get; set; }
+
+    public string? RecordType { get; set; }
+
+    /// <summary>First and last day, in the jurisdiction's dates.</summary>
+    public DateOnly? From { get; set; }
+
+    public DateOnly? To { get; set; }
+
+    public int Page { get; set; } = 1;
+
+    public bool IsFiltered => UserId is not null || EntityId is not null || Action is not null || RecordType is not null || From is not null || To is not null;
+
+    /// <summary>The query string for this filter, at another page.</summary>
+    public string Query(int? page = null)
+    {
+        var parts = new List<string>();
+        void Add(string key, string? value)
+        {
+            if (!string.IsNullOrEmpty(value))
+            {
+                parts.Add($"{key}={Uri.EscapeDataString(value)}");
+            }
+        }
+
+        Add("userId", UserId?.ToString());
+        Add("entityId", EntityId?.ToString());
+        Add("action", Action);
+        Add("recordType", RecordType);
+        Add("from", From?.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture));
+        Add("to", To?.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture));
+        if ((page ?? 1) > 1)
+        {
+            Add("page", page!.Value.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        }
+
+        return parts.Count == 0 ? string.Empty : "?" + string.Join('&', parts);
+    }
+}
+
+public sealed record AuditModel(IReadOnlyList<AuditEventRow> Events, AuditFilterModel Filter, int TotalCount, int PageSize,
+                                IReadOnlyList<SelectOption> Users)
+{
+    public int PageCount => Math.Max(1, (TotalCount + PageSize - 1) / PageSize);
+
+    /// <summary>Only sign-ins record an address; the column shows when the page has one.</summary>
+    public bool ShowAddress => Events.Any(e => e.ClientAddress is not null);
+}
 
 public sealed record LookupOptionsModel(string FieldId, IReadOnlyList<(Guid Id, string Label, string? Detail)> Options, string? Extra = null);
 

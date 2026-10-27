@@ -2,7 +2,7 @@ import { angularReady, expect, expectAccessible, test } from './helpers';
 
 // Every key screen of both front ends at tablet width, checked with axe for WCAG 2.1 AA.
 const htmxPages = ['/', '/cases', '/investigations', '/intake', '/extracts', '/config/thresholds', '/search?q=Rivera', '/account/profiles',
-  '/account/profiles/new', '/reporters', '/reporters/import'];
+  '/account/profiles/new', '/reporters', '/reporters/import', '/admin/audit', '/admin/audit?action=signIn'];
 const angularPages = ['/app/queues', '/app/held', '/app/results', '/app/match-review', '/app/map', '/app/clusters', '/app/reports'];
 
 for (const path of htmxPages) {

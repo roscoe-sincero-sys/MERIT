@@ -13,7 +13,7 @@ CreateDate:   2026-10-24
 ========================================================================================================================
 Description:
 
-Searches the audit ledger by user and record, within the caller's root tenant.
+Searches the audit ledger within the caller's root tenant by user, record, action, record type and time, newest first, one page at a time with the total. Record type 'report' covers every report.
 
 ========================================================================================================================
 Requirements and Key Dependencies:
@@ -47,10 +47,14 @@ Description:	Initial version.
 
 ***********************************************************************************************************************/
 CREATE OR ALTER PROCEDURE logs.uspSearchAuditEvents
-      @appUserId  UNIQUEIDENTIFIER = NULL
-      , @entityId   UNIQUEIDENTIFIER = NULL
-      , @fromUtc    DATETIME2 (3) = NULL
-      , @maxRows    INT = 200
+      @appUserId   UNIQUEIDENTIFIER = NULL
+      , @entityId    UNIQUEIDENTIFIER = NULL
+      , @eventAction VARCHAR (20) = NULL
+      , @entityType  VARCHAR (30) = NULL
+      , @fromUtc     DATETIME2 (3) = NULL
+      , @toUtc       DATETIME2 (3) = NULL
+      , @pageNumber  INT = 1
+      , @pageSize    INT = 100
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -71,7 +75,7 @@ BEGIN
           , @ErrorLine      INT            = NULL;
 
     -- Identifiers and counts ONLY. Never free-text search terms or patient data.
-    SET @KeyParameters = CONCAT (N'appUserId=', @appUserId, N', entityId=', @entityId);
+    SET @KeyParameters = CONCAT (N'appUserId=', @appUserId, N', entityId=', @entityId, N', eventAction=', @eventAction, N', entityType=', @entityType, N', pageNumber=', @pageNumber, N', pageSize=', @pageSize);
 
     SET @ContextMessage = N'Error-only instrumented read: no start row is opened, so @ExecutionLogId is NULL by design.';
 
@@ -82,19 +86,30 @@ BEGIN
             ;THROW 51403, N'You do not have permission to do this (audit.view).', 1;
         END;
 
+        IF @pageNumber < 1 OR @pageSize NOT BETWEEN 1 AND 10000
+        BEGIN
+            ;THROW 50000, N'@pageNumber must be 1 or more and @pageSize between 1 and 10000.', 1;
+        END;
+
         -- =========================================================================================
         -- ===== The procedure's own work starts here. Everything above and below is boilerplate. ==
         -- =========================================================================================
 
-        SELECT TOP (@maxRows) e.auditEventId, e.eventUtc, e.appUserId, u.displayName, e.eventAction, e.entityType, e.entityId,
-               e.recordCount, e.clientAddress
+        SELECT e.auditEventId, e.eventUtc, e.appUserId, u.displayName, e.eventAction, e.entityType, e.entityId,
+               e.recordCount, e.clientAddress, COUNT (*) OVER () AS totalCount
           FROM logs.auditEvent AS e
           LEFT JOIN auth.appUser AS u ON u.appUserId = e.appUserId
          WHERE e.rootTenantId = auth.udfSessionRootTenantId ()
            AND (@appUserId IS NULL OR e.appUserId = @appUserId)
            AND (@entityId IS NULL OR e.entityId = @entityId)
+           AND (@eventAction IS NULL OR e.eventAction = @eventAction)
+           AND (@entityType IS NULL OR e.entityType = @entityType OR (@entityType = 'report' AND e.entityType LIKE 'report:%'))
            AND (@fromUtc IS NULL OR e.eventUtc >= @fromUtc)
-         ORDER BY e.auditEventId DESC;
+           AND (@toUtc IS NULL OR e.eventUtc < @toUtc)
+         ORDER BY e.auditEventId DESC
+        OFFSET (@pageNumber - 1) * @pageSize ROWS
+         FETCH NEXT @pageSize ROWS ONLY
+        OPTION (RECOMPILE);
 
         -- =========================================================================================
         -- ===== End of the procedure's own work. ===================================================
@@ -133,7 +148,7 @@ EXEC util.uspSetObjectDescription
       @SchemaName  = N'logs'
     , @ObjectType  = N'PROCEDURE'
     , @ObjectName  = N'uspSearchAuditEvents'
-    , @Description = N'Searches the audit ledger by user and record, within the caller''s root tenant.';
+    , @Description = N'Searches the audit ledger within the caller''s root tenant by user, record, action, record type and time, newest first, one page at a time with the total. Record type ''report'' covers every report.';
 GO
 
 IF DATABASE_PRINCIPAL_ID (N'meritWebRole') IS NOT NULL
