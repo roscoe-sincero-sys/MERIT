@@ -17,6 +17,7 @@ var services = builder.Services;
 // ---------------------------------------------------------------------------------------------- application layers
 services.AddHttpContextAccessor();
 services.AddScoped<ICurrentSession, WebCurrentSession>();
+services.AddScoped<SessionRenewal>();
 services.AddScoped<CspNonce>();
 services.AddMeritApplication();
 services.AddMeritSqlServer(o =>

@@ -14,7 +14,7 @@ namespace Merit.Web.Controllers;
 /// need tenant.create and add under the tenants they administer. The database repeats every check.
 /// </summary>
 [Route("admin/tenants")]
-public sealed class TenantsController(AdminService admin, ConfigService config, AccountService accounts, ICurrentSession session) : Controller
+public sealed class TenantsController(AdminService admin, ConfigService config, SessionRenewal sessions, ICurrentSession session) : Controller
 {
     [HttpGet("")]
     [Authorize(Policy = Permissions.TenantCreate)]
@@ -61,20 +61,9 @@ public sealed class TenantsController(AdminService admin, ConfigService config, 
 
     private async Task RefreshScopeAsync(CancellationToken ct)
     {
-        static Guid? ClaimGuid(System.Security.Claims.ClaimsPrincipal user, string type)
-            => Guid.TryParse(user.FindFirst(type)?.Value, out var g) ? g : null;
-
-        var me = session.RequireUserId();
         try
         {
-            var scope = await accounts.CreateSessionAsync(me, ProfilesController.SessionLifetime, ClaimGuid(User, MeritClaims.ProfileId),
-                ClaimGuid(User, MeritClaims.ViewAsUserId), session.ActingTenantId, ct);
-            if (session.ScopeKey is Guid old)
-            {
-                await accounts.SignOutAsync(old, ct);
-            }
-
-            await SessionCookie.SignInAsync(HttpContext, scope.Scope);
+            await sessions.RefreshAsync(HttpContext, ct);
         }
         catch (MeritException)
         {

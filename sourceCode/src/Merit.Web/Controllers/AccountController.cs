@@ -17,10 +17,8 @@ namespace Merit.Web.Controllers;
 /// with no authenticator enrolls at first sign-in. Only after both factors is the session scope created.
 /// </summary>
 [Route("account")]
-public sealed class AccountController(AccountService accounts, QrCodes qr) : Controller
+public sealed class AccountController(AccountService accounts, QrCodes qr, SessionRenewal sessions) : Controller
 {
-    private static readonly TimeSpan SessionLifetime = TimeSpan.FromHours(12);
-
     [HttpGet("signin")]
     [AllowAnonymous]
     public IActionResult SignIn(string? returnUrl) => View(new SignInModel { ReturnUrl = returnUrl });
@@ -157,9 +155,8 @@ public sealed class AccountController(AccountService accounts, QrCodes qr) : Con
     private async Task CompleteSignInAsync(Guid userId, CancellationToken ct)
     {
         // Every sign-in starts on the master profile; the person switches from the header when they want another.
-        var session = await accounts.CreateSessionAsync(userId, SessionLifetime, ct: ct);
         await HttpContext.SignOutAsync(AuthSchemes.PendingMfa);
-        await SessionCookie.SignInAsync(HttpContext, session.Scope);
+        await sessions.SignInAsync(HttpContext, userId, ct);
     }
 
     private EnrollModel BuildEnroll(string secret)

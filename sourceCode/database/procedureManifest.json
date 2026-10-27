@@ -1177,6 +1177,12 @@
     "type": "UNIQUEIDENTIFIER",
     "hasDefault": false,
     "isOutput": false
+   },
+   {
+    "name": "contentSha256",
+    "type": "CHAR (64)",
+    "hasDefault": true,
+    "isOutput": false
    }
   ]
  },
@@ -1456,6 +1462,28 @@
     "name": "valueReported",
     "type": "DECIMAL (18, 6)",
     "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
+  "name": "dbo.uspFindIntakeBatchByContent",
+  "kind": "read",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": "intake.upload",
+  "params": [
+   {
+    "name": "intakeProfileId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "contentSha256",
+    "type": "CHAR (64)",
+    "hasDefault": false,
     "isOutput": false
    }
   ]

@@ -28,6 +28,7 @@ BEGIN
         sourceChannel              VARCHAR (20)      NOT NULL,
         fileName                   NVARCHAR (260)    NULL,
         rawContent                 NVARCHAR (MAX)    NULL,
+        contentSha256              CHAR (64)         NULL,
         receivedUtc                DATETIME2 (3)     NOT NULL,
         batchStatus                VARCHAR (20)      NOT NULL CONSTRAINT DF_dbo_intakeBatch_batchStatus DEFAULT ('received'),
         pauseReason                NVARCHAR (500)    NULL,
@@ -63,6 +64,8 @@ IF COL_LENGTH (N'dbo.intakeBatch', N'fileName') IS NULL
     ALTER TABLE dbo.intakeBatch ADD fileName                   NVARCHAR (260)    NULL;
 IF COL_LENGTH (N'dbo.intakeBatch', N'rawContent') IS NULL
     ALTER TABLE dbo.intakeBatch ADD rawContent                 NVARCHAR (MAX)    NULL;
+IF COL_LENGTH (N'dbo.intakeBatch', N'contentSha256') IS NULL
+    ALTER TABLE dbo.intakeBatch ADD contentSha256              CHAR (64)         NULL;
 IF COL_LENGTH (N'dbo.intakeBatch', N'batchStatus') IS NULL
     ALTER TABLE dbo.intakeBatch ADD batchStatus                VARCHAR (20)      NOT NULL CONSTRAINT DF_dbo_intakeBatch_batchStatus DEFAULT ('received');
 IF COL_LENGTH (N'dbo.intakeBatch', N'pauseReason') IS NULL
@@ -104,6 +107,16 @@ IF NOT EXISTS (SELECT 1
 BEGIN
     CREATE CLUSTERED INDEX IX_dbo_intakeBatch_rootTenantId_intakeBatchId
         ON dbo.intakeBatch (rootTenantId, intakeBatchId);
+END;
+GO
+IF NOT EXISTS (SELECT 1
+                 FROM sys.indexes
+                WHERE name      = N'IX_dbo_intakeBatch_contentSha256_intakeProfileId'
+                  AND object_id = OBJECT_ID (N'dbo.intakeBatch'))
+BEGIN
+    CREATE INDEX IX_dbo_intakeBatch_contentSha256_intakeProfileId
+        ON dbo.intakeBatch (contentSha256, intakeProfileId)
+        WHERE isDeleted = 0 AND contentSha256 IS NOT NULL;
 END;
 GO
 
@@ -199,6 +212,7 @@ EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', 
 EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'intakeBatch', @ColumnName = N'sourceChannel', @Description = N'upload, sftp, feed, portal or manual.';
 EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'intakeBatch', @ColumnName = N'fileName', @Description = N'Original file name.';
 EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'intakeBatch', @ColumnName = N'rawContent', @Description = N'Raw file or message exactly as received. Never edited.';
+EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'intakeBatch', @ColumnName = N'contentSha256', @Description = N'SHA-256 of the content as received (UTF-8), in hex: finds the same file uploaded twice for the same profile. Null for batches received before it was recorded.';
 EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'intakeBatch', @ColumnName = N'receivedUtc', @Description = N'UTC time the agency received it.';
 EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'intakeBatch', @ColumnName = N'batchStatus', @Description = N'received, parsing, paused, loaded or failed.';
 EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'intakeBatch', @ColumnName = N'pauseReason', @Description = N'Why the batch paused, e.g. the sender''s header changed.';

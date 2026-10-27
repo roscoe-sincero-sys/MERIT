@@ -73,7 +73,8 @@ SET @Comments = CONCAT (N'Profile version ', @version, N' saved.');
 , @intakeProfileId UNIQUEIDENTIFIER
 , @fileName        NVARCHAR (260)
 , @rawContent      NVARCHAR (MAX)
-, @jobId           UNIQUEIDENTIFIER""",
+, @jobId           UNIQUEIDENTIFIER
+, @contentSha256   CHAR (64) = NULL""",
         "key": "CONCAT (N'intakeBatchId=', @intakeBatchId, N', intakeProfileId=', @intakeProfileId, N', jobId=', @jobId)",
         "body": """
 DECLARE @root UNIQUEIDENTIFIER = auth.udfSessionRootTenantId ();
@@ -88,9 +89,9 @@ BEGIN
 END;
 
 INSERT dbo.intakeBatch (intakeBatchId, rootTenantId, owningTenantId, intakeProfileId, senderOrganizationId, sourceChannel,
-                        fileName, rawContent, receivedUtc, batchStatus, submittedByUserId)
-VALUES (@intakeBatchId, @root, @acting, @intakeProfileId, @sender, 'upload', @fileName, @rawContent, SYSUTCDATETIME (),
-        'received', @user);
+                        fileName, rawContent, contentSha256, receivedUtc, batchStatus, submittedByUserId)
+VALUES (@intakeBatchId, @root, @acting, @intakeProfileId, @sender, 'upload', @fileName, @rawContent, @contentSha256,
+        SYSUTCDATETIME (), 'received', @user);
 
 """ + JOB_SCOPE + """
 
@@ -101,6 +102,21 @@ VALUES (@jobId, @root, @acting, 'intakeBatch',
         """ + JOB_SCOPE_VALUES + """);
 
 SET @Comments = N'Batch received and queued.';
+""",
+    },
+    {
+        "schema": "dbo", "name": "uspFindIntakeBatchByContent", "kind": "read", "grants": WEB, "ticket": "T183",
+        "permission": "intake.upload",
+        "desc": "The first batch already received for this intake profile with exactly this content, if any, so the same "
+                "file is not processed twice by mistake.",
+        "params": """@intakeProfileId UNIQUEIDENTIFIER
+, @contentSha256   CHAR (64)""",
+        "key": "CONCAT (N'intakeProfileId=', @intakeProfileId)",
+        "body": """
+SELECT TOP (1) intakeBatchId, fileName, receivedUtc
+  FROM dbo.intakeBatch
+ WHERE isDeleted = 0 AND contentSha256 IS NOT NULL AND contentSha256 = @contentSha256 AND intakeProfileId = @intakeProfileId
+ ORDER BY receivedUtc;
 """,
     },
     {

@@ -192,6 +192,7 @@ dotnet run --project src/Merit.Web         # terminal 2: https://localhost:7243
 | --- | --- | --- | --- |
 | `ConnectionStrings:Merit` (`ConnectionStrings__Merit`) | placeholder | Web, Worker | SQL Server connection. Web uses the `meritWeb` login; Worker uses `meritWorker`. Both are EXECUTE-only. |
 | `Session:IdleTimeoutMinutes` | `20` | Web | Sign-out after inactivity. |
+| `Session:LifetimeHours` | `12` | Web | Longest a session lasts, active or not. Each sign-in, profile switch and view-as starts a new session of this length. |
 | `DataProtection:KeyPath` | app data folder | Web | Where ASP.NET Core data-protection keys are kept. They protect MFA secrets and cookies, so share them across web servers. |
 | `Merit:SignInAttemptsPerMinute` | `30` | Web | Password attempts allowed per client address in any minute. Over the limit the client sees a **Too many attempts** page (HTTP 429 with `Retry-After`). Other clients are not affected, and repeated wrong passwords still lock the account after 5 tries. |
 | `Merit:MfaAttemptsPerMinute` | `30` | Web | The same limit for the authenticator-code and enrollment steps, counted separately. |

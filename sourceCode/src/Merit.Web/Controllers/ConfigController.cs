@@ -247,28 +247,42 @@ public sealed class IntakeController(IntakeService intake) : Controller
 {
     [HttpGet("")]
     [Authorize(Policy = Permissions.IntakeUpload)]
-    public async Task<IActionResult> Index(string? message, CancellationToken ct)
-        => this.PageOrPartial("Index", "_Batches", new IntakeModel(await intake.ProfilesAsync(ct), await intake.BatchesAsync(ct), message));
+    public async Task<IActionResult> Index(string? message, Guid? duplicateOf, CancellationToken ct)
+        => this.PageOrPartial("Index", "_Batches", new IntakeModel(await intake.ProfilesAsync(ct), await intake.BatchesAsync(ct), message, duplicateOf));
 
     [HttpPost("upload")]
     [Authorize(Policy = Permissions.IntakeUpload)]
     [RequestSizeLimit(IntakeService.MaxFileBytes + 65536)]
-    public async Task<IActionResult> Upload(Guid intakeProfileId, IFormFile? file, CancellationToken ct)
+    public async Task<IActionResult> Upload(Guid intakeProfileId, IFormFile? file, bool uploadAgain, CancellationToken ct)
     {
         if (file is null || file.Length == 0)
         {
             return RedirectToAction(nameof(Index), new { message = "Choose a file to upload." });
         }
 
+        // The limit is in bytes: check the upload's size before reading it (issue #20).
+        if (file.Length > IntakeService.MaxFileBytes)
+        {
+            return RedirectToAction(nameof(Index), new { message = "The file is larger than 20 MB; split it or send it through the secure file drop." });
+        }
+
         using var reader = new StreamReader(file.OpenReadStream());
         string content = await reader.ReadToEndAsync(ct);
         try
         {
-            await intake.UploadAsync(intakeProfileId, file.FileName, content, ct);
+            await intake.UploadAsync(intakeProfileId, file.FileName, content, uploadAgain, ct);
         }
         catch (ValidationException ex)
         {
             return RedirectToAction(nameof(Index), new { message = string.Join(" ", ex.Errors.Values.SelectMany(v => v)) });
+        }
+        catch (FileAlreadyReceivedException ex)
+        {
+            return RedirectToAction(nameof(Index), new
+            {
+                message = $"This file was already received on {Options.Date(ex.ReceivedUtc)} as {ex.FileName}. It was not processed again.",
+                duplicateOf = ex.IntakeBatchId,
+            });
         }
 
         return RedirectToAction(nameof(Index), new { message = "File received. It is being processed; this page updates as it runs." });

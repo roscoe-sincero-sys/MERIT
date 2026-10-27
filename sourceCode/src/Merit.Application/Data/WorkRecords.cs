@@ -255,6 +255,16 @@ public sealed class IntakeProfileRow
     public bool IsActive { get; init; }
 }
 
+/// <summary>A batch already received, as the duplicate-file check reports it.</summary>
+public sealed class ReceivedBatchRow
+{
+    public Guid IntakeBatchId { get; init; }
+
+    public string? FileName { get; init; }
+
+    public DateTime ReceivedUtc { get; init; }
+}
+
 public sealed class IntakeBatchRow
 {
     public Guid IntakeBatchId { get; init; }

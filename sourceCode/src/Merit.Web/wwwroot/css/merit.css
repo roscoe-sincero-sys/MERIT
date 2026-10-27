@@ -42,6 +42,8 @@ main.merit-main { max-width: 80rem; margin: 0 auto; padding: 1rem 1rem 3rem; }
 .merit-empty { color: var(--merit-muted); font-style: italic; }
 .merit-meta { color: var(--merit-muted); font-size: .9rem; }
 .merit-grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr)); gap: 1rem; }
+/* Card lists keep their column width when there are only one or two cards, instead of stretching across the page. */
+.merit-cards { grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr)); }
 .merit-inline-form { background: var(--merit-bg-soft); padding: 1rem; border-radius: .25rem; margin-top: .75rem; }
 .merit-inline-form .usa-form { max-width: none; }
 .merit-form-row { display: flex; flex-wrap: wrap; gap: 0 1rem; }

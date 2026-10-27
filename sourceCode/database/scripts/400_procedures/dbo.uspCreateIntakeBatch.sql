@@ -52,6 +52,7 @@ CREATE OR ALTER PROCEDURE dbo.uspCreateIntakeBatch
       , @fileName        NVARCHAR (260)
       , @rawContent      NVARCHAR (MAX)
       , @jobId           UNIQUEIDENTIFIER
+      , @contentSha256   CHAR (64) = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -110,9 +111,9 @@ BEGIN
         END;
 
         INSERT dbo.intakeBatch (intakeBatchId, rootTenantId, owningTenantId, intakeProfileId, senderOrganizationId, sourceChannel,
-                                fileName, rawContent, receivedUtc, batchStatus, submittedByUserId)
-        VALUES (@intakeBatchId, @root, @acting, @intakeProfileId, @sender, 'upload', @fileName, @rawContent, SYSUTCDATETIME (),
-                'received', @user);
+                                fileName, rawContent, contentSha256, receivedUtc, batchStatus, submittedByUserId)
+        VALUES (@intakeBatchId, @root, @acting, @intakeProfileId, @sender, 'upload', @fileName, @rawContent, @contentSha256,
+                SYSUTCDATETIME (), 'received', @user);
 
         DECLARE @jobProfile UNIQUEIDENTIFIER, @jobViewAs UNIQUEIDENTIFIER, @jobActing UNIQUEIDENTIFIER;
         SELECT @jobProfile = userProfileId, @jobViewAs = viewAsUserId, @jobActing = actingTenantId
