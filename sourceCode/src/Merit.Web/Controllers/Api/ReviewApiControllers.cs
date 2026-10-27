@@ -144,7 +144,7 @@ public sealed class ClustersController(ClusterService clusters) : ControllerBase
                 m.AnalyteCode, m.Population, m.Classification, m.CaseStatus, m.OpenedDate, m.HighestValue, m.HighestUnit, m.JoinedDate,
                 m.LeftDate, m.AddressLine1 is null ? null : $"{m.AddressLine1}{(m.Unit is null ? string.Empty : " " + m.Unit)}, {m.City}",
                 m.Latitude, m.Longitude)).ToList(),
-            d.Tasks.Select(t => new ClusterTaskDto(t.WorkTaskId, t.Title, t.Detail, t.DueDate, t.IsUrgent, t.AssignedToName)).ToList());
+            d.Tasks.Select(t => new ClusterTaskDto(t.WorkTaskId, t.QueueCode, t.Title, t.Detail, t.DueDate, t.IsUrgent, t.AssignedToName)).ToList());
 }
 
 /// <summary>The standard report library: definitions, results with chart hints, and CSV or Excel exports.</summary>

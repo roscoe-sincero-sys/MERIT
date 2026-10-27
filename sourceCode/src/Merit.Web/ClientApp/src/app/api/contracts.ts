@@ -271,6 +271,7 @@ export interface ClusterMemberDto {
 
 export interface ClusterTaskDto {
   workTaskId: string;
+  queueCode: string;
   title: string;
   detail: string | null;
   dueDate: string | null;
@@ -359,4 +360,13 @@ export interface ReportDto {
   columns: ReportColumnDto[];
   chart: ReportChartDto;
   rows: ReportCell[][];
+}
+
+/** A county's outline for the maps' context layer (GeoJSON geometry, longitude then latitude) and where to write its name. */
+export interface BoundaryDto {
+  countyFips: string;
+  name: string;
+  geometry: { type: 'Polygon'; coordinates: number[][][] } | { type: 'MultiPolygon'; coordinates: number[][][][] };
+  labelLatitude: number | null;
+  labelLongitude: number | null;
 }

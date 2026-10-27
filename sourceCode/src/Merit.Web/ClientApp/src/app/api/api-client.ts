@@ -2,7 +2,7 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import {
-  AnalyteOptionDto, AssignableUserDto, BulkActionResponse, BulkTaskActionRequest, CaseMapPointDto, ClusterDto, ClusterListItemDto,
+  AnalyteOptionDto, AssignableUserDto, BoundaryDto, BulkActionResponse, BulkTaskActionRequest, CaseMapPointDto, ClusterDto, ClusterListItemDto,
   ClusterMemberRequest, ClusterUpdateRequest, HeldActionRequest, HeldGroupDto, HeldRowDto, LabelsDto, MatchDecisionRequest, MatchDecisionResponse,
   MatchQueueItemDto, MatchReviewDto, MeDto, PagedResult, PersonTimelineDto, QueueCountDto, ReportDto, ReportSummaryDto,
   ResultListItemDto, WorkTaskDto,
@@ -18,6 +18,10 @@ export class ApiClient {
 
   labels(): Observable<LabelsDto> {
     return this.http.get<LabelsDto>(`${this.base}/reference/labels`);
+  }
+
+  boundaries(): Observable<BoundaryDto[]> {
+    return this.http.get<BoundaryDto[]>(`${this.base}/reference/boundaries`);
   }
 
   me(): Observable<MeDto> {

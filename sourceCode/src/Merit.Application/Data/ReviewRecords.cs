@@ -201,6 +201,8 @@ public sealed class ClusterTaskRow
 {
     public Guid WorkTaskId { get; init; }
 
+    public string QueueCode { get; init; } = string.Empty;
+
     public string Title { get; init; } = string.Empty;
 
     public string? Detail { get; init; }

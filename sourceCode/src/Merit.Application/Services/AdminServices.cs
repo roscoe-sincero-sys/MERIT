@@ -96,6 +96,10 @@ public sealed class ConfigService(IConfigData config, IReferenceDataProvider ref
     public Task<IReadOnlyList<SubJurisdictionRow>> SubJurisdictionsAsync(CancellationToken ct = default)
         => config.ListSubJurisdictionsAsync(ct);
 
+    /// <summary>County outlines for the maps (issue #48): reference geography, not records, so any signed-in user.</summary>
+    public Task<IReadOnlyList<SubJurisdictionBoundaryRow>> BoundariesAsync(CancellationToken ct = default)
+        => config.ListSubJurisdictionBoundariesAsync(ct);
+
     public Task<IReadOnlyList<EnvironmentalStandardRow>> StandardsAsync(CancellationToken ct = default)
         => config.GetEnvironmentalStandardsAsync(ct);
 }

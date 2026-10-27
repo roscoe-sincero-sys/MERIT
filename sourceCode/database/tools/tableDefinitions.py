@@ -83,6 +83,11 @@ TABLES = [
             c("subJurisdictionName", "NVARCHAR (80)", "Display name, e.g. Baltimore City.", null=False),
             c("jurisdictionType", "VARCHAR (20)", "county, independentCity or healthDistrict.", null=False,
               check="jurisdictionType IN ('county', 'independentCity', 'healthDistrict')"),
+            c("boundary", "NVARCHAR (MAX)", "Simplified outline for the map's context layer: a GeoJSON Polygon or "
+              "MultiPolygon geometry in WGS 84 longitude and latitude, e.g. from the Census Bureau's cartographic "
+              "boundaries. NULL draws no outline."),
+            c("labelLatitude", "DECIMAL (9, 6)", "Latitude of a point inside the outline, where the map writes the name."),
+            c("labelLongitude", "DECIMAL (9, 6)", "Longitude of a point inside the outline, where the map writes the name."),
         ],
         "fks": [("rootTenantId", "auth.tenant", "tenantId")],
         "indexes": [{"name": "UX_config_subJurisdiction_rootTenantId_countyFips", "cols": "rootTenantId, countyFips",

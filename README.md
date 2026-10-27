@@ -211,6 +211,19 @@ cases opened, activities, form defaults, report periods. So does every time show
 root created before this setting is on Eastern time; to change it, set `auth.tenant.timeZone` for the root to a name from
 `sys.time_zone_info` (for example `Central Standard Time`), and users pick it up at their next sign-in.
 
+**County outlines on the maps.** The case and cluster maps draw the jurisdiction's county outlines and names under the
+points, served by MERIT itself, so no tile service sees where cases are. Load them once at install from a GeoJSON file
+of simplified outlines (for example from the Census Bureau's cartographic boundary files), whose features carry
+`countyFips` and, optionally, `labelLatitude` and `labelLongitude`:
+
+```powershell
+python sourceCode\database\tools\boundaries.py outlines.geojson <root tenant code> > boundaries.sql
+sqlcmd -S localhost\PORTAL -d MERIT -E -b -i boundaries.sql
+```
+
+The demo loads Maryland's from `sourceCode/database/tools/data/mdCountyBoundaries.geojson`. A jurisdiction without
+outlines gets the plain latitude and longitude grid.
+
 **`Deploy-MeritDatabase.ps1` flags:**
 
 | Flag | Meaning |

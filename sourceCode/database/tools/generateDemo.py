@@ -23,6 +23,7 @@ import struct
 import uuid
 import unicodedata
 from pathlib import Path
+from boundaries import boundary_sql
 
 OUT = Path(__file__).resolve().parents[1] / "scripts" / "900_demo" / "900_demoMaryland.sql"
 DEMO_PASSWORD = "MeritDemo!2026"
@@ -231,6 +232,9 @@ WHEN NOT MATCHED THEN
             s.subJurisdictionName, s.jurisdictionType);
 GO
 """)
+    # County outlines for the maps' context layer (issue #48), from the Census Bureau.
+    w("-- County outlines for the case and cluster maps (U.S. Census Bureau, public domain).")
+    w(boundary_sql(Path(__file__).parent / "data" / "mdCountyBoundaries.geojson", ROOT_CODE))
     for code, name, ttype, fips in CHILD_TENANTS:
         w(f"EXEC config.uspCreateChildTenant @tenantCode = N'{code}', @tenantName = {q(name)}, @tenantType = '{ttype}', "
           f"@parentTenantCode = N'{ROOT_CODE}', @countyFipsList = '{fips}';")

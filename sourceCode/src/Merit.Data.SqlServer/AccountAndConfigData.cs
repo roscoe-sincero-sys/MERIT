@@ -149,6 +149,9 @@ public sealed class ConfigData(Db db) : IConfigData
     public Task<IReadOnlyList<SubJurisdictionRow>> ListSubJurisdictionsAsync(CancellationToken ct = default)
         => db.QueryAsync<SubJurisdictionRow>("config.uspListSubJurisdictions", null, ct);
 
+    public Task<IReadOnlyList<SubJurisdictionBoundaryRow>> ListSubJurisdictionBoundariesAsync(CancellationToken ct = default)
+        => db.QueryAsync<SubJurisdictionBoundaryRow>("config.uspListSubJurisdictionBoundaries", null, ct);
+
     public Task<IReadOnlyList<EnvironmentalStandardRow>> GetEnvironmentalStandardsAsync(CancellationToken ct = default)
         => db.QueryAsync<EnvironmentalStandardRow>("config.uspGetEnvironmentalStandards", null, ct);
 

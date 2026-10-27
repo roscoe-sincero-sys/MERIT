@@ -25,6 +25,9 @@ BEGIN
         countyFips                 CHAR (3)          NOT NULL,
         subJurisdictionName        NVARCHAR (80)     NOT NULL,
         jurisdictionType           VARCHAR (20)      NOT NULL,
+        boundary                   NVARCHAR (MAX)    NULL,
+        labelLatitude              DECIMAL (9, 6)    NULL,
+        labelLongitude             DECIMAL (9, 6)    NULL,
 
         -- Standard audit columns. Soft delete only. Convention: DF_<schema>_<tableName>_<fieldName>.
         isDeleted       BIT             NOT NULL CONSTRAINT DF_config_subJurisdiction_isDeleted       DEFAULT (0),
@@ -44,6 +47,12 @@ GO
 -- 2. Additive columns. Each column is also added on its own when missing, so a table deployed by an
 --    earlier release converges on the current definition. A no-op on a fresh install.
 -- -------------------------------------------------------------------------------------------
+IF COL_LENGTH (N'config.subJurisdiction', N'boundary') IS NULL
+    ALTER TABLE config.subJurisdiction ADD boundary                   NVARCHAR (MAX)    NULL;
+IF COL_LENGTH (N'config.subJurisdiction', N'labelLatitude') IS NULL
+    ALTER TABLE config.subJurisdiction ADD labelLatitude              DECIMAL (9, 6)    NULL;
+IF COL_LENGTH (N'config.subJurisdiction', N'labelLongitude') IS NULL
+    ALTER TABLE config.subJurisdiction ADD labelLongitude             DECIMAL (9, 6)    NULL;
 GO
 
 -- -------------------------------------------------------------------------------------------
@@ -168,6 +177,9 @@ EXEC util.uspSetObjectDescription @SchemaName = N'config', @ObjectType = N'TABLE
 EXEC util.uspSetObjectDescription @SchemaName = N'config', @ObjectType = N'TABLE', @ObjectName = N'subJurisdiction', @ColumnName = N'countyFips', @Description = N'Three-digit county FIPS code; 999 = unknown.';
 EXEC util.uspSetObjectDescription @SchemaName = N'config', @ObjectType = N'TABLE', @ObjectName = N'subJurisdiction', @ColumnName = N'subJurisdictionName', @Description = N'Display name, e.g. Baltimore City.';
 EXEC util.uspSetObjectDescription @SchemaName = N'config', @ObjectType = N'TABLE', @ObjectName = N'subJurisdiction', @ColumnName = N'jurisdictionType', @Description = N'county, independentCity or healthDistrict.';
+EXEC util.uspSetObjectDescription @SchemaName = N'config', @ObjectType = N'TABLE', @ObjectName = N'subJurisdiction', @ColumnName = N'boundary', @Description = N'Simplified outline for the map''s context layer: a GeoJSON Polygon or MultiPolygon geometry in WGS 84 longitude and latitude, e.g. from the Census Bureau''s cartographic boundaries. NULL draws no outline.';
+EXEC util.uspSetObjectDescription @SchemaName = N'config', @ObjectType = N'TABLE', @ObjectName = N'subJurisdiction', @ColumnName = N'labelLatitude', @Description = N'Latitude of a point inside the outline, where the map writes the name.';
+EXEC util.uspSetObjectDescription @SchemaName = N'config', @ObjectType = N'TABLE', @ObjectName = N'subJurisdiction', @ColumnName = N'labelLongitude', @Description = N'Longitude of a point inside the outline, where the map writes the name.';
 EXEC util.uspSetObjectDescription @SchemaName = N'config', @ObjectType = N'TABLE', @ObjectName = N'subJurisdiction', @ColumnName = N'isDeleted', @Description = N'Soft-delete flag. 1 = deleted, 0 = active. This database performs no hard deletes; all reads must filter isDeleted = 0.';
 EXEC util.uspSetObjectDescription @SchemaName = N'config', @ObjectType = N'TABLE', @ObjectName = N'subJurisdiction', @ColumnName = N'deletedBy', @Description = N'Login or application user that soft-deleted the row. Stamped by trg_au_updt_subJurisdiction when isDeleted transitions 0 -> 1. Meaningful only when isDeleted = 1.';
 EXEC util.uspSetObjectDescription @SchemaName = N'config', @ObjectType = N'TABLE', @ObjectName = N'subJurisdiction', @ColumnName = N'deletedDateUtc', @Description = N'UTC timestamp of the soft delete, stamped by trg_au_updt_subJurisdiction with the same instant as modifiedDateUtc. Meaningful only when isDeleted = 1.';

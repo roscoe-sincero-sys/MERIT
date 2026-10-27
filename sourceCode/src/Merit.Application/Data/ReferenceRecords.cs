@@ -183,6 +183,20 @@ public sealed class SettingRow
     public DateTime ModifiedDateUtc { get; init; }
 }
 
+/// <summary>A county's outline (GeoJSON geometry) and label point, for the maps' context layer (issue #48).</summary>
+public sealed class SubJurisdictionBoundaryRow
+{
+    public string CountyFips { get; init; } = string.Empty;
+
+    public string SubJurisdictionName { get; init; } = string.Empty;
+
+    public string Boundary { get; init; } = string.Empty;
+
+    public decimal? LabelLatitude { get; init; }
+
+    public decimal? LabelLongitude { get; init; }
+}
+
 public sealed class SubJurisdictionRow
 {
     public Guid SubJurisdictionId { get; init; }

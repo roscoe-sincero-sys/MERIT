@@ -741,6 +741,15 @@
   ]
  },
  {
+  "name": "config.uspListSubJurisdictionBoundaries",
+  "kind": "read",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": null,
+  "params": []
+ },
+ {
   "name": "config.uspListSubJurisdictions",
   "kind": "read",
   "grants": [
@@ -925,6 +934,44 @@
    {
     "name": "rowVersion",
     "type": "BINARY (8)",
+    "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
+  "name": "config.uspSetSubJurisdictionBoundary",
+  "kind": "write",
+  "grants": [],
+  "permission": null,
+  "params": [
+   {
+    "name": "tenantCode",
+    "type": "NVARCHAR (40)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "countyFips",
+    "type": "CHAR (3)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "boundary",
+    "type": "NVARCHAR (MAX)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "labelLatitude",
+    "type": "DECIMAL (9, 6)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "labelLongitude",
+    "type": "DECIMAL (9, 6)",
     "hasDefault": true,
     "isOutput": false
    }
