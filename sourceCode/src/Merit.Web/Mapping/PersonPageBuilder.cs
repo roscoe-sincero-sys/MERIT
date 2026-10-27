@@ -11,7 +11,7 @@ namespace Merit.Web.Mapping;
 /// Builds the person page's view models from the application read model. The page has the same sections for everyone;
 /// the population only changes their order and which empty states appear (specification, Person page table).
 /// </summary>
-public sealed class PersonPageBuilder(IReferenceDataProvider reference, ConfigService config, ICurrentSession session)
+public sealed class PersonPageBuilder(IClock clock, IReferenceDataProvider reference, ConfigService config, ICurrentSession session)
 {
     private static readonly Dictionary<string, int[]> Order = new(StringComparer.Ordinal)
     {
@@ -81,7 +81,7 @@ public sealed class PersonPageBuilder(IReferenceDataProvider reference, ConfigSe
         var options = new List<SelectOption> { new(string.Empty, "All analytes", analyteFilter is null) };
         options.AddRange(analytes.Select(a => new SelectOption(a.AnalyteId.ToString(), a.AnalyteName, a.AnalyteId == analyteFilter)));
 
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var today = clock.Today;
         var allThresholds = await config.ThresholdsAsync(ct);
         var charts = new List<TrendChart>();
         foreach (var group in shown.Where(r => r.ValueCanonical is not null && r.ResultRowStatus == "valid")

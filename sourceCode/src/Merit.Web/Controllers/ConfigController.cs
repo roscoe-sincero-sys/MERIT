@@ -14,7 +14,7 @@ namespace Merit.Web.Controllers;
 
 /// <summary>Threshold, settings and analyte configuration screens (htmx): small tables and forms.</summary>
 [Route("config")]
-public sealed class ConfigController(ConfigService config, IReferenceDataProvider reference, ICurrentSession session) : Controller
+public sealed class ConfigController(IClock clock, ConfigService config, IReferenceDataProvider reference, ICurrentSession session) : Controller
 {
     [HttpGet("thresholds")]
     [Authorize(Policy = Permissions.SignedIn)]
@@ -27,7 +27,7 @@ public sealed class ConfigController(ConfigService config, IReferenceDataProvide
     [Authorize(Policy = Permissions.ConfigEdit)]
     public async Task<IActionResult> EditThreshold(Guid? id, CancellationToken ct)
     {
-        var form = new ThresholdFormModel { EffectiveFrom = DateOnly.FromDateTime(DateTime.UtcNow) };
+        var form = new ThresholdFormModel { EffectiveFrom = clock.Today };
         if (id is Guid tid)
         {
             var t = (await config.ThresholdsAsync(ct)).FirstOrDefault(x => x.ThresholdId == tid) ?? throw new NotFoundException();
@@ -83,7 +83,7 @@ public sealed class ConfigController(ConfigService config, IReferenceDataProvide
     public async Task<IActionResult> Settings(CancellationToken ct)
     {
         var all = await config.SettingsAsync(true, ct);
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var today = clock.Today;
         var current = all.Where(s => s.EffectiveFrom <= today && (s.EffectiveTo is null || s.EffectiveTo >= today))
             .GroupBy(s => s.SettingKey).Select(g => g.OrderByDescending(s => s.EffectiveFrom).First()).OrderBy(s => s.SettingKey).ToList();
         return this.PageOrPartial("Settings", "_SettingsTable", new SettingsModel(current, all, session.Has(Permissions.ConfigEdit)));
@@ -93,7 +93,7 @@ public sealed class ConfigController(ConfigService config, IReferenceDataProvide
     [Authorize(Policy = Permissions.ConfigEdit)]
     public async Task<IActionResult> SaveSetting(string key, string? settingValue, DateOnly? effectiveFrom, CancellationToken ct)
     {
-        await config.SaveSettingAsync(key, settingValue, effectiveFrom ?? DateOnly.FromDateTime(DateTime.UtcNow), ct);
+        await config.SaveSettingAsync(key, settingValue, effectiveFrom ?? clock.Today, ct);
         Response.Announce($"Setting {key} changed.");
         return await Settings(ct);
     }
@@ -134,7 +134,7 @@ public sealed class ConfigController(ConfigService config, IReferenceDataProvide
 
 /// <summary>User administration (htmx forms): accounts, profile assignments at tenant nodes, MFA resets.</summary>
 [Route("admin")]
-public sealed class AdminController(AdminService admin, AuditService audit, ICurrentSession session) : Controller
+public sealed class AdminController(IClock clock, AdminService admin, AuditService audit, ICurrentSession session) : Controller
 {
     [HttpGet("users")]
     [Authorize(Policy = Permissions.TenantAdminister)]
@@ -198,7 +198,7 @@ public sealed class AdminController(AdminService admin, AuditService audit, ICur
     {
         try
         {
-            await admin.AssignAsync(id, roleId, tenantId, includeDescendants, accessLevel ?? "full", DateOnly.FromDateTime(DateTime.UtcNow), null, ct);
+            await admin.AssignAsync(id, roleId, tenantId, includeDescendants, accessLevel ?? "full", clock.Today, null, ct);
         }
         catch (MeritException ex) when (ex is ValidationException or PermissionDeniedException)
         {

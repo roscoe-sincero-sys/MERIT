@@ -25,7 +25,9 @@ public static class Options
 
     public static string Date(DateOnly? d) => d?.ToString("MMM d, yyyy", CultureInfo.InvariantCulture) ?? string.Empty;
 
-    public static string Date(DateTime? d) => d?.ToLocalTime().ToString("MMM d, yyyy h:mm tt", CultureInfo.InvariantCulture) ?? string.Empty;
+    /// <summary>A stored UTC instant as the jurisdiction's date and time (see <see cref="DisplayTime"/>).</summary>
+    public static string Date(DateTime? d) => d is null ? string.Empty
+        : DisplayTime.ToLocal(d.Value).ToString("MMM d, yyyy h:mm tt", CultureInfo.InvariantCulture);
 
     public static string Iso(DateOnly? d) => d?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? string.Empty;
 

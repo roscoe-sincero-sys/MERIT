@@ -26,7 +26,7 @@ PROCS = [
                  "owningTenantName.",
         "body": f"""
 DECLARE @root UNIQUEIDENTIFIER = (SELECT rootTenantId FROM dbo.person WHERE personId = @personId);
-DECLARE @today DATE = CAST (SYSUTCDATETIME () AS DATE);
+DECLARE @today DATE = auth.udfSessionToday ();
 DECLARE @owner UNIQUEIDENTIFIER;
 
 IF EXISTS (SELECT 1 FROM dbo.exposureCase WITH (UPDLOCK, HOLDLOCK)
@@ -108,7 +108,7 @@ IF @before <> @after
 BEGIN
     INSERT dbo.caseActivity (caseActivityId, rootTenantId, owningTenantId, exposureCaseId, activityType, activityDate,
                              workerUserId, note)
-    VALUES ({NEWID}, @root, @owner, @exposureCaseId, 'statusChange', CAST (SYSUTCDATETIME () AS DATE),
+    VALUES ({NEWID}, @root, @owner, @exposureCaseId, 'statusChange', auth.udfSessionToday (),
             auth.udfSessionUserId (), CONCAT (N'Classification changed from ', @before, N' to ', @after,
                                                N' by a new result.'));
 END;
@@ -185,7 +185,7 @@ SELECT TOP (1) r.relatedPersonId AS contactPersonId, cp.lastName, cp.firstName, 
   FROM dbo.personRelationship AS r
   JOIN dbo.person AS cp ON cp.personId = r.relatedPersonId
  WHERE r.personId = @personId AND r.isDeleted = 0 AND r.isPrimaryContact = 1
-   AND (r.endDate IS NULL OR r.endDate >= CAST (SYSUTCDATETIME () AS DATE));
+   AND (r.endDate IS NULL OR r.endDate >= auth.udfSessionToday ());
 """,
     },
     {
@@ -276,7 +276,7 @@ UPDATE dbo.exposureCase
 
 INSERT dbo.caseActivity (caseActivityId, rootTenantId, owningTenantId, exposureCaseId, activityType, activityDate,
                          workerUserId, note)
-VALUES ({NEWID}, @root, @owner, @exposureCaseId, 'statusChange', CAST (SYSUTCDATETIME () AS DATE),
+VALUES ({NEWID}, @root, @owner, @exposureCaseId, 'statusChange', auth.udfSessionToday (),
         auth.udfSessionUserId (),
         CONCAT (N'Override: ', @before, N'/', @beforePop, N' to ', @classification, N'/', @population, N'. Reason: ', @reason));
 
@@ -366,7 +366,7 @@ DECLARE @scope UNIQUEIDENTIFIER = TRY_CAST (SESSION_CONTEXT (N'scopeKey') AS UNI
 SELECT DISTINCT u.appUserId, u.displayName
   FROM auth.appUser AS u
   JOIN auth.userAssignment AS ua ON ua.appUserId = u.appUserId AND ua.isDeleted = 0
-                                AND (ua.endDate IS NULL OR ua.endDate >= CAST (SYSUTCDATETIME () AS DATE))
+                                AND (ua.endDate IS NULL OR ua.endDate >= auth.udfSessionToday ())
   JOIN auth.sessionScopeTenant AS st ON st.tenantId = ua.tenantId AND st.sessionScopeId = @scope
  WHERE u.isActive = 1 AND u.isDeleted = 0
  ORDER BY u.displayName;
@@ -388,7 +388,7 @@ SELECT DISTINCT u.appUserId, u.displayName
         "body": f"""
 DECLARE @personId UNIQUEIDENTIFIER, @root UNIQUEIDENTIFIER, @owner UNIQUEIDENTIFIER, @population VARCHAR (10),
         @category VARCHAR (20), @code VARCHAR (8), @caseNumber VARCHAR (20);
-DECLARE @today DATE = CAST (SYSUTCDATETIME () AS DATE);
+DECLARE @today DATE = auth.udfSessionToday ();
 
 SELECT @personId = c.personId, @root = c.rootTenantId, @owner = c.owningTenantId, @population = c.population,
        @category = c.exposureCategory, @code = a.code, @caseNumber = c.caseNumber

@@ -81,6 +81,7 @@ public sealed record PregnancyInput(Guid? PregnancyEpisodeId, Guid PersonId, Dat
 /// dates. Every view and change is audited. A DOB or pregnancy change reruns classification and reports what changed.
 /// </summary>
 public sealed class PersonService(
+    IClock clock,
     IPersonData data,
     IPlaceData places,
     IWorkData work,
@@ -110,7 +111,7 @@ public sealed class PersonService(
         await audit.ViewedAsync("person", personId, ct).ConfigureAwait(false);
 
         var config = await settings.GetAsync(ct).ConfigureAwait(false);
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var today = clock.Today;
         var episodes = pregnancies.Result.Select(e => new PregnancyEpisode(e.StartDate, e.ExpectedEndDate, e.ActualEndDate));
         var population = PopulationRules.Derive(header.Person.Dob, today, episodes, config.AdultAgeCutoffYears, config.PregnancyMaxWeeks);
         int? ageYears = header.Person.Dob is DateOnly dob ? PopulationRules.AgeInYears(dob, today) : null;
@@ -149,7 +150,7 @@ public sealed class PersonService(
         var v = new Validator();
         v.Required(nameof(input.LastName), input.LastName, "Last name").MaxLength(nameof(input.LastName), input.LastName, 60, "Last name");
         v.MaxLength(nameof(input.FirstName), input.FirstName, 60, "First name").MaxLength(nameof(input.MiddleName), input.MiddleName, 60, "Middle name");
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var today = clock.Today;
         v.When(input.Dob > today, nameof(input.Dob), "Date of birth cannot be in the future.");
         v.When(input.Dob < new DateOnly(1900, 1, 1), nameof(input.Dob), "Date of birth cannot be before 1900.");
         v.When(input.DeceasedDate is not null && input.Dob is not null && input.DeceasedDate < input.Dob, nameof(input.DeceasedDate),
@@ -225,7 +226,7 @@ public sealed class PersonService(
         session.Require(Permissions.PersonViewIdentifiers);
         new Validator().Required("IdentifierValue", value, "Identifier").ThrowIfInvalid();
         await data.SaveIdentifierAsync(TimeOrderedId.New(), personId, type, value.Trim(), Clean(facility), "staff",
-            DateOnly.FromDateTime(DateTime.UtcNow), false, ct).ConfigureAwait(false);
+            clock.Today, false, ct).ConfigureAwait(false);
         await audit.ChangedAsync("person", personId, ct).ConfigureAwait(false);
     }
 
@@ -248,7 +249,7 @@ public sealed class PersonService(
 
         await data.SaveRelationshipAsync(new RelationshipSave(TimeOrderedId.New(), input.PersonId, related, input.Role,
             input.IsPrimaryContact, input.HasLegalCustody, input.StartDate, null, input.Source,
-            input.Source is "interview" or "caseManager" ? DateOnly.FromDateTime(DateTime.UtcNow) : null, false, null), ct)
+            input.Source is "interview" or "caseManager" ? clock.Today : null, false, null), ct)
             .ConfigureAwait(false);
         await audit.ChangedAsync("person", input.PersonId, ct).ConfigureAwait(false);
     }
@@ -341,7 +342,7 @@ public sealed class PersonService(
         {
             await work.CreateTaskAsync(new WorkTaskCreate(TimeOrderedId.New(), "newbornTesting", "Link the newborn and arrange testing",
                 "A live birth was recorded. Add the newborn as a contact-only person with a parent relationship.", input.PersonId,
-                null, null, null, null, false, DateOnly.FromDateTime(DateTime.UtcNow).AddDays(14)), ct).ConfigureAwait(false);
+                null, null, null, null, false, clock.Today.AddDays(14)), ct).ConfigureAwait(false);
             notes.Add("A newborn testing task was created.");
         }
 

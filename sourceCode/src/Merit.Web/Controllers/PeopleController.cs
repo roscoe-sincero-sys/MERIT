@@ -15,7 +15,7 @@ namespace Merit.Web.Controllers;
 /// SVG. Every section URL also renders as a full page on its own, so anything htmx pushes into history works.
 /// </summary>
 [Route("people")]
-public sealed class PeopleController(PersonService people, PersonPageBuilder builder, IReferenceDataProvider reference) : Controller
+public sealed class PeopleController(IClock clock, PersonService people, PersonPageBuilder builder, IReferenceDataProvider reference) : Controller
 {
     // ------------------------------------------------------------------------------------------ person
     [HttpGet("new")]
@@ -184,7 +184,7 @@ public sealed class PeopleController(PersonService people, PersonPageBuilder bui
     [Authorize(Policy = Permissions.PersonEdit)]
     public async Task<IActionResult> EndRelationship(Guid id, Guid relationshipId, CancellationToken ct)
     {
-        await people.EndRelationshipAsync(id, relationshipId, DateOnly.FromDateTime(DateTime.UtcNow), ct);
+        await people.EndRelationshipAsync(id, relationshipId, clock.Today, ct);
         Response.Announce("Relationship ended.");
         return await SectionAsync(id, "_Relationships", m => m.Relationships, ct, forcePartial: true);
     }

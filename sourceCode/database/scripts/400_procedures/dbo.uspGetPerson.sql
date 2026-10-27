@@ -90,7 +90,7 @@ BEGIN
         -- ===== The procedure's own work starts here. Everything above and below is boilerplate. ==
         -- =========================================================================================
 
-        DECLARE @today DATE = CAST (SYSUTCDATETIME () AS DATE);
+        DECLARE @today DATE = auth.udfSessionToday ();
 
         SELECT p.personId, p.rootTenantId, p.lastName, p.firstName, p.middleName, p.dob, p.dobVerified, p.sex, p.ethnicity,
                p.preferredLanguage, p.deceasedDate, p.mergedIntoPersonId, p.isPlaceholderName, p.rowVersion,

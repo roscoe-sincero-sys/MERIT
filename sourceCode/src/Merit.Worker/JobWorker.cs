@@ -57,6 +57,8 @@ public sealed class JobCurrentSession(JobSessionHolder holder) : ICurrentSession
 
     public string? ActingTenantName => S?.ActingTenantName;
 
+    public string TimeZoneId => S?.TimeZone ?? JurisdictionTimeZones.Default;
+
     public IReadOnlySet<string> Permissions => holder.Current?.Permissions.ToHashSet(StringComparer.Ordinal)
                                                ?? new HashSet<string>(StringComparer.Ordinal);
 }

@@ -21,7 +21,8 @@ PROCS = [
 , @effectiveFrom    DATE = '2026-01-01'
 , @tenantType       VARCHAR (30) = 'state'
 , @parentTenantCode VARCHAR (30) = NULL
-, @countiesJson     NVARCHAR (MAX) = N'[]'""",
+, @countiesJson     NVARCHAR (MAX) = N'[]'
+, @timeZone         VARCHAR (64) = NULL""",
         "key": "CONCAT (N'tenantCode=', @tenantCode)",
         "notes": "Core installer: runs as its owner and is granted to no role, because it seeds the new root's shared "
                  "rows, which row-level security would hide from a platform administrator. Reached only through "
@@ -46,8 +47,13 @@ END;
 
 IF NOT EXISTS (SELECT 1 FROM auth.tenant WHERE tenantId = @root)
 BEGIN
-    INSERT auth.tenant (tenantId, parentTenantId, rootTenantId, tenantCode, tenantName, tenantType, statePostalCode)
-    VALUES (@root, @parent, @root, @tenantCode, @tenantName, @tenantType, @statePostalCode);
+    INSERT auth.tenant (tenantId, parentTenantId, rootTenantId, tenantCode, tenantName, tenantType, statePostalCode, timeZone)
+    VALUES (@root, @parent, @root, @tenantCode, @tenantName, @tenantType, @statePostalCode, @timeZone);
+END
+ELSE IF @timeZone IS NOT NULL
+BEGIN
+    -- A re-run fills in a zone the root does not have yet (issue #36); one already chosen is kept.
+    UPDATE auth.tenant SET timeZone = @timeZone WHERE tenantId = @root AND timeZone IS NULL;
 END;
 
 -- Closure: self, plus every ancestor of the parent one level further away.
@@ -318,7 +324,8 @@ PROCS += [
 , @effectiveFrom    DATE = '2026-01-01'
 , @tenantType       VARCHAR (30) = 'state'
 , @parentTenantCode VARCHAR (30) = NULL
-, @countiesJson     NVARCHAR (MAX) = N'[]'""",
+, @countiesJson     NVARCHAR (MAX) = N'[]'
+, @timeZone         VARCHAR (64) = NULL""",
         "key": "CONCAT (N'tenantCode=', @tenantCode, N', parentTenantCode=', @parentTenantCode, N', tenantType=', @tenantType)",
         "notes": "Returns the root tenant id. The inserts run in config.uspInstallRootTenant.",
         "validate": CODE_RULE + """
@@ -342,11 +349,15 @@ END;
 IF @tenantType IN ('state', 'tribe') AND (@statePostalCode IS NULL OR @statePostalCode NOT LIKE '[A-Z][A-Z]')
 BEGIN
     ;THROW 51422, N'A state or tribe needs its two-letter postal code.', 1;
+END;
+IF @timeZone IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sys.time_zone_info WHERE name = @timeZone)
+BEGIN
+    ;THROW 51422, N'Choose the time zone from the list.', 1;
 END;""",
         "body": """
 EXEC config.uspInstallRootTenant @tenantCode = @tenantCode, @tenantName = @tenantName, @statePostalCode = @statePostalCode,
      @stateFips = @stateFips, @effectiveFrom = @effectiveFrom, @tenantType = @tenantType,
-     @parentTenantCode = @parentTenantCode, @countiesJson = @countiesJson;
+     @parentTenantCode = @parentTenantCode, @countiesJson = @countiesJson, @timeZone = @timeZone;
 
 SET @Comments = N'Root tenant created.';
 """,

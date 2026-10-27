@@ -96,8 +96,8 @@ BEGIN
         -- =========================================================================================
 
         DECLARE @root UNIQUEIDENTIFIER = auth.udfSessionRootTenantId ();
-        DECLARE @from DATE = DATEADD (DAY, -@windowDays, CAST (SYSUTCDATETIME () AS DATE));
-        DECLARE @to DATE = CAST (SYSUTCDATETIME () AS DATE);
+        DECLARE @from DATE = DATEADD (DAY, -@windowDays, auth.udfSessionToday ());
+        DECLARE @to DATE = auth.udfSessionToday ();
         DECLARE @groups TABLE (clusterType VARCHAR (20), sharedKey UNIQUEIDENTIFIER, title NVARCHAR (200), caseCount INT,
                                owner UNIQUEIDENTIFIER);
         DECLARE @members TABLE (clusterType VARCHAR (20), sharedKey UNIQUEIDENTIFIER, exposureCaseId UNIQUEIDENTIFIER);

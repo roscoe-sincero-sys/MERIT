@@ -49,6 +49,7 @@ public sealed record ResultSaveSummary(
 
 /// <summary>Manual result entry (fax and paper) and result reads. Intake files take the same path in the worker.</summary>
 public sealed class ResultService(
+    IClock clock,
     IResultData results,
     ClassificationService classification,
     IReferenceDataProvider reference,
@@ -82,7 +83,7 @@ public sealed class ResultService(
         v.When(specimen.SpeciationList.Count > 0 && input.Speciation is not null && !specimen.SpeciationList.Contains(input.Speciation),
             nameof(input.Speciation), "Choose a speciation from the list.");
         v.When(specimen.RequiresCreatinine && input.Creatinine is null, nameof(input.Creatinine), "Creatinine is required for this specimen.");
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var today = clock.Today;
         v.When(input.CollectedDate > today, nameof(input.CollectedDate), "The collection date cannot be in the future.");
         v.When(input.ReportedDate is not null && input.ReportedDate < input.CollectedDate, nameof(input.ReportedDate),
             "The reported date must be on or after the collection date.");

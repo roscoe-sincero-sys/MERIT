@@ -214,7 +214,8 @@ GO
 
 -- ======================================================================================== part 1: jurisdiction
 EXEC config.uspCreateRootTenant @tenantCode = N'{ROOT_CODE}', @tenantName = N'Maryland Lead and Metals Program (demo)',
-     @statePostalCode = 'MD', @stateFips = '24', @tenantType = 'state';
+     @statePostalCode = 'MD', @stateFips = '24', @tenantType = 'state',
+     @timeZone = 'Eastern Standard Time';
 GO
 
 DECLARE @root UNIQUEIDENTIFIER = (SELECT tenantId FROM auth.tenant WHERE tenantCode = N'{ROOT_CODE}');

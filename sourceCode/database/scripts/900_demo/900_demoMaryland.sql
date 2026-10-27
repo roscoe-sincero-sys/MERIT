@@ -20,7 +20,8 @@ GO
 
 -- ======================================================================================== part 1: jurisdiction
 EXEC config.uspCreateRootTenant @tenantCode = N'MD-LEAD', @tenantName = N'Maryland Lead and Metals Program (demo)',
-     @statePostalCode = 'MD', @stateFips = '24', @tenantType = 'state';
+     @statePostalCode = 'MD', @stateFips = '24', @tenantType = 'state',
+     @timeZone = 'Eastern Standard Time';
 GO
 
 DECLARE @root UNIQUEIDENTIFIER = (SELECT tenantId FROM auth.tenant WHERE tenantCode = N'MD-LEAD');
@@ -126,7 +127,7 @@ INSERT @users VALUES
 
 INSERT auth.appUser (appUserId, rootTenantId, homeTenantId, userName, displayName, email, passwordHash, securityStamp)
 SELECT CAST (HASHBYTES ('MD5', N'user:' + u.userName) AS UNIQUEIDENTIFIER), h.rootTenantId, h.tenantId, u.userName,
-       u.displayName, u.userName + N'@merit.example', N'AQAAAAIAAYagAAAAEO7hfYawERZBd7aw6N0dF2bYGr2HzZX5DxBnrm3tMok3bj2hZX8uFfDqJrjZFNIeeQ==', NEWID ()
+       u.displayName, u.userName + N'@merit.example', N'AQAAAAIAAYagAAAAEBtnQ45avu60Os0QX7se8uW89aagEDmHFhBDFi+b5Ctnn8rfqVQQTq0+pgzIEdACXw==', NEWID ()
   FROM @users AS u
   JOIN auth.tenant AS h ON h.tenantCode = u.homeTenantCode
  WHERE NOT EXISTS (SELECT 1 FROM auth.appUser AS x WHERE x.userName = u.userName AND x.isDeleted = 0);

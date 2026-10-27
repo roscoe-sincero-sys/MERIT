@@ -21,7 +21,7 @@ public sealed class MeController(ICurrentSession session) : ControllerBase
     [HttpGet]
     [Authorize(Policy = Permissions.SignedIn)]
     public MeDto Get() => new(session.UserName ?? string.Empty, session.DisplayName ?? string.Empty, session.ActingTenantName,
-        session.Permissions.Order(StringComparer.Ordinal).ToList());
+        session.Permissions.Order(StringComparer.Ordinal).ToList(), JurisdictionTimeZones.IanaId(session.TimeZoneId));
 }
 
 [ApiController]

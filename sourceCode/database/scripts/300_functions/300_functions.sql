@@ -205,6 +205,99 @@ END;
 GO
 
 /***********************************************************************************************************************
+ObjectName:   auth.udfLocalDate
+Author:       MERIT build
+CreateDate:   2026-10-27
+========================================================================================================================
+Description:
+
+Today's date in a time zone (a Windows name from sys.time_zone_info, e.g. Eastern Standard Time). NULL means Eastern
+Standard Time, the zone of a data root that has none set.
+
+========================================================================================================================
+Requirements and Key Dependencies:
+
+AT TIME ZONE; the zone names in sys.time_zone_info.
+
+========================================================================================================================
+Notes:
+
+Dates people read, and dates that default to today, follow the jurisdiction, not the server's UTC clock (issue #36):
+at 8 p.m. in Maryland the UTC date is already tomorrow.
+
+========================================================================================================================
+Example Usage and Performance:
+
+SELECT auth.udfLocalDate ('Pacific Standard Time');
+
+No data access.
+
+========================================================================================================================
+Modification History:
+
+Date:		2026-10-27
+Author:		MERIT build
+Ticket:		T188
+Description:	Initial version.
+
+-----------------------------------------------------------------------------------------------------------------------
+
+***********************************************************************************************************************/
+CREATE OR ALTER FUNCTION auth.udfLocalDate (@timeZone VARCHAR (64))
+RETURNS DATE
+AS
+BEGIN
+    RETURN CAST (SYSUTCDATETIME () AT TIME ZONE 'UTC' AT TIME ZONE COALESCE (@timeZone, 'Eastern Standard Time') AS DATE);
+END;
+GO
+
+/***********************************************************************************************************************
+ObjectName:   auth.udfSessionToday
+Author:       MERIT build
+CreateDate:   2026-10-27
+========================================================================================================================
+Description:
+
+Today's date in the session's jurisdiction, from SESSION_CONTEXT (N'timeZone'), which the application sets from the
+session's data root. Every procedure that dates something today uses it.
+
+========================================================================================================================
+Requirements and Key Dependencies:
+
+SESSION_CONTEXT (N'timeZone'); auth.udfLocalDate.
+
+========================================================================================================================
+Notes:
+
+With no zone in the session (deployment scripts, a sign-in before its scope exists) the date is Eastern time.
+
+========================================================================================================================
+Example Usage and Performance:
+
+SELECT auth.udfSessionToday ();
+
+No data access.
+
+========================================================================================================================
+Modification History:
+
+Date:		2026-10-27
+Author:		MERIT build
+Ticket:		T188
+Description:	Initial version.
+
+-----------------------------------------------------------------------------------------------------------------------
+
+***********************************************************************************************************************/
+CREATE OR ALTER FUNCTION auth.udfSessionToday ()
+RETURNS DATE
+AS
+BEGIN
+    RETURN auth.udfLocalDate (TRY_CAST (SESSION_CONTEXT (N'timeZone') AS VARCHAR (64)));
+END;
+GO
+
+/***********************************************************************************************************************
 ObjectName:   dbo.udfAgeInMonths
 Author:       MERIT build
 CreateDate:   2026-10-24
@@ -257,5 +350,7 @@ EXEC util.uspSetObjectDescription @SchemaName = N'auth', @ObjectType = N'FUNCTIO
 EXEC util.uspSetObjectDescription @SchemaName = N'auth', @ObjectType = N'FUNCTION', @ObjectName = N'udfSessionUserId', @Description = N'Signed-in application user for this connection, from SESSION_CONTEXT appUserId.';
 EXEC util.uspSetObjectDescription @SchemaName = N'auth', @ObjectType = N'FUNCTION', @ObjectName = N'udfSessionRootTenantId', @Description = N'Root tenant of the current, valid session scope; NULL otherwise.';
 EXEC util.uspSetObjectDescription @SchemaName = N'auth', @ObjectType = N'FUNCTION', @ObjectName = N'udfSessionActingTenantId', @Description = N'Tenant the signed-in user acts for (primary assignment); falls back to the root tenant.';
+EXEC util.uspSetObjectDescription @SchemaName = N'auth', @ObjectType = N'FUNCTION', @ObjectName = N'udfLocalDate', @Description = N'Today''s date in a time zone (Windows name); NULL means Eastern Standard Time.';
+EXEC util.uspSetObjectDescription @SchemaName = N'auth', @ObjectType = N'FUNCTION', @ObjectName = N'udfSessionToday', @Description = N'Today''s date in the session''s jurisdiction, from SESSION_CONTEXT timeZone.';
 EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'FUNCTION', @ObjectName = N'udfAgeInMonths', @Description = N'Whole months between a date of birth and a later date; NULL when either is NULL.';
 GO

@@ -104,7 +104,7 @@ public sealed record UserInput(Guid? AppUserId, string? UserName, string? Displa
                                Guid? HomeTenantId = null);
 
 /// <summary>User administration: accounts, profile assignments at tenant nodes, MFA resets.</summary>
-public sealed class AdminService(IAccountData accounts, AccountService accountService, ISettingsProvider settings, ICurrentSession session)
+public sealed class AdminService(IClock clock, IAccountData accounts, AccountService accountService, ISettingsProvider settings, ICurrentSession session)
 {
     public async Task<IReadOnlyList<UserListRow>> UsersAsync(CancellationToken ct = default)
     {
@@ -155,7 +155,7 @@ public sealed class AdminService(IAccountData accounts, AccountService accountSe
     {
         session.Require(Permissions.TenantAdminister);
         await accounts.SaveUserAssignmentAsync(assignment.UserAssignmentId, appUserId, assignment.RoleId, assignment.TenantId,
-            assignment.IncludeDescendants, assignment.AccessLevel, assignment.StartDate, DateOnly.FromDateTime(DateTime.UtcNow), ct)
+            assignment.IncludeDescendants, assignment.AccessLevel, assignment.StartDate, clock.Today, ct)
             .ConfigureAwait(false);
     }
 
@@ -213,6 +213,9 @@ public sealed class AdminService(IAccountData accounts, AccountService accountSe
         v.When(TenantRules.NeedsPostalCode(type) && (postal is null || postal.Length != 2 || !postal.All(char.IsAsciiLetter)),
             "StatePostalCode", "Enter the two-letter postal code.");
         v.When(stateFips is not null && (stateFips.Length != 2 || !stateFips.All(char.IsAsciiDigit)), "StateFips", "A state FIPS code is two digits.");
+        string? timeZone = NullIfBlank(input.TimeZone);
+        v.When(TenantRules.CreatesDataRoot(parent.TenantType) && timeZone is not null && !JurisdictionTimeZones.IsKnown(timeZone),
+            "TimeZone", "Choose the time zone from the list.");
         v.When(countyFips.Any(f => !TenantRules.IsValidCountyFips(f)), "CountyFipsList", "County FIPS codes are three digits, for example 037.");
         v.When(newCounties.Count > 0 && !TenantRules.MayChooseAnyCounty(parent.TenantId == parent.RootTenantId, parent.TenantType),
             "NewCounties", $"New counties are added under the state, tribe or other data root, not under {parent.TenantName}.");
@@ -222,7 +225,8 @@ public sealed class AdminService(IAccountData accounts, AccountService accountSe
             "TenantCode", "That code is already used elsewhere in the tree.");
         v.ThrowIfInvalid();
 
-        var create = new TenantCreate(code, input.TenantName!.Trim(), type, parent.TenantCode, postal, stateFips, countyFips, newCounties);
+        var create = new TenantCreate(code, input.TenantName!.Trim(), type, parent.TenantCode, postal, stateFips, countyFips, newCounties,
+            TenantRules.CreatesDataRoot(parent.TenantType) ? timeZone ?? JurisdictionTimeZones.Default : null);
         return TenantRules.CreatesDataRoot(parent.TenantType)
             ? await accounts.CreateRootTenantAsync(create, ct).ConfigureAwait(false)
             : await accounts.CreateChildTenantAsync(create, ct).ConfigureAwait(false);
@@ -263,7 +267,7 @@ public sealed class AdminService(IAccountData accounts, AccountService accountSe
 
 /// <summary>The Add tenant form. County FIPS codes are those the tenant serves; new counties are added to the data root.</summary>
 public sealed record TenantInput(Guid? ParentTenantId, string? TenantCode, string? TenantName, string? TenantType, string? StatePostalCode,
-                                 string? StateFips, string? CountyFipsList, string? NewCounties);
+                                 string? StateFips, string? CountyFipsList, string? NewCounties, string? TimeZone = null);
 
 /// <summary>Server-side type-ahead for organizations, providers, locations and products.</summary>
 public sealed class LookupService(IPlaceData places, ICurrentSession session)

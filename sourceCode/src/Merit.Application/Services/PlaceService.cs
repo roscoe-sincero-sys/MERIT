@@ -35,7 +35,7 @@ public sealed record AddPlaceInput(
 /// enforced again by dbo.uspSavePersonLocations under row locks; this service turns user intent into a plan, shows it,
 /// and applies exactly the plan that was shown.
 /// </summary>
-public sealed class PlaceService(IPlaceData places, IPersonData persons, ICurrentSession session)
+public sealed class PlaceService(IClock clock, IPlaceData places, IPersonData persons, ICurrentSession session)
 {
     public static PlaceRow ToPlaceRow(PlaceListRow r) => new(
         r.PersonLocationId, r.LocationId, r.OrganizationSiteId, r.Role, r.IsPrimary, r.PrimaryReason, r.ScheduleType,
@@ -54,7 +54,7 @@ public sealed class PlaceService(IPlaceData places, IPersonData persons, ICurren
     {
         session.Require(Permissions.PersonEdit);
         var rows = (await persons.GetPlacesAsync(personId, ct).ConfigureAwait(false)).Select(ToPlaceRow).ToList();
-        return PrimaryResidencePlanner.PlanSetPrimary(rows, personLocationId, startDate, reason, TimeOrderedId.New, isAdult);
+        return PrimaryResidencePlanner.PlanSetPrimary(rows, personLocationId, startDate, reason, TimeOrderedId.New, isAdult, clock.Today);
     }
 
     public async Task<PlacePlan> SetPrimaryAsync(Guid personId, Guid personLocationId, DateOnly startDate, string? reason,
@@ -87,7 +87,7 @@ public sealed class PlaceService(IPlaceData places, IPersonData persons, ICurren
         var newRow = new PlaceRow(TimeOrderedId.New(), locationId, input.OrganizationSiteId, input.Role, false, null,
             input.ScheduleType, input.HoursPerWeek, input.ScheduleNote, input.StartDate, input.EndDate, input.Source, null, null,
             input.Address?.CountyFips, null, label);
-        return (PrimaryResidencePlanner.PlanAddPlace(rows, newRow, input.NewIsPrimary, input.PrimaryReason, TimeOrderedId.New, isAdult),
+        return (PrimaryResidencePlanner.PlanAddPlace(rows, newRow, input.NewIsPrimary, input.PrimaryReason, TimeOrderedId.New, isAdult, clock.Today),
             locationId);
     }
 
@@ -120,7 +120,7 @@ public sealed class PlaceService(IPlaceData places, IPersonData persons, ICurren
         session.Require(Permissions.PersonEdit);
         var rows = (await persons.GetPlacesAsync(personId, ct).ConfigureAwait(false)).Select(ToPlaceRow).ToList();
         var row = rows.FirstOrDefault(r => r.PersonLocationId == personLocationId) ?? throw new NotFoundException();
-        var verified = row with { VerifiedDate = DateOnly.FromDateTime(DateTime.UtcNow) };
+        var verified = row with { VerifiedDate = clock.Today };
         await ApplyAsync(personId, new PlacePlan([new PlaceChange(ChangeKind.Update, verified, "Verified.")], [], [], null, null), ct)
             .ConfigureAwait(false);
     }

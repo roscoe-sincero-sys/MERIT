@@ -140,7 +140,7 @@ BEGIN
         BEGIN
             UPDATE dbo.personRelationship SET isPrimaryContact = 0
              WHERE personId = @personId AND personRelationshipId <> @personRelationshipId AND isPrimaryContact = 1
-               AND isDeleted = 0 AND (endDate IS NULL OR endDate >= CAST (SYSUTCDATETIME () AS DATE));
+               AND isDeleted = 0 AND (endDate IS NULL OR endDate >= auth.udfSessionToday ());
         END;
 
         SET @Comments = N'Relationship saved.';

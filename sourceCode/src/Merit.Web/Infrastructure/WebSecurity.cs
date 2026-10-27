@@ -23,6 +23,7 @@ public static class MeritClaims
     public const string IsAdministrator = "merit:admin";
     public const string ProfileId = "merit:profile";
     public const string ProfileName = "merit:profileName";
+    public const string TimeZone = "merit:tz";
     public const string ViewAsUserId = "merit:viewAs";
     public const string ViewAsName = "merit:viewAsName";
     public const string IsPlatformAdmin = "merit:platform";
@@ -62,6 +63,8 @@ public sealed class WebCurrentSession(IHttpContextAccessor accessor) : ICurrentS
     public string? ActingTenantName => IsAuthenticated ? User?.FindFirstValue(MeritClaims.ActingTenantName) : null;
 
     public string? ProfileName => IsAuthenticated ? User?.FindFirstValue(MeritClaims.ProfileName) : null;
+
+    public string TimeZoneId => (IsAuthenticated ? User?.FindFirstValue(MeritClaims.TimeZone) : null) ?? JurisdictionTimeZones.Default;
 
     public Guid? ProfileId => Guid(MeritClaims.ProfileId);
 

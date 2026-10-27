@@ -346,6 +346,47 @@ public sealed class AuthorizationScenarioTests(MeritFixture fixture)
         }
     }
 
+    [SqlFact]
+    public async Task TodayInSqlIsTheJurisdictionsDate()
+    {
+        // Issue #36: procedures dated things with the UTC date, so evening work in the United States was dated tomorrow.
+        // The functions are reached through procedures (ownership chaining); the test calls them directly as dbo.
+        await using var c = new SqlConnection(TestEnvironment.AdminConnectionString());
+        await c.OpenAsync();
+        foreach (var zone in new[] { "Eastern Standard Time", "Pacific Standard Time", "West Pacific Standard Time" })
+        {
+            await using var cmd = new SqlCommand("SELECT auth.udfLocalDate (@z)", c);
+            cmd.Parameters.AddWithValue("@z", zone);
+            var before = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, TimeZoneInfo.FindSystemTimeZoneById(zone)));
+            var sql = DateOnly.FromDateTime((DateTime)(await cmd.ExecuteScalarAsync())!);
+            var after = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, TimeZoneInfo.FindSystemTimeZoneById(zone)));
+            Assert.True(sql == before || sql == after, $"{zone}: SQL {sql}, .NET {before}");
+        }
+
+        // The session's zone comes from the connection's session context, which the application sets from the data root.
+        await using (var set = new SqlCommand("EXEC sys.sp_set_session_context @key = N'timeZone', @value = N'Pacific Standard Time';", c))
+        {
+            await set.ExecuteNonQueryAsync();
+        }
+
+        await using (var both = new SqlCommand("SELECT CASE WHEN auth.udfSessionToday () = auth.udfLocalDate ('Pacific Standard Time') THEN 1 ELSE 0 END", c))
+        {
+            Assert.Equal(1, (int)(await both.ExecuteScalarAsync())!);
+        }
+
+        // A session reports its data root's zone; the test roots have none set, which means Eastern.
+        var user = await UserIdAsync("supervisor");
+        await using var c2 = new SqlConnection(TestEnvironment.WebConnectionString);
+        await c2.OpenAsync();
+        await using var scope = new SqlCommand("auth.uspCreateSessionScope", c2) { CommandType = CommandType.StoredProcedure };
+        scope.Parameters.AddWithValue("@sessionScopeId", Guid.NewGuid());
+        scope.Parameters.AddWithValue("@appUserId", user);
+        scope.Parameters.AddWithValue("@expiresUtc", DateTime.UtcNow.AddMinutes(10));
+        await using var r = await scope.ExecuteReaderAsync();
+        Assert.True(await r.ReadAsync());
+        Assert.Equal("Eastern Standard Time", r.GetString(r.GetOrdinal("timeZone")));
+    }
+
     private sealed record JobContext(Guid User, Guid? Profile, Guid? ViewAs, Guid? Acting);
 
     /// <summary>Queues a job far in the future, so no worker picks it up.</summary>

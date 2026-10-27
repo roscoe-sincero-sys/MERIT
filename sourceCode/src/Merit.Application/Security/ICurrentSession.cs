@@ -30,6 +30,9 @@ public interface ICurrentSession
     /// <summary>The profile the session uses: "Master profile", a profile the user made, or "Viewing as ...".</summary>
     string? ProfileName => null;
 
+    /// <summary>The time zone of the session's jurisdiction (Windows name); see <see cref="IClock"/>.</summary>
+    string TimeZoneId => JurisdictionTimeZones.Default;
+
     /// <summary>The user's own profile the session uses; null for the master profile.</summary>
     Guid? ProfileId => null;
 

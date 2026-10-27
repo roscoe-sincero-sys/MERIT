@@ -25,6 +25,7 @@ public static class SessionCookie
             new(MeritClaims.ActingTenantName, s.ActingTenantName ?? string.Empty),
             new(MeritClaims.SecurityStamp, s.SecurityStamp.ToString()),
             new(MeritClaims.ProfileName, s.ProfileName),
+            new(MeritClaims.TimeZone, s.TimeZone),
             new(MeritClaims.IsPlatformAdmin, s.IsPlatformAdmin ? "1" : "0"),
         };
         if (s.UserProfileId is Guid profile)

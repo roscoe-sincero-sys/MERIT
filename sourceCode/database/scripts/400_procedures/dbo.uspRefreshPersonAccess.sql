@@ -89,7 +89,7 @@ BEGIN
         -- ===== The procedure's own work starts here. Everything above and below is boilerplate. ==
         -- =========================================================================================
 
-        DECLARE @today DATE = CAST (SYSUTCDATETIME () AS DATE);
+        DECLARE @today DATE = auth.udfSessionToday ();
         DECLARE @root UNIQUEIDENTIFIER = (SELECT rootTenantId FROM dbo.person WHERE personId = @personId);
         DECLARE @want TABLE (tenantId UNIQUEIDENTIFIER, accessReason VARCHAR (20), PRIMARY KEY (tenantId, accessReason));
 

@@ -111,7 +111,7 @@ BEGIN
 
         DECLARE @caseId UNIQUEIDENTIFIER = (SELECT exposureCaseId FROM dbo.exposureCase WHERE caseNumber = @caseNumber
                                                                                           AND isDeleted = 0);
-        DECLARE @today DATE = CAST (SYSUTCDATETIME () AS DATE);
+        DECLARE @today DATE = auth.udfSessionToday ();
 
         IF @isMember = 1
         BEGIN

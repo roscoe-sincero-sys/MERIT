@@ -84,8 +84,8 @@ SELECT TOP (@maxRows) p.personId, p.lastName, p.firstName, p.middleName, p.dob, 
                  JOIN dbo.location AS l ON l.locationId = pl.locationId
                  LEFT JOIN config.subJurisdiction AS sj ON sj.countyFips = l.countyFips AND sj.rootTenantId = p.rootTenantId
                 WHERE pl.personId = p.personId AND pl.isDeleted = 0 AND pl.role = 'residence' AND pl.isPrimary = 1
-                  AND pl.startDate <= CAST (SYSUTCDATETIME () AS DATE)
-                  AND (pl.endDate IS NULL OR pl.endDate >= CAST (SYSUTCDATETIME () AS DATE))) AS cur
+                  AND pl.startDate <= auth.udfSessionToday ()
+                  AND (pl.endDate IS NULL OR pl.endDate >= auth.udfSessionToday ())) AS cur
  ORDER BY p.lastName, p.firstName, p.dob;
 
 SET @found = @@ROWCOUNT;
@@ -142,7 +142,7 @@ SET @Comments = CONCAT (@found, N' match(es).');
                  "are indistinguishable on purpose.",
         "validate": PERSON_VISIBLE,
         "body": """
-DECLARE @today DATE = CAST (SYSUTCDATETIME () AS DATE);
+DECLARE @today DATE = auth.udfSessionToday ();
 
 SELECT p.personId, p.rootTenantId, p.lastName, p.firstName, p.middleName, p.dob, p.dobVerified, p.sex, p.ethnicity,
        p.preferredLanguage, p.deceasedDate, p.mergedIntoPersonId, p.isPlaceholderName, p.rowVersion,
@@ -367,7 +367,7 @@ DECLARE @root UNIQUEIDENTIFIER = auth.udfSessionRootTenantId ();
 DECLARE @acting UNIQUEIDENTIFIER = auth.udfSessionActingTenantId ();
 DECLARE @isNew BIT = 0, @dobChanged BIT = 0, @deceasedChanged BIT = 0;
 
-IF @dob IS NOT NULL AND @dob > CAST (SYSUTCDATETIME () AS DATE)
+IF @dob IS NOT NULL AND @dob > auth.udfSessionToday ()
 BEGIN
     ;THROW 51422, N'Date of birth cannot be in the future.', 1;
 END;
@@ -649,7 +649,7 @@ IF @isPrimaryContact = 1 AND @isDeleted = 0
 BEGIN
     UPDATE dbo.personRelationship SET isPrimaryContact = 0
      WHERE personId = @personId AND personRelationshipId <> @personRelationshipId AND isPrimaryContact = 1
-       AND isDeleted = 0 AND (endDate IS NULL OR endDate >= CAST (SYSUTCDATETIME () AS DATE));
+       AND isDeleted = 0 AND (endDate IS NULL OR endDate >= auth.udfSessionToday ());
 END;
 
 SET @Comments = N'Relationship saved.';
@@ -665,7 +665,7 @@ SET @Comments = N'Relationship saved.';
         "notes": "Converges: rows that should exist are added, rows that no longer apply are soft-deleted, rows that are "
                  "right are left alone (so their audit columns do not move).",
         "body": f"""
-DECLARE @today DATE = CAST (SYSUTCDATETIME () AS DATE);
+DECLARE @today DATE = auth.udfSessionToday ();
 DECLARE @root UNIQUEIDENTIFIER = (SELECT rootTenantId FROM dbo.person WHERE personId = @personId);
 DECLARE @want TABLE (tenantId UNIQUEIDENTIFIER, accessReason VARCHAR (20), PRIMARY KEY (tenantId, accessReason));
 

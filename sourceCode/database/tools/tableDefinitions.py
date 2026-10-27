@@ -51,6 +51,8 @@ TABLES = [
             c("tenantType", "VARCHAR (30)", "platform, region, state, tribe, program or jurisdiction.", null=False,
               check="tenantType IN ('platform', 'region', 'state', 'tribe', 'program', 'jurisdiction')"),
             c("statePostalCode", "CHAR (2)", "Two-letter postal code, e.g. MD; NULL for the platform and regions."),
+            c("timeZone", "VARCHAR (64)", "For a data root: its Windows time zone name (sys.time_zone_info), e.g. Eastern "
+              "Standard Time. Dates such as today follow it; NULL means Eastern Standard Time."),
             c("isActive", "BIT", "1 while the tenant can sign users in.", null=False, default="1"),
         ],
         "fks": [("parentTenantId", "auth.tenant", "tenantId")],

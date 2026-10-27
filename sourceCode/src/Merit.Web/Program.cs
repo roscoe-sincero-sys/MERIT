@@ -202,6 +202,12 @@ app.UseStaticFiles(new StaticFileOptions
 
 app.UseRouting();
 app.UseAuthentication();
+app.Use(async (http, next) =>
+{
+    // Times on this request's pages follow the session's jurisdiction (issue #36).
+    DisplayTime.Zone = http.RequestServices.GetRequiredService<IClock>().Zone;
+    await next(http);
+});
 app.UseMiddleware<SecurityHeadersMiddleware>();
 app.UseRateLimiter();    // after the security headers, so the "too many attempts" page carries its CSP nonce
 app.UseAuthorization();

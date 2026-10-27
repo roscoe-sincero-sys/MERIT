@@ -185,7 +185,7 @@ BEGIN
                          dueDate)
     SELECT {NEWID}, @root, s.owningTenantId, 'matchReview', N'Person match: reviewer not sure',
            COALESCE (@note, N'A reviewer could not decide whether this record is an existing person.'), s.stagingRowId,
-           s.isUrgent, DATEADD (DAY, CASE WHEN s.isUrgent = 1 THEN 1 ELSE 5 END, CAST (SYSUTCDATETIME () AS DATE))
+           s.isUrgent, DATEADD (DAY, CASE WHEN s.isUrgent = 1 THEN 1 ELSE 5 END, auth.udfSessionToday ())
       FROM dbo.stagingRow AS s WHERE s.stagingRowId = @stagingRowId;
 END;
 
@@ -318,7 +318,7 @@ END;""",
         "body": f"""
 DECLARE @caseId UNIQUEIDENTIFIER = (SELECT exposureCaseId FROM dbo.exposureCase WHERE caseNumber = @caseNumber
                                                                                   AND isDeleted = 0);
-DECLARE @today DATE = CAST (SYSUTCDATETIME () AS DATE);
+DECLARE @today DATE = auth.udfSessionToday ();
 
 IF @isMember = 1
 BEGIN

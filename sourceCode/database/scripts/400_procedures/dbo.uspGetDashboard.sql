@@ -83,7 +83,7 @@ BEGIN
         -- ===== The procedure's own work starts here. Everything above and below is boilerplate. ==
         -- =========================================================================================
 
-        DECLARE @today DATE = CAST (SYSUTCDATETIME () AS DATE);
+        DECLARE @today DATE = auth.udfSessionToday ();
         DECLARE @me UNIQUEIDENTIFIER = auth.udfSessionUserId ();
 
         SELECT (SELECT COUNT (*) FROM dbo.exposureCase WHERE assignedToUserId = @me AND caseStatus <> 'closed' AND isDeleted = 0) AS myOpenCases,

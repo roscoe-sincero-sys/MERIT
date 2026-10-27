@@ -7,7 +7,9 @@ namespace Merit.Contracts;
 public sealed record PagedResult<T>(IReadOnlyList<T> Items, int TotalCount, int PageNumber, int PageSize);
 
 /// <summary>The signed-in user, for the Angular header and permission-aware controls.</summary>
-public sealed record MeDto(string UserName, string DisplayName, string? ActingTenantName, IReadOnlyList<string> Permissions);
+/// <param name="TimeZone">The jurisdiction's time zone as an IANA name, for showing dates and times in the browser.</param>
+public sealed record MeDto(string UserName, string DisplayName, string? ActingTenantName, IReadOnlyList<string> Permissions,
+                           string TimeZone = "America/New_York");
 
 public sealed record QueueCountDto(string QueueCode, string QueueName, int OpenCount, int UrgentCount, int OverdueCount, int MineCount);
 

@@ -6,6 +6,7 @@ using Merit.Domain.Population;
 using Merit.Domain.Residence;
 using Merit.Domain.Results;
 using Merit.Domain.Thresholds;
+using Merit.Application.Security;
 
 namespace Merit.Application.Services;
 
@@ -26,6 +27,7 @@ public sealed record ClassificationOutcome(
 /// by reruns after a DOB or pregnancy change, so both front ends and the worker share one copy of every rule.
 /// </summary>
 public sealed class ClassificationService(
+    IClock clock,
     IResultData results,
     ICaseData cases,
     IWorkData work,
@@ -75,7 +77,7 @@ public sealed class ClassificationService(
             caseId = TimeOrderedId.New();
             var opened = await cases.OpenCaseAsync(caseId.Value, personId, analyte.AnalyteId, population.Population.ToCode(),
                 decision.Classification.ToCode(), labResultId, CaseClassifier.WorkflowTemplate(population.Population),
-                DateOnly.FromDateTime(DateTime.UtcNow), ct).ConfigureAwait(false);
+                clock.Today, ct).ConfigureAwait(false);
             caseNumber = opened.CaseNumber;
             owner = opened.OwningTenantName;
             await cases.CreateFollowUpTasksAsync(caseId.Value, config.AdultAgeCutoffYears, ct).ConfigureAwait(false);
@@ -185,7 +187,7 @@ public sealed class ClassificationService(
             await work.CreateTaskAsync(new WorkTaskCreate(TimeOrderedId.New(), "investigationRequest",
                 "Decide which places to investigate",
                 "The investigation lookback and site minimum-hours settings are not set, so places were not proposed automatically.",
-                personId, caseId, null, null, null, false, DateOnly.FromDateTime(DateTime.UtcNow).AddDays(14)), ct).ConfigureAwait(false);
+                personId, caseId, null, null, null, false, clock.Today.AddDays(14)), ct).ConfigureAwait(false);
             return ["Decide which places to investigate"];
         }
 
@@ -199,7 +201,7 @@ public sealed class ClassificationService(
                 : $"Review whether to investigate {p.Place.AddressLabel}";
             await work.CreateTaskAsync(new WorkTaskCreate(TimeOrderedId.New(),
                 p.Outcome == ScopeOutcome.InvestigationRequest ? "investigationRequest" : "siteReview", title, p.Reason,
-                personId, caseId, null, null, null, false, DateOnly.FromDateTime(DateTime.UtcNow).AddDays(14)), ct).ConfigureAwait(false);
+                personId, caseId, null, null, null, false, clock.Today.AddDays(14)), ct).ConfigureAwait(false);
             titles.Add(title);
         }
 

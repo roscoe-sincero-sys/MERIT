@@ -122,7 +122,7 @@ BEGIN
 
         INSERT dbo.caseActivity (caseActivityId, rootTenantId, owningTenantId, exposureCaseId, activityType, activityDate,
                                  workerUserId, note)
-        VALUES (CAST (CAST (NEWID () AS BINARY (10)) + CAST (DATEDIFF_BIG (MILLISECOND, '19700101', SYSUTCDATETIME ()) AS BINARY (6)) AS UNIQUEIDENTIFIER), @root, @owner, @exposureCaseId, 'statusChange', CAST (SYSUTCDATETIME () AS DATE),
+        VALUES (CAST (CAST (NEWID () AS BINARY (10)) + CAST (DATEDIFF_BIG (MILLISECOND, '19700101', SYSUTCDATETIME ()) AS BINARY (6)) AS UNIQUEIDENTIFIER), @root, @owner, @exposureCaseId, 'statusChange', auth.udfSessionToday (),
                 auth.udfSessionUserId (),
                 CONCAT (N'Override: ', @before, N'/', @beforePop, N' to ', @classification, N'/', @population, N'. Reason: ', @reason));
 

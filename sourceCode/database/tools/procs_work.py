@@ -73,7 +73,7 @@ ELSE
         "params": "",
         "key": "NULL",
         "body": f"""
-DECLARE @today DATE = CAST (SYSUTCDATETIME () AS DATE);
+DECLARE @today DATE = auth.udfSessionToday ();
 DECLARE @me UNIQUEIDENTIFIER = auth.udfSessionUserId ();
 
 SELECT q.queueCode, q.queueName,
@@ -99,7 +99,7 @@ SELECT 'heldRecords', N'Held intake records', COUNT (*), SUM (CASE WHEN isUrgent
         "params": "",
         "key": "NULL",
         "body": """
-DECLARE @today DATE = CAST (SYSUTCDATETIME () AS DATE);
+DECLARE @today DATE = auth.udfSessionToday ();
 DECLARE @me UNIQUEIDENTIFIER = auth.udfSessionUserId ();
 
 SELECT (SELECT COUNT (*) FROM dbo.exposureCase WHERE assignedToUserId = @me AND caseStatus <> 'closed' AND isDeleted = 0) AS myOpenCases,
@@ -383,8 +383,8 @@ SELECT j.rootTenantId, t.tenantName, j.jobType,
         "key": "CONCAT (N'windowDays=', @windowDays, N', minCount=', @minCount)",
         "body": f"""
 DECLARE @root UNIQUEIDENTIFIER = auth.udfSessionRootTenantId ();
-DECLARE @from DATE = DATEADD (DAY, -@windowDays, CAST (SYSUTCDATETIME () AS DATE));
-DECLARE @to DATE = CAST (SYSUTCDATETIME () AS DATE);
+DECLARE @from DATE = DATEADD (DAY, -@windowDays, auth.udfSessionToday ());
+DECLARE @to DATE = auth.udfSessionToday ();
 DECLARE @groups TABLE (clusterType VARCHAR (20), sharedKey UNIQUEIDENTIFIER, title NVARCHAR (200), caseCount INT,
                        owner UNIQUEIDENTIFIER);
 DECLARE @members TABLE (clusterType VARCHAR (20), sharedKey UNIQUEIDENTIFIER, exposureCaseId UNIQUEIDENTIFIER);

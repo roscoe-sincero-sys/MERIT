@@ -11,6 +11,7 @@ using Merit.Domain.Results;
 using Merit.Domain.Text;
 using Merit.Domain.Thresholds;
 using Microsoft.Extensions.Logging;
+using Merit.Application.Security;
 
 namespace Merit.Application.Intake;
 
@@ -22,6 +23,7 @@ public sealed record IntakeRunSummary(int Received, int Loaded, int Held, int Re
 /// Apart from a layout pause a batch never fails whole. Logs carry record ids only, never patient data.
 /// </summary>
 public sealed partial class IntakeProcessor(
+    IClock clock,
     IIntakeData intake,
     IPlaceData places,
     IPersonData persons,
@@ -68,7 +70,7 @@ public sealed partial class IntakeProcessor(
                 await intake.SetBatchStatusAsync(batchId, "paused", reason, ct).ConfigureAwait(false);
                 await work.CreateTaskAsync(new WorkTaskCreate(TimeOrderedId.New(), "pausedBatch",
                     $"Intake batch paused: {batch.FileName}", reason, null, null, null, null, null, false,
-                    DateOnly.FromDateTime(DateTime.UtcNow).AddDays(2)), ct).ConfigureAwait(false);
+                    clock.Today.AddDays(2)), ct).ConfigureAwait(false);
                 return new IntakeRunSummary(parsed.Count - headerIndex - 1, 0, 0, 0, true, reason);
             }
 
@@ -165,7 +167,7 @@ public sealed partial class IntakeProcessor(
         var refData = await reference.GetAsync(ct).ConfigureAwait(false);
         var config = await settings.GetAsync(ct).ConfigureAwait(false);
         var holds = new List<HoldReason>();
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var today = clock.Today;
 
         // ---- sender and laboratory
         string? clia = ProviderIdentifiers.NormalizeClia(Get("labCliaNumber"));
@@ -408,7 +410,7 @@ public sealed partial class IntakeProcessor(
                 await work.CreateTaskAsync(new WorkTaskCreate(TimeOrderedId.New(), "addressReview", "New address on a lab report",
                     $"A result collected {collected:yyyy-MM-dd} reports {PlaceService.FormatAddress(address)}, which differs from the primary residence"
                     + (primary is null ? "." : $" ({primary.AddressLabel})."), personId, null, null, null, null, false,
-                    DateOnly.FromDateTime(DateTime.UtcNow).AddDays(14)), ct).ConfigureAwait(false);
+                    clock.Today.AddDays(14)), ct).ConfigureAwait(false);
             }
         }
 
@@ -430,7 +432,7 @@ public sealed partial class IntakeProcessor(
         {
             await work.CreateTaskAsync(new WorkTaskCreate(TimeOrderedId.New(), "crossLink", "Guardian field looks like an organization",
                 "The report's guardian value looks like an organization name; it may be the person's employer. Review and record it as employment if so.",
-                personId, null, null, null, null, false, DateOnly.FromDateTime(DateTime.UtcNow).AddDays(14)), ct).ConfigureAwait(false);
+                personId, null, null, null, null, false, clock.Today.AddDays(14)), ct).ConfigureAwait(false);
             return;
         }
 

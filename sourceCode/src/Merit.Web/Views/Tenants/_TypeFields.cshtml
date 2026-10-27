@@ -24,6 +24,11 @@
         <div class="usa-form-group"><label class="usa-label" for="StateFips">State FIPS code</label>
             <div class="usa-hint" id="fips-hint">Two digits, for example 54 for West Virginia. Optional for a tribe.</div>
             <input class="usa-input usa-input--small" id="StateFips" name="StateFips" value="@Model.StateFips" maxlength="2" inputmode="numeric" aria-describedby="fips-hint" /></div>
+        <div class="usa-form-group"><label class="usa-label" for="TimeZone">Time zone</label>
+            <div class="usa-hint" id="zone-hint">Dates such as today follow it: a case opened at 8 p.m. is dated that day.</div>
+            <select class="usa-select" id="TimeZone" name="TimeZone" aria-describedby="zone-hint">
+                @foreach (var (id, label) in JurisdictionTimeZones.Choices) { <option value="@id" selected="@(id == Model.TimeZone)">@label</option> }
+            </select></div>
     }
     else
     {

@@ -24,7 +24,7 @@ public sealed record MatchDecisionOutcome(bool Released, int RemainingCandidates
 /// field by field. The reviewer decides Same person, Different person (remembered) or Not sure (to a supervisor); the
 /// decision is stored beside the reported values and the row is released to load with it.
 /// </summary>
-public sealed class MatchReviewService(IReviewData review, IPersonData persons, IIntakeData intake, AuditService audit,
+public sealed class MatchReviewService(IClock clock, IReviewData review, IPersonData persons, IIntakeData intake, AuditService audit,
                                        ICurrentSession session)
 {
     public const int MaxCandidates = 5;
@@ -119,7 +119,7 @@ public sealed class MatchReviewService(IReviewData review, IPersonData persons, 
             p.Sex, p.IsPlaceholderName, Aliases(p.Aliases),
             details.Places.Where(pl => pl.PersonId == p.PersonId && pl.Role == "residence")
                 .Select(pl => new MatchAddress(pl.AddressLine1, pl.Unit, pl.City, pl.State, pl.Zip5,
-                    pl.IsPrimary && (pl.EndDate is null || pl.EndDate >= DateOnly.FromDateTime(DateTime.UtcNow))))
+                    pl.IsPrimary && (pl.EndDate is null || pl.EndDate >= clock.Today)))
                 .ToList())).ToList();
 
         return MatchComparer.Rank(incoming, identities, MaxCandidates)
@@ -231,7 +231,7 @@ public sealed record ReportResult(ReportDefinition Definition, DateOnly FromDate
 /// The standard report library. Each report is one stored procedure that aggregates inside the caller's tenant scope;
 /// the definitions here name the columns and the chart. Exports need the export permission and are audited.
 /// </summary>
-public sealed class ReportService(IReviewData review, AuditService audit, ICurrentSession session)
+public sealed class ReportService(IClock clock, IReviewData review, AuditService audit, ICurrentSession session)
 {
     public static IReadOnlyList<ReportDefinition> Library { get; } =
     [
@@ -284,7 +284,7 @@ public sealed class ReportService(IReviewData review, AuditService audit, ICurre
     {
         var definition = Library.FirstOrDefault(r => r.Code == code) ?? throw new NotFoundException("There is no report with that name.");
         session.Require(definition.Permission);
-        var to = toDate ?? DateOnly.FromDateTime(DateTime.UtcNow);
+        var to = toDate ?? clock.Today;
         var from = fromDate ?? to.AddMonths(-12).AddDays(1);
         new Validator().When(from > to, "FromDate", "The start date must be on or before the end date.")
             .When(to.DayNumber - from.DayNumber > 3660, "FromDate", "Choose a period of ten years or less.").ThrowIfInvalid();

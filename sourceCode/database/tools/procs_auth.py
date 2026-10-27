@@ -85,7 +85,7 @@ SET @Comments = CASE WHEN @succeeded = 1 THEN N'Sign-in succeeded.' ELSE N'Sign-
                  "have no other ownership rule are owned by it. The worker calls this for the user a job records, so "
                  "background work runs under the same security as the request that started it.",
         "body": f"""
-DECLARE @today DATE = CAST (SYSUTCDATETIME () AS DATE);
+DECLARE @today DATE = auth.udfSessionToday ();
 DECLARE @root  UNIQUEIDENTIFIER = (SELECT rootTenantId
                                       FROM auth.appUser
                                      WHERE appUserId = @appUserId AND isActive = 1 AND isDeleted = 0);
@@ -273,7 +273,7 @@ SELECT u.appUserId, u.userName, u.displayName, u.email, u.isActive, u.mfaEnabled
      , STRING_AGG (CONCAT (p.profileName, N' @ ', t.tenantName), N'; ') WITHIN GROUP (ORDER BY p.profileName) AS assignments
   FROM auth.appUser AS u
   LEFT JOIN auth.userAssignment AS ua ON ua.appUserId = u.appUserId AND ua.isDeleted = 0
-                                     AND (ua.endDate IS NULL OR ua.endDate >= CAST (SYSUTCDATETIME () AS DATE))
+                                     AND (ua.endDate IS NULL OR ua.endDate >= auth.udfSessionToday ())
   LEFT JOIN auth.profile AS p ON p.profileId = ua.profileId
   LEFT JOIN auth.tenant  AS t ON t.tenantId = ua.tenantId
  WHERE u.rootTenantId = @root AND u.isDeleted = 0

@@ -108,7 +108,7 @@
                     <div class="usa-form-group"><label class="usa-label" for="sampleValue">Value</label><input class="usa-input" id="sampleValue" name="sampleValue" inputmode="decimal" required /></div>
                     <div class="usa-form-group"><label class="usa-label" for="unit">Unit</label>
                         <select class="usa-select" id="unit" name="unit"><option value="ug/ft2">ug/ft2</option><option value="mg/cm2">mg/cm2</option><option value="ppm">ppm</option><option value="ug/L">ug/L</option></select></div>
-                    <div class="usa-form-group"><label class="usa-label" for="sampleDate">Sample date</label><input class="usa-input" id="sampleDate" name="sampleDate" type="date" value="@Options.Iso(DateOnly.FromDateTime(DateTime.UtcNow))" required /></div>
+                    <div class="usa-form-group"><label class="usa-label" for="sampleDate">Sample date</label><input class="usa-input" id="sampleDate" name="sampleDate" type="date" value="@Options.Iso(Clock.Today)" required /></div>
                 </div>
                 <div class="usa-form-group"><label class="usa-label" for="notes">Notes</label><input class="usa-input" id="notes" name="notes" /></div>
                 <button class="usa-button usa-button--outline" type="submit">Add sample</button>

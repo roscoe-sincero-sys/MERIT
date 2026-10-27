@@ -15,7 +15,7 @@ namespace Merit.Web.Controllers;
 /// computed by the server rule, so the dialog shows exactly what saving will do.
 /// </summary>
 [Route("people/{personId:guid}/places")]
-public sealed class PlacesController(PlaceService places, PersonService people, PersonPageBuilder builder,
+public sealed class PlacesController(IClock clock, PlaceService places, PersonService people, PersonPageBuilder builder,
                                      IReferenceDataProvider reference, ConfigService config) : Controller
 {
     [HttpGet("")]
@@ -37,7 +37,7 @@ public sealed class PlacesController(PlaceService places, PersonService people, 
         {
             PersonId = personId,
             Role = role ?? "residence",
-            StartDate = DateOnly.FromDateTime(DateTime.UtcNow),
+            StartDate = clock.Today,
         }, ct));
 
     /// <summary>Adds a place. An overlapping residence re-renders the form with the primary choice; it cannot save without one.</summary>
@@ -90,7 +90,7 @@ public sealed class PlacesController(PlaceService places, PersonService people, 
             PersonId = personId,
             PersonLocationId = personLocationId,
             AddressLabel = row.AddressLabel,
-            StartDate = DateOnly.FromDateTime(DateTime.UtcNow),
+            StartDate = clock.Today,
         }, ct));
     }
 
@@ -143,7 +143,7 @@ public sealed class PlacesController(PlaceService places, PersonService people, 
     [Authorize(Policy = Permissions.PersonEdit)]
     public async Task<IActionResult> End(Guid personId, Guid personLocationId, DateOnly? endDate, CancellationToken ct)
     {
-        await places.EndPlaceAsync(personId, personLocationId, endDate ?? DateOnly.FromDateTime(DateTime.UtcNow), ct);
+        await places.EndPlaceAsync(personId, personLocationId, endDate ?? clock.Today, ct);
         Response.Announce("Place ended.");
         return PartialView("_Places", await builder.PlacesAsync(personId, await places.GetPlacesAsync(personId, ct), true, ct));
     }
