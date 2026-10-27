@@ -1374,6 +1374,17 @@
       "started": "2026-10-27",
       "finished": "2026-10-27",
       "notes": "Filters by user, action, record type, dates, record; 100 a page; export audited; links from person, case and result pages"
+    },
+    {
+      "id": "T202",
+      "phase": "12 Quality",
+      "task": "Case and cluster maps: county outlines for context, a 320 px cluster map, linked cluster tasks",
+      "ref": "Issue #48",
+      "where": "config.subJurisdiction boundary; uspSetSubJurisdictionBoundary; uspListSubJurisdictionBoundaries; tools/boundaries.py; shared/map",
+      "status": "Done",
+      "started": "2026-10-27",
+      "finished": "2026-10-27",
+      "notes": "Outlines served by MERIT (no tile service); Maryland's from Census TIGERweb in the demo"
     }
   ]
 }

@@ -113,7 +113,7 @@ BEGIN
          WHERE cc.clusterId = @clusterId AND cc.isDeleted = 0
          ORDER BY CASE WHEN cc.leftDate IS NULL THEN 0 ELSE 1 END, c.openedDate;
 
-        SELECT w.workTaskId, w.title, w.detail, w.dueDate, w.isUrgent, u.displayName AS assignedToName
+        SELECT w.workTaskId, w.queueCode, w.title, w.detail, w.dueDate, w.isUrgent, u.displayName AS assignedToName
           FROM dbo.workTask AS w
           LEFT JOIN auth.appUser AS u ON u.appUserId = w.assignedToUserId
          WHERE w.clusterId = @clusterId AND w.taskStatus = 'open' AND w.isDeleted = 0;

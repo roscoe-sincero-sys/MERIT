@@ -71,6 +71,8 @@ public interface IConfigData
 
     Task<IReadOnlyList<SubJurisdictionRow>> ListSubJurisdictionsAsync(CancellationToken ct = default);
 
+    Task<IReadOnlyList<SubJurisdictionBoundaryRow>> ListSubJurisdictionBoundariesAsync(CancellationToken ct = default);
+
     Task<IReadOnlyList<EnvironmentalStandardRow>> GetEnvironmentalStandardsAsync(CancellationToken ct = default);
 
     Task<ExtractLayoutData?> GetExtractLayoutAsync(string extractType, CancellationToken ct = default);

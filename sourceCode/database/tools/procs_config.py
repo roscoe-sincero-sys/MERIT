@@ -188,6 +188,55 @@ SET @Comments = CONCAT (@@ROWCOUNT, N' analyte(s) updated.');
 """,
     },
     {
+        "schema": "config", "name": "uspListSubJurisdictionBoundaries", "kind": "read", "grants": WEB, "ticket": "T109",
+        "desc": "The outlines of the caller's root's counties and other sub-jurisdictions, with a point for each name, for "
+                "the context layer of the case and cluster maps. Only those with an outline are listed.",
+        "params": "",
+        "key": "NULL",
+        "body": """
+SELECT sj.countyFips, sj.subJurisdictionName, sj.boundary, sj.labelLatitude, sj.labelLongitude
+  FROM config.subJurisdiction AS sj
+ WHERE sj.rootTenantId = auth.udfSessionRootTenantId ()
+   AND sj.isDeleted = 0
+   AND sj.boundary IS NOT NULL
+ ORDER BY sj.subJurisdictionName;
+""",
+    },
+    {
+        "schema": "config", "name": "uspSetSubJurisdictionBoundary", "kind": "write", "grants": [], "ticket": "T109",
+        "desc": "Stores a county's outline and label point for the map's context layer. Run at install, like the "
+                "counties themselves (tools/boundaries.py writes the calls from a GeoJSON file); no application role "
+                "may execute it.",
+        "params": """@tenantCode     NVARCHAR (40)
+, @countyFips     CHAR (3)
+, @boundary       NVARCHAR (MAX)
+, @labelLatitude  DECIMAL (9, 6) = NULL
+, @labelLongitude DECIMAL (9, 6) = NULL""",
+        "key": "CONCAT (N'tenantCode=', @tenantCode, N', countyFips=', @countyFips)",
+        "validate": """IF ISJSON (@boundary) = 0 OR JSON_VALUE (@boundary, '$.type') NOT IN ('Polygon', 'MultiPolygon')
+BEGIN
+    ;THROW 50000, N'@boundary must be a GeoJSON Polygon or MultiPolygon geometry.', 1;
+END;
+IF @labelLatitude NOT BETWEEN -90 AND 90 OR @labelLongitude NOT BETWEEN -180 AND 180
+BEGIN
+    ;THROW 50000, N'@labelLatitude and @labelLongitude must be a latitude and a longitude.', 1;
+END;""",
+        "body": """
+UPDATE sj
+   SET sj.boundary = @boundary, sj.labelLatitude = @labelLatitude, sj.labelLongitude = @labelLongitude
+  FROM config.subJurisdiction AS sj
+  JOIN auth.tenant AS t ON t.tenantId = sj.rootTenantId
+ WHERE t.tenantCode = @tenantCode AND sj.countyFips = @countyFips AND sj.isDeleted = 0;
+
+IF @@ROWCOUNT = 0
+BEGIN
+    ;THROW 51404, N'No such county in that jurisdiction.', 1;
+END;
+
+SET @Comments = N'Sub-jurisdiction outline stored.';
+""",
+    },
+    {
         "schema": "config", "name": "uspListSubJurisdictions", "kind": "read", "grants": BOTH, "ticket": "T020",
         "desc": "Counties and other sub-jurisdictions of the caller's root, with the tenants that serve them (names for "
                 "display, ids for choosing among a parent's counties).",

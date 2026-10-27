@@ -66,12 +66,22 @@ public sealed class QueuesController(QueueService queues, CaseService cases) : C
 /// <summary>The words for stored codes and file fields (issues #37 and #38), so the client shows the same names as the pages.</summary>
 [ApiController]
 [Route("api/v1/reference")]
-public sealed class ReferenceLabelsController(IReferenceDataProvider reference) : ControllerBase
+public sealed class ReferenceLabelsController(IReferenceDataProvider reference, ConfigService config) : ControllerBase
 {
     [HttpGet("labels")]
     [Authorize(Policy = Permissions.SignedIn)]
     public async Task<LabelsDto> Labels(CancellationToken ct)
         => new((await reference.GetAsync(ct)).Names.Codes, DisplayNames.Fields, DisplayNames.StagingFields.Select(f => f.Key).ToList());
+
+    /// <summary>The jurisdiction's county outlines, the maps' context layer (issue #48). Served from MERIT; no tile service.</summary>
+    [HttpGet("boundaries")]
+    [Authorize(Policy = Permissions.SignedIn)]
+    public async Task<IReadOnlyList<BoundaryDto>> Boundaries(CancellationToken ct)
+        => (await config.BoundariesAsync(ct)).Select(b =>
+        {
+            using var geometry = JsonDocument.Parse(b.Boundary);
+            return new BoundaryDto(b.CountyFips, b.SubJurisdictionName, geometry.RootElement.Clone(), b.LabelLatitude, b.LabelLongitude);
+        }).ToList();
 }
 
 [ApiController]

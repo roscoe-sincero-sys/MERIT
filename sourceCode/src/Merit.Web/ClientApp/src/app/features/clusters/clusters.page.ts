@@ -106,7 +106,7 @@ export class ClusterStore {
     @if (store.message(); as m) { <div class="usa-alert usa-alert--success usa-alert--slim" role="status"><div class="usa-alert__body"><p class="usa-alert__text">{{ m }}</p></div></div> }
     @if (store.cluster(); as c) {
       <h1 tabindex="-1">{{ c.title }}</h1>
-      <p class="merit-meta">{{ typeLabel(c.clusterType) }} &middot; window {{ c.windowStart }} to {{ c.windowEnd }} &middot; owned by {{ c.owningTenantName }}</p>
+      <p class="merit-meta">{{ typeLabel(c.clusterType) }} &middot; window {{ display.date(c.windowStart) }} to {{ display.date(c.windowEnd) }} &middot; owned by {{ c.owningTenantName }}</p>
 
       <form class="usa-form usa-form--large status" (submit)="save($event)">
         <label class="usa-label" for="cl-status">Status</label>
@@ -120,7 +120,8 @@ export class ClusterStore {
 
       <h2>Cases</h2>
       @if (points().length > 0) {
-        <merit-point-map [points]="points()" [categories]="classifications" ringLabel="Left the cluster" />
+        <!-- A locator, not the page's subject: kept short so the case list stays in view (issue #48). -->
+        <merit-point-map [points]="points()" [categories]="classifications" ringLabel="Left the cluster" [maxHeight]="320" />
       }
       <div class="merit-table-wrap" tabindex="0" role="region" aria-label="Cases in the cluster; scroll sideways for more columns">
       <table class="usa-table usa-table--borderless">
@@ -157,7 +158,10 @@ export class ClusterStore {
       @if (c.tasks.length > 0) {
         <h2>Open tasks</h2>
         <ul class="usa-list">
-          @for (t of c.tasks; track t.workTaskId) { <li>{{ t.title }}@if (t.dueDate) {, due {{ t.dueDate }}}@if (t.assignedToName) {, {{ t.assignedToName }}}</li> }
+          <!-- Each task opens its work queue, where it is assigned and done (issue #48). -->
+          @for (t of c.tasks; track t.workTaskId) {
+            <li><a class="usa-link" [href]="'/app/queues?queue=' + t.queueCode">{{ t.title }}</a>@if (t.isUrgent) { <strong>(urgent)</strong>}@if (t.dueDate) {, due <span class="merit-nowrap">{{ display.date(t.dueDate) }}</span>}@if (t.assignedToName) {, {{ t.assignedToName }}}</li>
+          }
         </ul>
       }
     } @else if (!store.error()) {

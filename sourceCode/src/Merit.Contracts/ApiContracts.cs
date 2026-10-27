@@ -187,7 +187,11 @@ public sealed record ClusterMemberDto(
     decimal? Latitude,
     decimal? Longitude);
 
-public sealed record ClusterTaskDto(Guid WorkTaskId, string Title, string? Detail, DateOnly? DueDate, bool IsUrgent, string? AssignedToName);
+public sealed record ClusterTaskDto(Guid WorkTaskId, string QueueCode, string Title, string? Detail, DateOnly? DueDate, bool IsUrgent,
+                                    string? AssignedToName);
+
+/// <summary>A county's outline for the maps' context layer: a GeoJSON Polygon or MultiPolygon, and where to write its name.</summary>
+public sealed record BoundaryDto(string CountyFips, string Name, System.Text.Json.JsonElement Geometry, decimal? LabelLatitude, decimal? LabelLongitude);
 
 public sealed record ClusterDto(
     Guid ClusterId,

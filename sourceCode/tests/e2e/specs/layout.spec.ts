@@ -145,3 +145,32 @@ test('timeline: axis labels name years, months or days by the span shown', async
   await check();
   expect(await page.locator('.tick-label').first().textContent()).toMatch(/^[A-Z][a-z]{2} \d{1,2}$/);
 });
+
+test('maps: county outlines give context, and the cluster map stays small', async ({ asUser }) => {
+  const page = await asUser('supervisor');
+  await page.setViewportSize({ width: 1280, height: 900 });
+  // Issue #48: points floated on a blank grid, and the cluster page's map was 760 px tall with two points in it.
+  await page.goto('/app/map');
+  await angularReady(page);
+  await expect(page.locator('merit-point-map path.area').first()).toBeAttached();
+  expect(await page.locator('merit-point-map path.area').count()).toBeGreaterThan(1);
+  expect(await page.locator('merit-point-map text.area-label').count()).toBeGreaterThan(0);
+  // A point still names its case on focus.
+  await page.locator('circle.point').first().focus();
+  await expect(page.locator('merit-point-map .tooltip')).toContainText(/PB-\d{4}-\d+/);
+
+  await page.goto('/app/clusters');
+  await angularReady(page);
+  const cluster = page.locator('main a[href^="/app/clusters/"]').first();
+  test.skip(await cluster.count() === 0, 'Needs a cluster (the demo data has some).');
+  await cluster.click();
+  await angularReady(page);
+  const map = page.locator('merit-point-map .plot');
+  await expect(map).toBeVisible();
+  expect((await map.boundingBox())!.height).toBeLessThanOrEqual(322);
+  await expect(page.locator('merit-point-map path.area').first()).toBeAttached();
+  // Its open tasks open their work queue.
+  for (const href of await page.locator('main h2:has-text("Open tasks") + ul a').evaluateAll(as => as.map(a => a.getAttribute('href')))) {
+    expect(href).toMatch(/^\/app\/queues\?queue=[a-zA-Z]+$/);
+  }
+});

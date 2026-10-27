@@ -1,6 +1,7 @@
 using System.Net;
 using Microsoft.AspNetCore.Mvc.Controllers;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit.Abstractions;
 
@@ -342,6 +343,45 @@ public sealed partial class EndpointTests(MeritFixture fixture, ITestOutputHelpe
         Assert.All(lines.Skip(1), l => Assert.Contains($",Viewed,Person,{mia},", l, StringComparison.Ordinal));
         string exports = await supervisor.Http.GetStringAsync("/admin/audit?action=export&recordType=auditEvent");
         Assert.Contains("<td>Exported</td>", exports, StringComparison.Ordinal);
+    }
+
+    [SqlFact]
+    public async Task TheMapsGetTheJurisdictionsCountyOutlines()
+    {
+        // Issue #48: the case and cluster maps drew points on a blank grid. The outlines come from MERIT, not a tile service.
+        var supervisor = await fixture.SignedInAsync("supervisor");
+        using var doc = System.Text.Json.JsonDocument.Parse(await supervisor.Http.GetStringAsync("/api/v1/reference/boundaries"));
+        var counties = doc.RootElement.EnumerateArray().ToList();
+        Assert.Equal(24, counties.Count);                                   // Maryland's 23 counties and Baltimore City
+        Assert.Contains(counties, c => c.GetProperty("countyFips").GetString() == "510" && c.GetProperty("name").GetString() == "Baltimore City");
+        Assert.All(counties, c =>
+        {
+            Assert.Contains(c.GetProperty("geometry").GetProperty("type").GetString(), new[] { "Polygon", "MultiPolygon" });
+            Assert.InRange(c.GetProperty("labelLatitude").GetDecimal(), 37.8m, 39.8m);
+            Assert.InRange(c.GetProperty("labelLongitude").GetDecimal(), -79.5m, -75.0m);
+        });
+
+        // Outlines are loaded at install: the web login cannot change them, and only a polygon is accepted.
+        await using (var web = new SqlConnection(TestEnvironment.WebConnectionString))
+        {
+            await web.OpenAsync();
+            var denied = await Assert.ThrowsAsync<SqlException>(() => SetBoundaryAsync(web, """{"type":"Polygon","coordinates":[]}"""));
+            Assert.Equal(229, denied.Number);                                // EXECUTE permission denied
+        }
+
+        await using var admin = new SqlConnection(TestEnvironment.AdminConnectionString());
+        await admin.OpenAsync();
+        var refused = await Assert.ThrowsAsync<SqlException>(() => SetBoundaryAsync(admin, """{"type":"Point","coordinates":[-76.6,39.3]}"""));
+        Assert.Equal(50000, refused.Number);
+
+        static Task SetBoundaryAsync(SqlConnection c, string boundary)
+        {
+            var cmd = new SqlCommand("config.uspSetSubJurisdictionBoundary", c) { CommandType = System.Data.CommandType.StoredProcedure };
+            cmd.Parameters.AddWithValue("@tenantCode", "MD-LEAD");
+            cmd.Parameters.AddWithValue("@countyFips", "510");
+            cmd.Parameters.AddWithValue("@boundary", boundary);
+            return cmd.ExecuteNonQueryAsync();
+        }
     }
 
     [SqlFact]
