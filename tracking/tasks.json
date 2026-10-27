@@ -1198,6 +1198,17 @@
       "started": "2026-10-26",
       "finished": "2026-10-26",
       "notes": "Capture recipe in docs/guides/README.md"
+    },
+    {
+      "id": "T186",
+      "phase": "12 Quality",
+      "task": "Issue #26: intake profile picker shows the version number (explicit Razor expression); the page render test fails on any unrendered Razor",
+      "ref": "GitHub issue #26",
+      "where": "Views/Intake/Index.cshtml, EndpointTests",
+      "status": "Done",
+      "started": "2026-10-26",
+      "finished": "2026-10-26",
+      "notes": "Check flags /intake on the old view and no other page"
     }
   ]
 }
