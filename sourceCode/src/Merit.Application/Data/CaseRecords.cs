@@ -502,6 +502,21 @@ public sealed record CaseDetail(
     IReadOnlyList<CaseTaskRow> Tasks,
     PrimaryContactRow? PrimaryContact);
 
+/// <summary>
+/// A case list search (issue #50): every filter optional. Sort is opened, case, classification or person; Assigned is
+/// "me", "unassigned" or a user id.
+/// </summary>
+public sealed record CaseListQuery(bool OpenOnly = true, string? Assigned = null, Guid? AnalyteId = null, string? Classification = null,
+                                   string? Population = null, Guid? OwningTenantId = null, string? Search = null, string Sort = "opened",
+                                   bool Descending = true, int PageNumber = 1, int PageSize = 25);
+
+public sealed class CaseOwnerRow
+{
+    public Guid TenantId { get; init; }
+
+    public string TenantName { get; init; } = string.Empty;
+}
+
 public sealed class CaseListRow
 {
     public Guid ExposureCaseId { get; init; }

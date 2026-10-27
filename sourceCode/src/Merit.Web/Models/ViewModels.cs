@@ -464,7 +464,93 @@ public sealed record CasePageModel(CaseDetail Detail, IReadOnlyList<SelectOption
                                    IReadOnlyList<SelectOption> ActivityTypes, IReadOnlyList<SelectOption> Outcomes, bool CanEdit,
                                    bool CanInvestigate, string? Message = null);
 
-public sealed record CaseListModel(IReadOnlyList<CaseListRow> Rows, bool OpenOnly, bool AssignedToMe, int PageNumber, int TotalCount);
+/// <summary>
+/// The case list's filters and sort, bound from the query string, so a filtered list is a link (issue #50). Assigned is
+/// "me", "unassigned" or a user id; the old mine=true still means "me".
+/// </summary>
+public sealed class CaseFilterModel
+{
+    public const int PageSize = 25;
+
+    public bool OpenOnly { get; set; } = true;
+
+    public string? Assigned { get; set; }
+
+    public bool Mine { get; set; }
+
+    public Guid? AnalyteId { get; set; }
+
+    public string? Classification { get; set; }
+
+    public string? Population { get; set; }
+
+    public Guid? Owner { get; set; }
+
+    public string? Q { get; set; }
+
+    public string Sort { get; set; } = "opened";
+
+    public bool Desc { get; set; } = true;
+
+    public int Page { get; set; } = 1;
+
+    public string? AssignedFilter => Mine && string.IsNullOrEmpty(Assigned) ? "me" : NullIfEmpty(Assigned);
+
+    public bool IsFiltered => !OpenOnly || AssignedFilter is not null || AnalyteId is not null || Classification is not null
+                              || Population is not null || Owner is not null || !string.IsNullOrWhiteSpace(Q);
+
+    public CaseListQuery ToQuery() => new(OpenOnly, AssignedFilter, AnalyteId, NullIfEmpty(Classification), NullIfEmpty(Population), Owner,
+        string.IsNullOrWhiteSpace(Q) ? null : Q.Trim(), Sorts.Contains(Sort) ? Sort : "opened", Desc, Math.Max(Page, 1), PageSize);
+
+    private static readonly string[] Sorts = ["opened", "case", "classification", "person"];
+
+    /// <summary>The query string for these filters, at another page or sorted another way.</summary>
+    public string Query(int? page = null, string? sort = null, bool? desc = null)
+    {
+        var parts = new List<string>();
+        void Add(string key, string? value)
+        {
+            if (!string.IsNullOrEmpty(value))
+            {
+                parts.Add($"{key}={Uri.EscapeDataString(value)}");
+            }
+        }
+
+        if (!OpenOnly)
+        {
+            Add("openOnly", "false");
+        }
+
+        Add("assigned", AssignedFilter);
+        Add("analyteId", AnalyteId?.ToString());
+        Add("classification", NullIfEmpty(Classification));
+        Add("population", NullIfEmpty(Population));
+        Add("owner", Owner?.ToString());
+        Add("q", string.IsNullOrWhiteSpace(Q) ? null : Q.Trim());
+        string s = sort ?? Sort;
+        bool d = desc ?? Desc;
+        if (s != "opened" || !d)
+        {
+            Add("sort", s);
+            Add("desc", d ? "true" : "false");
+        }
+
+        if ((page ?? 1) > 1)
+        {
+            Add("page", page!.Value.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        }
+
+        return parts.Count == 0 ? string.Empty : "?" + string.Join('&', parts);
+    }
+
+    private static string? NullIfEmpty(string? value) => string.IsNullOrEmpty(value) ? null : value;
+}
+
+public sealed record CaseListModel(IReadOnlyList<CaseListRow> Rows, CaseFilterModel Filter, int TotalCount, IReadOnlyList<SelectOption> Analytes,
+                                   IReadOnlyList<SelectOption> Owners, IReadOnlyList<SelectOption> Users)
+{
+    public int PageNumber => Math.Max(Filter.Page, 1);
+}
 
 public sealed class InvestigationRequestModel
 {

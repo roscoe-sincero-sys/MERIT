@@ -17,11 +17,16 @@ public sealed class CasesController(IClock clock, CaseService cases, PersonServi
 {
     [HttpGet("")]
     [Authorize(Policy = Permissions.CaseView)]
-    public async Task<IActionResult> Index(bool openOnly = true, bool mine = false, int page = 1, CancellationToken ct = default)
+    public async Task<IActionResult> Index([FromQuery] CaseFilterModel filter, CancellationToken ct = default)
     {
-        var rows = await cases.ListAsync(openOnly, mine, Math.Max(page, 1), 25, ct);
-        return this.PageOrPartial("Index", "_CaseList",
-            new CaseListModel(rows, openOnly, mine, Math.Max(page, 1), rows.FirstOrDefault()?.TotalCount ?? 0));
+        // Issue #50: filters, a text search and sorting, all in the query string.
+        var rows = await cases.ListAsync(filter.ToQuery(), ct);
+        var refData = await reference.GetAsync(ct);
+        var analytes = refData.ActiveAnalytes.Select(a => new SelectOption(a.AnalyteId.ToString(), a.DisplayName, a.AnalyteId == filter.AnalyteId)).ToList();
+        var owners = (await cases.OwnersAsync(ct)).Select(o => new SelectOption(o.TenantId.ToString(), o.TenantName, o.TenantId == filter.Owner)).ToList();
+        var users = (await cases.AssignableUsersAsync(ct))
+            .Select(u => new SelectOption(u.AppUserId.ToString(), u.DisplayName, u.AppUserId.ToString() == filter.AssignedFilter)).ToList();
+        return this.PageOrPartial("Index", "_CaseList", new CaseListModel(rows, filter, rows.FirstOrDefault()?.TotalCount ?? 0, analytes, owners, users));
     }
 
     [HttpGet("{id:guid}")]

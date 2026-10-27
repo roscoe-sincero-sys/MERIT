@@ -179,7 +179,9 @@ public interface ICaseData
 
     Task<CaseDetail?> GetCaseAsync(Guid exposureCaseId, CancellationToken ct = default);
 
-    Task<IReadOnlyList<CaseListRow>> ListCasesAsync(bool openOnly, bool assignedToMe, Guid? analyteId, int pageNumber, int pageSize, CancellationToken ct = default);
+    Task<IReadOnlyList<CaseListRow>> ListCasesAsync(CaseListQuery query, CancellationToken ct = default);
+
+    Task<IReadOnlyList<CaseOwnerRow>> ListCaseOwnersAsync(CancellationToken ct = default);
 
     Task UpdateCaseAsync(Guid exposureCaseId, Guid? assignedToUserId, string exposureCategory, string caseStatus, byte[] rowVersion, CancellationToken ct = default);
 

@@ -385,6 +385,41 @@ public sealed partial class EndpointTests(MeritFixture fixture, ITestOutputHelpe
     }
 
     [SqlFact]
+    public async Task TheCaseListFiltersSearchesAndSorts()
+    {
+        // Issue #50: Open only and Assigned to me were the only choices; no sort, no search.
+        var supervisor = await fixture.SignedInAsync("supervisor");
+        static List<string> Numbers(string html) => System.Text.RegularExpressions.Regex.Matches(html, @"<a class=""usa-link"" href=""/cases/[0-9a-f-]{36}"">([A-Z]{2}-\d{4}-\d{6})</a>")
+            .Select(m => m.Groups[1].Value).ToList();
+
+        string all = await supervisor.Http.GetStringAsync("/cases?openOnly=false");
+        var everyCase = Numbers(all);
+        Assert.NotEmpty(everyCase);
+        Assert.Contains("for=\"classification\"", all, StringComparison.Ordinal);
+        Assert.Contains("aria-sort=\"descending\"", all, StringComparison.Ordinal);            // opened, newest first
+
+        // Sorted by case number, both ways.
+        var up = Numbers(await supervisor.Http.GetStringAsync("/cases?openOnly=false&sort=case&desc=false"));
+        Assert.Equal(up.OrderBy(n => n, StringComparer.Ordinal), up);
+        var down = Numbers(await supervisor.Http.GetStringAsync("/cases?openOnly=false&sort=case&desc=true"));
+        Assert.Equal(down.OrderByDescending(n => n, StringComparer.Ordinal), down);
+
+        // A case number finds that case; a classification keeps only those.
+        var one = Numbers(await supervisor.Http.GetStringAsync($"/cases?openOnly=false&q={fixture.Ids.MiaCaseNumber}"));
+        Assert.Equal([fixture.Ids.MiaCaseNumber], one);
+        string confirmed = await supervisor.Http.GetStringAsync("/cases?openOnly=false&classification=confirmed");
+        Assert.DoesNotContain("merit-badge--suspect\"", confirmed, StringComparison.Ordinal);
+        Assert.DoesNotContain("merit-badge--notACase\"", confirmed, StringComparison.Ordinal);
+
+        // Unassigned is one filter; "mine" from the Home tile still means assigned to me.
+        string unassigned = await supervisor.Http.GetStringAsync("/cases?openOnly=false&assigned=unassigned");
+        Assert.All(System.Text.RegularExpressions.Regex.Matches(unassigned, @"<td class=""merit-nowrap"">[A-Z][a-z]{2} \d{1,2}, \d{4}</td>\s*<td>([^<]*)</td>"),
+            m => Assert.Equal("Unassigned", m.Groups[1].Value));
+        Assert.Equal(HttpStatusCode.OK, (await supervisor.NoRedirect.GetAsync("/cases?mine=true")).StatusCode);
+        Assert.Contains("<option value=\"me\" selected=\"selected\">Me</option>", await supervisor.Http.GetStringAsync("/cases?mine=true"), StringComparison.Ordinal);
+    }
+
+    [SqlFact]
     public async Task ResultPagesAndLabelsUseWordsNotCodes()
     {
         // Issues #37 and #38: "Icp ms" for ICP-MS, file fields shown as lastName and zip5, and "analyzed ," with no date.

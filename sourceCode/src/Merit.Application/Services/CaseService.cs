@@ -27,11 +27,17 @@ public sealed class CaseService(IClock clock, ICaseData cases, IWorkData work, I
         return detail;
     }
 
-    public async Task<IReadOnlyList<CaseListRow>> ListAsync(bool openOnly, bool assignedToMe, int pageNumber, int pageSize,
-                                                           CancellationToken ct = default)
+    public async Task<IReadOnlyList<CaseListRow>> ListAsync(CaseListQuery query, CancellationToken ct = default)
     {
         session.Require(Permissions.CaseView);
-        return await cases.ListCasesAsync(openOnly, assignedToMe, null, pageNumber, pageSize, ct).ConfigureAwait(false);
+        return await cases.ListCasesAsync(query, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>The tenants that own a case the caller can see, for the list's owner filter.</summary>
+    public async Task<IReadOnlyList<CaseOwnerRow>> OwnersAsync(CancellationToken ct = default)
+    {
+        session.Require(Permissions.CaseView);
+        return await cases.ListCaseOwnersAsync(ct).ConfigureAwait(false);
     }
 
     public Task<IReadOnlyList<AssignableUserRow>> AssignableUsersAsync(CancellationToken ct = default)
