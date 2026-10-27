@@ -1352,6 +1352,28 @@
       "started": "2026-10-27",
       "finished": "2026-10-27",
       "notes": "A '+' was HTML-encoded in hx-nonce and hx-csp stripped about one partial in three; unit and integration tests added"
+    },
+    {
+      "id": "T200",
+      "phase": "12 Quality",
+      "task": "Held rows held for an uncertain match link to Match review; Release skips them",
+      "ref": "Issue #42",
+      "where": "HeldRowDto.ReasonCodes; features/held; features/match-review ?row=",
+      "status": "Done",
+      "started": "2026-10-27",
+      "finished": "2026-10-27",
+      "notes": "Release disabled with an explanation when only such rows are selected"
+    },
+    {
+      "id": "T201",
+      "phase": "12 Quality",
+      "task": "Audit log: filters, paging, words, record links, CSV export",
+      "ref": "Issue #45",
+      "where": "logs.uspSearchAuditEvents; logs.uspListAuditUsers; AuditText; Views/Admin/Audit; _AuditLink",
+      "status": "Done",
+      "started": "2026-10-27",
+      "finished": "2026-10-27",
+      "notes": "Filters by user, action, record type, dates, record; 100 a page; export audited; links from person, case and result pages"
     }
   ]
 }
