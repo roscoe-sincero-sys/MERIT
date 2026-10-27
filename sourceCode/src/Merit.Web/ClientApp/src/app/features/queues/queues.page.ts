@@ -63,11 +63,11 @@ import { Display } from '../../shared/display.service';
     </div>
   `,
   styles: `
-    .layout { display: grid; grid-template-columns: minmax(12rem, 18rem) 1fr; gap: 1.5rem; }
+    .layout { display: grid; grid-template-columns: minmax(12rem, 18rem) minmax(0, 1fr); gap: 1.5rem; }
     .filters, .bulk { display: flex; flex-wrap: wrap; align-items: end; gap: .5rem 1rem; margin-bottom: .75rem; }
     .filters .usa-select, .bulk .usa-select { max-width: 14rem; margin-top: 0; }
     .bulk .usa-select.assignee { max-width: 22rem; }
-    @media (max-width: 64em) { .layout { grid-template-columns: 1fr; } }
+    @media (max-width: 64em) { .layout { grid-template-columns: minmax(0, 1fr); } }
   `,
 })
 export class QueuesPage implements OnInit {

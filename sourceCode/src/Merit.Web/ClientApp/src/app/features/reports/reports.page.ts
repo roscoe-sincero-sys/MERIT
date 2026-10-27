@@ -95,14 +95,14 @@ export class ReportsStore {
     </div>
   `,
   styles: `
-    .layout { display: grid; grid-template-columns: minmax(12rem, 18rem) 1fr; gap: 1.5rem; }
+    .layout { display: grid; grid-template-columns: minmax(12rem, 18rem) minmax(0, 1fr); gap: 1.5rem; }
     .filters { display: flex; flex-wrap: wrap; gap: .5rem 1rem; align-items: end; margin-bottom: 1rem; }
     .filters .usa-input, .filters .usa-select, .measure .usa-select { max-width: 14rem; }
     .exports { display: flex; gap: .5rem; margin-left: auto; }
     .measure { margin-bottom: .5rem; }
     .scroll { overflow-x: auto; }
     .num { text-align: right; font-variant-numeric: tabular-nums; }
-    @media (max-width: 64em) { .layout { grid-template-columns: 1fr; } }
+    @media (max-width: 64em) { .layout { grid-template-columns: minmax(0, 1fr); } }
   `,
 })
 export class ReportsPage implements OnInit {

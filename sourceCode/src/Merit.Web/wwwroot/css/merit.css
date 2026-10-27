@@ -26,7 +26,7 @@ body { background: #fff; color: var(--merit-ink); }
 .merit-nav a { text-decoration: none; padding: .25rem 0; border-bottom: 2px solid transparent; }
 .merit-nav a:hover, .merit-nav a:focus, .merit-nav a[aria-current="page"] { border-bottom-color: #fff; }
 .merit-header__search { margin-left: auto; display: flex; gap: .25rem; }
-.merit-header__search input { min-width: 14rem; margin: 0; }
+.merit-header__search input { min-width: 16rem; margin: 0; }
 .merit-header__user { font-size: .9rem; display: flex; align-items: center; gap: .75rem; }
 .merit-header__user form { margin: 0; }
 .merit-header .usa-button--unstyled { color: #fff; }
@@ -110,9 +110,24 @@ dialog.merit-dialog::backdrop { background: rgba(0,0,0,.5); }
 [aria-busy=true] { opacity: .75; transition: opacity 200ms ease-in 200ms; }
 
 /* ---------------------------------------------------------------------------------------------- tablet and phone */
+/* On a phone: the brand and a Menu button, search on a full-width row, and the menu and user block behind the button
+   (issue #47). merit.js adds merit-header--js; without script the menu stays open. */
+.merit-menu-button { display: none; }
 @media (max-width: 40em) {
-    .merit-header__search { margin-left: 0; width: 100%; }
-    .merit-header__search input { min-width: 0; flex: 1; }
+    .merit-header__inner { gap: .75rem; }
+    /* USWDS makes every button full width on a phone, which left the search box a sliver beside its button. */
+    .merit-header .usa-button { width: auto; }
+    .merit-brand { flex: 1 1 0; min-width: 0; }
+    .merit-header--js .merit-menu-button { display: inline-block; margin: 0; padding: .5rem 1rem; }
+    .merit-header__search { order: 1; margin-left: 0; width: 100%; }
+    .merit-header__search input { min-width: 0; flex: 1; max-width: none; }
+    .merit-header__nav, .merit-header__user { order: 2; width: 100%; }
+    .merit-header--js:not(.merit-header--open) .merit-header__nav,
+    .merit-header--js:not(.merit-header--open) .merit-header__user { display: none; }
+    .merit-nav { flex-direction: column; gap: 0; border-top: 1px solid rgba(255, 255, 255, .35); }
+    .merit-nav a { display: block; padding: .6rem 0; }
+    .merit-nav a[aria-current="page"] { border-bottom-color: transparent; font-weight: 700; }
+    .merit-header__user { justify-content: space-between; border-top: 1px solid rgba(255, 255, 255, .35); padding-top: .75rem; }
 }
 
 @media print {

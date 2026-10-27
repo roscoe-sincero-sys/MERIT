@@ -34,6 +34,7 @@ export class ClustersStore {
       </select>
     </div>
     @if (store.clusters().length === 0) { <p class="merit-empty">No clusters.</p> } @else {
+      <div class="merit-table-wrap" tabindex="0" role="region" aria-label="Clusters; scroll sideways for more columns">
       <table class="usa-table usa-table--borderless">
         <caption class="usa-sr-only">Clusters</caption>
         <thead><tr><th scope="col">Cluster</th><th scope="col">Kind</th><th scope="col">Status</th><th scope="col">Cases</th><th scope="col">Window</th><th scope="col">Owner</th></tr></thead>
@@ -44,12 +45,13 @@ export class ClustersStore {
               <td>{{ typeLabel(c.clusterType) }}</td>
               <td>{{ statusLabel(c.status) }}</td>
               <td>{{ c.memberCount }}</td>
-              <td>{{ c.windowStart }} to {{ c.windowEnd }}</td>
+              <td><span class="merit-nowrap">{{ display.date(c.windowStart) }}</span> to <span class="merit-nowrap">{{ display.date(c.windowEnd) }}</span></td>
               <td>{{ c.owningTenantName }}</td>
             </tr>
           }
         </tbody>
       </table>
+      </div>
     }
   `,
   styles: `.filters { display: flex; gap: 1rem; align-items: end; margin-bottom: 1rem; } .filters .usa-select { max-width: 12rem; margin-top: 0; }`,
@@ -120,6 +122,7 @@ export class ClusterStore {
       @if (points().length > 0) {
         <merit-point-map [points]="points()" [categories]="classifications" ringLabel="Left the cluster" />
       }
+      <div class="merit-table-wrap" tabindex="0" role="region" aria-label="Cases in the cluster; scroll sideways for more columns">
       <table class="usa-table usa-table--borderless">
         <caption class="usa-sr-only">Cases in the cluster</caption>
         <thead><tr><th scope="col">Case</th><th scope="col">Person</th><th scope="col">Classification</th><th scope="col">Highest</th><th scope="col">Address</th><th scope="col">Joined</th><th scope="col"><span class="usa-sr-only">Action</span></th></tr></thead>
@@ -142,6 +145,7 @@ export class ClusterStore {
           }
         </tbody>
       </table>
+      </div>
       @if (c.status !== 'closed') {
         <form class="add" (submit)="add($event)">
           <label class="usa-label" for="cl-case">Add a case by number</label>
