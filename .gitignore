@@ -28,6 +28,9 @@ __pycache__/
 !.archify/**/
 !.archify/**/candidate.json
 
+# Local issue drafts and screenshots (the issues themselves live on GitHub)
+/issues/
+
 # Claude Code local-only settings
 .claude/settings.local.json
 
