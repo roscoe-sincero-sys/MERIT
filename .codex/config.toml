@@ -1,0 +1,3 @@
+# MERIT: route eligible approval requests through automatic review.
+approval_policy = "on-request"
+approvals_reviewer = "auto_review"
