@@ -444,6 +444,97 @@ test('work queues: changing status, assigned-to-me, or urgent-only clears select
   expect(bulkCalls).toEqual([[taskB]]);
 });
 
+test('work queues: a delayed filter load superseded by sorting cannot carry stale row selection into the filtered view', async ({ asUser }) => {
+  // Issue #61 / PR #120 review: delaying a filter GET, attempting to select stale rows, and clicking a sortable header
+  // to supersede the filter GET must neither allow selecting stale rows during refresh nor lose the pending scope reset.
+  const page = await asUser('supervisor');
+  const taskA = '00000000-0000-0000-0000-00000000610a';
+  const taskB = '00000000-0000-0000-0000-00000000610b';
+  const makeTask = (id: string, title: string, isUrgent: boolean) => ({
+    workTaskId: id, queueCode: 'caseFollowUp', title, detail: null, taskStatus: 'open', isUrgent,
+    dueDate: '2026-11-01', personId: null, personName: null, exposureCaseId: null, caseNumber: null,
+    stagingRowId: null, assignedToUserId: null, assignedToName: null, createdUtc: '2026-10-28T12:00:00Z',
+  });
+  const bulkPayloads: { taskIds: string[]; action: string }[] = [];
+  let sawFiltered!: () => void;
+  const reachedFiltered = new Promise<void>(resolve => { sawFiltered = resolve; });
+  let releaseFiltered!: () => Promise<void>;
+  let sawSorted!: () => void;
+  const reachedSorted = new Promise<void>(resolve => { sawSorted = resolve; });
+  let releaseSorted!: () => Promise<void>;
+
+  await page.route('**/api/v1/tasks**', async route => {
+    const req = route.request();
+    const url = new URL(req.url());
+    if (req.method() === 'POST' && url.pathname === '/api/v1/tasks/bulk') {
+      const body = req.postDataJSON() as { taskIds: string[]; action: string };
+      bulkPayloads.push({ taskIds: body.taskIds, action: body.action });
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ updated: body.taskIds.length }) });
+      return;
+    }
+    if (req.method() === 'GET' && url.pathname === '/api/v1/tasks') {
+      const mine = url.searchParams.get('mine') === 'true';
+      const sort = url.searchParams.get('sort');
+      if (!mine) {
+        const items = [makeTask(taskA, 'Task A initial scope', false)];
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ items, totalCount: 1, pageNumber: 1, pageSize: 25 }),
+        });
+        return;
+      }
+      const items = [makeTask(taskB, 'Task B filtered scope', true)];
+      const body = JSON.stringify({ items, totalCount: 1, pageNumber: 1, pageSize: 25 });
+      if (sort === 'title') {
+        releaseSorted = () => route.fulfill({ status: 200, contentType: 'application/json', body });
+        sawSorted();
+        return;
+      }
+      releaseFiltered = () => route.fulfill({ status: 200, contentType: 'application/json', body }).catch(() => {});
+      sawFiltered();
+      return;
+    }
+    await route.continue();
+  });
+
+  await page.goto('/app/queues');
+  await angularReady(page);
+  await expect(page.locator('table tbody')).toContainText('Task A initial scope');
+
+  // Pre-select A, then toggle "Assigned to me" and hold its GET pending.
+  const firstRowBox = page.locator('table tbody input[type=checkbox]').first();
+  await firstRowBox.focus();
+  await page.keyboard.press('Space');
+  await expect(page.getByRole('button', { name: 'Complete' })).toBeEnabled();
+
+  await page.locator('#mine').focus();
+  await page.keyboard.press('Space');
+  await reachedFiltered;
+
+  // Stale rows are removed immediately and grid selection is disabled while loading.
+  await expect(page.locator('table tbody input[type=checkbox]')).toHaveCount(0);
+  await expect(page.locator('#tasks-all')).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Complete' })).toBeDisabled();
+
+  // Supersede the delayed filter GET by clicking the sortable Task column header.
+  await page.getByRole('button', { name: /^Task/ }).click();
+  await reachedSorted;
+  await releaseSorted();
+  await releaseFiltered();
+
+  await expect(page.locator('table tbody')).toContainText('Task B filtered scope');
+  await expect(page.locator('.grid-count')).toHaveText('1 row');
+  await expect(page.getByRole('button', { name: 'Complete' })).toBeDisabled();
+
+  // Selecting visible B and completing submits only B, never hidden A.
+  await firstRowBox.focus();
+  await page.keyboard.press('Space');
+  await expect(page.locator('.grid-count')).toHaveText('1 row, 1 selected');
+  await page.getByRole('button', { name: 'Complete' }).click();
+  expect(bulkPayloads).toEqual([{ taskIds: [taskB], action: 'complete' }]);
+});
+
 test('places: switching role from child care to residence clears and disables the hidden organization selection', async ({ asUser }) => {
   // Issue #62: picking a child-care site and switching Role to Residence left hidden OrganizationSite active and posted it.
   const page = await asUser('supervisor');

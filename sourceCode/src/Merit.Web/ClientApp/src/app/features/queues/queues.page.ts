@@ -58,8 +58,8 @@ import { LatestRequest } from '../../shared/latest-request';
         </div>
         <merit-data-grid gridId="tasks" caption="Tasks" [columns]="columns" [rows]="store.result().items" [total]="store.result().totalCount"
                          [page]="store.page()" [pageSize]="store.pageSize()" [sort]="store.sort()" [loading]="store.loading()"
-                         [selectable]="true" [selected]="store.selected()" [rowKey]="key" emptyText="No tasks in this view."
-                         (sortChange)="onSort($event)" (pageChange)="onPage($event)" (selectionChange)="store.selected.set($event)" />
+                         [selectable]="true" [selectionDisabled]="store.loading()" [selected]="store.selected()" [rowKey]="key" emptyText="No tasks in this view."
+                         (sortChange)="onSort($event)" (pageChange)="onPage($event)" (selectionChange)="onSelect($event)" />
       </section>
     </div>
   `,
@@ -78,6 +78,7 @@ export class QueuesPage implements OnInit {
   private readonly router = inject(Router);
   private readonly queuesLoad = new LatestRequest();
   private readonly tasksLoad = new LatestRequest();
+  private pendingSelectionReset = false;
 
   /** Query-string inputs, so a dashboard tile can link straight to a queue. */
   readonly queueParam = input<string | undefined>(undefined, { alias: 'queue' });
@@ -140,6 +141,11 @@ export class QueuesPage implements OnInit {
     this.load();
   }
 
+  protected onSelect(selected: ReadonlySet<string>): void {
+    if (this.pendingSelectionReset || this.store.loading()) return;
+    this.store.selected.set(selected);
+  }
+
   /** The person chosen in the assignee list, or empty: nobody is chosen until the user chooses. */
   protected readonly assignee = signal('');
   protected readonly assigneeName = computed(() => this.store.users().find(u => u.appUserId === this.assignee())?.displayName ?? '');
@@ -176,14 +182,17 @@ export class QueuesPage implements OnInit {
 
   private load(resetSelection = false): void {
     if (resetSelection) {
+      this.pendingSelectionReset = true;
       this.store.selected.set(new Set<string>());
+      this.store.result.set({ items: [], totalCount: 0, pageNumber: 1, pageSize: this.store.pageSize() });
     }
     this.store.error.set(null);
     this.store.loading.set(true);
     this.tasksLoad.run(this.api.tasks(this.store.query()), {
       next: r => {
-        if (resetSelection) {
+        if (this.pendingSelectionReset) {
           this.store.selected.set(new Set<string>());
+          this.pendingSelectionReset = false;
         }
         this.store.result.set(r);
         this.store.loading.set(false);
