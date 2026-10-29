@@ -45,16 +45,16 @@ import { LatestRequest } from '../../shared/latest-request';
           <div class="usa-checkbox"><input class="usa-checkbox__input" id="urgent" type="checkbox" [checked]="store.urgentOnly()" (change)="toggleUrgent()" /><label class="usa-checkbox__label" for="urgent">Urgent only</label></div>
         </div>
         <div class="bulk" role="group" aria-label="Bulk actions on selected tasks">
-          <button class="usa-button usa-button--outline" type="button" [disabled]="store.selected().size === 0" (click)="bulk('assignToMe')">Assign to me</button>
+          <button class="usa-button usa-button--outline" type="button" [disabled]="store.selected().size === 0 || store.loading()" (click)="bulk('assignToMe')">Assign to me</button>
           <label class="usa-sr-only" for="assignee">Assign to</label>
           <!-- No one is chosen until the user chooses, so Assign never goes to whoever is first in the list (issue #41). -->
           <select class="usa-select assignee" id="assignee" [value]="assignee()" [title]="assigneeName()" (change)="assignee.set($any($event.target).value)">
             <option value="">Choose a person&hellip;</option>
             @for (u of store.users(); track u.appUserId) { <option [value]="u.appUserId">{{ u.displayName }}</option> }
           </select>
-          <button class="usa-button usa-button--outline" type="button" [disabled]="store.selected().size === 0 || !assignee()" (click)="bulk('assign', assignee())">Assign</button>
-          <button class="usa-button" type="button" [disabled]="store.selected().size === 0" (click)="bulk('complete')">Complete</button>
-          <button class="usa-button usa-button--secondary" type="button" [disabled]="store.selected().size === 0" (click)="bulk('dismiss')">Dismiss</button>
+          <button class="usa-button usa-button--outline" type="button" [disabled]="store.selected().size === 0 || !assignee() || store.loading()" (click)="bulk('assign', assignee())">Assign</button>
+          <button class="usa-button" type="button" [disabled]="store.selected().size === 0 || store.loading()" (click)="bulk('complete')">Complete</button>
+          <button class="usa-button usa-button--secondary" type="button" [disabled]="store.selected().size === 0 || store.loading()" (click)="bulk('dismiss')">Dismiss</button>
         </div>
         <merit-data-grid gridId="tasks" caption="Tasks" [columns]="columns" [rows]="store.result().items" [total]="store.result().totalCount"
                          [page]="store.page()" [pageSize]="store.pageSize()" [sort]="store.sort()" [loading]="store.loading()"
@@ -108,27 +108,26 @@ export class QueuesPage implements OnInit {
     event.preventDefault();
     this.store.queue.set(code);
     this.store.page.set(1);
-    this.store.selected.set(new Set<string>());
     void this.router.navigate([], { queryParams: { queue: code }, replaceUrl: true });
-    this.load();
+    this.load(true);
   }
 
   protected setStatus(event: Event): void {
     this.store.status.set((event.target as HTMLSelectElement).value);
     this.store.page.set(1);
-    this.load();
+    this.load(true);
   }
 
   protected toggleMine(): void {
     this.store.mine.update(v => !v);
     this.store.page.set(1);
-    this.load();
+    this.load(true);
   }
 
   protected toggleUrgent(): void {
     this.store.urgentOnly.update(v => !v);
     this.store.page.set(1);
-    this.load();
+    this.load(true);
   }
 
   protected onSort(sort: GridSort): void {
@@ -175,11 +174,20 @@ export class QueuesPage implements OnInit {
     });
   }
 
-  private load(): void {
+  private load(resetSelection = false): void {
+    if (resetSelection) {
+      this.store.selected.set(new Set<string>());
+    }
     this.store.error.set(null);
     this.store.loading.set(true);
     this.tasksLoad.run(this.api.tasks(this.store.query()), {
-      next: r => { this.store.result.set(r); this.store.loading.set(false); },
+      next: r => {
+        if (resetSelection) {
+          this.store.selected.set(new Set<string>());
+        }
+        this.store.result.set(r);
+        this.store.loading.set(false);
+      },
       error: e => { this.store.error.set(problemMessage(e)); this.store.loading.set(false); },
     });
   }

@@ -70,11 +70,20 @@ public sealed class PlaceService(IClock clock, IPlaceData places, IPersonData pe
     {
         session.Require(Permissions.PersonEdit);
         var v = new Validator();
+        bool siteRole = input.Role is "childCare" or "school";
         v.When(input.Role is not ("residence" or "childCare" or "school" or "relativeHome" or "otherSite"), "Role", "Choose a role.");
-        v.When(input.LocationId is null && input.Address is null, "AddressLine1", "Enter an address or pick an existing place.");
+        if (siteRole)
+        {
+            v.When(input.OrganizationSiteId is null || input.LocationId is null, "OrganizationSite",
+                "Choose a child-care provider or school.");
+        }
+        else
+        {
+            v.When(input.LocationId is null && input.Address is null, "AddressLine1", "Enter an address or pick an existing place.");
+        }
         v.When(input.EndDate is not null && input.EndDate < input.StartDate, "EndDate", "The end date is before the start date.");
         v.When(input.HoursPerWeek is < 0 or > 168, "HoursPerWeek", "Hours per week must be between 0 and 168.");
-        if (input.Address is { } a && input.LocationId is null)
+        if (!siteRole && input.Address is { } a && input.LocationId is null)
         {
             ValidateAddress(a, v);
         }

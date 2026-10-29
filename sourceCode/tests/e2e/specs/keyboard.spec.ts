@@ -367,3 +367,225 @@ test('reports: a slower earlier report selection cannot overwrite a newer report
   await expect(firstLink).toHaveClass(/usa-current/);
   await expect(page.locator('#report-title')).toHaveText(firstTitle);
 });
+
+test('work queues: changing status, assigned-to-me, or urgent-only clears selection so hidden tasks are never submitted', async ({ asUser }) => {
+  // Issue #61: filter changes left earlier selections intact, letting bulk actions submit hidden task IDs.
+  const page = await asUser('supervisor');
+  const taskA = '00000000-0000-0000-0000-00000000061a';
+  const taskB = '00000000-0000-0000-0000-00000000061b';
+  const makeTask = (id: string, title: string, isUrgent: boolean) => ({
+    workTaskId: id, queueCode: 'caseFollowUp', title, detail: null, taskStatus: 'open', isUrgent,
+    dueDate: '2026-11-01', personId: null, personName: null, exposureCaseId: null, caseNumber: null,
+    stagingRowId: null, assignedToUserId: null, assignedToName: null, createdUtc: '2026-10-28T12:00:00Z',
+  });
+  const bulkCalls: string[][] = [];
+
+  await page.route('**/api/v1/tasks**', async route => {
+    const req = route.request();
+    const url = new URL(req.url());
+    if (req.method() === 'POST' && url.pathname === '/api/v1/tasks/bulk') {
+      const body = req.postDataJSON() as { taskIds: string[] };
+      bulkCalls.push(body.taskIds);
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ updated: body.taskIds.length }) });
+      return;
+    }
+    if (req.method() === 'GET' && url.pathname === '/api/v1/tasks') {
+      const filtered = url.searchParams.get('mine') === 'true'
+        || url.searchParams.get('urgent') === 'true'
+        || url.searchParams.get('status') !== 'open';
+      const items = filtered ? [makeTask(taskB, 'Task B visible after filter', true)] : [makeTask(taskA, 'Task A before filter', false)];
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ items, totalCount: items.length, pageNumber: 1, pageSize: 25 }),
+      });
+      return;
+    }
+    await route.continue();
+  });
+
+  await page.goto('/app/queues');
+  await angularReady(page);
+  const assignToMe = page.getByRole('button', { name: 'Assign to me' });
+  const complete = page.getByRole('button', { name: 'Complete' });
+  const dismiss = page.getByRole('button', { name: 'Dismiss' });
+
+  // Select task A, then toggle "Assigned to me" so only task B is shown: selection must clear.
+  const firstRowBox = page.locator('table tbody input[type=checkbox]').first();
+  await firstRowBox.focus();
+  await page.keyboard.press('Space');
+  await expect(assignToMe).toBeEnabled();
+  await page.locator('#mine').focus();
+  await page.keyboard.press('Space');
+  await expect(page.locator('table tbody')).toContainText('Task B visible after filter');
+  await expect(assignToMe).toBeDisabled();
+  await expect(complete).toBeDisabled();
+  await expect(dismiss).toBeDisabled();
+
+  // Select task B, then change Status: selection must clear again.
+  await firstRowBox.focus();
+  await page.keyboard.press('Space');
+  await expect(assignToMe).toBeEnabled();
+  await page.getByLabel('Status').selectOption('done');
+  await expect(assignToMe).toBeDisabled();
+
+  // Select task B, then toggle "Urgent only": selection must clear again.
+  await firstRowBox.focus();
+  await page.keyboard.press('Space');
+  await expect(assignToMe).toBeEnabled();
+  await page.locator('#urgent').focus();
+  await page.keyboard.press('Space');
+  await expect(assignToMe).toBeDisabled();
+
+  // Selecting the currently visible task submits only task B, never hidden task A.
+  await firstRowBox.focus();
+  await page.keyboard.press('Space');
+  await assignToMe.click();
+  expect(bulkCalls).toEqual([[taskB]]);
+});
+
+test('places: switching role from child care to residence clears and disables the hidden organization selection', async ({ asUser }) => {
+  // Issue #62: picking a child-care site and switching Role to Residence left hidden OrganizationSite active and posted it.
+  const page = await asUser('supervisor');
+  const results = await (await page.request.get('/api/v1/results?pageSize=20')).json() as { items: { personId: string | null }[] };
+  const personId = results.items.find(r => r.personId)!.personId!;
+  const siteValue = '00000000-0000-0000-0000-000000000621:00000000-0000-0000-0000-000000000622';
+  let postedBody = '';
+
+  await page.route('**/lookup/sites**', async route => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'text/html',
+      body: `<li role="option" id="OrganizationSite-opt-0" aria-selected="false" data-value="${siteValue}" data-label="Harbor Tots Child Care">Harbor Tots Child Care</li>`,
+    });
+  });
+  await page.route(`**/people/${personId}/places/add`, async route => {
+    if (route.request().method() === 'POST') {
+      postedBody = route.request().postData() ?? '';
+      await route.fulfill({ status: 200, contentType: 'text/html', body: '<section id="section-places"><p>Saved</p></section>' });
+      return;
+    }
+    await route.continue();
+  });
+
+  await page.goto(`/people/${personId}`);
+  await page.getByRole('button', { name: 'Add child care or school' }).click();
+  await expect(page.locator('#OrganizationSite-text')).toBeVisible();
+  await expect(page.locator('#AddressLine1')).toBeDisabled();
+
+  await page.locator('#OrganizationSite-text').fill('Harbor');
+  await page.locator('#OrganizationSite-opt-0').click();
+  await expect(page.locator('#OrganizationSite')).toHaveValue(siteValue);
+
+  await page.locator('#Role').selectOption('residence');
+  await expect(page.locator('#OrganizationSite')).toHaveValue('');
+  await expect(page.locator('#OrganizationSite')).toBeDisabled();
+  await expect(page.locator('#OrganizationSite-text')).toBeDisabled();
+  await expect(page.locator('#AddressLine1')).toBeVisible();
+  await expect(page.locator('#AddressLine1')).toBeEnabled();
+
+  await page.locator('#AddressLine1').fill('742 Evergreen Ter');
+  await page.locator('#City').fill('Baltimore');
+  await page.locator('#State').fill('MD');
+  await page.locator('#Zip5').fill('21201');
+  await page.getByRole('button', { name: 'Save place' }).click();
+  await expect.poll(() => postedBody).not.toBe('');
+  const params = new URLSearchParams(postedBody);
+  expect(params.get('Role')).toBe('residence');
+  expect(params.get('AddressLine1')).toBe('742 Evergreen Ter');
+  expect(params.has('OrganizationSite')).toBe(false);
+});
+
+test('match review: marking the last candidate a different person keeps the record in review for explicit new-person choice', async ({ asUser }) => {
+  // Issue #63: rejecting the final candidate must show the incoming record and require explicit C (newPerson) or N (notSure).
+  const page = await asUser('supervisor');
+  const rowId = '00000000-0000-0000-0000-00000000063a';
+  const candId = '00000000-0000-0000-0000-00000000063b';
+  let excluded = false;
+  let released = false;
+  const postedDecisions: { decision: string; personId: string | null }[] = [];
+
+  await page.route('**/api/v1/match-review**', async route => {
+    const req = route.request();
+    const url = new URL(req.url());
+    if (req.method() === 'GET' && url.pathname === '/api/v1/match-review') {
+      const items = released ? [] : [{
+        stagingRowId: rowId, fileName: 'ux63.csv', senderName: 'Chesapeake Lab', rowNumber: 1,
+        patientName: 'Vega, Lucia', dob: '2021-08-19', isUrgent: false, heldSinceUtc: '2026-10-28T12:00:00Z',
+        reasonMessage: 'Uncertain person match', isEscalated: false, escalationNote: null,
+      }];
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ items, totalCount: items.length, pageNumber: 1, pageSize: 200 }),
+      });
+      return;
+    }
+    if (req.method() === 'GET' && url.pathname === `/api/v1/match-review/${rowId}`) {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          stagingRowId: rowId, fileName: 'ux63.csv', senderName: 'Chesapeake Lab', rowNumber: 1,
+          isUrgent: false, isEscalated: false, escalationNote: null, reasonMessage: 'Uncertain person match',
+          incoming: [
+            { key: 'lastName', label: 'Last name', value: 'Vega' },
+            { key: 'firstName', label: 'First name', value: 'Lucia' },
+            { key: 'dob', label: 'Date of birth', value: '2021-08-19' },
+          ],
+          candidates: excluded ? [] : [{
+            personId: candId, rank: 1, personName: 'Lucy Vega', explanation: 'Close first name and matching DOB.', warnings: [],
+            fields: [{ field: 'name', label: 'Name', incoming: 'Lucia Vega', candidate: 'Lucy Vega', agreement: 'close', note: null }],
+            aliases: null, resultCount: 1, lastCollectedDate: '2026-09-01', openCaseNumbers: null, places: [], results: [],
+          }],
+        }),
+      });
+      return;
+    }
+    if (req.method() === 'POST' && url.pathname === `/api/v1/match-review/${rowId}/decision`) {
+      const body = req.postDataJSON() as { decision: string; personId: string | null };
+      postedDecisions.push({ decision: body.decision, personId: body.personId });
+      if (body.decision === 'different') {
+        excluded = true;
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            released: false,
+            remainingCandidates: 0,
+            message: 'Remembered. No candidates remain; review the incoming record before creating a new person or sending it to a supervisor.',
+          }),
+        });
+        return;
+      }
+      if (body.decision === 'newPerson') {
+        released = true;
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ released: true, remainingCandidates: 0, message: 'The row loads in the background as a new person.' }),
+        });
+        return;
+      }
+    }
+    await route.continue();
+  });
+
+  await page.goto('/app/match-review');
+  await angularReady(page);
+  await expect(page.getByRole('button', { name: 'Different person (D)' })).toBeEnabled();
+
+  await page.locator('h1').focus();
+  await page.keyboard.press('d');
+  await expect(page.locator('dl.incoming')).toContainText('Lucia');
+  await expect(page.getByRole('button', { name: 'Create as a new person (C)' })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'Not sure (N)' })).toBeEnabled();
+  expect(postedDecisions).toEqual([{ decision: 'different', personId: candId }]);
+
+  await page.keyboard.press('c');
+  await expect(page.locator('.merit-empty')).toContainText('Nothing to review.');
+  expect(postedDecisions).toEqual([
+    { decision: 'different', personId: candId },
+    { decision: 'newPerson', personId: null },
+  ]);
+});
