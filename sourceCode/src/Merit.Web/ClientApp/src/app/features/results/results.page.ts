@@ -3,6 +3,7 @@ import { ApiClient, problemMessage } from '../../api/api-client';
 import { AnalyteOptionDto, PagedResult, ResultListItemDto } from '../../api/contracts';
 import { Display } from '../../shared/display.service';
 import { DataGridComponent, GridColumn, GridSort } from '../../shared/grid/data-grid.component';
+import { LatestRequest } from '../../shared/latest-request';
 
 @Injectable()
 export class ResultsStore {
@@ -51,6 +52,7 @@ export class ResultsPage implements OnInit {
   protected readonly store = inject(ResultsStore);
   private readonly api = inject(ApiClient);
   private readonly display = inject(Display);
+  private readonly resultsLoad = new LatestRequest();
   protected readonly key = (r: ResultListItemDto): string => r.labResultId;
 
   protected readonly columns: GridColumn<ResultListItemDto>[] = [
@@ -95,11 +97,12 @@ export class ResultsPage implements OnInit {
 
   private load(): void {
     const f = this.store.filters();
+    this.store.error.set(null);
     this.store.loading.set(true);
-    this.api.results({
+    this.resultsLoad.run(this.api.results({
       analyteId: f.analyteId, from: f.from, to: f.to, population: f.population, minValue: f.minValue, unmatched: f.unmatched,
       sort: this.store.sort().key, desc: this.store.sort().descending, page: this.store.page(), pageSize: 50,
-    }).subscribe({
+    }), {
       next: r => { this.store.result.set(r); this.store.loading.set(false); },
       error: e => { this.store.error.set(problemMessage(e)); this.store.loading.set(false); },
     });

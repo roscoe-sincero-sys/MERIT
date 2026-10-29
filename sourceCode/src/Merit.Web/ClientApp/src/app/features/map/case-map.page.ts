@@ -3,6 +3,7 @@ import { ApiClient, problemMessage } from '../../api/api-client';
 import { AnalyteOptionDto, CaseMapPointDto } from '../../api/contracts';
 import { MapCategory, MapPoint, PointMapComponent } from '../../shared/map/point-map.component';
 import { Display } from '../../shared/display.service';
+import { LatestRequest } from '../../shared/latest-request';
 
 export const CLASSIFICATIONS: MapCategory[] = [
   { key: 'confirmed', label: 'Confirmed' },
@@ -86,6 +87,7 @@ export class CaseMapPage implements OnInit {
   protected readonly store = inject(CaseMapStore);
   private readonly api = inject(ApiClient);
   protected readonly display = inject(Display);
+  private readonly mapLoad = new LatestRequest();
   protected readonly categories = CLASSIFICATIONS;
 
   protected readonly points = computed<MapPoint[]>(() => this.store.located().map(c => ({
@@ -111,8 +113,9 @@ export class CaseMapPage implements OnInit {
 
   private load(): void {
     const f = this.store.filters();
+    this.store.error.set(null);
     this.store.loading.set(true);
-    this.api.caseMap({ analyteId: f.analyteId, from: f.from, to: f.to, openOnly: f.openOnly }).subscribe({
+    this.mapLoad.run(this.api.caseMap({ analyteId: f.analyteId, from: f.from, to: f.to, openOnly: f.openOnly }), {
       next: c => { this.store.cases.set(c); this.store.loading.set(false); },
       error: e => { this.store.error.set(problemMessage(e)); this.store.loading.set(false); },
     });

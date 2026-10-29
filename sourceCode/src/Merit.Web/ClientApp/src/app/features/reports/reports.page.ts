@@ -4,6 +4,7 @@ import { ApiClient, problemMessage } from '../../api/api-client';
 import { AnalyteOptionDto, ReportCell, ReportDto, ReportSummaryDto } from '../../api/contracts';
 import { ChartSeries, SeriesChartComponent } from '../../shared/chart/series-chart.component';
 import { Display } from '../../shared/display.service';
+import { LatestRequest } from '../../shared/latest-request';
 
 @Injectable()
 export class ReportsStore {
@@ -110,6 +111,8 @@ export class ReportsPage implements OnInit {
   private readonly api = inject(ApiClient);
   protected readonly display = inject(Display);
   private readonly router = inject(Router);
+  private readonly libraryLoad = new LatestRequest();
+  private readonly reportLoad = new LatestRequest();
   readonly codeParam = input<string | undefined>(undefined, { alias: 'code' });
 
   protected readonly measureKey = computed(() => {
@@ -143,7 +146,7 @@ export class ReportsPage implements OnInit {
 
   ngOnInit(): void {
     this.api.analytes().subscribe({ next: a => this.store.analytes.set(a), error: () => this.store.analytes.set([]) });
-    this.api.reports().subscribe({
+    this.libraryLoad.run(this.api.reports(), {
       next: lib => {
         this.store.library.set(lib);
         const first = lib.find(r => r.code === this.codeParam()) ?? lib[0];
@@ -197,13 +200,24 @@ export class ReportsPage implements OnInit {
   }
 
   private run(code: string): void {
+    if (this.store.report()?.code !== code) {
+      this.store.report.set(null);
+    }
     this.store.code.set(code);
     this.store.loading.set(true);
     this.store.error.set(null);
     const f = this.store.filters();
-    this.api.report(code, { from: f.from, to: f.to, analyteId: f.analyteId }).subscribe({
-      next: r => { this.store.report.set(r); this.store.loading.set(false); },
-      error: e => { this.store.error.set(problemMessage(e)); this.store.loading.set(false); },
+    this.reportLoad.run(this.api.report(code, { from: f.from, to: f.to, analyteId: f.analyteId }), {
+      next: r => {
+        if (this.store.code() !== code || r.code !== code) return;
+        this.store.report.set(r);
+        this.store.loading.set(false);
+      },
+      error: e => {
+        if (this.store.code() !== code) return;
+        this.store.error.set(problemMessage(e));
+        this.store.loading.set(false);
+      },
     });
   }
 }

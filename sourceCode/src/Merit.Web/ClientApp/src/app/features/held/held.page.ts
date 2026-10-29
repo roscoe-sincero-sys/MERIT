@@ -3,6 +3,7 @@ import { ApiClient, problemMessage } from '../../api/api-client';
 import { HeldGroupDto, HeldRowDto, PagedResult } from '../../api/contracts';
 import { Display } from '../../shared/display.service';
 import { DataGridComponent, GridColumn } from '../../shared/grid/data-grid.component';
+import { LatestRequest } from '../../shared/latest-request';
 
 /** Held-records state: groups by cause, the rows of the chosen group, the selection. Signals only. */
 @Injectable()
@@ -117,6 +118,8 @@ export class HeldPage implements OnInit {
   protected readonly store = inject(HeldStore);
   private readonly api = inject(ApiClient);
   protected readonly display = inject(Display);
+  private readonly groupsLoad = new LatestRequest();
+  private readonly rowsLoad = new LatestRequest();
   readonly batchParam = input<string | undefined>(undefined, { alias: 'batch' });
   private fixes: Record<string, string | null> = {};
 
@@ -163,6 +166,8 @@ export class HeldPage implements OnInit {
     this.store.group.set(g);
     this.store.page.set(1);
     this.store.selected.set(new Set<string>());
+    this.store.focusRow.set(null);
+    this.fixes = {};
     this.loadRows();
   }
 
@@ -226,24 +231,27 @@ export class HeldPage implements OnInit {
   }
 
   private loadGroups(): void {
-    this.api.heldGroups().subscribe({ next: g => this.store.groups.set(g), error: e => this.store.error.set(problemMessage(e)) });
+    this.groupsLoad.run(this.api.heldGroups(), {
+      next: g => this.store.groups.set(g),
+      error: e => this.store.error.set(problemMessage(e)),
+    });
   }
 
   private loadRows(): void {
     const g = this.store.group();
+    this.store.error.set(null);
     this.store.loading.set(true);
     // A chosen group is asked for exactly: its sender too, and a missing value means "none", not "any" (issue #9).
     const scope = g ? { reason: g.reasonCode, value: g.reportedValue, sender: g.senderOrganizationId, exact: true } : {};
-    this.api.heldRows({ ...scope, batch: this.store.batch(), page: this.store.page(), pageSize: 50 })
-      .subscribe({
-        next: r => {
-          this.store.rows.set(r);
-          // Keep the open row in step with what is stored, so its correction boxes show the saved values.
-          const open = this.store.focusRow();
-          this.store.focusRow.set(open ? (r.items.find(x => x.stagingRowId === open.stagingRowId) ?? null) : null);
-          this.store.loading.set(false);
-        },
-        error: e => { this.store.error.set(problemMessage(e)); this.store.loading.set(false); },
-      });
+    this.rowsLoad.run(this.api.heldRows({ ...scope, batch: this.store.batch(), page: this.store.page(), pageSize: 50 }), {
+      next: r => {
+        this.store.rows.set(r);
+        // Keep the open row in step with what is stored, so its correction boxes show the saved values.
+        const open = this.store.focusRow();
+        this.store.focusRow.set(open ? (r.items.find(x => x.stagingRowId === open.stagingRowId) ?? null) : null);
+        this.store.loading.set(false);
+      },
+      error: e => { this.store.error.set(problemMessage(e)); this.store.loading.set(false); },
+    });
   }
 }
