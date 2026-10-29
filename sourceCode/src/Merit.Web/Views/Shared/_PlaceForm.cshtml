@@ -30,13 +30,13 @@
         </div>
 
         @* A child-care or school entry is picked from organizations first; the site address fills in. *@
-        <div data-show-when="Role=childCare|school" hidden="@(!siteRole)">
-            <partial name="_Combobox" model='("OrganizationSite", "OrganizationSite", "Child-care provider or school", "/lookup/sites?type=" + (Model.Role == "school" ? "school" : "childCare"), Model.OrganizationSite, Model.OrganizationLabel, (string?)"Pick the provider; its site address is used.")' />
-        </div>
+        <fieldset class="usa-fieldset" data-show-when="Role=childCare|school" hidden="@(!siteRole)" disabled="@(!siteRole)">
+            <partial name="_Combobox" model='("OrganizationSite", "OrganizationSite", "Child-care provider or school", "/lookup/sites?type=" + (Model.Role == "school" ? "school" : "childCare"), siteRole ? Model.OrganizationSite : null, siteRole ? Model.OrganizationLabel : null, (string?)"Pick the provider; its site address is used.")' />
+        </fieldset>
 
-        <div data-show-when="Role=residence|relativeHome|otherSite" hidden="@siteRole">
+        <fieldset class="usa-fieldset" data-show-when="Role=residence|relativeHome|otherSite" hidden="@siteRole" disabled="@siteRole">
             @* Address entry offers matching existing locations before creating a new one. *@
-            <partial name="_Combobox" model='("LocationId", "LocationId", "Existing address", "/lookup/locations", Model.LocationId?.ToString(), Model.LocationLabel, (string?)"Start typing the street address to reuse a location already on file, or enter a new one below.")' />
+            <partial name="_Combobox" model='("LocationId", "LocationId", "Existing address", "/lookup/locations", siteRole ? null : Model.LocationId?.ToString(), siteRole ? null : Model.LocationLabel, (string?)"Start typing the street address to reuse a location already on file, or enter a new one below.")' />
             <fieldset class="usa-fieldset">
                 <legend class="usa-legend">New address</legend>
                 <div class="merit-form-row">
@@ -53,7 +53,7 @@
                 </div>
                 <div class="usa-checkbox"><input class="usa-checkbox__input" id="IsCityOnly" type="checkbox" name="IsCityOnly" value="true" @(Model.IsCityOnly ? "checked" : "") /><label class="usa-checkbox__label" for="IsCityOnly">City only (no fixed address)</label></div>
             </fieldset>
-        </div>
+        </fieldset>
 
         <div class="merit-form-row">
             <div class="usa-form-group"><label class="usa-label" for="ScheduleType">Schedule</label>

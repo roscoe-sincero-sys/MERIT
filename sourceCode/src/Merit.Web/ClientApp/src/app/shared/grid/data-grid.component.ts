@@ -47,13 +47,13 @@ export interface GridSort {
           <ng-container cdkColumnDef="__select">
             <th cdk-header-cell *cdkHeaderCellDef scope="col" class="grid-select">
               <div class="usa-checkbox">
-                <input class="usa-checkbox__input" type="checkbox" [id]="gridId() + '-all'" [checked]="allSelected()" (change)="toggleAll()" />
+                <input class="usa-checkbox__input" type="checkbox" [id]="gridId() + '-all'" [checked]="allSelected()" [disabled]="selectionDisabled()" (change)="toggleAll()" />
                 <label class="usa-checkbox__label" [for]="gridId() + '-all'"><span class="usa-sr-only">Select all on this page</span></label>
               </div>
             </th>
             <td cdk-cell *cdkCellDef="let row; let i = index" class="grid-select">
               <div class="usa-checkbox">
-                <input class="usa-checkbox__input" type="checkbox" [id]="gridId() + '-sel-' + i" [checked]="selected().has(rowKey()(row))" (change)="toggle(row)" />
+                <input class="usa-checkbox__input" type="checkbox" [id]="gridId() + '-sel-' + i" [checked]="selected().has(rowKey()(row))" [disabled]="selectionDisabled()" (change)="toggle(row)" />
                 <label class="usa-checkbox__label" [for]="gridId() + '-sel-' + i"><span class="usa-sr-only">Select row {{ i + 1 }}</span></label>
               </div>
             </td>
@@ -124,6 +124,7 @@ export class DataGridComponent<T> {
   readonly sort = input<GridSort | null>(null);
   readonly loading = input(false);
   readonly selectable = input(false);
+  readonly selectionDisabled = input(false);
   readonly selected = input<ReadonlySet<string>>(new Set<string>());
   readonly rowKey = input.required<(row: T) => string>();
   readonly emptyText = input('Nothing to show.');
@@ -172,6 +173,7 @@ export class DataGridComponent<T> {
   }
 
   toggle(row: T): void {
+    if (this.selectionDisabled()) return;
     const key = this.rowKey()(row);
     const next = new Set(this.selected());
     next.has(key) ? next.delete(key) : next.add(key);
@@ -179,6 +181,7 @@ export class DataGridComponent<T> {
   }
 
   toggleAll(): void {
+    if (this.selectionDisabled()) return;
     const next = new Set(this.selected());
     const keys = this.rows().map(r => this.rowKey()(r));
     if (this.allSelected()) {

@@ -162,15 +162,30 @@ public sealed class PlacesController(IClock clock, PlaceService places, PersonSe
 
     private static AddPlaceInput ToInput(PlaceFormModel f)
     {
-        // The site picker posts "siteId:locationId", so a child-care or school row points at the organization's site.
-        if (!string.IsNullOrEmpty(f.OrganizationSite) && f.OrganizationSite.Split(':') is [var site, var loc]
-            && Guid.TryParse(site, out var siteId) && Guid.TryParse(loc, out var locId))
+        bool siteRole = f.Role is "childCare" or "school";
+        if (siteRole)
         {
-            f.OrganizationSiteId = siteId;
-            f.LocationId = locId;
+            // The site picker posts "siteId:locationId", so a child-care or school row resolves strictly from the
+            // organization's site and never from hidden residence fields.
+            f.OrganizationSiteId = null;
+            f.LocationId = null;
+            f.LocationLabel = null;
+            if (!string.IsNullOrEmpty(f.OrganizationSite) && f.OrganizationSite.Split(':') is [var site, var loc]
+                && Guid.TryParse(site, out var siteId) && Guid.TryParse(loc, out var locId))
+            {
+                f.OrganizationSiteId = siteId;
+                f.LocationId = locId;
+            }
+        }
+        else
+        {
+            // Non-site roles resolve strictly from the existing-location picker or typed address, ignoring any hidden site field.
+            f.OrganizationSite = null;
+            f.OrganizationSiteId = null;
+            f.OrganizationLabel = null;
         }
 
-        AddressInput? address = f.LocationId is null && f.OrganizationSiteId is null
+        AddressInput? address = !siteRole && f.LocationId is null
             ? new AddressInput(f.AddressLine1, f.Unit, f.City, f.State, f.Zip5, "US", f.CountyFips, f.IsCityOnly, f.YearBuilt)
             : null;
         bool? newIsPrimary = f.PrimaryChoice switch { "new" => true, "existing" => false, _ => null };

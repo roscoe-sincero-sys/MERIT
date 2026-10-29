@@ -21,8 +21,8 @@ public sealed record MatchDecisionOutcome(bool Released, int RemainingCandidates
 
 /// <summary>
 /// Person matching review: the held rows whose identity needs a person, each with up to five ranked candidates compared
-/// field by field. The reviewer decides Same person, Different person (remembered) or Not sure (to a supervisor); the
-/// decision is stored beside the reported values and the row is released to load with it.
+/// field by field. The reviewer decides Same person, Different person (remembered), New person, or Not sure (to a
+/// supervisor); the decision is stored beside the reported values and releasing rows load with it.
 /// </summary>
 public sealed class MatchReviewService(IClock clock, IReviewData review, IPersonData persons, IIntakeData intake, AuditService audit,
                                        ICurrentSession session)
@@ -85,16 +85,10 @@ public sealed class MatchReviewService(IClock clock, IReviewData review, IPerson
                 return new MatchDecisionOutcome(false, detail.Candidates.Count, "Sent to a supervisor in the match review queue.");
             default:
                 var remaining = await CandidatesAsync(incoming, ct).ConfigureAwait(false);
-                if (remaining.Count == 0 && incoming.LastName is not null && incoming.Dob is not null)
-                {
-                    await review.RecordMatchDecisionAsync(stagingRowId, "newPerson", null, null, note, ct).ConfigureAwait(false);
-                    await intake.ReleaseRowsAsync([stagingRowId], ct).ConfigureAwait(false);
-                    return new MatchDecisionOutcome(true, 0,
-                        "Remembered. No candidates are left, so the row loads in the background as a new person.");
-                }
-
                 return new MatchDecisionOutcome(false, remaining.Count,
-                    "Remembered: this person will not be suggested for this record again.");
+                    remaining.Count == 0
+                        ? "Remembered. No candidates remain; review the incoming record before creating a new person or sending it to a supervisor."
+                        : "Remembered: this person will not be suggested for this record again.");
         }
     }
 

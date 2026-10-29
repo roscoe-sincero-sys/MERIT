@@ -217,17 +217,43 @@
         if (el && el.form && !el.form.hasAttribute("hx-get") && !el.form.hasAttribute("hx-post")) el.form.requestSubmit();
     });
 
-    // Shows or hides dependent fields, for example the primary-choice fieldset or the org picker by place role.
-    function syncToggles(root) {
-        (root || document).querySelectorAll("[data-show-when]").forEach(el => {
+    function clearCombobox(box) {
+        box.value = "";
+        box.setAttribute("aria-expanded", "false");
+        box.removeAttribute("aria-activedescendant");
+        const hidden = document.getElementById(box.getAttribute("data-hidden"));
+        if (hidden) hidden.value = "";
+        const listbox = document.getElementById(box.getAttribute("aria-controls"));
+        if (listbox) listbox.innerHTML = "";
+    }
+
+    // Shows or hides dependent fields, disables inactive controls, and clears incompatible selections on role changes.
+    function syncToggles(root, changedField) {
+        const container = root || document;
+        const targets = container.matches && container.matches("[data-show-when]")
+            ? [container, ...container.querySelectorAll("[data-show-when]")]
+            : container.querySelectorAll("[data-show-when]");
+        targets.forEach(el => {
             const [name, values] = el.getAttribute("data-show-when").split("=");
-            const field = document.querySelector(`[name="${name}"]:checked, select[name="${name}"]`);
+            const scope = el.closest("form") || document;
+            const field = scope.querySelector(`[name="${name}"]:checked, select[name="${name}"]`);
             const value = field ? field.value : "";
-            el.hidden = !values.split("|").includes(value);
+            const active = values.split("|").includes(value);
+            el.hidden = !active;
+            if ("disabled" in el) el.disabled = !active;
+            el.querySelectorAll("input, select, textarea, button").forEach(ctrl => { ctrl.disabled = !active; });
+            el.querySelectorAll("[role=combobox]").forEach(box => {
+                if (box.id === "OrganizationSite-text") {
+                    box.setAttribute("hx-get", "/lookup/sites?type=" + (value === "school" ? "school" : "childCare"));
+                }
+                if (!active || (changedField && changedField.name === name && box.id === "OrganizationSite-text")) {
+                    clearCombobox(box);
+                }
+            });
         });
     }
 
-    document.addEventListener("change", () => syncToggles());
+    document.addEventListener("change", evt => syncToggles(document, evt.target));
     document.addEventListener("htmx:after:settle", evt => syncToggles(evt.detail && evt.detail.ctx && evt.detail.ctx.target));
     document.addEventListener("DOMContentLoaded", () => syncToggles());
 })();
