@@ -4,6 +4,7 @@ import { ClusterDto, ClusterListItemDto, ClusterStatus } from '../../api/contrac
 import { MapPoint, PointMapComponent } from '../../shared/map/point-map.component';
 import { CLASSIFICATIONS } from '../map/case-map.page';
 import { Display } from '../../shared/display.service';
+import { LatestRequest } from '../../shared/latest-request';
 
 const TYPE_LABELS: Record<string, string> = {
   location: 'Shared location', building: 'Shared building', childCareSite: 'Child-care site', worksite: 'Shared worksite',
@@ -60,6 +61,7 @@ export class ClustersPage implements OnInit {
   protected readonly store = inject(ClustersStore);
   private readonly api = inject(ApiClient);
   protected readonly display = inject(Display);
+  private readonly clustersLoad = new LatestRequest();
 
   ngOnInit(): void {
     this.load();
@@ -79,7 +81,8 @@ export class ClustersPage implements OnInit {
   }
 
   private load(): void {
-    this.api.clusters({ status: this.store.status(), page: 1, pageSize: 200 }).subscribe({
+    this.store.error.set(null);
+    this.clustersLoad.run(this.api.clusters({ status: this.store.status(), page: 1, pageSize: 200 }), {
       next: p => this.store.clusters.set(p.items),
       error: e => this.store.error.set(problemMessage(e)),
     });
@@ -179,6 +182,7 @@ export class ClusterPage implements OnInit {
   protected readonly store = inject(ClusterStore);
   private readonly api = inject(ApiClient);
   protected readonly display = inject(Display);
+  private readonly clusterLoad = new LatestRequest();
   readonly clusterId = input.required<string>();
   protected readonly statuses: ClusterStatus[] = ['open', 'underReview', 'closed'];
   protected readonly classifications = CLASSIFICATIONS;
@@ -189,7 +193,10 @@ export class ClusterPage implements OnInit {
       label: `${m.caseNumber}: ${m.personName}`, detail: `${this.display.of(m.classification)}, opened ${this.display.date(m.openedDate)}. ${m.addressLabel ?? ''}` })));
 
   ngOnInit(): void {
-    this.api.cluster(this.clusterId()).subscribe({ next: c => this.store.cluster.set(c), error: e => this.store.error.set(problemMessage(e)) });
+    this.clusterLoad.run(this.api.cluster(this.clusterId()), {
+      next: c => this.store.cluster.set(c),
+      error: e => this.store.error.set(problemMessage(e)),
+    });
   }
 
   protected typeLabel(t: string): string {
@@ -219,13 +226,15 @@ export class ClusterPage implements OnInit {
     const form = event.target as HTMLFormElement;
     const caseNumber = String(new FormData(form).get('caseNumber') ?? '').trim();
     const c = this.store.cluster();
-    if (c && caseNumber) {
+    if (c && caseNumber && !this.store.busy()) {
       this.run(this.api.setClusterMember(c.clusterId, { caseNumber, isMember: true }), `${caseNumber} added.`);
       form.reset();
     }
   }
 
   private run(call: ReturnType<ApiClient['cluster']>, message: string): void {
+    if (this.store.busy()) return;
+    this.clusterLoad.cancel();
     this.store.busy.set(true);
     this.store.error.set(null);
     call.subscribe({

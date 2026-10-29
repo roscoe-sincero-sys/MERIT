@@ -5,6 +5,7 @@ import { BulkTaskActionRequest, WorkTaskDto } from '../../api/contracts';
 import { DataGridComponent, GridColumn, GridSort } from '../../shared/grid/data-grid.component';
 import { QueuesStore } from './queues.store';
 import { Display } from '../../shared/display.service';
+import { LatestRequest } from '../../shared/latest-request';
 
 /** Work queues: the shared grid over tasks of every queue, with bulk assign, complete and dismiss. Route component. */
 @Component({
@@ -75,6 +76,8 @@ export class QueuesPage implements OnInit {
   private readonly api = inject(ApiClient);
   protected readonly display = inject(Display);
   private readonly router = inject(Router);
+  private readonly queuesLoad = new LatestRequest();
+  private readonly tasksLoad = new LatestRequest();
 
   /** Query-string inputs, so a dashboard tile can link straight to a queue. */
   readonly queueParam = input<string | undefined>(undefined, { alias: 'queue' });
@@ -96,7 +99,7 @@ export class QueuesPage implements OnInit {
   ngOnInit(): void {
     this.store.queue.set(this.queueParam() ?? null);
     this.store.mine.set(this.mineParam() === 'true');
-    this.api.queues().subscribe({ next: q => this.store.queues.set(q), error: e => this.store.error.set(problemMessage(e)) });
+    this.loadQueues();
     this.api.assignableUsers().subscribe({ next: u => this.store.users.set(u), error: () => this.store.users.set([]) });
     this.load();
   }
@@ -154,7 +157,7 @@ export class QueuesPage implements OnInit {
           : action === 'complete' ? `${tasks} completed.` : `${tasks} dismissed.`);
         this.assignee.set('');
         this.store.selected.set(new Set<string>());
-        this.api.queues().subscribe(q => this.store.queues.set(q));
+        this.loadQueues();
         this.load();
       },
       error: e => this.store.error.set(problemMessage(e)),
@@ -165,9 +168,17 @@ export class QueuesPage implements OnInit {
     return this.store.queues().find(q => q.queueCode === code)?.queueName ?? code;
   }
 
+  private loadQueues(): void {
+    this.queuesLoad.run(this.api.queues(), {
+      next: q => this.store.queues.set(q),
+      error: e => this.store.error.set(problemMessage(e)),
+    });
+  }
+
   private load(): void {
+    this.store.error.set(null);
     this.store.loading.set(true);
-    this.api.tasks(this.store.query()).subscribe({
+    this.tasksLoad.run(this.api.tasks(this.store.query()), {
       next: r => { this.store.result.set(r); this.store.loading.set(false); },
       error: e => { this.store.error.set(problemMessage(e)); this.store.loading.set(false); },
     });

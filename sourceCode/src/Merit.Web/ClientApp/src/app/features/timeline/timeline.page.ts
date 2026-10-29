@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, Injectable, input
 import { ApiClient, problemMessage } from '../../api/api-client';
 import { PersonTimelineDto, TimelineEventDto } from '../../api/contracts';
 import { Display } from '../../shared/display.service';
+import { LatestRequest } from '../../shared/latest-request';
 
 const DAY = 86_400_000;
 const LANES: { kind: TimelineEventDto['kind']; label: string }[] = [
@@ -193,11 +194,12 @@ export class TimelinePage implements OnInit {
   protected readonly store = inject(TimelineStore);
   private readonly api = inject(ApiClient);
   protected readonly display = inject(Display);
+  private readonly timelineLoad = new LatestRequest();
   readonly personId = input.required<string>();
   private full = { from: 0, to: 0 };
 
   ngOnInit(): void {
-    this.api.timeline(this.personId()).subscribe({
+    this.timelineLoad.run(this.api.timeline(this.personId()), {
       next: t => {
         const times = t.events.flatMap(e => [Date.parse(e.date), e.endDate ? Date.parse(e.endDate) : Date.now()]);
         const from = (times.length ? Math.min(...times) : Date.now() - 365 * DAY) - 30 * DAY;

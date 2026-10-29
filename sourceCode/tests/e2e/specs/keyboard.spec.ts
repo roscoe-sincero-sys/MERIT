@@ -188,3 +188,182 @@ test('reporter import: check the sample file and see the rows to fix', async ({ 
   await expect(page.locator('table tbody tr')).toHaveCount(4);
   await expect(page.getByRole('button', { name: /Import 4 ready row/ })).toBeVisible();
 });
+
+test('match review: delayed response for an earlier record never overwrites the active selection or unlocks wrong decisions', async ({ asUser }) => {
+  // Issue #60: opening A then B while A was slow let A replace B's review and let S/D/N/C submit the wrong record.
+  const page = await asUser('supervisor');
+  const row0 = '00000000-0000-0000-0000-0000000000a0';
+  const rowA = '00000000-0000-0000-0000-0000000000a1';
+  const rowB = '00000000-0000-0000-0000-0000000000b2';
+  const makeQueueItem = (id: string, rowNumber: number, patientName: string) => ({
+    stagingRowId: id, fileName: 'batch.csv', senderName: 'Chesapeake Lab', rowNumber,
+    patientName, dob: '2021-04-12', isUrgent: false, heldSinceUtc: '2026-10-27T12:00:00Z',
+    reasonMessage: 'Uncertain person match', isEscalated: false, escalationNote: null,
+  });
+  const makeReview = (id: string, rowNumber: number, candidateName: string, personId: string) => ({
+    stagingRowId: id, fileName: 'batch.csv', senderName: 'Chesapeake Lab', rowNumber,
+    isUrgent: false, isEscalated: false, escalationNote: null, reasonMessage: 'Uncertain person match',
+    incoming: [{ key: 'patientName', label: 'Name', value: candidateName }],
+    candidates: [{
+      personId, rank: 1, personName: candidateName, explanation: 'Name and date of birth are close.', warnings: [],
+      fields: [{ field: 'name', label: 'Name', incoming: candidateName, candidate: candidateName, agreement: 'agree', note: null }],
+      aliases: null, resultCount: 1, lastCollectedDate: '2026-09-01', openCaseNumbers: null, places: [], results: [],
+    }],
+  });
+
+  let queueItems = [
+    makeQueueItem(row0, 1, 'Zero, Carlos'),
+    makeQueueItem(rowA, 2, 'Alvarez, Elena'),
+    makeQueueItem(rowB, 3, 'Brooks, Marcus'),
+  ];
+  let sawA!: () => void;
+  const reachedA = new Promise<void>(resolve => { sawA = resolve; });
+  let releaseA!: () => Promise<void>;
+  let sawB!: () => void;
+  const reachedB = new Promise<void>(resolve => { sawB = resolve; });
+  let releaseB!: () => Promise<void>;
+  let sawDecision!: () => void;
+  const reachedDecision = new Promise<void>(resolve => { sawDecision = resolve; });
+  let releaseDecision!: () => Promise<void>;
+  const decisions: string[] = [];
+
+  await page.route('**/api/v1/match-review**', async route => {
+    const req = route.request();
+    const url = new URL(req.url());
+    if (req.method() === 'GET' && url.pathname === '/api/v1/match-review') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ items: queueItems, totalCount: queueItems.length, pageNumber: 1, pageSize: 200 }),
+      });
+      return;
+    }
+    if (req.method() === 'GET' && url.pathname === `/api/v1/match-review/${row0}`) {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(makeReview(row0, 1, 'Carlos Zero', '00000000-0000-0000-0000-000000000100')),
+      });
+      return;
+    }
+    if (req.method() === 'GET' && url.pathname === `/api/v1/match-review/${rowA}`) {
+      releaseA = () => route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(makeReview(rowA, 2, 'Elena Alvarez', '00000000-0000-0000-0000-000000000101')),
+      }).catch(() => {});
+      sawA();
+      return;
+    }
+    if (req.method() === 'GET' && url.pathname === `/api/v1/match-review/${rowB}`) {
+      releaseB = () => route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(makeReview(rowB, 3, 'Marcus Brooks', '00000000-0000-0000-0000-000000000102')),
+      });
+      sawB();
+      return;
+    }
+    if (req.method() === 'POST' && url.pathname.endsWith('/decision')) {
+      decisions.push(url.pathname);
+      queueItems = queueItems.filter(q => q.stagingRowId !== rowB);
+      releaseDecision = () => route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ released: true, remainingCandidates: 0, message: 'Matched to Marcus Brooks.' }),
+      });
+      sawDecision();
+      return;
+    }
+    await route.continue();
+  });
+
+  await page.goto('/app/match-review');
+  await angularReady(page);
+  await expect(page.locator('#record-heading')).toContainText('Row 1 of batch.csv');
+
+  // Step onto row A (held pending): decisions must not fire while the selected record is still loading.
+  await page.locator('h1').focus();
+  await page.keyboard.press('j');
+  await reachedA;
+  await expect(page.locator('nav ol li [aria-current="true"]')).toContainText('Alvarez, Elena');
+  await expect(page.locator('#record-heading')).toHaveCount(0);
+  await expect(page.locator('.merit-indicator')).toContainText('Loading the record');
+  await page.keyboard.press('s');
+  expect(decisions).toEqual([]);
+
+  // Step onto row B before row A responds; fulfill B first, then fulfill delayed A.
+  await page.keyboard.press('j');
+  await reachedB;
+  await expect(page.locator('nav ol li [aria-current="true"]')).toContainText('Brooks, Marcus');
+  await releaseB();
+  await expect(page.locator('#record-heading')).toContainText('Row 3 of batch.csv');
+  await expect(page.getByRole('button', { name: 'Same person as Marcus Brooks (S)' })).toBeEnabled();
+
+  await releaseA();
+  await page.waitForTimeout(100);
+  await expect(page.locator('nav ol li [aria-current="true"]')).toContainText('Brooks, Marcus');
+  await expect(page.locator('#record-heading')).toContainText('Row 3 of batch.csv');
+  await expect(page.getByRole('button', { name: 'Same person as Marcus Brooks (S)' })).toBeEnabled();
+
+  // Decide row B: while the decision POST is in flight, navigation and duplicate decisions are locked.
+  await page.keyboard.press('s');
+  await reachedDecision;
+  expect(decisions).toEqual([`/api/v1/match-review/${rowB}/decision`]);
+  await expect(page.getByRole('button', { name: 'Same person as Marcus Brooks (S)' })).toBeDisabled();
+  await expect(page.locator('nav ol li button').first()).toBeDisabled();
+  await page.keyboard.press('k');
+  await page.keyboard.press('s');
+  await expect(page.locator('nav ol li [aria-current="true"]')).toContainText('Brooks, Marcus');
+  expect(decisions).toEqual([`/api/v1/match-review/${rowB}/decision`]);
+
+  await releaseDecision();
+  await expect(page.locator('.usa-alert--success')).toContainText('Matched to Marcus Brooks.');
+});
+
+test('reports: a slower earlier report selection cannot overwrite a newer report selection', async ({ asUser }) => {
+  // Issue #60: switching reports without cancelling superseded reads let an older response replace the chosen report.
+  const page = await asUser('supervisor');
+  await page.goto('/app/reports');
+  await angularReady(page);
+  const links = page.locator('nav[aria-label="Report library"] a');
+  const firstLink = links.nth(0);
+  const secondLink = links.nth(1);
+  const firstTitle = (await firstLink.innerText()).trim();
+  const secondTitle = (await secondLink.innerText()).trim();
+  const secondCode = new URL(await secondLink.getAttribute('href') ?? '', 'https://x').searchParams.get('code')!;
+
+  let sawSecond!: () => void;
+  const reachedSecond = new Promise<void>(resolve => { sawSecond = resolve; });
+  let releaseSecond!: () => Promise<void>;
+
+  await page.route(`**/api/v1/reports/${secondCode}**`, async route => {
+    releaseSecond = () => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        code: secondCode, title: secondTitle, description: 'Delayed earlier report.',
+        fromDate: '2026-01-01', toDate: '2026-10-28', analyteId: null, usesAnalyte: false, canExport: false,
+        columns: [{ key: 'month', label: 'Month', kind: 'month' }, { key: 'count', label: 'Count', kind: 'number' }],
+        chart: { kind: 'bar', x: 'month', group: null, measures: ['count'] },
+        rows: [['2026-10', 1]],
+      }),
+    }).catch(() => {});
+    sawSecond();
+  });
+
+  await secondLink.click();
+  await reachedSecond;
+  await expect(secondLink).toHaveClass(/usa-current/);
+  await expect(page.locator('#report-title')).toHaveCount(0);
+  await expect(page.locator('.merit-indicator')).toContainText('Running the report');
+
+  await firstLink.click();
+  await expect(firstLink).toHaveClass(/usa-current/);
+  await expect(page.locator('#report-title')).toHaveText(firstTitle);
+
+  await releaseSecond();
+  await page.waitForTimeout(100);
+  await expect(firstLink).toHaveClass(/usa-current/);
+  await expect(page.locator('#report-title')).toHaveText(firstTitle);
+});

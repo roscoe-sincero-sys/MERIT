@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, ElementRef, inject, Injectable, input, OnInit, output, signal, viewChild } from '@angular/core';
 import { ApiClient, problemMessage } from '../../api/api-client';
 import { Agreement, MatchCandidateDto, MatchDecision, MatchQueueItemDto, MatchReviewDto } from '../../api/contracts';
+import { LatestRequest } from '../../shared/latest-request';
 
 /** Match review state: the queue, the record under review, the chosen candidate. Signals only; no HTTP, no DOM. */
 @Injectable()
@@ -12,12 +13,20 @@ export class MatchReviewStore {
   readonly review = signal<MatchReviewDto | null>(null);
   readonly selected = signal(0);
   readonly showHistory = signal(false);
+  readonly queueLoading = signal(false);
+  readonly reviewLoading = signal(false);
   readonly busy = signal(false);
   readonly message = signal<string | null>(null);
   readonly error = signal<string | null>(null);
 
+  readonly loading = computed(() => this.queueLoading() || this.reviewLoading());
   readonly position = computed(() => this.queue().findIndex(q => q.stagingRowId === this.currentId()));
   readonly candidate = computed<MatchCandidateDto | null>(() => this.review()?.candidates[this.selected()] ?? null);
+  /** Decisions apply only when no write or load is pending and the loaded review matches the active queue selection. */
+  readonly canDecide = computed(() => {
+    const r = this.review();
+    return !this.busy() && !this.loading() && r !== null && r.stagingRowId === this.currentId();
+  });
 }
 
 const AGREEMENT_TEXT: Record<Agreement, string> = { agree: 'Agrees', close: 'Close', different: 'Different', missing: 'Missing' };
@@ -40,7 +49,7 @@ const AGREEMENT_TEXT: Record<Agreement, string> = { agree: 'Agrees', close: 'Clo
             @for (c of review().candidates; track c.personId; let i = $index) {
               <th scope="col" [class.chosen]="i === selected()">
                 <button type="button" class="usa-button usa-button--unstyled pick" [attr.aria-pressed]="i === selected()"
-                        [attr.aria-keyshortcuts]="'' + (i + 1)" (click)="pick.emit(i)">
+                        [attr.aria-keyshortcuts]="'' + (i + 1)" [disabled]="disabled()" (click)="pick.emit(i)">
                   {{ i + 1 }}. {{ c.personName }}
                 </button>
               </th>
@@ -105,6 +114,7 @@ const AGREEMENT_TEXT: Record<Agreement, string> = { agree: 'Agrees', close: 'Clo
 export class MatchComparisonComponent {
   readonly review = input.required<MatchReviewDto>();
   readonly selected = input(0);
+  readonly disabled = input(false);
   readonly pick = output<number>();
 
   protected readonly fieldNames = computed(() => this.review().candidates[0]?.fields ?? []);
@@ -169,7 +179,7 @@ export class CandidateHistoryComponent {
     <div class="layout">
       <nav aria-label="Records to review">
         <div class="usa-checkbox">
-          <input class="usa-checkbox__input" id="escalated" type="checkbox" [checked]="store.escalatedOnly()" (change)="toggleEscalated()" />
+          <input class="usa-checkbox__input" id="escalated" type="checkbox" [checked]="store.escalatedOnly()" [disabled]="store.busy()" (change)="toggleEscalated()" />
           <label class="usa-checkbox__label" for="escalated">Sent to a supervisor only</label>
         </div>
         @if (store.queue().length === 0) { <p class="merit-empty">Nothing to review.</p> }
@@ -177,7 +187,7 @@ export class CandidateHistoryComponent {
           @for (q of store.queue(); track q.stagingRowId) {
             <li>
               <button type="button" class="usa-button usa-button--unstyled" [attr.aria-current]="q.stagingRowId === store.currentId() ? 'true' : null"
-                      (click)="open(q.stagingRowId)">
+                      [disabled]="store.busy() || store.queueLoading()" (click)="open(q.stagingRowId)">
                 {{ q.patientName ?? '(no name)' }}@if (q.dob) { &middot; {{ q.dob }}}
               </button>
               @if (q.isUrgent) { <span class="badge urgent">Urgent</span> }
@@ -194,7 +204,7 @@ export class CandidateHistoryComponent {
           @if (r.isEscalated) { <p class="usa-alert usa-alert--info usa-alert--slim usa-alert__text">Sent to a supervisor: {{ r.escalationNote }}</p> }
 
           @if (r.candidates.length > 0) {
-            <merit-match-comparison [review]="r" [selected]="store.selected()" (pick)="choose($event)" />
+            <merit-match-comparison [review]="r" [selected]="store.selected()" [disabled]="store.busy()" (pick)="choose($event)" />
           } @else {
             <p class="merit-empty">No candidate persons were found for this record (or every candidate was marked a different person).</p>
             <dl class="incoming">
@@ -203,26 +213,26 @@ export class CandidateHistoryComponent {
           }
 
           <label class="usa-label" for="note">Note (optional; sent with Not sure)</label>
-          <input class="usa-input" id="note" #note maxlength="500" />
+          <input class="usa-input" id="note" #note maxlength="500" [disabled]="store.busy()" />
           <div class="actions" role="group" aria-label="Decision">
             @if (store.candidate(); as c) {
-              <button class="usa-button" type="button" aria-keyshortcuts="S" [disabled]="store.busy()" (click)="decide('same', note.value)">
+              <button class="usa-button" type="button" aria-keyshortcuts="S" [disabled]="!store.canDecide()" (click)="decide('same', note.value)">
                 Same person as {{ c.personName }} (S)</button>
-              <button class="usa-button usa-button--secondary" type="button" aria-keyshortcuts="D" [disabled]="store.busy()" (click)="decide('different', note.value)">
+              <button class="usa-button usa-button--secondary" type="button" aria-keyshortcuts="D" [disabled]="!store.canDecide()" (click)="decide('different', note.value)">
                 Different person (D)</button>
             } @else {
-              <button class="usa-button" type="button" aria-keyshortcuts="C" [disabled]="store.busy()" (click)="decide('newPerson', note.value)">
+              <button class="usa-button" type="button" aria-keyshortcuts="C" [disabled]="!store.canDecide()" (click)="decide('newPerson', note.value)">
                 Create as a new person (C)</button>
             }
-            <button class="usa-button usa-button--outline" type="button" aria-keyshortcuts="N" [disabled]="store.busy()" (click)="decide('notSure', note.value)">
+            <button class="usa-button usa-button--outline" type="button" aria-keyshortcuts="N" [disabled]="!store.canDecide()" (click)="decide('notSure', note.value)">
               Not sure (N)</button>
             @if (store.candidate()) {
-              <button class="usa-button usa-button--unstyled" type="button" aria-keyshortcuts="H" [attr.aria-expanded]="store.showHistory()" (click)="store.showHistory.update(v => !v)">
+              <button class="usa-button usa-button--unstyled" type="button" aria-keyshortcuts="H" [disabled]="store.busy()" [attr.aria-expanded]="store.showHistory()" (click)="store.showHistory.update(v => !v)">
                 {{ store.showHistory() ? 'Hide' : 'Show' }} history (H)</button>
             }
           </div>
           @if (store.showHistory() && store.candidate(); as c) { <merit-candidate-history [candidate]="c" /> }
-        } @else if (store.queue().length > 0) {
+        } @else if (store.loading() || (store.queue().length > 0 && !store.error())) {
           <p class="merit-indicator">Loading the record&hellip;</p>
         }
       </section>
@@ -245,6 +255,8 @@ export class MatchReviewPage implements OnInit {
   protected readonly store = inject(MatchReviewStore);
   private readonly api = inject(ApiClient);
   private readonly heading = viewChild<ElementRef<HTMLElement>>('heading');
+  private readonly queueLoad = new LatestRequest();
+  private readonly reviewLoad = new LatestRequest();
   readonly escalatedParam = input<string | undefined>(undefined, { alias: 'escalated' });
   /** A row to open first, from Held records' "Review the match" (issue #42). */
   readonly rowParam = input<string | undefined>(undefined, { alias: 'row' });
@@ -255,22 +267,18 @@ export class MatchReviewPage implements OnInit {
   }
 
   protected toggleEscalated(): void {
+    if (this.store.busy()) return;
     this.store.escalatedOnly.update(v => !v);
     this.loadQueue(true);
   }
 
   protected open(id: string): void {
-    this.store.currentId.set(id);
-    this.store.review.set(null);
-    this.store.selected.set(0);
-    this.store.showHistory.set(false);
-    this.api.matchReview(id).subscribe({
-      next: r => this.store.review.set(r),
-      error: e => this.store.error.set(problemMessage(e)),
-    });
+    if (this.store.busy() || this.store.queueLoading()) return;
+    this.openRow(id);
   }
 
   protected choose(i: number): void {
+    if (this.store.busy()) return;
     const count = this.store.review()?.candidates.length ?? 0;
     if (i >= 0 && i < count) {
       this.store.selected.set(i);
@@ -279,22 +287,29 @@ export class MatchReviewPage implements OnInit {
 
   protected decide(decision: MatchDecision, note: string): void {
     const r = this.store.review();
-    if (!r || this.store.busy()) return;
+    if (!r || !this.store.canDecide()) return;
+    const rowId = r.stagingRowId;
     const candidate = this.store.candidate();
     if ((decision === 'same' || decision === 'different') && !candidate) return;
+    const position = Math.max(this.store.position(), 0);
+    this.queueLoad.cancel();
+    this.reviewLoad.cancel();
+    this.store.queueLoading.set(false);
+    this.store.reviewLoading.set(false);
     this.store.busy.set(true);
     this.store.error.set(null);
-    this.api.matchDecision(r.stagingRowId, { decision, personId: candidate?.personId ?? null, note: note.trim() || null }).subscribe({
+    this.api.matchDecision(rowId, { decision, personId: candidate?.personId ?? null, note: note.trim() || null }).subscribe({
       next: res => {
         this.store.busy.set(false);
+        this.store.review.set(null);
         this.store.message.set(res.message);
         if (res.released) {
-          this.advance();
+          this.loadQueue(false, position);
         } else if (decision === 'notSure') {
           // The record stays held (now with a supervisor), so move past it.
-          this.loadQueue(false, this.store.position() + 1);
+          this.loadQueue(false, position + 1);
         } else {
-          this.open(r.stagingRowId);
+          this.openRow(rowId);
         }
       },
       error: e => {
@@ -316,7 +331,7 @@ export class MatchReviewPage implements OnInit {
         case 'd': this.decide('different', note); return true;
         case 'n': this.decide('notSure', note); return true;
         case 'c': if (!this.store.candidate()) { this.decide('newPerson', note); } return true;
-        case 'h': this.store.showHistory.update(v => !v); return true;
+        case 'h': if (!this.store.busy()) { this.store.showHistory.update(v => !v); } return true;
         case 'j': this.step(1); return true;
         case 'k': this.step(-1); return true;
         default: return false;
@@ -326,38 +341,68 @@ export class MatchReviewPage implements OnInit {
   }
 
   private step(delta: number): void {
+    if (this.store.busy() || this.store.queueLoading()) return;
     const q = this.store.queue();
     const next = q[this.store.position() + delta];
-    if (next) this.open(next.stagingRowId);
+    if (next) this.openRow(next.stagingRowId);
   }
 
-  /** After a decision the record leaves the queue; open the one that took its place. */
-  private advance(): void {
-    const index = Math.max(this.store.position(), 0);
-    this.loadQueue(false, index);
+  private openRow(id: string): void {
+    this.store.currentId.set(id);
+    this.store.review.set(null);
+    this.store.selected.set(0);
+    this.store.showHistory.set(false);
+    this.store.error.set(null);
+    this.store.reviewLoading.set(true);
+    this.reviewLoad.run(this.api.matchReview(id), {
+      next: r => {
+        this.store.reviewLoading.set(false);
+        if (this.store.currentId() !== id || r.stagingRowId !== id) return;
+        this.store.review.set(r);
+      },
+      error: e => {
+        this.store.reviewLoading.set(false);
+        if (this.store.currentId() !== id) return;
+        this.store.error.set(problemMessage(e));
+      },
+    });
   }
 
   private loadQueue(openFirst: boolean, index = 0, rowId?: string): void {
-    this.api.matchQueue({ escalated: this.store.escalatedOnly(), page: 1, pageSize: 200 }).subscribe({
+    if (openFirst) {
+      this.reviewLoad.cancel();
+      this.store.reviewLoading.set(false);
+      this.store.currentId.set(null);
+      this.store.review.set(null);
+    }
+    this.store.error.set(null);
+    this.store.queueLoading.set(true);
+    this.queueLoad.run(this.api.matchQueue({ escalated: this.store.escalatedOnly(), page: 1, pageSize: 200 }), {
       next: p => {
+        this.store.queueLoading.set(false);
         this.store.queue.set(p.items);
         this.store.total.set(p.totalCount);
         if (rowId) {
           // The row asked for, even when it is past the first page of the queue or escalated.
-          this.open(rowId);
+          this.openRow(rowId);
           this.heading()?.nativeElement.focus();
           return;
         }
         const pick = p.items[Math.min(index, p.items.length - 1)];
         if (pick && (openFirst || pick.stagingRowId !== this.store.currentId() || !this.store.review())) {
-          this.open(pick.stagingRowId);
+          this.openRow(pick.stagingRowId);
         } else if (!pick) {
+          this.reviewLoad.cancel();
+          this.store.reviewLoading.set(false);
           this.store.currentId.set(null);
           this.store.review.set(null);
         }
         if (openFirst) this.heading()?.nativeElement.focus();
       },
-      error: e => this.store.error.set(problemMessage(e)),
+      error: e => {
+        this.store.queueLoading.set(false);
+        this.store.error.set(problemMessage(e));
+      },
     });
   }
 }
