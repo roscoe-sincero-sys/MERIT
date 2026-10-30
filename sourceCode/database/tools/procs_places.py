@@ -5,6 +5,32 @@ PERSON_VISIBLE = not_found("@personId", "dbo.person", "personId", "The person")
 
 PROCS = [
     {
+        "schema": "dbo", "name": "uspGetLookupSelection", "kind": "read", "grants": WEB, "ticket": "#66",
+        "permission": "person.view",
+        "desc": "Rehydrates one selected lookup from its authorized identifier; RLS applies to every source.",
+        "params": "@kind VARCHAR (20)\n, @id UNIQUEIDENTIFIER",
+        "key": "CONCAT (N'kind=', @kind, N', id=', @id)",
+        "body": """
+SELECT CONVERT (NVARCHAR (80), p.personId) AS value, CONCAT (p.lastName, N', ', p.firstName) AS label
+  FROM dbo.person AS p WHERE @kind = 'person' AND p.personId = @id AND p.isDeleted = 0
+UNION ALL
+SELECT CONVERT (NVARCHAR (80), o.organizationId), o.organizationName
+  FROM dbo.organization AS o WHERE @kind = 'organization' AND o.organizationId = @id AND o.isDeleted = 0
+UNION ALL
+SELECT CONVERT (NVARCHAR (80), p.providerId), RTRIM (CONCAT (p.lastName, N', ', p.firstName, N' ', p.credential))
+  FROM dbo.provider AS p WHERE @kind = 'provider' AND p.providerId = @id AND p.isDeleted = 0
+UNION ALL
+SELECT CONVERT (NVARCHAR (80), l.locationId), CONCAT (l.addressLine1, CASE WHEN l.unit IS NULL THEN N'' ELSE N' ' + l.unit END)
+  FROM dbo.location AS l WHERE @kind = 'location' AND l.locationId = @id AND l.isDeleted = 0
+UNION ALL
+SELECT CONCAT (s.organizationSiteId, N':', s.locationId), CONCAT (o.organizationName, N' - ', l.addressLine1, N', ', l.city)
+  FROM dbo.organizationSite AS s
+  JOIN dbo.organization AS o ON o.organizationId = s.organizationId AND o.isDeleted = 0
+  JOIN dbo.location AS l ON l.locationId = s.locationId AND l.isDeleted = 0
+ WHERE @kind = 'site' AND s.organizationSiteId = @id AND s.isDeleted = 0;
+""",
+    },
+    {
         "schema": "dbo", "name": "uspFindLocations", "kind": "read", "grants": BOTH, "ticket": "T042",
         "permission": "person.view",
         "desc": "Existing locations whose normalized address starts with the text typed, so address entry offers a "

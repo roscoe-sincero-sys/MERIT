@@ -103,15 +103,22 @@ BEGIN
         INSERT @ids SELECT DISTINCT TRY_CAST ([value] AS UNIQUEIDENTIFIER) FROM OPENJSON (@stagingRowIdsJson)
                      WHERE TRY_CAST ([value] AS UNIQUEIDENTIFIER) IS NOT NULL;
 
+        DECLARE @released TABLE (stagingRowId UNIQUEIDENTIFIER PRIMARY KEY);
         DECLARE @batches TABLE (intakeBatchId UNIQUEIDENTIFIER PRIMARY KEY);
 
         UPDATE s SET rowStatus = 'released'
+        OUTPUT inserted.stagingRowId INTO @released
           FROM dbo.stagingRow AS s
           JOIN @ids AS i ON i.stagingRowId = s.stagingRowId
-         WHERE s.rowStatus = 'held' AND s.isDeleted = 0;
+         WHERE s.rowStatus = 'held' AND s.isDeleted = 0
+           AND (NOT EXISTS (SELECT 1 FROM dbo.stagingHoldReason AS h
+                             WHERE h.stagingRowId = s.stagingRowId AND h.reasonCode = 'uncertainMatch'
+                               AND h.isResolved = 0 AND h.isDeleted = 0)
+                OR TRY_CAST (JSON_VALUE (s.correctedJson, '$.matchPersonId') AS UNIQUEIDENTIFIER) IS NOT NULL
+                OR JSON_VALUE (s.correctedJson, '$.matchNewPerson') = N'true');
 
         INSERT @batches (intakeBatchId)
-        SELECT DISTINCT s.intakeBatchId FROM dbo.stagingRow AS s JOIN @ids AS i ON i.stagingRowId = s.stagingRowId
+        SELECT DISTINCT s.intakeBatchId FROM dbo.stagingRow AS s JOIN @released AS i ON i.stagingRowId = s.stagingRowId
          WHERE s.rowStatus = 'released';
 
         DECLARE @jobProfile UNIQUEIDENTIFIER, @jobViewAs UNIQUEIDENTIFIER, @jobActing UNIQUEIDENTIFIER;
@@ -126,8 +133,7 @@ BEGIN
                auth.udfSessionUserId (), @jobProfile, @jobViewAs, @jobActing
           FROM dbo.intakeBatch AS b JOIN @batches AS x ON x.intakeBatchId = b.intakeBatchId;
 
-        SELECT COUNT (*) AS releasedCount FROM dbo.stagingRow AS s JOIN @ids AS i ON i.stagingRowId = s.stagingRowId
-         WHERE s.rowStatus = 'released';
+        SELECT COUNT (*) AS releasedCount FROM @released;
 
         SET @Comments = N'Rows released.';
 

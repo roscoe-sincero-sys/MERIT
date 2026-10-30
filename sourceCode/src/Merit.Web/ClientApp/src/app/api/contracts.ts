@@ -59,6 +59,11 @@ export interface AssignableUserDto {
   displayName: string;
 }
 
+export interface HeldSummaryDto {
+  totalCount: number;
+  batchFileName: string | null;
+}
+
 export interface HeldGroupDto {
   reasonCode: string;
   reportedValue: string | null;

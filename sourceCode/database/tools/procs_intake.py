@@ -3,6 +3,20 @@ from procs_common import NEWID, WEB, WORKER, BOTH, CONCURRENCY, not_found, JOB_S
 
 PROCS = [
     {
+        "schema": "dbo", "name": "uspGetHeldSummary", "kind": "read", "grants": WEB, "ticket": "#71 #72",
+        "permission": "result.release_hold",
+        "desc": "Distinct held-row count and the active batch filename, in the same scope as held groups and rows.",
+        "params": "@intakeBatchId UNIQUEIDENTIFIER = NULL",
+        "key": "CONCAT (N'intakeBatchId=', @intakeBatchId)",
+        "body": """
+SELECT COUNT (*) AS totalCount,
+       (SELECT b.fileName FROM dbo.intakeBatch AS b WHERE b.intakeBatchId = @intakeBatchId AND b.isDeleted = 0) AS batchFileName
+  FROM dbo.stagingRow AS s
+ WHERE s.rowStatus = 'held' AND s.isDeleted = 0
+   AND (@intakeBatchId IS NULL OR s.intakeBatchId = @intakeBatchId);
+""",
+    },
+    {
         "schema": "dbo", "name": "uspListIntakeProfiles", "kind": "read", "grants": BOTH, "ticket": "T048",
         "permission": "intake.upload",
         "desc": "Active intake profiles with their sender, for the upload screen.",
@@ -257,8 +271,8 @@ SET @Comments = CONCAT (N'Row ', @rowStatus, N'.');
         "permission": "result.release_hold",
         "desc": "Held records grouped by cause -- reason, the reported value that caused it, and sender -- so that "
                 "fixing one unknown code releases every row held for it. Urgent groups first.",
-        "params": "",
-        "key": "NULL",
+        "params": "@intakeBatchId UNIQUEIDENTIFIER = NULL",
+        "key": "CONCAT (N'intakeBatchId=', @intakeBatchId)",
         "body": """
 SELECT h.reasonCode, h.reportedValue, b.senderOrganizationId, o.organizationName AS senderName,
        COUNT (DISTINCT s.stagingRowId) AS heldRowCount,
@@ -270,6 +284,7 @@ SELECT h.reasonCode, h.reportedValue, b.senderOrganizationId, o.organizationName
   JOIN dbo.intakeBatch AS b ON b.intakeBatchId = s.intakeBatchId
   LEFT JOIN dbo.organization AS o ON o.organizationId = b.senderOrganizationId
  WHERE h.isDeleted = 0 AND h.isResolved = 0
+   AND (@intakeBatchId IS NULL OR s.intakeBatchId = @intakeBatchId)
  GROUP BY h.reasonCode, h.reportedValue, b.senderOrganizationId, o.organizationName
  ORDER BY COUNT (DISTINCT CASE WHEN s.isUrgent = 1 THEN s.stagingRowId END) DESC, MIN (s.heldSinceUtc);
 """,
@@ -368,15 +383,22 @@ DECLARE @ids TABLE (stagingRowId UNIQUEIDENTIFIER PRIMARY KEY);
 INSERT @ids SELECT DISTINCT TRY_CAST ([value] AS UNIQUEIDENTIFIER) FROM OPENJSON (@stagingRowIdsJson)
              WHERE TRY_CAST ([value] AS UNIQUEIDENTIFIER) IS NOT NULL;
 
+DECLARE @released TABLE (stagingRowId UNIQUEIDENTIFIER PRIMARY KEY);
 DECLARE @batches TABLE (intakeBatchId UNIQUEIDENTIFIER PRIMARY KEY);
 
 UPDATE s SET rowStatus = 'released'
+OUTPUT inserted.stagingRowId INTO @released
   FROM dbo.stagingRow AS s
   JOIN @ids AS i ON i.stagingRowId = s.stagingRowId
- WHERE s.rowStatus = 'held' AND s.isDeleted = 0;
+ WHERE s.rowStatus = 'held' AND s.isDeleted = 0
+   AND (NOT EXISTS (SELECT 1 FROM dbo.stagingHoldReason AS h
+                     WHERE h.stagingRowId = s.stagingRowId AND h.reasonCode = 'uncertainMatch'
+                       AND h.isResolved = 0 AND h.isDeleted = 0)
+        OR TRY_CAST (JSON_VALUE (s.correctedJson, '$.matchPersonId') AS UNIQUEIDENTIFIER) IS NOT NULL
+        OR JSON_VALUE (s.correctedJson, '$.matchNewPerson') = N'true');
 
 INSERT @batches (intakeBatchId)
-SELECT DISTINCT s.intakeBatchId FROM dbo.stagingRow AS s JOIN @ids AS i ON i.stagingRowId = s.stagingRowId
+SELECT DISTINCT s.intakeBatchId FROM dbo.stagingRow AS s JOIN @released AS i ON i.stagingRowId = s.stagingRowId
  WHERE s.rowStatus = 'released';
 
 {JOB_SCOPE}
@@ -388,8 +410,7 @@ SELECT {NEWID}, b.rootTenantId, b.owningTenantId, 'intakeBatch',
        auth.udfSessionUserId (), {JOB_SCOPE_VALUES}
   FROM dbo.intakeBatch AS b JOIN @batches AS x ON x.intakeBatchId = b.intakeBatchId;
 
-SELECT COUNT (*) AS releasedCount FROM dbo.stagingRow AS s JOIN @ids AS i ON i.stagingRowId = s.stagingRowId
- WHERE s.rowStatus = 'released';
+SELECT COUNT (*) AS releasedCount FROM @released;
 
 SET @Comments = N'Rows released.';
 """,

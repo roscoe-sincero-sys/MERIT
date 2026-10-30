@@ -3,7 +3,7 @@ import { inject, Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import {
   AnalyteOptionDto, AssignableUserDto, BoundaryDto, BulkActionResponse, BulkTaskActionRequest, CaseMapPointDto, ClusterDto, ClusterListItemDto,
-  ClusterMemberRequest, ClusterUpdateRequest, HeldActionRequest, HeldGroupDto, HeldRowDto, LabelsDto, MatchDecisionRequest, MatchDecisionResponse,
+  ClusterMemberRequest, ClusterUpdateRequest, HeldActionRequest, HeldGroupDto, HeldSummaryDto, HeldRowDto, LabelsDto, MatchDecisionRequest, MatchDecisionResponse,
   MatchQueueItemDto, MatchReviewDto, MeDto, PagedResult, PersonTimelineDto, QueueCountDto, ReportDto, ReportSummaryDto,
   ResultListItemDto, WorkTaskDto,
 } from './contracts';
@@ -44,8 +44,12 @@ export class ApiClient {
     return this.http.get<AssignableUserDto[]>(`${this.base}/users/assignable`);
   }
 
-  heldGroups(): Observable<HeldGroupDto[]> {
-    return this.http.get<HeldGroupDto[]>(`${this.base}/held/groups`);
+  heldGroups(batch: string | null = null): Observable<HeldGroupDto[]> {
+    return this.http.get<HeldGroupDto[]>(`${this.base}/held/groups`, { params: params({ batch }) });
+  }
+
+  heldSummary(batch: string | null): Observable<HeldSummaryDto> {
+    return this.http.get<HeldSummaryDto>(`${this.base}/held/summary`, { params: params({ batch }) });
   }
 
   heldRows(q: Query): Observable<PagedResult<HeldRowDto>> {

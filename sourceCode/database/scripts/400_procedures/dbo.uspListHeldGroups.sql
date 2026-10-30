@@ -47,7 +47,7 @@ Description:	Initial version.
 
 ***********************************************************************************************************************/
 CREATE OR ALTER PROCEDURE dbo.uspListHeldGroups
-
+      @intakeBatchId UNIQUEIDENTIFIER = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -68,7 +68,7 @@ BEGIN
           , @ErrorLine      INT            = NULL;
 
     -- Identifiers and counts ONLY. Never free-text search terms or patient data.
-    SET @KeyParameters = NULL;
+    SET @KeyParameters = CONCAT (N'intakeBatchId=', @intakeBatchId);
 
     SET @ContextMessage = N'Error-only instrumented read: no start row is opened, so @ExecutionLogId is NULL by design.';
 
@@ -93,6 +93,7 @@ BEGIN
           JOIN dbo.intakeBatch AS b ON b.intakeBatchId = s.intakeBatchId
           LEFT JOIN dbo.organization AS o ON o.organizationId = b.senderOrganizationId
          WHERE h.isDeleted = 0 AND h.isResolved = 0
+           AND (@intakeBatchId IS NULL OR s.intakeBatchId = @intakeBatchId)
          GROUP BY h.reasonCode, h.reportedValue, b.senderOrganizationId, o.organizationName
          ORDER BY COUNT (DISTINCT CASE WHEN s.isUrgent = 1 THEN s.stagingRowId END) DESC, MIN (s.heldSinceUtc);
 

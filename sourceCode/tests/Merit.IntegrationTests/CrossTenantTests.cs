@@ -250,6 +250,8 @@ public sealed class CrossTenantProcedureTests(MeritFixture fixture, ITestOutputH
         {
             object? v = p.Name switch
             {
+                "kind" when proc.Name == "dbo.uspGetLookupSelection" => "person",
+                "id" when proc.Name == "dbo.uspGetLookupSelection" => t.Person,
                 "personId" or "relatedPersonId" or "contactPersonId" or "survivorPersonId" => t.Person,
                 "exposureCaseId" => t.Case,
                 "labResultId" or "qualifyingLabResultId" => t.Result,

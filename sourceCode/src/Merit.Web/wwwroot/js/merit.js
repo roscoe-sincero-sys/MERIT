@@ -78,6 +78,40 @@
     });
 
     // ------------------------------------------------------------------------------------------ after a swap
+    // Keep edited sibling fields when a case/investigation action refreshes its body. Never restore row versions,
+    // antiforgery values, or the successfully submitted form. Snapshots live only for the duration of this swap.
+    const editedFields = new WeakSet();
+    document.addEventListener("input", evt => editedFields.add(evt.target));
+    document.addEventListener("change", evt => editedFields.add(evt.target));
+    document.addEventListener("htmx:before:swap", evt => {
+        const ctx = evt.detail && evt.detail.ctx;
+        if (!ctx) return;
+        const target = typeof ctx.target === "string" ? document.querySelector(ctx.target) : ctx.target;
+        if (!target || !target.matches("[data-preserve-drafts]")) return;
+        const submitted = ctx.sourceElement && ctx.sourceElement.closest("form");
+        const failed = ctx.response && ctx.response.status >= 400;
+        ctx.meritDrafts = [];
+        target.querySelectorAll("form[id]").forEach(form => {
+            if (form === submitted && !failed) return;
+            form.querySelectorAll("input[id], select[id], textarea[id]").forEach(field => {
+                if (field.type === "hidden" || field.type === "file" || (!editedFields.has(field) && form !== submitted)) return;
+                ctx.meritDrafts.push({ form: form.id, id: field.id, value: field.value, checked: field.checked });
+            });
+        });
+    });
+    document.addEventListener("htmx:after:swap", evt => {
+        const ctx = evt.detail && evt.detail.ctx;
+        for (const draft of (ctx && ctx.meritDrafts) || []) {
+            const form = document.getElementById(draft.form);
+            const field = document.getElementById(draft.id);
+            if (!form || !field || !form.contains(field) || field.disabled) continue;
+            field.value = draft.value;
+            if (draft.checked !== undefined) field.checked = draft.checked;
+            editedFields.add(field);
+        }
+        if (ctx) delete ctx.meritDrafts;
+    });
+
     document.addEventListener("htmx:after:swap", evt => {
         const ctx = evt.detail && evt.detail.ctx;
         const target = ctx && ctx.target;
@@ -211,6 +245,18 @@
     });
 
     // ------------------------------------------------------------------------------------------ small conveniences
+    function invalidatePrimaryPreview(evt) {
+        const form = evt.target.closest("[data-primary-preview]");
+        if (!form) return;
+        const preview = form.closest("#set-primary");
+        const confirm = preview && preview.querySelector("[data-primary-confirm]");
+        if (confirm) confirm.disabled = true;
+        const message = preview && preview.querySelector("[data-preview-stale]");
+        if (message) message.hidden = false;
+    }
+    document.addEventListener("input", invalidatePrimaryPreview);
+    document.addEventListener("change", invalidatePrimaryPreview);
+
     // A select with data-autosubmit submits its form (used by plain GET filter forms; htmx forms trigger on change).
     document.addEventListener("change", evt => {
         const el = evt.target.closest("[data-autosubmit]");
@@ -243,10 +289,11 @@
             if ("disabled" in el) el.disabled = !active;
             el.querySelectorAll("input, select, textarea, button").forEach(ctrl => { ctrl.disabled = !active; });
             el.querySelectorAll("[role=combobox]").forEach(box => {
-                if (box.id === "OrganizationSite-text") {
+                if (box.getAttribute("data-field") === "OrganizationSite") {
+                    if (changedField === field) box.dispatchEvent(new Event("htmx:abort"));
                     box.setAttribute("hx-get", "/lookup/sites?type=" + (value === "school" ? "school" : "childCare"));
                 }
-                if (!active || (changedField && changedField.name === name && box.id === "OrganizationSite-text")) {
+                if (!active || (changedField === field && box.getAttribute("data-field") === "OrganizationSite")) {
                     clearCombobox(box);
                 }
             });

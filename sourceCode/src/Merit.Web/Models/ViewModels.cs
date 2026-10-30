@@ -7,6 +7,12 @@ namespace Merit.Web.Models;
 // View models: each Razor view receives one built for it. They hold application read models (rows returned by the data
 // interface) and form fields, never domain types (architecture rule 2, checked by the architecture tests).
 
+public sealed record FormDraft(string Form, IReadOnlyDictionary<string, string> Values)
+{
+    public string? Value(string form, string key, string? fallback)
+        => Form == form && Values.TryGetValue(key, out var value) ? value : fallback;
+}
+
 public sealed record AlertModel(string Kind, string Title, string Message);
 
 public sealed record SelectOption(string Value, string Label, bool Selected = false);
@@ -449,6 +455,10 @@ public sealed class ResultFieldsModel
 
     public IReadOnlyList<SelectOption> Speciations { get; set; } = [];
 
+    public decimal? Creatinine { get; set; }
+
+    public bool CreatinineCleared { get; set; }
+
     public bool RequiresCreatinine { get; set; }
 
     public string? CanonicalUnit { get; set; }
@@ -462,7 +472,7 @@ public sealed record ResultDetailModel(LabResultDetailRow Result, IReadOnlyList<
 
 public sealed record CasePageModel(CaseDetail Detail, IReadOnlyList<SelectOption> Users, IReadOnlyList<SelectOption> ClosureReasons,
                                    IReadOnlyList<SelectOption> ActivityTypes, IReadOnlyList<SelectOption> Outcomes, bool CanEdit,
-                                   bool CanInvestigate, string? Message = null);
+                                   bool CanInvestigate, string? Message = null, FormDraft? Draft = null);
 
 /// <summary>
 /// The case list's filters and sort, bound from the query string, so a filtered list is a link (issue #50). Assigned is
@@ -573,7 +583,7 @@ public sealed class InvestigationRequestModel
 
 public sealed record InvestigationPageModel(InvestigationDetail Detail, IReadOnlyList<SelectOption> Users,
                                             IReadOnlyList<SelectOption> Statuses, IReadOnlyList<SelectOption> RegulatoryActions,
-                                            IReadOnlyList<SelectOption> SampleTypes, bool CanEdit);
+                                            IReadOnlyList<SelectOption> SampleTypes, bool CanEdit, FormDraft? Draft = null);
 
 public sealed record InvestigationListModel(IReadOnlyList<InvestigationListRow> Rows, bool OpenOnly, int PageNumber);
 

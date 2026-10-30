@@ -101,6 +101,9 @@ public sealed class PersonData(Db db) : IPersonData
 
 public sealed class PlaceData(Db db) : IPlaceData
 {
+    public Task<LookupSelection?> GetLookupSelectionAsync(string kind, Guid id, CancellationToken ct = default)
+        => db.QuerySingleAsync<LookupSelection>("dbo.uspGetLookupSelection", new { kind, id }, ct);
+
     public Task<IReadOnlyList<LocationCandidateRow>> FindLocationsAsync(string addressKeyPrefix, string? zip5, int maxRows, CancellationToken ct = default)
         => db.QueryAsync<LocationCandidateRow>("dbo.uspFindLocations", new { addressKeyPrefix, zip5, maxRows }, ct);
 

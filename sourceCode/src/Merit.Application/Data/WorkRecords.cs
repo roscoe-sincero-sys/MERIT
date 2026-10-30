@@ -342,6 +342,8 @@ public sealed class HeldGroupRow
     public string? SampleMessage { get; init; }
 }
 
+public sealed record HeldSummaryRow(int TotalCount, string? BatchFileName);
+
 public sealed class HeldRowRow
 {
     public Guid StagingRowId { get; init; }

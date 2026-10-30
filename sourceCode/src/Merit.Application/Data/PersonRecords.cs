@@ -1,5 +1,7 @@
 namespace Merit.Application.Data;
 
+public sealed record LookupSelection(string Value, string Label);
+
 // Rows returned by the person, place and organization procedures.
 
 public sealed class SearchPersonRow

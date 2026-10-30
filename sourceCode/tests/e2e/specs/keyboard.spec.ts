@@ -547,7 +547,7 @@ test('places: switching role from child care to residence clears and disables th
     await route.fulfill({
       status: 200,
       contentType: 'text/html',
-      body: `<li role="option" id="OrganizationSite-opt-0" aria-selected="false" data-value="${siteValue}" data-label="Harbor Tots Child Care">Harbor Tots Child Care</li>`,
+      body: `<li role="option" id="place-OrganizationSite-opt-0" aria-selected="false" data-value="${siteValue}" data-label="Harbor Tots Child Care">Harbor Tots Child Care</li>`,
     });
   });
   await page.route(`**/people/${personId}/places/add`, async route => {
@@ -561,24 +561,24 @@ test('places: switching role from child care to residence clears and disables th
 
   await page.goto(`/people/${personId}`);
   await page.getByRole('button', { name: 'Add child care or school' }).click();
-  await expect(page.locator('#OrganizationSite-text')).toBeVisible();
-  await expect(page.locator('#AddressLine1')).toBeDisabled();
+  await expect(page.locator('#place-OrganizationSite-text')).toBeVisible();
+  await expect(page.locator('#place-AddressLine1')).toBeDisabled();
 
-  await page.locator('#OrganizationSite-text').fill('Harbor');
-  await page.locator('#OrganizationSite-opt-0').click();
-  await expect(page.locator('#OrganizationSite')).toHaveValue(siteValue);
+  await page.locator('#place-OrganizationSite-text').fill('Harbor');
+  await page.locator('#place-OrganizationSite-opt-0').click();
+  await expect(page.locator('#place-OrganizationSite')).toHaveValue(siteValue);
 
-  await page.locator('#Role').selectOption('residence');
-  await expect(page.locator('#OrganizationSite')).toHaveValue('');
-  await expect(page.locator('#OrganizationSite')).toBeDisabled();
-  await expect(page.locator('#OrganizationSite-text')).toBeDisabled();
-  await expect(page.locator('#AddressLine1')).toBeVisible();
-  await expect(page.locator('#AddressLine1')).toBeEnabled();
+  await page.locator('#place-Role').selectOption('residence');
+  await expect(page.locator('#place-OrganizationSite')).toHaveValue('');
+  await expect(page.locator('#place-OrganizationSite')).toBeDisabled();
+  await expect(page.locator('#place-OrganizationSite-text')).toBeDisabled();
+  await expect(page.locator('#place-AddressLine1')).toBeVisible();
+  await expect(page.locator('#place-AddressLine1')).toBeEnabled();
 
-  await page.locator('#AddressLine1').fill('742 Evergreen Ter');
-  await page.locator('#City').fill('Baltimore');
-  await page.locator('#State').fill('MD');
-  await page.locator('#Zip5').fill('21201');
+  await page.locator('#place-AddressLine1').fill('742 Evergreen Ter');
+  await page.locator('#place-City').fill('Baltimore');
+  await page.locator('#place-State').fill('MD');
+  await page.locator('#place-Zip5').fill('21201');
   await page.getByRole('button', { name: 'Save place' }).click();
   await expect.poll(() => postedBody).not.toBe('');
   const params = new URLSearchParams(postedBody);

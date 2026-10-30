@@ -90,9 +90,17 @@ public sealed class HeldRecordsController(IntakeService intake, IReferenceDataPr
 {
     [HttpGet("groups")]
     [Authorize(Policy = Permissions.ResultReleaseHold)]
-    public async Task<IReadOnlyList<HeldGroupDto>> Groups(CancellationToken ct)
-        => (await intake.HeldGroupsAsync(ct)).Select(g => new HeldGroupDto(g.ReasonCode, g.ReportedValue, g.SenderOrganizationId, g.SenderName, g.HeldRowCount,
+    public async Task<IReadOnlyList<HeldGroupDto>> Groups(Guid? batch = null, CancellationToken ct = default)
+        => (await intake.HeldGroupsAsync(batch, ct)).Select(g => new HeldGroupDto(g.ReasonCode, g.ReportedValue, g.SenderOrganizationId, g.SenderName, g.HeldRowCount,
             g.UrgentCount, g.OldestHeldUtc, g.BatchCount, g.SampleMessage)).ToList();
+
+    [HttpGet("summary")]
+    [Authorize(Policy = Permissions.ResultReleaseHold)]
+    public async Task<HeldSummaryDto> Summary(Guid? batch = null, CancellationToken ct = default)
+    {
+        var summary = await intake.HeldSummaryAsync(batch, ct);
+        return new HeldSummaryDto(summary.TotalCount, summary.BatchFileName);
+    }
 
     /// <summary>
     /// Held rows. <c>exact=true</c> with <c>reason</c>, <c>value</c> and <c>sender</c> lists one group from <c>groups</c>,

@@ -276,6 +276,12 @@ public sealed record TenantInput(Guid? ParentTenantId, string? TenantCode, strin
 /// <summary>Server-side type-ahead for organizations, providers, locations and products.</summary>
 public sealed class LookupService(IPlaceData places, ICurrentSession session)
 {
+    public async Task<LookupSelection?> SelectionAsync(string kind, Guid? id, CancellationToken ct = default)
+    {
+        session.Require(Permissions.PersonView);
+        return id is null ? null : await places.GetLookupSelectionAsync(kind, id.Value, ct).ConfigureAwait(false);
+    }
+
     public async Task<IReadOnlyList<OrganizationSearchRow>> OrganizationsAsync(string? text, string? type, CancellationToken ct = default)
     {
         session.Require(Permissions.PersonView);
