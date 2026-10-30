@@ -73,6 +73,12 @@ public sealed class IntakeService(IIntakeData intake, IWorkData work, Services.A
         return await intake.ListHeldGroupsAsync(batchId, ct).ConfigureAwait(false);
     }
 
+    public async Task<HeldOverview> HeldOverviewAsync(Guid? batchId, CancellationToken ct = default)
+    {
+        session.Require(Permissions.ResultReleaseHold);
+        return await intake.GetHeldOverviewAsync(batchId, ct).ConfigureAwait(false);
+    }
+
     public async Task<HeldSummaryRow> HeldSummaryAsync(Guid? batchId, CancellationToken ct = default)
     {
         session.Require(Permissions.ResultReleaseHold);

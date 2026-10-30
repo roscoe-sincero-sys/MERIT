@@ -1,6 +1,14 @@
 """Intake: profiles, batches, staging rows, held records and person-match candidates."""
 from procs_common import NEWID, WEB, WORKER, BOTH, CONCURRENCY, not_found, JOB_SCOPE, JOB_SCOPE_COLUMNS, JOB_SCOPE_VALUES
 
+HELD_SUMMARY_QUERY = """
+SELECT COUNT (*) AS totalCount,
+       (SELECT b.fileName FROM dbo.intakeBatch AS b WHERE b.intakeBatchId = @intakeBatchId AND b.isDeleted = 0) AS batchFileName
+  FROM dbo.stagingRow AS s
+ WHERE s.rowStatus = 'held' AND s.isDeleted = 0
+   AND (@intakeBatchId IS NULL OR s.intakeBatchId = @intakeBatchId);
+"""
+
 PROCS = [
     {
         "schema": "dbo", "name": "uspGetHeldSummary", "kind": "read", "grants": WEB, "ticket": "#71 #72",
@@ -8,13 +16,7 @@ PROCS = [
         "desc": "Distinct held-row count and the active batch filename, in the same scope as held groups and rows.",
         "params": "@intakeBatchId UNIQUEIDENTIFIER = NULL",
         "key": "CONCAT (N'intakeBatchId=', @intakeBatchId)",
-        "body": """
-SELECT COUNT (*) AS totalCount,
-       (SELECT b.fileName FROM dbo.intakeBatch AS b WHERE b.intakeBatchId = @intakeBatchId AND b.isDeleted = 0) AS batchFileName
-  FROM dbo.stagingRow AS s
- WHERE s.rowStatus = 'held' AND s.isDeleted = 0
-   AND (@intakeBatchId IS NULL OR s.intakeBatchId = @intakeBatchId);
-""",
+        "body": HELD_SUMMARY_QUERY,
     },
     {
         "schema": "dbo", "name": "uspListIntakeProfiles", "kind": "read", "grants": BOTH, "ticket": "T048",
@@ -271,7 +273,7 @@ SET @Comments = CONCAT (N'Row ', @rowStatus, N'.');
         "permission": "result.release_hold",
         "desc": "Held records grouped by cause -- reason, the reported value that caused it, and sender -- so that "
                 "fixing one unknown code releases every row held for it. Urgent groups first.",
-        "params": "@intakeBatchId UNIQUEIDENTIFIER = NULL",
+        "params": "@intakeBatchId UNIQUEIDENTIFIER = NULL\n, @includeSummary BIT = 0",
         "key": "CONCAT (N'intakeBatchId=', @intakeBatchId)",
         "body": """
 SELECT h.reasonCode, h.reportedValue, b.senderOrganizationId, o.organizationName AS senderName,
@@ -287,7 +289,7 @@ SELECT h.reasonCode, h.reportedValue, b.senderOrganizationId, o.organizationName
    AND (@intakeBatchId IS NULL OR s.intakeBatchId = @intakeBatchId)
  GROUP BY h.reasonCode, h.reportedValue, b.senderOrganizationId, o.organizationName
  ORDER BY COUNT (DISTINCT CASE WHEN s.isUrgent = 1 THEN s.stagingRowId END) DESC, MIN (s.heldSinceUtc);
-""",
+""" + "\nIF @includeSummary = 1\nBEGIN\n" + HELD_SUMMARY_QUERY + "\nEND;\n",
     },
     {
         "schema": "dbo", "name": "uspListHeldRows", "kind": "read", "grants": WEB, "ticket": "T105",

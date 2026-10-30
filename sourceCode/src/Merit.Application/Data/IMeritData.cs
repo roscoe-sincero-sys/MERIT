@@ -117,7 +117,7 @@ public interface IPersonData
 
 public interface IPlaceData
 {
-    Task<LookupSelection?> GetLookupSelectionAsync(string kind, Guid id, CancellationToken ct = default);
+    Task<IReadOnlyList<LookupSelectionRow>> GetLookupSelectionsAsync(IReadOnlyList<LookupSelectionRequest> requests, CancellationToken ct = default);
 
     Task<IReadOnlyList<LocationCandidateRow>> FindLocationsAsync(string addressKeyPrefix, string? zip5, int maxRows, CancellationToken ct = default);
 
@@ -268,6 +268,8 @@ public interface IIntakeData
     Task CompleteRowAsync(Guid stagingRowId, string rowStatus, Guid? labResultId, IReadOnlyList<HoldReason> reasons, bool isUrgent, CancellationToken ct = default);
 
     Task<IReadOnlyList<HeldGroupRow>> ListHeldGroupsAsync(Guid? intakeBatchId = null, CancellationToken ct = default);
+
+    Task<HeldOverview> GetHeldOverviewAsync(Guid? intakeBatchId, CancellationToken ct = default);
 
     Task<HeldSummaryRow> GetHeldSummaryAsync(Guid? intakeBatchId, CancellationToken ct = default);
 

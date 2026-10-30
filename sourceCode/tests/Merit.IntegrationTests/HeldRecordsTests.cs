@@ -38,6 +38,9 @@ public sealed class HeldRecordsTests(MeritFixture fixture)
             using var summary = await JsonAsync(client, $"/api/v1/held/summary?batch={batch}");
             Assert.Equal(1, summary.RootElement.GetProperty("totalCount").GetInt32());
             Assert.Equal("held-groups.csv", summary.RootElement.GetProperty("batchFileName").GetString());
+            using var overview = await JsonAsync(client, $"/api/v1/held/overview?batch={batch}");
+            Assert.Equal(1, overview.RootElement.GetProperty("totalCount").GetInt32());
+            Assert.Equal(2, overview.RootElement.GetProperty("groups").GetArrayLength());
             using var groups = await JsonAsync(client, $"/api/v1/held/groups?batch={batch}");
             Assert.Equal(2, groups.RootElement.GetArrayLength());
             Assert.All(groups.RootElement.EnumerateArray(), g => Assert.Equal(labA, g.GetProperty("senderOrganizationId").GetGuid()));

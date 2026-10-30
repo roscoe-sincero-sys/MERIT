@@ -108,7 +108,7 @@ public sealed class LookupController(LookupService lookup, PlaceService places, 
     {
         var results = string.IsNullOrWhiteSpace(q) || q.Trim().Length < 2 ? null : await search.SearchAsync(q, ct);
         return PartialView("_Options", new LookupOptionsModel(field, (results?.Persons ?? []).Take(10)
-            .Select(p => (p.PersonId, $"{p.LastName}, {p.FirstName}", (string?)(p.Dob is null ? "DOB unknown" : "b. " + Options.Date(p.Dob)))).ToList()));
+            .Select(p => (p.PersonId, LookupLabels.Person(p.LastName, p.FirstName), (string?)(p.Dob is null ? "DOB unknown" : "b. " + Options.Date(p.Dob)))).ToList()));
     }
 
     [HttpGet("organizations")]
@@ -139,7 +139,7 @@ public sealed class LookupController(LookupService lookup, PlaceService places, 
     {
         var rows = await lookup.ProvidersAsync(q, ct);
         return PartialView("_Options", new LookupOptionsModel(field,
-            rows.Select(r => (r.ProviderId, $"{r.LastName}, {r.FirstName} {r.Credential}".Trim(),
+            rows.Select(r => (r.ProviderId, LookupLabels.Provider(r.LastName, r.FirstName, r.Credential),
                 (string?)$"NPI {r.Npi} {r.PracticeCity} {r.PracticeState}".Trim())).ToList()));
     }
 
@@ -149,7 +149,7 @@ public sealed class LookupController(LookupService lookup, PlaceService places, 
     {
         var rows = await places.FindLocationsAsync(q, ct);
         return PartialView("_Options", new LookupOptionsModel(field,
-            rows.Select(r => (r.LocationId, $"{r.AddressLine1}{(string.IsNullOrEmpty(r.Unit) ? string.Empty : " " + r.Unit)}",
+            rows.Select(r => (r.LocationId, LookupLabels.Location(r.AddressLine1, r.Unit),
                 (string?)$"{r.City}, {r.State} {r.Zip5}{(r.CountyName is null ? string.Empty : " - " + r.CountyName)}")).ToList()));
     }
 }

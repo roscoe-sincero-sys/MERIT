@@ -276,11 +276,31 @@ public sealed record TenantInput(Guid? ParentTenantId, string? TenantCode, strin
 /// <summary>Server-side type-ahead for organizations, providers, locations and products.</summary>
 public sealed class LookupService(IPlaceData places, ICurrentSession session)
 {
-    public async Task<LookupSelection?> SelectionAsync(string kind, Guid? id, CancellationToken ct = default)
+    public async Task<LookupSelection?> SelectionAsync(string kind, Guid? id, CancellationToken ct = default, string? organizationTypeCode = null)
     {
-        session.Require(Permissions.PersonView);
-        return id is null ? null : await places.GetLookupSelectionAsync(kind, id.Value, ct).ConfigureAwait(false);
+        if (id is null) return null;
+        var rows = await SelectionsAsync([new(kind, id.Value, organizationTypeCode)], ct).ConfigureAwait(false);
+        return Selection(rows.FirstOrDefault());
     }
+
+    public async Task<(LookupSelection? Laboratory, LookupSelection? Provider)> ResultSelectionsAsync(Guid? laboratory, Guid? provider, CancellationToken ct = default)
+    {
+        var requests = new List<LookupSelectionRequest>();
+        if (laboratory is { } labId) requests.Add(new("organization", labId, "laboratory"));
+        if (provider is { } providerId) requests.Add(new("provider", providerId));
+        var rows = await SelectionsAsync(requests, ct).ConfigureAwait(false);
+        return (Selection(rows.FirstOrDefault(r => r.Kind == "organization")), Selection(rows.FirstOrDefault(r => r.Kind == "provider")));
+    }
+
+    private async Task<IReadOnlyList<LookupSelectionRow>> SelectionsAsync(IReadOnlyList<LookupSelectionRequest> requests, CancellationToken ct)
+    {
+        if (requests.Count == 0) return [];
+        session.Require(Permissions.PersonView);
+        return await places.GetLookupSelectionsAsync(requests, ct).ConfigureAwait(false);
+    }
+
+    private static LookupSelection? Selection(LookupSelectionRow? row)
+        => row is null ? null : new(row.Value, LookupLabels.Format(row));
 
     public async Task<IReadOnlyList<OrganizationSearchRow>> OrganizationsAsync(string? text, string? type, CancellationToken ct = default)
     {

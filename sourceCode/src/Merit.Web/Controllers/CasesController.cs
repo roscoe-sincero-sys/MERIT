@@ -45,7 +45,7 @@ public sealed class CasesController(IClock clock, CaseService cases, PersonServi
         }
         catch (ValidationException ex)
         {
-            return this.Invalid("_CaseBody", (await PageAsync(id, null, ct)) with { Draft = Draft("update") }, ex);
+            return this.Invalid("_CaseBody", (await PageAsync(id, null, ct)) with { Draft = this.SubmittedDraft("update") }, ex);
         }
         Response.Announce("Case updated.");
         return PartialView("_CaseBody", await PageAsync(id, "Case updated.", ct));
@@ -62,7 +62,7 @@ public sealed class CasesController(IClock clock, CaseService cases, PersonServi
         }
         catch (ValidationException ex)
         {
-            var model = (await PageAsync(id, null, ct)) with { Draft = Draft("override") };
+            var model = (await PageAsync(id, null, ct)) with { Draft = this.SubmittedDraft("override") };
             return this.Invalid("_CaseBody", model, ex);
         }
 
@@ -83,7 +83,7 @@ public sealed class CasesController(IClock clock, CaseService cases, PersonServi
         }
         catch (ValidationException ex)
         {
-            return this.Invalid("_CaseBody", (await PageAsync(id, null, ct)) with { Draft = Draft("activity") }, ex);
+            return this.Invalid("_CaseBody", (await PageAsync(id, null, ct)) with { Draft = this.SubmittedDraft("activity") }, ex);
         }
 
         Response.Announce("Activity logged. " + message);
@@ -101,7 +101,7 @@ public sealed class CasesController(IClock clock, CaseService cases, PersonServi
         }
         catch (ValidationException ex)
         {
-            return this.Invalid("_CaseBody", (await PageAsync(id, null, ct)) with { Draft = Draft("close") }, ex);
+            return this.Invalid("_CaseBody", (await PageAsync(id, null, ct)) with { Draft = this.SubmittedDraft("close") }, ex);
         }
 
         Response.Announce("Case closed.");
@@ -169,8 +169,6 @@ public sealed class CasesController(IClock clock, CaseService cases, PersonServi
         return form;
     }
 
-    private FormDraft Draft(string form) => new(form, Request.Form.ToDictionary(p => p.Key, p => p.Value.ToString()));
-
     private async Task<CasePageModel> PageAsync(Guid id, string? message, CancellationToken ct)
     {
         var detail = await cases.GetAsync(id, ct);
@@ -219,7 +217,7 @@ public sealed class InvestigationsController(InvestigationService investigations
                 ModelState.AddModelError(k, string.Join(" ", v));
             }
 
-            return this.Invalid("_InvestigationBody", (await PageAsync(id, ct)) with { Draft = Draft("save") });
+            return this.Invalid("_InvestigationBody", (await PageAsync(id, ct)) with { Draft = this.SubmittedDraft("save") });
         }
 
         Response.Announce("Investigation saved.");
@@ -234,7 +232,7 @@ public sealed class InvestigationsController(InvestigationService investigations
         if (sampleValue is null || sampleDate is null || string.IsNullOrWhiteSpace(unit))
         {
             ModelState.AddModelError("sampleValue", "Enter the value, unit and sample date.");
-            return this.Invalid("_InvestigationBody", (await PageAsync(id, ct)) with { Draft = Draft("sample") });
+            return this.Invalid("_InvestigationBody", (await PageAsync(id, ct)) with { Draft = this.SubmittedDraft("sample") });
         }
 
         bool? exceeds;
@@ -245,7 +243,7 @@ public sealed class InvestigationsController(InvestigationService investigations
         }
         catch (ValidationException ex)
         {
-            return this.Invalid("_InvestigationBody", (await PageAsync(id, ct)) with { Draft = Draft("sample") }, ex);
+            return this.Invalid("_InvestigationBody", (await PageAsync(id, ct)) with { Draft = this.SubmittedDraft("sample") }, ex);
         }
         Response.Announce(exceeds switch
         {
@@ -255,8 +253,6 @@ public sealed class InvestigationsController(InvestigationService investigations
         });
         return PartialView("_InvestigationBody", await PageAsync(id, ct));
     }
-
-    private FormDraft Draft(string form) => new(form, Request.Form.ToDictionary(p => p.Key, p => p.Value.ToString()));
 
     private async Task<InvestigationPageModel> PageAsync(Guid id, CancellationToken ct)
     {

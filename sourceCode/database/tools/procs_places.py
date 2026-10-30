@@ -8,26 +8,42 @@ PROCS = [
         "schema": "dbo", "name": "uspGetLookupSelection", "kind": "read", "grants": WEB, "ticket": "#66",
         "permission": "person.view",
         "desc": "Rehydrates one selected lookup from its authorized identifier; RLS applies to every source.",
-        "params": "@kind VARCHAR (20)\n, @id UNIQUEIDENTIFIER",
-        "key": "CONCAT (N'kind=', @kind, N', id=', @id)",
+        "params": "@kind VARCHAR (20) = NULL\n, @id UNIQUEIDENTIFIER = NULL\n, @organizationTypeCode VARCHAR (30) = NULL\n, @selectionsJson NVARCHAR (MAX) = NULL",
+        "key": "CONCAT (N'kind=', @kind, N', id=', @id, N', organizationTypeCode=', @organizationTypeCode)",
         "body": """
-SELECT CONVERT (NVARCHAR (80), p.personId) AS value, CONCAT (p.lastName, N', ', p.firstName) AS label
-  FROM dbo.person AS p WHERE @kind = 'person' AND p.personId = @id AND p.isDeleted = 0
+DECLARE @requested TABLE (kind VARCHAR (20), id UNIQUEIDENTIFIER, organizationTypeCode VARCHAR (30));
+IF @selectionsJson IS NULL
+    INSERT @requested VALUES (@kind, @id, @organizationTypeCode);
+ELSE
+    INSERT @requested SELECT kind, id, organizationTypeCode
+      FROM OPENJSON (@selectionsJson) WITH (kind VARCHAR (20), id UNIQUEIDENTIFIER, organizationTypeCode VARCHAR (30));
+
+SELECT r.kind, r.id, CONVERT (NVARCHAR (80), p.personId) AS value, p.lastName AS name,
+       p.firstName, CAST (NULL AS NVARCHAR (30)) AS credential, CAST (NULL AS NVARCHAR (30)) AS unit
+  FROM @requested AS r JOIN dbo.person AS p ON p.personId = r.id
+ WHERE r.kind = 'person' AND p.isDeleted = 0 AND p.mergedIntoPersonId IS NULL
 UNION ALL
-SELECT CONVERT (NVARCHAR (80), o.organizationId), o.organizationName
-  FROM dbo.organization AS o WHERE @kind = 'organization' AND o.organizationId = @id AND o.isDeleted = 0
+SELECT r.kind, r.id, CONVERT (NVARCHAR (80), o.organizationId), o.organizationName, NULL, NULL, NULL
+  FROM @requested AS r JOIN dbo.organization AS o ON o.organizationId = r.id
+ WHERE r.kind = 'organization' AND o.isDeleted = 0 AND o.isActive = 1
+   AND (r.organizationTypeCode IS NULL OR EXISTS (SELECT 1 FROM dbo.organizationType AS ot
+         WHERE ot.organizationId = o.organizationId AND ot.isDeleted = 0 AND ot.organizationTypeCode = r.organizationTypeCode))
 UNION ALL
-SELECT CONVERT (NVARCHAR (80), p.providerId), RTRIM (CONCAT (p.lastName, N', ', p.firstName, N' ', p.credential))
-  FROM dbo.provider AS p WHERE @kind = 'provider' AND p.providerId = @id AND p.isDeleted = 0
+SELECT r.kind, r.id, CONVERT (NVARCHAR (80), p.providerId), p.lastName, p.firstName, p.credential, NULL
+  FROM @requested AS r JOIN dbo.provider AS p ON p.providerId = r.id
+ WHERE r.kind = 'provider' AND p.isDeleted = 0
 UNION ALL
-SELECT CONVERT (NVARCHAR (80), l.locationId), CONCAT (l.addressLine1, CASE WHEN l.unit IS NULL THEN N'' ELSE N' ' + l.unit END)
-  FROM dbo.location AS l WHERE @kind = 'location' AND l.locationId = @id AND l.isDeleted = 0
+SELECT r.kind, r.id, CONVERT (NVARCHAR (80), l.locationId), l.addressLine1, NULL, NULL, l.unit
+  FROM @requested AS r JOIN dbo.location AS l ON l.locationId = r.id
+ WHERE r.kind = 'location' AND l.isDeleted = 0
 UNION ALL
-SELECT CONCAT (s.organizationSiteId, N':', s.locationId), CONCAT (o.organizationName, N' - ', l.addressLine1, N', ', l.city)
-  FROM dbo.organizationSite AS s
-  JOIN dbo.organization AS o ON o.organizationId = s.organizationId AND o.isDeleted = 0
+SELECT r.kind, r.id, CONCAT (s.organizationSiteId, N':', s.locationId), o.organizationName, NULL, NULL, NULL
+  FROM @requested AS r JOIN dbo.organizationSite AS s ON s.organizationSiteId = r.id
+  JOIN dbo.organization AS o ON o.organizationId = s.organizationId AND o.isDeleted = 0 AND o.isActive = 1
   JOIN dbo.location AS l ON l.locationId = s.locationId AND l.isDeleted = 0
- WHERE @kind = 'site' AND s.organizationSiteId = @id AND s.isDeleted = 0;
+ WHERE r.kind = 'site' AND s.isDeleted = 0 AND s.endDate IS NULL
+   AND (r.organizationTypeCode IS NULL OR EXISTS (SELECT 1 FROM dbo.organizationType AS ot
+         WHERE ot.organizationId = o.organizationId AND ot.isDeleted = 0 AND ot.organizationTypeCode = r.organizationTypeCode));
 """,
     },
     {

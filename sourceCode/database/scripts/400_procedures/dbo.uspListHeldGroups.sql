@@ -48,6 +48,7 @@ Description:	Initial version.
 ***********************************************************************************************************************/
 CREATE OR ALTER PROCEDURE dbo.uspListHeldGroups
       @intakeBatchId UNIQUEIDENTIFIER = NULL
+      , @includeSummary BIT = 0
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -96,6 +97,17 @@ BEGIN
            AND (@intakeBatchId IS NULL OR s.intakeBatchId = @intakeBatchId)
          GROUP BY h.reasonCode, h.reportedValue, b.senderOrganizationId, o.organizationName
          ORDER BY COUNT (DISTINCT CASE WHEN s.isUrgent = 1 THEN s.stagingRowId END) DESC, MIN (s.heldSinceUtc);
+
+        IF @includeSummary = 1
+        BEGIN
+
+        SELECT COUNT (*) AS totalCount,
+               (SELECT b.fileName FROM dbo.intakeBatch AS b WHERE b.intakeBatchId = @intakeBatchId AND b.isDeleted = 0) AS batchFileName
+          FROM dbo.stagingRow AS s
+         WHERE s.rowStatus = 'held' AND s.isDeleted = 0
+           AND (@intakeBatchId IS NULL OR s.intakeBatchId = @intakeBatchId);
+
+        END;
 
         -- =========================================================================================
         -- ===== End of the procedure's own work. ===================================================

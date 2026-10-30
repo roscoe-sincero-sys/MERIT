@@ -1936,13 +1936,25 @@
    {
     "name": "kind",
     "type": "VARCHAR (20)",
-    "hasDefault": false,
+    "hasDefault": true,
     "isOutput": false
    },
    {
     "name": "id",
     "type": "UNIQUEIDENTIFIER",
-    "hasDefault": false,
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "organizationTypeCode",
+    "type": "VARCHAR (30)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "selectionsJson",
+    "type": "NVARCHAR (MAX)",
+    "hasDefault": true,
     "isOutput": false
    }
   ]
@@ -2387,6 +2399,12 @@
    {
     "name": "intakeBatchId",
     "type": "UNIQUEIDENTIFIER",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "includeSummary",
+    "type": "BIT",
     "hasDefault": true,
     "isOutput": false
    }

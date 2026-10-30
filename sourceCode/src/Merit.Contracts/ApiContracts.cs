@@ -39,6 +39,8 @@ public sealed record BulkTaskActionRequest(IReadOnlyList<Guid> TaskIds, string A
 
 public sealed record BulkActionResponse(int Updated);
 
+public sealed record HeldOverviewDto(IReadOnlyList<HeldGroupDto> Groups, int TotalCount, string? BatchFileName);
+
 public sealed record HeldSummaryDto(int TotalCount, string? BatchFileName);
 
 public sealed record AssignableUserDto(Guid AppUserId, string DisplayName);

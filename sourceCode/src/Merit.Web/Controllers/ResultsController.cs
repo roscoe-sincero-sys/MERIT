@@ -97,10 +97,9 @@ public sealed class ResultsController(IClock clock, ResultService results, Perso
         form.Reasons = refData.Choices("reasonForTest", form.ReasonForTest, includeBlank: true);
         form.Payers = refData.Choices("payerType", form.PayerType, includeBlank: true);
         form.Fields = await FieldsAsync(form.AnalyteId, form.AnalyteSpecimenId, form.Unit, form.SampleType, form.Speciation, form.Creatinine, ct);
-        var lab = await lookup.SelectionAsync("organization", form.LabOrganizationId, ct);
+        var (lab, provider) = await lookup.ResultSelectionsAsync(form.LabOrganizationId, form.OrderingProviderId, ct);
         form.LabOrganizationId = lab is null ? null : form.LabOrganizationId;
         form.LabLabel = lab?.Label;
-        var provider = await lookup.SelectionAsync("provider", form.OrderingProviderId, ct);
         form.OrderingProviderId = provider is null ? null : form.OrderingProviderId;
         form.ProviderLabel = provider?.Label;
         if (string.IsNullOrEmpty(form.PersonName))
@@ -116,7 +115,7 @@ public sealed class ResultsController(IClock clock, ResultService results, Perso
                                                       string? speciation, decimal? creatinine, CancellationToken ct)
     {
         var refData = await reference.GetAsync(ct);
-        var model = new ResultFieldsModel();
+        var model = new ResultFieldsModel { CreatinineCleared = creatinine is not null };
         if (analyteId is null)
         {
             return model;

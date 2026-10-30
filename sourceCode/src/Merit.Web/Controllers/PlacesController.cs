@@ -200,7 +200,7 @@ public sealed class PlacesController(IClock clock, PlaceService places, PersonSe
         {
             var parts = form.OrganizationSite?.Split(':');
             var site = parts is { Length: 2 } && Guid.TryParse(parts[0], out var siteId)
-                ? await lookup.SelectionAsync("site", siteId, ct) : null;
+                ? await lookup.SelectionAsync("site", siteId, ct, form.Role) : null;
             form.OrganizationSite = site?.Value;
             form.OrganizationLabel = site?.Label;
         }

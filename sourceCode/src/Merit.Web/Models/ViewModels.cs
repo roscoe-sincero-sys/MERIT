@@ -9,7 +9,12 @@ namespace Merit.Web.Models;
 
 public sealed record FormDraft(string Form, IReadOnlyDictionary<string, string> Values)
 {
-    public string? Value(string form, string key, string? fallback)
+    public static FormDraft Empty { get; } = new("", new Dictionary<string, string>());
+
+    public bool Selected(string form, string key, SelectOption option)
+        => Value(form, key, option.Selected ? option.Value : null) == option.Value;
+
+    public string? Value(string form, string key, string? fallback = null)
         => Form == form && Values.TryGetValue(key, out var value) ? value : fallback;
 }
 

@@ -78,11 +78,18 @@
     });
 
     // ------------------------------------------------------------------------------------------ after a swap
-    // Keep edited sibling fields when a case/investigation action refreshes its body. Never restore row versions,
-    // antiforgery values, or the successfully submitted form. Snapshots live only for the duration of this swap.
-    const editedFields = new WeakSet();
-    document.addEventListener("input", evt => editedFields.add(evt.target));
-    document.addEventListener("change", evt => editedFields.add(evt.target));
+    // Preserve only user-edited sibling fields, together with the version they were edited against.
+    // The server alone redisplays the submitted form on validation failure.
+    const formEdits = new Map();
+    function recordEdit(evt) {
+        const field = evt.target;
+        const form = field.closest("[data-preserve-drafts] form[id]");
+        if (!form || !field.id || field.type === "hidden") return;
+        if (!formEdits.has(form.id)) formEdits.set(form.id, new Set());
+        formEdits.get(form.id).add(field.id);
+    }
+    document.addEventListener("input", recordEdit);
+    document.addEventListener("change", recordEdit);
     document.addEventListener("htmx:before:swap", evt => {
         const ctx = evt.detail && evt.detail.ctx;
         if (!ctx) return;
@@ -92,24 +99,38 @@
         const failed = ctx.response && ctx.response.status >= 400;
         ctx.meritDrafts = [];
         target.querySelectorAll("form[id]").forEach(form => {
-            if (form === submitted && !failed) return;
-            form.querySelectorAll("input[id], select[id], textarea[id]").forEach(field => {
-                if (field.type === "hidden" || field.type === "file" || (!editedFields.has(field) && form !== submitted)) return;
-                ctx.meritDrafts.push({ form: form.id, id: field.id, value: field.value, checked: field.checked });
-            });
+            if (form === submitted) {
+                if (!failed) formEdits.delete(form.id);
+                return;
+            }
+            const edited = formEdits.get(form.id);
+            if (!edited) return;
+            const fields = [...form.querySelectorAll("input[id], select[id], textarea[id]")]
+                .filter(field => edited.has(field.id) && field.type !== "hidden" && field.type !== "file")
+                .map(field => ({ id: field.id, value: field.value, checked: field.checked }));
+            ctx.meritDrafts.push({ id: form.id, fields,
+                version: form.querySelector('[name="rowVersion"]')?.value });
         });
     });
+    // htmx 4 completes its settle tasks before emitting this event with the request context.
     document.addEventListener("htmx:after:swap", evt => {
         const ctx = evt.detail && evt.detail.ctx;
         for (const draft of (ctx && ctx.meritDrafts) || []) {
-            const form = document.getElementById(draft.form);
-            const field = document.getElementById(draft.id);
-            if (!form || !field || !form.contains(field) || field.disabled) continue;
-            field.value = draft.value;
-            if (draft.checked !== undefined) field.checked = draft.checked;
-            editedFields.add(field);
+            const form = document.getElementById(draft.id);
+            if (!form) continue;
+            for (const saved of draft.fields) {
+                const field = document.getElementById(saved.id);
+                if (!field || !form.contains(field) || field.disabled) continue;
+                field.value = saved.value;
+                if (saved.checked !== undefined) field.checked = saved.checked;
+            }
+            const version = form.querySelector('[name="rowVersion"]');
+            if (draft.fields.length && version && draft.version !== undefined) version.value = draft.version;
         }
-        if (ctx) delete ctx.meritDrafts;
+        if (ctx && ctx.meritDrafts) {
+            delete ctx.meritDrafts;
+            for (const id of formEdits.keys()) if (!document.getElementById(id)) formEdits.delete(id);
+        }
     });
 
     document.addEventListener("htmx:after:swap", evt => {

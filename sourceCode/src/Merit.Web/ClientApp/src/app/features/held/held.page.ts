@@ -125,7 +125,6 @@ export class HeldPage implements OnInit {
   private readonly api = inject(ApiClient);
   protected readonly display = inject(Display);
   private readonly router = inject(Router);
-  private readonly summaryLoad = new LatestRequest();
   private readonly groupsLoad = new LatestRequest();
   private readonly rowsLoad = new LatestRequest();
   readonly batchParam = input<string | undefined>(undefined, { alias: 'batch' });
@@ -146,7 +145,12 @@ export class HeldPage implements OnInit {
   ];
 
   ngOnInit(): void {
-    this.store.batch.set(this.batchParam() ?? null);
+    const batch = this.batchParam();
+    if (batch && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(batch)) {
+      this.store.batch.set(null);
+      this.store.message.set('That batch link is not valid. Showing all batches.');
+      void this.router.navigate([], { queryParams: { batch: null }, queryParamsHandling: 'merge', replaceUrl: true });
+    } else this.store.batch.set(batch ?? null);
     this.loadGroups();
     this.loadRows();
   }
@@ -263,12 +267,12 @@ export class HeldPage implements OnInit {
   }
 
   private loadGroups(): void {
-    this.summaryLoad.run(this.api.heldSummary(this.store.batch()), {
-      next: s => { this.store.totalHeld.set(s.totalCount); this.store.batchFileName.set(s.batchFileName); },
-      error: e => this.store.error.set(problemMessage(e)),
-    });
-    this.groupsLoad.run(this.api.heldGroups(this.store.batch()), {
-      next: g => this.store.groups.set(g),
+    this.groupsLoad.run(this.api.heldOverview(this.store.batch()), {
+      next: s => {
+        this.store.groups.set(s.groups);
+        this.store.totalHeld.set(s.totalCount);
+        this.store.batchFileName.set(s.batchFileName);
+      },
       error: e => this.store.error.set(problemMessage(e)),
     });
   }

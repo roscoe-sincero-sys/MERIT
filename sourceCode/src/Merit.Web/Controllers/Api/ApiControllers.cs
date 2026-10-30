@@ -94,6 +94,16 @@ public sealed class HeldRecordsController(IntakeService intake, IReferenceDataPr
         => (await intake.HeldGroupsAsync(batch, ct)).Select(g => new HeldGroupDto(g.ReasonCode, g.ReportedValue, g.SenderOrganizationId, g.SenderName, g.HeldRowCount,
             g.UrgentCount, g.OldestHeldUtc, g.BatchCount, g.SampleMessage)).ToList();
 
+    [HttpGet("overview")]
+    [Authorize(Policy = Permissions.ResultReleaseHold)]
+    public async Task<HeldOverviewDto> Overview(Guid? batch = null, CancellationToken ct = default)
+    {
+        var overview = await intake.HeldOverviewAsync(batch, ct);
+        return new HeldOverviewDto(overview.Groups.Select(g => new HeldGroupDto(g.ReasonCode, g.ReportedValue,
+            g.SenderOrganizationId, g.SenderName, g.HeldRowCount, g.UrgentCount, g.OldestHeldUtc, g.BatchCount, g.SampleMessage)).ToList(),
+            overview.Summary.TotalCount, overview.Summary.BatchFileName);
+    }
+
     [HttpGet("summary")]
     [Authorize(Policy = Permissions.ResultReleaseHold)]
     public async Task<HeldSummaryDto> Summary(Guid? batch = null, CancellationToken ct = default)

@@ -322,7 +322,7 @@ public sealed class PeopleController(IClock clock, PersonService people, PersonP
     private async Task<EmploymentFormModel> EmploymentFormAsync(EmploymentFormModel form, CancellationToken ct)
     {
         var refData = await reference.GetAsync(ct);
-        var employer = await lookup.SelectionAsync("organization", form.OrganizationId, ct);
+        var employer = await lookup.SelectionAsync("organization", form.OrganizationId, ct, "employer");
         form.OrganizationId = employer is null ? null : form.OrganizationId;
         form.OrganizationLabel = employer?.Label;
         form.Analytes = refData.ActiveAnalytes.Select(a => new SelectOption(a.AnalyteId.ToString(), a.DisplayName, form.AnalyteIds.Contains(a.AnalyteId))).ToList();
