@@ -257,7 +257,7 @@ SELECT e.employmentId, e.organizationId, o.organizationName, o.naicsCode AS orga
        e.startDate, e.endDate, e.source, e.verifiedDate, e.rowVersion,
        (SELECT STRING_AGG (a.code, ', ') FROM dbo.employmentAnalyte AS ea JOIN config.analyte AS a ON a.analyteId = ea.analyteId
          WHERE ea.employmentId = e.employmentId AND ea.isDeleted = 0) AS analytes,
-       (SELECT ea.analyteId FROM dbo.employmentAnalyte AS ea WHERE ea.employmentId = e.employmentId AND ea.isDeleted = 0 FOR JSON PATH) AS analyteIdsJson
+       COALESCE ((SELECT ea.analyteId FROM dbo.employmentAnalyte AS ea WHERE ea.employmentId = e.employmentId AND ea.isDeleted = 0 FOR JSON PATH), N'[]') AS analyteIdsJson
   FROM dbo.employment AS e
   JOIN dbo.organization AS o ON o.organizationId = e.organizationId
   LEFT JOIN dbo.location AS l ON l.locationId = e.worksiteLocationId

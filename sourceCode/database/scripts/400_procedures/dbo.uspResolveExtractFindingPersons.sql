@@ -47,7 +47,8 @@ Description:	Initial version.
 
 ***********************************************************************************************************************/
 CREATE OR ALTER PROCEDURE dbo.uspResolveExtractFindingPersons
-      @extractRunId UNIQUEIDENTIFIER, @recordIdsJson NVARCHAR (MAX)
+      @extractRunId UNIQUEIDENTIFIER
+      , @recordIdsJson NVARCHAR (MAX)
 AS
 BEGIN
     SET NOCOUNT ON;

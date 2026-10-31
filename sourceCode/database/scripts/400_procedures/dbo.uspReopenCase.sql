@@ -47,7 +47,9 @@ Description:	Initial version.
 
 ***********************************************************************************************************************/
 CREATE OR ALTER PROCEDURE dbo.uspReopenCase
-      @exposureCaseId UNIQUEIDENTIFIER, @reason NVARCHAR (2000), @rowVersion BINARY (8)
+      @exposureCaseId UNIQUEIDENTIFIER
+      , @reason NVARCHAR (2000)
+      , @rowVersion BINARY (8)
 AS
 BEGIN
     SET NOCOUNT ON;

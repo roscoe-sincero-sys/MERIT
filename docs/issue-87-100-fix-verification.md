@@ -40,3 +40,15 @@ Results: Angular production build passed; 171 unit tests, 71 database integratio
 Repeated integration runs exposed an existing 8 KB limit in the jurisdiction's list of serving tenants. Both summary aggregations now use `nvarchar(max)` so larger datasets render without truncation or failure.
 
 AI contributor: OpenAI Codex. GitHub's contributor graph depends on commit identity; no unverified GitHub account or email was added as a coauthor.
+
+## PR #123 review follow-up
+
+All three review findings were verified and addressed:
+
+- The isolated SQL Server returned NULL for an empty scalar `FOR JSON PATH` subquery. Employment reads now coalesce analyte JSON to `[]`, and the editor defensively accepts null or blank JSON. Integration coverage opens the editor after removing all analytes.
+- Five procedure definitions combined parameters on individual lines, causing missing parameters and malformed types in the test manifest. Definitions now use one parameter per line, and the parser recognizes inline separators while preserving decimal precision and quoted defaults. Generated scripts and the manifest were refreshed. Parser regression tests cover both layouts; an integration check compares every tenant-data web procedure's parameter names with the deployed catalog. Cross-tenant tests now accept only known validation, permission, concurrency, constraint and row-security refusals, allowing signature/type errors to fail the suite.
+- Clearing an existing source's product name now detaches its product. Integration coverage verifies the link becomes NULL while the product record remains intact, alongside the existing preservation and stale-edit checks.
+
+Review fixes were implemented with assistance from OpenAI Codex.
+
+Follow-up validation: 171 unit tests, 72 SQL integration tests (zero skipped), two Python manifest-parser tests, and SQL conventions for 234 scripts passed. The .NET web project built successfully. Browser tests were not rerun for these server/generator changes.

@@ -201,7 +201,9 @@ public sealed class PeopleController(IClock clock, PersonService people, PersonP
     public async Task<IActionResult> EditEmployment(Guid id, Guid employmentId, CancellationToken ct)
     {
         var e = (await people.GetPageAsync(id, ct)).Employment.FirstOrDefault(x => x.EmploymentId == employmentId) ?? throw new NotFoundException();
-        var ids = JsonSerializer.Deserialize<List<Dictionary<string, Guid>>>(e.AnalyteIdsJson) ?? [];
+        var ids = string.IsNullOrWhiteSpace(e.AnalyteIdsJson)
+            ? []
+            : JsonSerializer.Deserialize<List<Dictionary<string, Guid>>>(e.AnalyteIdsJson) ?? [];
         return PartialView("_EmploymentForm", await EmploymentFormAsync(new EmploymentFormModel {
             PersonId = id, EmploymentId = employmentId, OrganizationId = e.OrganizationId, JobTitle = e.JobTitle,
             IndustryText = e.IndustryText, OccupationCode = e.OccupationCode, NaicsOverride = e.NaicsOverride,

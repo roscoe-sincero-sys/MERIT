@@ -102,6 +102,12 @@ public sealed class RecordCorrectionTests(MeritFixture fixture)
             Assert.Equal(product, await Sql(c, "SELECT productId FROM dbo.exposureSource WHERE exposureSourceId = @id AND isConfirmed = 1 AND endDate = '2026-02-01'", ("@id", id)));
             Assert.Equal(DBNull.Value, await Sql(c, "SELECT exposureCaseId FROM dbo.exposureSource WHERE exposureSourceId = @id", ("@id", id)));
             using var stale = await client.NoRedirect.PostAsync($"/people/{person}/sources", new FormUrlEncodedContent(fields)); Assert.Equal(HttpStatusCode.Conflict, stale.StatusCode);
+            stamp = (DateTime)(await Sql(c, "SELECT modifiedDateUtc FROM dbo.exposureSource WHERE exposureSourceId = @id", ("@id", id)))!;
+            fields["OriginalModifiedUtc"] = stamp.ToString("O", CultureInfo.InvariantCulture);
+            fields["ProductName"] = " ";
+            using var cleared = await client.NoRedirect.PostAsync($"/people/{person}/sources", new FormUrlEncodedContent(fields)); Assert.Equal(HttpStatusCode.OK, cleared.StatusCode);
+            Assert.Equal(DBNull.Value, await Sql(c, "SELECT productId FROM dbo.exposureSource WHERE exposureSourceId = @id", ("@id", id)));
+            Assert.Equal(1, await Sql(c, "SELECT COUNT (*) FROM dbo.product WHERE productId = @product AND isDeleted = 0", ("@product", product)));
         }
         finally { await Sql(c, "DELETE dbo.exposureSource WHERE exposureSourceId = @id; DELETE dbo.product WHERE productId = @product", ("@id", id), ("@product", product)); }
     }
@@ -135,6 +141,10 @@ public sealed class RecordCorrectionTests(MeritFixture fixture)
             Assert.Equal(worksite, await Sql(c, "SELECT worksiteLocationId FROM dbo.employment WHERE employmentId = @id AND endDate = '2026-02-01' AND verifiedDate IS NOT NULL AND source = 'labReport' AND occupationCodeVersion = '2010'", ("@id", id)));
             Assert.Equal(analyte, await Sql(c, "SELECT analyteId FROM dbo.employmentAnalyte WHERE employmentId = @id AND isDeleted = 0", ("@id", id)));
             using var stale = await client.NoRedirect.PostAsync($"/people/{person}/employment", new FormUrlEncodedContent(fields)); Assert.Equal(HttpStatusCode.Conflict, stale.StatusCode);
+            await Sql(c, "DELETE dbo.employmentAnalyte WHERE employmentId = @id", ("@id", id));
+            using var withoutAnalytes = await client.GetPartialAsync($"/people/{person}/employment/{id}/edit");
+            withoutAnalytes.EnsureSuccessStatusCode();
+            Assert.Contains("Updated title", await withoutAnalytes.Content.ReadAsStringAsync());
         }
         finally { await Sql(c, "DELETE dbo.employmentAnalyte WHERE employmentId = @id; DELETE dbo.employment WHERE employmentId = @id", ("@id", id)); }
     }

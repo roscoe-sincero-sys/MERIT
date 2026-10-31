@@ -15,7 +15,7 @@ PROCS = [
     {
         "schema": "dbo", "name": "uspResolveExtractFindingPersons", "kind": "read", "grants": WEB, "ticket": "T084",
         "permission": "extract.run", "desc": "Resolves finding surrogate ids to visible persons in the extract root, only with person.view. Ambiguous surrogate ids have no link.",
-        "params": "@extractRunId UNIQUEIDENTIFIER, @recordIdsJson NVARCHAR (MAX)",
+        "params": "@extractRunId UNIQUEIDENTIFIER\n, @recordIdsJson NVARCHAR (MAX)",
         "key": "CONCAT (N'extractRunId=', @extractRunId)",
         "body": """
 SELECT ids.recordId, TRY_CONVERT (UNIQUEIDENTIFIER, MIN (CONVERT (CHAR (36), p.personId))) AS personId

@@ -1146,13 +1146,43 @@
   "params": [
    {
     "name": "reason",
-    "type": "VARCHAR (30), @reportedValue NVARCHAR (200)",
+    "type": "VARCHAR (30)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "reportedValue",
+    "type": "NVARCHAR (200)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "sender",
+    "type": "UNIQUEIDENTIFIER",
     "hasDefault": true,
     "isOutput": false
    },
    {
     "name": "batch",
     "type": "UNIQUEIDENTIFIER",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "field",
+    "type": "VARCHAR (60)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "value",
+    "type": "NVARCHAR (1000)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "selectedIdsJson",
+    "type": "NVARCHAR (MAX)",
     "hasDefault": true,
     "isOutput": false
    }
@@ -1168,13 +1198,43 @@
   "params": [
    {
     "name": "personId",
-    "type": "UNIQUEIDENTIFIER, @changesJson NVARCHAR (MAX), @unit NVARCHAR (30)",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "changesJson",
+    "type": "NVARCHAR (MAX)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "unit",
+    "type": "NVARCHAR (30)",
     "hasDefault": true,
     "isOutput": false
    },
    {
     "name": "yearBuilt",
     "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "addressKey",
+    "type": "NVARCHAR (300)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "buildingAddressKey",
+    "type": "NVARCHAR (300)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "correctLocation",
+    "type": "BIT",
     "hasDefault": true,
     "isOutput": false
    }
@@ -2246,7 +2306,13 @@
   "params": [
    {
     "name": "investigationId",
-    "type": "UNIQUEIDENTIFIER, @samplesJson NVARCHAR (MAX)",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "samplesJson",
+    "type": "NVARCHAR (MAX)",
     "hasDefault": false,
     "isOutput": false
    }
@@ -3041,7 +3107,19 @@
   "params": [
    {
     "name": "exposureCaseId",
-    "type": "UNIQUEIDENTIFIER, @reason NVARCHAR (2000), @rowVersion BINARY (8)",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "reason",
+    "type": "NVARCHAR (2000)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "rowVersion",
+    "type": "BINARY (8)",
     "hasDefault": false,
     "isOutput": false
    }
@@ -3191,7 +3269,13 @@
   "params": [
    {
     "name": "extractRunId",
-    "type": "UNIQUEIDENTIFIER, @recordIdsJson NVARCHAR (MAX)",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "recordIdsJson",
+    "type": "NVARCHAR (MAX)",
     "hasDefault": false,
     "isOutput": false
    }

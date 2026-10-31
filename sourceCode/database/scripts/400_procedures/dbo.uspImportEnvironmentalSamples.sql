@@ -47,7 +47,8 @@ Description:	Initial version.
 
 ***********************************************************************************************************************/
 CREATE OR ALTER PROCEDURE dbo.uspImportEnvironmentalSamples
-      @investigationId UNIQUEIDENTIFIER, @samplesJson NVARCHAR (MAX)
+      @investigationId UNIQUEIDENTIFIER
+      , @samplesJson NVARCHAR (MAX)
 AS
 BEGIN
     SET NOCOUNT ON;

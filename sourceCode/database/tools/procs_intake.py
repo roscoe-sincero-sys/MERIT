@@ -343,8 +343,13 @@ OFFSET (@pageNumber - 1) * @pageSize ROWS
     {
         "schema": "dbo", "name": "uspCorrectHeldGroup", "kind": "write", "grants": WEB, "ticket": "T105",
         "permission": "result.release_hold", "desc": "Corrects one field of an exact held group, optionally limited to selected rows and a batch.",
-        "params": """@reason VARCHAR (30), @reportedValue NVARCHAR (200) = NULL, @sender UNIQUEIDENTIFIER = NULL,
-@batch UNIQUEIDENTIFIER = NULL, @field VARCHAR (60), @value NVARCHAR (1000) = NULL, @selectedIdsJson NVARCHAR (MAX) = NULL""",
+        "params": """@reason VARCHAR (30)
+, @reportedValue NVARCHAR (200) = NULL
+, @sender UNIQUEIDENTIFIER = NULL
+, @batch UNIQUEIDENTIFIER = NULL
+, @field VARCHAR (60)
+, @value NVARCHAR (1000) = NULL
+, @selectedIdsJson NVARCHAR (MAX) = NULL""",
         "key": "N'group correction'",
         "validate": """IF NULLIF (@reason, '') IS NULL OR @field LIKE '%[^a-zA-Z0-9]%' OR @field IN ('matchPersonId', 'matchNewPerson')
     THROW 50000, N'Choose a cause and a reported field.', 1;""",

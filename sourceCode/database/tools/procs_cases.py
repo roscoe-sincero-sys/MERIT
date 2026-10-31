@@ -8,7 +8,7 @@ PROCS = [
     {
         "schema": "dbo", "name": "uspReopenCase", "kind": "write", "grants": WEB, "ticket": "T081",
         "permission": "case.edit", "desc": "Reopens a closed case with a reason and a review task, retaining the closure activity history.",
-        "params": "@exposureCaseId UNIQUEIDENTIFIER, @reason NVARCHAR (2000), @rowVersion BINARY (8)",
+        "params": "@exposureCaseId UNIQUEIDENTIFIER\n, @reason NVARCHAR (2000)\n, @rowVersion BINARY (8)",
         "key": "CONCAT (N'exposureCaseId=', @exposureCaseId)", "validate": CASE_VISIBLE,
         "body": f"""
 DECLARE @person UNIQUEIDENTIFIER, @analyte UNIQUEIDENTIFIER, @root UNIQUEIDENTIFIER, @owner UNIQUEIDENTIFIER;
@@ -774,7 +774,7 @@ SET @Comments = N'Sample saved.';
         "schema": "dbo", "name": "uspImportEnvironmentalSamples", "kind": "write", "grants": WEB, "ticket": "T081",
         "permission": "investigation.edit",
         "desc": "Atomically imports validated CSV readings. Stable reading ids make repeated submissions idempotent.",
-        "params": "@investigationId UNIQUEIDENTIFIER, @samplesJson NVARCHAR (MAX)",
+        "params": "@investigationId UNIQUEIDENTIFIER\n, @samplesJson NVARCHAR (MAX)",
         "key": "CONCAT (N'investigationId=', @investigationId)",
         "validate": INV_VISIBLE,
         "body": """

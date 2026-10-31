@@ -47,8 +47,13 @@ Description:	Initial version.
 
 ***********************************************************************************************************************/
 CREATE OR ALTER PROCEDURE dbo.uspCorrectHeldGroup
-      @reason VARCHAR (30), @reportedValue NVARCHAR (200) = NULL, @sender UNIQUEIDENTIFIER = NULL,
-      @batch UNIQUEIDENTIFIER = NULL, @field VARCHAR (60), @value NVARCHAR (1000) = NULL, @selectedIdsJson NVARCHAR (MAX) = NULL
+      @reason VARCHAR (30)
+      , @reportedValue NVARCHAR (200) = NULL
+      , @sender UNIQUEIDENTIFIER = NULL
+      , @batch UNIQUEIDENTIFIER = NULL
+      , @field VARCHAR (60)
+      , @value NVARCHAR (1000) = NULL
+      , @selectedIdsJson NVARCHAR (MAX) = NULL
 AS
 BEGIN
     SET NOCOUNT ON;

@@ -47,8 +47,13 @@ Description:	Initial version.
 
 ***********************************************************************************************************************/
 CREATE OR ALTER PROCEDURE dbo.uspCorrectPersonPlace
-      @personId UNIQUEIDENTIFIER, @changesJson NVARCHAR (MAX), @unit NVARCHAR (30) = NULL,
-      @yearBuilt INT = NULL, @addressKey NVARCHAR (300), @buildingAddressKey NVARCHAR (300) = NULL, @correctLocation BIT = 0
+      @personId UNIQUEIDENTIFIER
+      , @changesJson NVARCHAR (MAX)
+      , @unit NVARCHAR (30) = NULL
+      , @yearBuilt INT = NULL
+      , @addressKey NVARCHAR (300)
+      , @buildingAddressKey NVARCHAR (300) = NULL
+      , @correctLocation BIT = 0
 AS
 BEGIN
     SET NOCOUNT ON;

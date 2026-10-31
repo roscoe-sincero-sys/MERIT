@@ -312,7 +312,7 @@ public sealed class PersonService(
             .When(input.EndDate is not null && input.StartDate is not null && input.EndDate < input.StartDate, "EndDate", "The end date is before the start date.")
             .When(existing is not null && input.OriginalModifiedUtc is null, "OriginalModifiedUtc", "Reload the source before editing it.").ThrowIfInvalid();
         if (existing is not null && existing.ModifiedDateUtc != input.OriginalModifiedUtc) throw new ConcurrencyException();
-        Guid? productId = existing?.ProductId;
+        Guid? productId = string.IsNullOrWhiteSpace(input.ProductName) ? null : existing?.ProductId;
         if (!string.IsNullOrWhiteSpace(input.ProductName) && (existing is null || input.ProductName != existing.ProductName || input.ProductBrand != existing.Brand || input.ProductCountry != existing.ProductCountry))
         {
             productId = TimeOrderedId.New();

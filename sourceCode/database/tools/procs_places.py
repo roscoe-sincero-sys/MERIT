@@ -7,8 +7,13 @@ PROCS = [
     {
         "schema": "dbo", "name": "uspCorrectPersonPlace", "kind": "write", "grants": WEB, "ticket": "T076",
         "permission": "person.edit", "desc": "Atomically corrects one person's place and its shared year built after checking the original row version.",
-        "params": """@personId UNIQUEIDENTIFIER, @changesJson NVARCHAR (MAX), @unit NVARCHAR (30) = NULL,
-@yearBuilt INT = NULL, @addressKey NVARCHAR (300), @buildingAddressKey NVARCHAR (300) = NULL, @correctLocation BIT = 0""",
+        "params": """@personId UNIQUEIDENTIFIER
+, @changesJson NVARCHAR (MAX)
+, @unit NVARCHAR (30) = NULL
+, @yearBuilt INT = NULL
+, @addressKey NVARCHAR (300)
+, @buildingAddressKey NVARCHAR (300) = NULL
+, @correctLocation BIT = 0""",
         "key": "CONCAT (N'personId=', @personId)", "validate": PERSON_VISIBLE,
         "body": """
 IF ISJSON (@changesJson, ARRAY) <> 1 OR (SELECT COUNT (*) FROM OPENJSON (@changesJson)) <> 1
