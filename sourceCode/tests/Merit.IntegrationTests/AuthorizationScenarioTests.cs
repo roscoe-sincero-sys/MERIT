@@ -507,6 +507,52 @@ public sealed class AuthorizationScenarioTests(MeritFixture fixture)
     }
 
     [SqlFact]
+    public async Task MixedTenantProfilesReturnRecordSpecificEditCapabilities()
+    {
+        Build();
+        var staff = await ScopeAsync("jbstaff");
+        var jefferson = await TenantAsync("R3-WV-JEF");
+        var berkeley = await TenantAsync("R3-WV-BER");
+        var role = await RoleAsync("R3-WV", "caseManager");
+        var profile = Key("profile:jbstaff:mixedEdit");
+        await SaveProfileAsync(staff, profile, "Write Jefferson, read Berkeley",
+            [new(jefferson, role, true, "write"), new(berkeley, role, true, "read")]);
+        var scope = await ScopeAsync("jbstaff", profile: profile);
+        var tasks = await RowsAsync(scope, "dbo.uspListWorkTasks", new() { ["taskStatus"] = "open" });
+        Assert.True((bool)tasks.Single(t => (string)t["title"]! == "Jefferson task")["canEdit"]!);
+        Assert.False((bool)tasks.Single(t => (string)t["title"]! == "Berkeley task")["canEdit"]!);
+
+        var ids = new[] { Guid.NewGuid(), Guid.NewGuid() };
+        await using var connection = new SqlConnection(TestEnvironment.AdminConnectionString());
+        await connection.OpenAsync();
+        try
+        {
+            for (int i = 0; i < ids.Length; i++)
+            {
+                await using var cmd = new SqlCommand("""
+                    INSERT dbo.cluster (clusterId, rootTenantId, owningTenantId, clusterType, sharedKey, title, windowStart, windowEnd)
+                    SELECT @id, rootTenantId, tenantId, 'building', @id, N'Capability test', '2026-01-01', '2026-10-31'
+                      FROM auth.tenant WHERE tenantId = @tenant;
+                    """, connection);
+                cmd.Parameters.AddWithValue("@id", ids[i]);
+                cmd.Parameters.AddWithValue("@tenant", i == 0 ? jefferson : berkeley);
+                await cmd.ExecuteNonQueryAsync();
+                var header = (await RowsAsync(scope, "dbo.uspGetCluster", new() { ["clusterId"] = ids[i] })).Single();
+                Assert.Equal(i == 0, (bool)header["canEdit"]!);
+            }
+        }
+        finally
+        {
+            foreach (var id in ids)
+            {
+                await using var cmd = new SqlCommand("DELETE dbo.cluster WHERE clusterId = @id", connection);
+                cmd.Parameters.AddWithValue("@id", id);
+                await cmd.ExecuteNonQueryAsync();
+            }
+        }
+    }
+
+    [SqlFact]
     public async Task ReducedProfilesNeverExceedTheMaster()
     {
         Build();
@@ -532,6 +578,9 @@ public sealed class AuthorizationScenarioTests(MeritFixture fixture)
         // Using the read-only profile: Berkeley only, read only, and a change is refused by the database.
         var scope = await ScopeAsync("jbstaff", profile: readOnly);
         Assert.Equal(new[] { "R3-WV-BER" }, await ScopeTenantCodesAsync(scope));
+        var readTasks = await RowsAsync(scope, "dbo.uspListWorkTasks", new() { ["taskStatus"] = "open" });
+        Assert.NotEmpty(readTasks);
+        Assert.All(readTasks, t => Assert.False((bool)t["canEdit"]!));
         var task = await TaskIdAsync("Berkeley task");
         await Assert.ThrowsAsync<SqlException>(() => RunAsync(scope, "dbo.uspUpdateWorkTasks",
             new() { ["workTaskIdsJson"] = JsonSerializer.Serialize(new[] { task }), ["action"] = "assignToMe" }));

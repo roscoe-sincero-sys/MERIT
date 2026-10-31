@@ -374,7 +374,7 @@ test('work queues: changing status, assigned-to-me, or urgent-only clears select
   const taskA = '00000000-0000-0000-0000-00000000061a';
   const taskB = '00000000-0000-0000-0000-00000000061b';
   const makeTask = (id: string, title: string, isUrgent: boolean) => ({
-    workTaskId: id, queueCode: 'caseFollowUp', title, detail: null, taskStatus: 'open', isUrgent,
+    canEdit: true, workTaskId: id, queueCode: 'caseFollowUp', title, detail: null, taskStatus: 'open', isUrgent,
     dueDate: '2026-11-01', personId: null, personName: null, exposureCaseId: null, caseNumber: null,
     stagingRowId: null, assignedToUserId: null, assignedToName: null, createdUtc: '2026-10-28T12:00:00Z',
   });
@@ -427,7 +427,9 @@ test('work queues: changing status, assigned-to-me, or urgent-only clears select
   await page.keyboard.press('Space');
   await expect(assignToMe).toBeEnabled();
   await page.getByLabel('Status').selectOption('done');
-  await expect(assignToMe).toBeDisabled();
+  await expect(assignToMe).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Reopen selected' })).toBeDisabled();
+  await page.getByLabel('Status').selectOption('open');
 
   // Select task B, then toggle "Urgent only": selection must clear again.
   await firstRowBox.focus();
@@ -451,7 +453,7 @@ test('work queues: a delayed filter load superseded by sorting cannot carry stal
   const taskA = '00000000-0000-0000-0000-00000000610a';
   const taskB = '00000000-0000-0000-0000-00000000610b';
   const makeTask = (id: string, title: string, isUrgent: boolean) => ({
-    workTaskId: id, queueCode: 'caseFollowUp', title, detail: null, taskStatus: 'open', isUrgent,
+    canEdit: true, workTaskId: id, queueCode: 'caseFollowUp', title, detail: null, taskStatus: 'open', isUrgent,
     dueDate: '2026-11-01', personId: null, personName: null, exposureCaseId: null, caseNumber: null,
     stagingRowId: null, assignedToUserId: null, assignedToName: null, createdUtc: '2026-10-28T12:00:00Z',
   });
@@ -531,6 +533,7 @@ test('work queues: a delayed filter load superseded by sorting cannot carry stal
   await firstRowBox.focus();
   await page.keyboard.press('Space');
   await expect(page.locator('.grid-count')).toHaveText('1 row, 1 selected');
+  page.once('dialog', dialog => dialog.accept());
   await page.getByRole('button', { name: 'Complete' }).click();
   expect(bulkPayloads).toEqual([{ taskIds: [taskB], action: 'complete' }]);
 });

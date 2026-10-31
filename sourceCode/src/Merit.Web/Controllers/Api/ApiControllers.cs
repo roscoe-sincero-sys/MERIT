@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Merit.Application.Data;
+using Merit.Web.Infrastructure;
 using Merit.Application.Intake;
 using Merit.Application.Reference;
 using Merit.Application.Security;
@@ -26,7 +27,7 @@ public sealed class MeController(ICurrentSession session) : ControllerBase
 
 [ApiController]
 [Route("api/v1")]
-public sealed class QueuesController(QueueService queues, CaseService cases) : ControllerBase
+public sealed class QueuesController(QueueService queues, CaseService cases, ICurrentSession session) : ControllerBase
 {
     [HttpGet("queues")]
     [Authorize(Policy = Permissions.TaskView)]
@@ -43,13 +44,14 @@ public sealed class QueuesController(QueueService queues, CaseService cases) : C
     {
         page = Math.Max(page, 1);
         pageSize = Math.Clamp(pageSize, 1, 500);
-        var rows = await queues.ListAsync(new WorkTaskQuery(string.IsNullOrEmpty(queue) ? null : queue,
-            string.IsNullOrEmpty(status) ? null : status, mine, urgent, sort, desc, page, pageSize), ct);
+        var result = await Paging.ReadAsync(page, pageSize, p => queues.ListAsync(new WorkTaskQuery(string.IsNullOrEmpty(queue) ? null : queue,
+            string.IsNullOrEmpty(status) ? null : status, mine, urgent, sort, desc, p, pageSize), ct), r => r.TotalCount);
+        var rows = result.Rows;
         return new PagedResult<WorkTaskDto>(rows.Select(r => new WorkTaskDto(r.WorkTaskId, r.QueueCode, r.Title, r.Detail, r.IsUrgent,
                 r.DueDate, r.TaskStatus, r.CreatedDateUtc, r.PersonId,
                 r.LastName is null ? null : $"{r.LastName}, {r.FirstName}", r.ExposureCaseId, r.CaseNumber, r.AssignedToUserId,
-                r.AssignedToName)).ToList(),
-            rows.FirstOrDefault()?.TotalCount ?? 0, page, pageSize);
+                r.AssignedToName, r.CanEdit && session.Has(Permissions.TaskEdit))).ToList(),
+            result.Total, result.Page, pageSize);
     }
 
     [HttpPost("tasks/bulk")]
@@ -123,11 +125,12 @@ public sealed class HeldRecordsController(IntakeService intake, IReferenceDataPr
     {
         page = Math.Max(page, 1);
         pageSize = Math.Clamp(pageSize, 1, 500);
-        var rows = await intake.HeldRowsAsync(reason, value, sender, exact, batch, page, pageSize, ct);
+        var result = await Paging.ReadAsync(page, pageSize, p => intake.HeldRowsAsync(reason, value, sender, exact, batch, p, pageSize, ct), r => r.TotalCount);
+        var rows = result.Rows;
         var names = (await reference.GetAsync(ct)).Names;
         return new PagedResult<HeldRowDto>(rows.Select(r => new HeldRowDto(r.StagingRowId, r.IntakeBatchId, r.FileName, r.SenderName,
                 r.RowNumber, Parse(r.ParsedJson), Parse(r.CorrectedJson), r.IsUrgent, r.HeldSinceUtc, r.AssignedToName, ReasonText(r.Reasons, names), ReasonCodes(r.Reasons))).ToList(),
-            rows.FirstOrDefault()?.TotalCount ?? 0, page, pageSize);
+            result.Total, result.Page, pageSize);
     }
 
     [HttpPut("rows/{id:guid}/correction")]

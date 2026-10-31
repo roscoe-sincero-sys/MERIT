@@ -54,7 +54,7 @@ services.AddAuthentication(AuthSchemes.Session)
         o.AccessDeniedPath = "/account/denied";
         o.Events = new CookieAuthenticationEvents
         {
-            // An expired session on an htmx request returns HX-Redirect to sign-in; on the API, 401.
+            // Interactive clients retain their in-memory drafts on 401 and offer sign-in in another tab.
             OnRedirectToLogin = ctx =>
             {
                 if (ctx.Request.Path.StartsWithSegments("/api", StringComparison.OrdinalIgnoreCase))
@@ -64,7 +64,6 @@ services.AddAuthentication(AuthSchemes.Session)
                 else if (ctx.Request.IsHtmx())
                 {
                     ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
-                    ctx.Response.Headers["HX-Redirect"] = "/account/signin";
                 }
                 else
                 {

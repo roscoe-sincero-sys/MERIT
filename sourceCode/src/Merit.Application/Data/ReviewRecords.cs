@@ -129,6 +129,8 @@ public sealed class ClusterListRow
 
 public sealed class ClusterRow
 {
+    public bool CanEdit { get; init; }
+
     public Guid ClusterId { get; init; }
 
     public string ClusterType { get; init; } = string.Empty;
