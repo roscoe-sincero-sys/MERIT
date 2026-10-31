@@ -2,6 +2,7 @@
 @{
     ViewData["Title"] = Model.FullName;
 }
+<partial name="_ReturnToList" />
 <partial name="_Header" model="Model" />
 <partial name="_AuditLink" model='(Model.Person.PersonId, "person")' />
 

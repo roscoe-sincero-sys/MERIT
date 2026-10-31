@@ -105,6 +105,7 @@ BEGIN
         SELECT w.workTaskId, w.queueCode, w.title, w.detail, w.isUrgent, w.dueDate, w.taskStatus, w.createdDateUtc,
                w.personId, p.lastName, p.firstName, w.exposureCaseId, c.caseNumber, w.labResultId, w.investigationId,
                w.stagingRowId, w.assignedToUserId, u.displayName AS assignedToName, w.rowVersion,
+               CAST (CASE WHEN EXISTS (SELECT 1 FROM auth.tvfTenantWritePredicate (w.rootTenantId, w.owningTenantId, w.isDeleted)) THEN 1 ELSE 0 END AS BIT) AS canEdit,
                COUNT (*) OVER () AS totalCount
           FROM dbo.workTask AS w
           LEFT JOIN dbo.person AS p ON p.personId = w.personId

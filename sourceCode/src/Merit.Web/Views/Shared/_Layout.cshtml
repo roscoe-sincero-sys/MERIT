@@ -1,22 +1,26 @@
 @inject ICurrentSession CurrentSession
+@inject IConfiguration Configuration
+@using Microsoft.AspNetCore.Authentication
 @{
     string path = Context.Request.Path.Value ?? "/";
     string Current(string prefix) => (prefix == "/" ? path == "/" : path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) ? "page" : "false";
     bool signedIn = CurrentSession.IsAuthenticated;
+    long? sessionExpires = (await Context.AuthenticateAsync(AuthSchemes.Session)).Properties?.ExpiresUtc?.ToUnixTimeMilliseconds();
 }
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="htmx-config" content='{"extensions":"hx-csp","defaultTimeout":60000}' />
+    @* Angular owns history inside its host; htmx must not replace its running document during Back/Forward. *@
+    <meta name="htmx-config" content='{"extensions":"hx-csp","defaultTimeout":60000,"history":@(ViewData["AngularHost"] is true ? "false" : "\"reload\"")}' />
     <title>@(ViewData["Title"] is string t ? t + " - " : string.Empty)MERIT</title>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="~/lib/uswds-3.14.0/css/uswds.min.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/css/merit.css" asp-append-version="true" />
     @await RenderSectionAsync("Head", required: false)
 </head>
-<body>
+<body data-session-minutes="@(signedIn ? Configuration.GetValue("Session:IdleTimeoutMinutes", 20) : 0)" data-session-user="@CurrentSession.UserName" data-session-expires="@sessionExpires">
     <a class="merit-skip" href="#main-content">Skip to main content</a>
     <header class="merit-header" role="banner">
         <div class="merit-header__inner">
@@ -84,6 +88,7 @@
 
     <dialog id="dialog" class="merit-dialog" aria-labelledby="dialog-title">
         <button type="button" class="usa-button usa-button--unstyled merit-dialog__close" data-close-dialog aria-label="Close dialog">Close</button>
+        <div id="dialog-alert-region" role="region" aria-label="Dialog alerts"></div>
         <div id="dialog-body" class="merit-dialog__content"></div>
     </dialog>
 

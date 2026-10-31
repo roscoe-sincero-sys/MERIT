@@ -4,6 +4,7 @@
     ViewData["Title"] = "Lab result";
 }
 @if (r.PersonId is Guid pid) { <p><a class="usa-link" href="/people/@pid">Back to the person</a></p> }
+<partial name="_ReturnToList" />
 <h1>@r.AnalyteName result, collected @Options.Date(r.CollectedDate)</h1>
 <div class="merit-grid-2">
     <section class="merit-section">

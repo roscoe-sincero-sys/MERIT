@@ -206,7 +206,7 @@ test('held paging clears match-review selection and releases only the eligible v
   await page.locator('merit-data-grid tbody input[type=checkbox]').focus();
   await page.keyboard.press('Space');
   await expect(page.getByRole('button', { name: 'Release selected' })).toBeDisabled();
-  await page.getByRole('button', { name: 'Next', exact: true }).click();
+  await page.getByRole('button', { name: 'Next page', exact: true }).click();
   await expect(page.locator('.grid-count')).toHaveText('51 rows');
   await expect(page.getByRole('button', { name: 'Release selected' })).toBeDisabled();
   await page.locator('merit-data-grid tbody input[type=checkbox]').focus();

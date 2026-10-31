@@ -1,5 +1,6 @@
-import { ChangeDetectionStrategy, Component, computed, inject, Injectable, input, OnInit, signal } from '@angular/core';
-import { Router } from '@angular/router';
+import { ChangeDetectionStrategy, Component, computed, inject, Injectable, OnInit, signal } from '@angular/core';
+import { ViewQuery } from '../../shared/view-query';
+import { ParamMap } from '@angular/router';
 import { ApiClient, problemMessage } from '../../api/api-client';
 import { AnalyteOptionDto, ReportCell, ReportDto, ReportSummaryDto } from '../../api/contracts';
 import { ChartSeries, SeriesChartComponent } from '../../shared/chart/series-chart.component';
@@ -26,7 +27,7 @@ export class ReportsStore {
 @Component({
   selector: 'merit-reports-page',
   imports: [SeriesChartComponent],
-  providers: [ReportsStore],
+  providers: [ReportsStore, ViewQuery],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <h1 tabindex="-1">Reports</h1>
@@ -69,8 +70,8 @@ export class ReportsStore {
           } @else {
             <div class="measure">
               <label class="usa-label" for="r-measure">Chart</label>
-              <select class="usa-select" id="r-measure" [value]="measureKey()" (change)="store.measure.set($any($event.target).value)">
-                @for (m of r.chart.measures; track m) { <option [value]="m">{{ label(r, m) }}</option> }
+              <select class="usa-select" id="r-measure" [value]="measureKey()" (change)="chooseMeasure($any($event.target).value)">
+                @for (m of r.chart.measures; track m) { <option [value]="m" [selected]="m === measureKey()">{{ label(r, m) }}</option> }
               </select>
             </div>
             <merit-series-chart [kind]="r.chart.kind" [categories]="chart().categories" [series]="chart().series"
@@ -110,10 +111,10 @@ export class ReportsPage implements OnInit {
   protected readonly store = inject(ReportsStore);
   private readonly api = inject(ApiClient);
   protected readonly display = inject(Display);
-  private readonly router = inject(Router);
+  private readonly view = inject(ViewQuery);
   private readonly libraryLoad = new LatestRequest();
   private readonly reportLoad = new LatestRequest();
-  readonly codeParam = input<string | undefined>(undefined, { alias: 'code' });
+  private reportQuery: string | null = null;
 
   protected readonly measureKey = computed(() => {
     const r = this.store.report();
@@ -145,22 +146,33 @@ export class ReportsPage implements OnInit {
   });
 
   ngOnInit(): void {
+    this.view.watch((query, refresh) => this.readView(query, refresh));
     this.api.analytes().subscribe({ next: a => this.store.analytes.set(a), error: () => this.store.analytes.set([]) });
     this.libraryLoad.run(this.api.reports(), {
       next: lib => {
         this.store.library.set(lib);
-        const first = lib.find(r => r.code === this.codeParam()) ?? lib[0];
-        if (first) this.run(first.code);
+        this.view.refresh();
       },
       error: e => this.store.error.set(problemMessage(e)),
     });
   }
 
+  private readView(query: ParamMap, refresh: boolean): void {
+    this.store.filters.set({ from: query.get('from') ?? '', to: query.get('to') ?? '', analyteId: query.get('analyteId') ?? '' });
+    this.store.measure.set(query.get('measure'));
+    const library = this.store.library();
+    const report = library.find(r => r.code === query.get('code')) ?? library[0];
+    if (!report) return;
+    const key = JSON.stringify([report.code, this.store.filters()]);
+    if (!refresh && key === this.reportQuery) return;
+    this.reportQuery = key;
+    this.run(report.code);
+  }
+
   protected choose(event: Event, code: string): void {
     event.preventDefault();
     this.store.measure.set(null);
-    void this.router.navigate([], { queryParams: { code }, replaceUrl: true });
-    this.run(code);
+    this.view.set({ code, measure: null });
   }
 
   protected apply(event: Event): void {
@@ -168,8 +180,10 @@ export class ReportsPage implements OnInit {
     const f = new FormData(event.target as HTMLFormElement);
     this.store.filters.set({ from: String(f.get('from') ?? ''), to: String(f.get('to') ?? ''), analyteId: String(f.get('analyteId') ?? '') });
     const code = this.store.code();
-    if (code) this.run(code);
+    if (code) this.view.set({ code, ...this.store.filters() });
   }
+
+  protected chooseMeasure(measure: string): void { this.view.set({ measure }); }
 
   protected exportUrl(format: 'csv' | 'xlsx'): string {
     const r = this.store.report();

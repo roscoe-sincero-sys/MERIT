@@ -5,6 +5,7 @@ import { MapPoint, PointMapComponent } from '../../shared/map/point-map.componen
 import { CLASSIFICATIONS } from '../map/case-map.page';
 import { Display } from '../../shared/display.service';
 import { LatestRequest } from '../../shared/latest-request';
+import { PagerComponent } from '../../shared/pager.component';
 
 const TYPE_LABELS: Record<string, string> = {
   location: 'Shared location', building: 'Shared building', childCareSite: 'Child-care site', worksite: 'Shared worksite',
@@ -14,6 +15,10 @@ const STATUS_LABELS: Record<ClusterStatus, string> = { open: 'Open', underReview
 
 @Injectable()
 export class ClustersStore {
+  readonly page = signal(1);
+  readonly pageSize = signal(200);
+  readonly total = signal(0);
+  readonly loading = signal(false);
   readonly status = signal('');
   readonly clusters = signal<ClusterListItemDto[]>([]);
   readonly error = signal<string | null>(null);
@@ -22,6 +27,7 @@ export class ClustersStore {
 /** Cluster review list: groups flagged by detection, open first. Nothing was merged; staff review each. */
 @Component({
   selector: 'merit-clusters-page',
+  imports: [PagerComponent],
   providers: [ClustersStore],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
@@ -34,7 +40,8 @@ export class ClustersStore {
         <option value="">All</option><option value="open">Open</option><option value="underReview">Under review</option><option value="closed">Closed</option>
       </select>
     </div>
-    @if (store.clusters().length === 0) { <p class="merit-empty">No clusters.</p> } @else {
+    <merit-pager label="Clusters" [page]="store.page()" [size]="store.pageSize()" [total]="store.total()" [busy]="store.loading()" (change)="goPage($event)" />
+    @if (store.clusters().length === 0 && !store.loading()) { <p class="merit-empty">No clusters.</p> } @else {
       <div class="merit-table-wrap" tabindex="0" role="region" aria-label="Clusters; scroll sideways for more columns">
       <table class="usa-table usa-table--borderless">
         <caption class="usa-sr-only">Clusters</caption>
@@ -69,6 +76,7 @@ export class ClustersPage implements OnInit {
 
   protected setStatus(status: string): void {
     this.store.status.set(status);
+    this.store.page.set(1);
     this.load();
   }
 
@@ -80,11 +88,14 @@ export class ClustersPage implements OnInit {
     return STATUS_LABELS[s];
   }
 
+  protected goPage(page: number): void { if (!this.store.loading()) { this.store.page.set(page); this.load(); } }
+
   private load(): void {
+    this.store.loading.set(true);
     this.store.error.set(null);
-    this.clustersLoad.run(this.api.clusters({ status: this.store.status(), page: 1, pageSize: 200 }), {
-      next: p => this.store.clusters.set(p.items),
-      error: e => this.store.error.set(problemMessage(e)),
+    this.clustersLoad.run(this.api.clusters({ status: this.store.status(), page: this.store.page(), pageSize: this.store.pageSize() }), {
+      next: p => { this.store.clusters.set(p.items); this.store.total.set(p.totalCount); this.store.page.set(p.pageNumber); this.store.pageSize.set(p.pageSize); this.store.loading.set(false); },
+      error: e => { this.store.error.set(problemMessage(e)); this.store.loading.set(false); },
     });
   }
 }
@@ -111,6 +122,7 @@ export class ClusterStore {
       <h1 tabindex="-1">{{ c.title }}</h1>
       <p class="merit-meta">{{ typeLabel(c.clusterType) }} &middot; window {{ display.date(c.windowStart) }} to {{ display.date(c.windowEnd) }} &middot; owned by {{ c.owningTenantName }}</p>
 
+      @if (c.canEdit) {
       <form class="usa-form usa-form--large status" (submit)="save($event)">
         <label class="usa-label" for="cl-status">Status</label>
         <select class="usa-select" id="cl-status" name="status">
@@ -120,6 +132,10 @@ export class ClusterStore {
         <textarea class="usa-textarea" id="cl-notes" name="notes" maxlength="2000">{{ c.notes ?? '' }}</textarea>
         <button class="usa-button" type="submit" [disabled]="store.busy()">Save</button>
       </form>
+      } @else {
+        <p>Status: {{ statusLabel(c.status) }}</p><h2>Notes</h2><p>{{ c.notes || 'No notes recorded.' }}</p>
+        <p class="merit-meta">You have read-only access to this cluster.</p>
+      }
 
       <h2>Cases</h2>
       @if (points().length > 0) {
@@ -140,7 +156,7 @@ export class ClusterStore {
               <td>{{ m.addressLabel ?? '—' }}</td>
               <td class="nowrap">{{ display.date(m.joinedDate) }}@if (m.leftDate) { (left {{ display.date(m.leftDate) }})}</td>
               <td>
-                @if (c.status !== 'closed') {
+                @if (c.canEdit && c.status !== 'closed') {
                   <button class="usa-button usa-button--unstyled" type="button" [disabled]="store.busy()" (click)="member(m.caseNumber, !!m.leftDate)">
                     {{ m.leftDate ? 'Rejoin' : 'Remove from cluster' }}<span class="usa-sr-only"> {{ m.caseNumber }}</span></button>
                 }
@@ -150,7 +166,7 @@ export class ClusterStore {
         </tbody>
       </table>
       </div>
-      @if (c.status !== 'closed') {
+      @if (c.canEdit && c.status !== 'closed') {
         <form class="add" (submit)="add($event)">
           <label class="usa-label" for="cl-case">Add a case by number</label>
           <input class="usa-input" id="cl-case" name="caseNumber" placeholder="PB-2026-000123" maxlength="20" required />
@@ -210,7 +226,7 @@ export class ClusterPage implements OnInit {
   protected save(event: Event): void {
     event.preventDefault();
     const c = this.store.cluster();
-    if (!c) return;
+    if (!c || !c.canEdit) return;
     const f = new FormData(event.target as HTMLFormElement);
     this.run(this.api.updateCluster(c.clusterId, { status: String(f.get('status')) as ClusterStatus, notes: String(f.get('notes') ?? '') || null,
       rowVersion: c.rowVersion }), 'Cluster saved.');
@@ -218,7 +234,7 @@ export class ClusterPage implements OnInit {
 
   protected member(caseNumber: string, isMember: boolean): void {
     const c = this.store.cluster();
-    if (c) this.run(this.api.setClusterMember(c.clusterId, { caseNumber, isMember }), isMember ? `${caseNumber} rejoined.` : `${caseNumber} left the cluster.`);
+    if (c?.canEdit) this.run(this.api.setClusterMember(c.clusterId, { caseNumber, isMember }), isMember ? `${caseNumber} rejoined.` : `${caseNumber} left the cluster.`);
   }
 
   protected add(event: Event): void {
@@ -226,7 +242,7 @@ export class ClusterPage implements OnInit {
     const form = event.target as HTMLFormElement;
     const caseNumber = String(new FormData(form).get('caseNumber') ?? '').trim();
     const c = this.store.cluster();
-    if (c && caseNumber && !this.store.busy()) {
+    if (c?.canEdit && caseNumber && !this.store.busy()) {
       this.run(this.api.setClusterMember(c.clusterId, { caseNumber, isMember: true }), `${caseNumber} added.`);
       form.reset();
     }

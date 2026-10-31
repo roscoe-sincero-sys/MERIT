@@ -89,7 +89,8 @@ BEGIN
         -- =========================================================================================
 
         SELECT cl.clusterId, cl.clusterType, cl.sharedKey, cl.title, cl.clusterStatus, cl.windowStart, cl.windowEnd, cl.notes,
-               cl.createdDateUtc, t.tenantName AS owningTenantName, cl.rowVersion
+               cl.createdDateUtc, t.tenantName AS owningTenantName, cl.rowVersion,
+               CAST (CASE WHEN EXISTS (SELECT 1 FROM auth.tvfTenantWritePredicate (cl.rootTenantId, cl.owningTenantId, cl.isDeleted)) THEN 1 ELSE 0 END AS BIT) AS canEdit
           FROM dbo.cluster AS cl
           LEFT JOIN auth.tenant AS t ON t.tenantId = cl.owningTenantId
          WHERE cl.clusterId = @clusterId;

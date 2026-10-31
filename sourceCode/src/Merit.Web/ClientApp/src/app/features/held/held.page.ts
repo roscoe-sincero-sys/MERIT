@@ -16,6 +16,7 @@ export class HeldStore {
   readonly rows = signal<PagedResult<HeldRowDto>>({ items: [], totalCount: 0, pageNumber: 1, pageSize: 50 });
   readonly selected = signal<ReadonlySet<string>>(new Set<string>());
   readonly loading = signal(false);
+  readonly busy = signal(false);
   readonly message = signal<string | null>(null);
   readonly error = signal<string | null>(null);
   readonly focusRow = signal<HeldRowDto | null>(null);
@@ -49,15 +50,15 @@ export function needsMatchReview(r: HeldRowDto): boolean {
 
     @if (store.batch()) {
       <p class="usa-alert usa-alert--info usa-alert--slim">Showing batch: <strong>{{ store.batchFileName() ?? store.batch() }}</strong>.
-        <button type="button" class="usa-button usa-button--unstyled" (click)="clearBatch()">Show all batches</button></p>
+        <button type="button" class="usa-button usa-button--unstyled" [disabled]="store.busy()" (click)="clearBatch()">Show all batches</button></p>
     }
     <h2>By cause</h2>
     @if (store.groups().length === 0) { <p class="merit-empty">Nothing is held.</p> }
     <ul class="groups">
-      <li><button type="button" class="usa-button usa-button--unstyled" [attr.aria-pressed]="store.group() === null" (click)="choose(null)">{{ store.batch() ? 'All held rows in this batch' : 'All held rows' }}</button></li>
+      <li><button type="button" class="usa-button usa-button--unstyled" [attr.aria-pressed]="store.group() === null" [disabled]="store.busy()" (click)="choose(null)">{{ store.batch() ? 'All held rows in this batch' : 'All held rows' }}</button></li>
       @for (g of store.groups(); track groupKey(g)) {
         <li>
-          <button type="button" class="usa-button usa-button--unstyled" [attr.aria-pressed]="isChosen(g)" (click)="choose(g)">
+          <button type="button" class="usa-button usa-button--unstyled" [attr.aria-pressed]="isChosen(g)" [disabled]="store.busy()" (click)="choose(g)">
             {{ label(g.reasonCode) }}@if (g.reportedValue) { : <code>{{ g.reportedValue }}</code> } &middot; {{ sender(g) }} &middot; {{ g.rowCount }} row(s)
           </button>
           @if (g.urgentCount > 0) { <span class="urgent">{{ g.urgentCount }} urgent</span> }
@@ -66,6 +67,7 @@ export function needsMatchReview(r: HeldRowDto): boolean {
       }
     </ul>
 
+    @if (store.busy()) { <p role="status">Saving changes&hellip;</p> }
     <h2>Rows</h2>
     <p class="merit-meta" id="held-scope" aria-live="polite">
       @if (store.group(); as g) {
@@ -75,11 +77,11 @@ export function needsMatchReview(r: HeldRowDto): boolean {
       }
     </p>
     <div class="bulk" role="group" aria-label="Actions on selected rows" aria-describedby="held-scope">
-      <button class="usa-button" type="button" [disabled]="store.loading() || store.releasable().length === 0" (click)="release()"
+      <button class="usa-button" type="button" [disabled]="store.loading() || store.busy() || store.releasable().length === 0" (click)="release()"
               [attr.aria-describedby]="store.selectedForMatch().length > 0 ? 'release-match-note' : null">Release selected</button>
       <label class="usa-label" for="reject-reason">Reject reason</label>
-      <input class="usa-input" id="reject-reason" #reason />
-      <button class="usa-button usa-button--secondary" type="button" [disabled]="store.loading() || store.selected().size === 0" (click)="reject(reason.value)">Reject selected</button>
+      <input class="usa-input" id="reject-reason" #reason [disabled]="store.busy()" />
+      <button class="usa-button usa-button--secondary" type="button" [disabled]="store.loading() || store.busy() || store.selected().size === 0" (click)="reject(reason.value)">Reject selected</button>
     </div>
     @if (store.selectedForMatch().length > 0) {
       <p class="merit-meta" id="release-match-note">
@@ -92,7 +94,7 @@ export function needsMatchReview(r: HeldRowDto): boolean {
       </p>
     }
     <merit-data-grid gridId="held" caption="Held rows" [columns]="columns" [rows]="store.rows().items" [total]="store.rows().totalCount"
-                     [page]="store.page()" [pageSize]="50" [loading]="store.loading()" [selectable]="true" [selectionDisabled]="store.loading()" [selected]="store.selected()"
+                     [page]="store.page()" [pageSize]="50" [loading]="store.loading() || store.busy()" [selectable]="true" [selectionDisabled]="store.loading() || store.busy()" [selected]="store.selected()"
                      [rowKey]="key" emptyText="No held rows in this group." (pageChange)="onPage($event)" (selectionChange)="onSelect($event)" />
 
     @if (store.focusRow(); as r) {
@@ -103,11 +105,11 @@ export function needsMatchReview(r: HeldRowDto): boolean {
           <tbody>
             @for (k of fields(r); track k) {
               <tr><th scope="row">{{ display.field(k) }}</th><td>{{ hasReported(r, k) ? (r.reported[k] ?? '(empty)') : '(not supplied)' }}</td>
-                <td><label class="usa-sr-only" [for]="'fix-' + k">Correct {{ display.field(k) }}</label><input class="usa-input" [id]="'fix-' + k" [value]="r.corrected[k] ?? ''" (change)="setFix(k, $event)" /></td></tr>
+                <td><label class="usa-sr-only" [for]="'fix-' + k">Correct {{ display.field(k) }}</label><input class="usa-input" [id]="'fix-' + k" [value]="r.corrected[k] ?? ''" [disabled]="store.busy() || store.loading()" (input)="setFix(k, $event)" /></td></tr>
             }
           </tbody>
         </table>
-        <button class="usa-button usa-button--outline" type="button" (click)="saveFix(r)">Save correction</button>
+        <button class="usa-button usa-button--outline" type="button" [disabled]="store.busy() || store.loading()" (click)="saveFix(r)">Save correction</button>
       </section>
     }
   `,
@@ -175,6 +177,7 @@ export class HeldPage implements OnInit {
   }
 
   protected choose(g: HeldGroupDto | null): void {
+    if (this.store.busy()) return;
     this.store.group.set(g);
     this.store.page.set(1);
     this.store.selected.set(new Set<string>());
@@ -184,6 +187,7 @@ export class HeldPage implements OnInit {
   }
 
   protected onPage(p: number): void {
+    if (this.store.busy()) return;
     this.store.page.set(p);
     this.clearSelection();
     this.loadRows();
@@ -191,7 +195,7 @@ export class HeldPage implements OnInit {
 
   /** Selecting exactly one row opens its reported values beside a correction form. */
   protected onSelect(ids: ReadonlySet<string>): void {
-    if (this.store.loading()) return;
+    if (this.store.loading() || this.store.busy()) return;
     this.store.selected.set(ids);
     const only = ids.size === 1 ? [...ids][0] : null;
     this.store.focusRow.set(this.store.rows().items.find(r => r.stagingRowId === only) ?? null);
@@ -212,6 +216,7 @@ export class HeldPage implements OnInit {
   }
 
   protected clearBatch(): void {
+    if (this.store.busy()) return;
     this.store.batch.set(null);
     this.store.batchFileName.set(null);
     this.store.group.set(null);
@@ -229,35 +234,48 @@ export class HeldPage implements OnInit {
 
   /** Sends only the fields changed since the row was opened; the server merges them into what is stored (issue #10). */
   protected saveFix(r: HeldRowDto): void {
+    if (this.store.loading() || this.store.busy() || this.store.focusRow()?.stagingRowId !== r.stagingRowId) return;
+    this.beginWrite();
     this.api.correctHeld(r.stagingRowId, { ...this.fixes }).subscribe({
-      next: () => { this.store.message.set('Correction saved beside the reported values. Release the row to load it.'); this.fixes = {}; this.loadRows(); },
-      error: e => this.store.error.set(problemMessage(e)),
+      next: () => { this.store.busy.set(false); this.store.message.set('Correction saved beside the reported values. Release the row to load it.'); this.fixes = {}; this.loadRows(); },
+      error: e => { this.store.busy.set(false); this.store.error.set(problemMessage(e)); this.loadGroups(true); },
     });
   }
 
   protected release(): void {
-    if (this.store.loading() || this.store.releasable().length === 0) return;
+    if (this.store.loading() || this.store.busy() || this.store.releasable().length === 0) return;
     const waiting = this.store.selectedForMatch().length;
+    this.beginWrite();
     this.api.releaseHeld({ stagingRowIds: this.store.releasable(), reason: null }).subscribe({
       next: r => this.done(`${r.updated} row(s) released; they rerun validation and matching in the background.`
         + (waiting > 0 ? ` ${waiting} left for Match review.` : '')),
-      error: e => this.store.error.set(problemMessage(e)),
+      error: e => { this.store.busy.set(false); this.store.error.set(problemMessage(e)); this.loadGroups(true); },
     });
   }
 
   protected reject(reason: string): void {
-    if (this.store.loading() || this.store.selected().size === 0) return;
+    if (this.store.loading() || this.store.busy() || this.store.selected().size === 0) return;
     if (!reason.trim()) {
       this.store.error.set('A reason is required to reject held records.');
       return;
     }
+    this.beginWrite();
     this.api.rejectHeld({ stagingRowIds: [...this.store.selected()], reason }).subscribe({
       next: r => this.done(`${r.updated} row(s) rejected.`),
-      error: e => this.store.error.set(problemMessage(e)),
+      error: e => { this.store.busy.set(false); this.store.error.set(problemMessage(e)); this.loadGroups(true); },
     });
   }
 
+  private beginWrite(): void {
+    this.rowsLoad.cancel();
+    this.groupsLoad.cancel();
+    this.store.busy.set(true);
+    this.store.error.set(null);
+    this.store.message.set(null);
+  }
+
   private done(message: string): void {
+    this.store.busy.set(false);
     this.store.error.set(null);
     this.store.message.set(message);
     this.store.selected.set(new Set<string>());
@@ -266,14 +284,14 @@ export class HeldPage implements OnInit {
     this.loadRows();
   }
 
-  private loadGroups(): void {
+  private loadGroups(preserveError = false): void {
     this.groupsLoad.run(this.api.heldOverview(this.store.batch()), {
       next: s => {
         this.store.groups.set(s.groups);
         this.store.totalHeld.set(s.totalCount);
         this.store.batchFileName.set(s.batchFileName);
       },
-      error: e => this.store.error.set(problemMessage(e)),
+      error: e => { if (!preserveError) this.store.error.set(problemMessage(e)); },
     });
   }
 
@@ -285,6 +303,7 @@ export class HeldPage implements OnInit {
     const scope = g ? { reason: g.reasonCode, value: g.reportedValue, sender: g.senderOrganizationId, exact: true } : {};
     this.rowsLoad.run(this.api.heldRows({ ...scope, batch: this.store.batch(), page: this.store.page(), pageSize: 50 }), {
       next: r => {
+        this.store.page.set(r.pageNumber);
         this.store.rows.set(r);
         // Keep the open row in step with what is stored, so its correction boxes show the saved values.
         const open = this.store.focusRow();

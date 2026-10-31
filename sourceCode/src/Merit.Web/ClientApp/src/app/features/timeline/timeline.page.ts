@@ -118,8 +118,6 @@ export class TimelineChartComponent {
   protected readonly ticks = computed(() => axisTicks(this.from(), this.to()).map(t => ({ x: this.x(t.at), label: t.label })));
 
   protected readonly drawn = computed<DrawnEvent[]>(() => {
-    const results = this.events().filter(e => e.kind === 'result' && e.value !== null);
-    const maxValue = Math.max(1, ...results.map(e => e.value ?? 0));
     return this.events()
       .map(e => {
         const lane = LANES.findIndex(l => l.kind === e.kind);
@@ -129,7 +127,7 @@ export class TimelineChartComponent {
           return null;
         }
         if (e.kind === 'result') {
-          const y = this.laneY(lane) + 40 - ((e.value ?? 0) / maxValue) * 34;
+          const y = this.laneY(lane) + 30;
           return { e, x: this.x(start), w: 0, y, point: true };
         }
         const x1 = this.x(Math.max(start, this.from()));
@@ -169,7 +167,7 @@ export class TimelineStore {
         </div>
         <merit-timeline-chart [events]="t.events" [from]="r.from" [to]="r.to" (pick)="store.selected.set($event)" />
       }
-      <p class="merit-meta">Filled circles are venous results; open circles capillary or unknown. Higher points are higher values.</p>
+      <p class="merit-meta">Filled circles are venous results; open circles capillary or unknown. Points show when results occurred; their height does not compare values. Select a point for its labeled result.</p>
       @if (store.selected(); as s) {
         <div class="usa-summary-box" role="status">
           <div class="usa-summary-box__body">

@@ -28,14 +28,15 @@ public sealed class MatchReviewController(MatchReviewService review) : Controlle
     {
         page = Math.Max(page, 1);
         pageSize = Math.Clamp(pageSize, 1, 500);
-        var rows = await review.QueueAsync(escalated, page, pageSize, ct);
+        var result = await Paging.ReadAsync(page, pageSize, p => review.QueueAsync(escalated, p, pageSize, ct), r => r.TotalCount);
+        var rows = result.Rows;
         return new PagedResult<MatchQueueItemDto>(rows.Select(r =>
         {
             var f = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string?>>(r.ParsedJson) ?? [];
             string? name = f.GetValueOrDefault("lastName") is string last ? $"{last}, {f.GetValueOrDefault("firstName")}".TrimEnd(',', ' ') : null;
             return new MatchQueueItemDto(r.StagingRowId, r.FileName, r.SenderName, r.RowNumber, name, f.GetValueOrDefault("dob"),
                 r.IsUrgent, r.HeldSinceUtc, r.ReasonMessage, r.IsEscalated, r.EscalationNote);
-        }).ToList(), rows.FirstOrDefault()?.TotalCount ?? 0, page, pageSize);
+        }).ToList(), result.Total, result.Page, pageSize);
     }
 
     [HttpGet("{id:guid}")]
@@ -82,7 +83,7 @@ public sealed class MatchReviewController(MatchReviewService review) : Controlle
 /// <summary>Cluster review and the case map.</summary>
 [ApiController]
 [Route("api/v1")]
-public sealed class ClustersController(ClusterService clusters) : ControllerBase
+public sealed class ClustersController(ClusterService clusters, ICurrentSession session) : ControllerBase
 {
     [HttpGet("clusters")]
     [Authorize(Policy = Permissions.CaseView)]
@@ -90,10 +91,11 @@ public sealed class ClustersController(ClusterService clusters) : ControllerBase
     {
         page = Math.Max(page, 1);
         pageSize = Math.Clamp(pageSize, 1, 500);
-        var rows = await clusters.ListAsync(status, page, pageSize, ct);
+        var result = await Paging.ReadAsync(page, pageSize, p => clusters.ListAsync(status, p, pageSize, ct), r => r.TotalCount);
+        var rows = result.Rows;
         return new PagedResult<ClusterListItemDto>(rows.Select(r => new ClusterListItemDto(r.ClusterId, r.ClusterType, r.Title, r.ClusterStatus,
-            r.WindowStart, r.WindowEnd, r.MemberCount, r.CreatedDateUtc, r.OwningTenantName)).ToList(), rows.FirstOrDefault()?.TotalCount ?? 0,
-            page, pageSize);
+            r.WindowStart, r.WindowEnd, r.MemberCount, r.CreatedDateUtc, r.OwningTenantName)).ToList(), result.Total,
+            result.Page, pageSize);
     }
 
     [HttpGet("clusters/{id:guid}")]
@@ -137,14 +139,15 @@ public sealed class ClustersController(ClusterService clusters) : ControllerBase
         }
     }
 
-    private static ClusterDto ToDto(ClusterDetail d)
+    private ClusterDto ToDto(ClusterDetail d)
         => new(d.Cluster.ClusterId, d.Cluster.ClusterType, d.Cluster.Title, d.Cluster.ClusterStatus, d.Cluster.WindowStart, d.Cluster.WindowEnd,
             d.Cluster.Notes, d.Cluster.OwningTenantName, Convert.ToBase64String(d.Cluster.RowVersion),
             d.Members.Select(m => new ClusterMemberDto(m.ExposureCaseId, m.CaseNumber, m.PersonId, $"{m.FirstName} {m.LastName}".Trim(),
                 m.AnalyteCode, m.Population, m.Classification, m.CaseStatus, m.OpenedDate, m.HighestValue, m.HighestUnit, m.JoinedDate,
                 m.LeftDate, m.AddressLine1 is null ? null : $"{m.AddressLine1}{(m.Unit is null ? string.Empty : " " + m.Unit)}, {m.City}",
                 m.Latitude, m.Longitude)).ToList(),
-            d.Tasks.Select(t => new ClusterTaskDto(t.WorkTaskId, t.QueueCode, t.Title, t.Detail, t.DueDate, t.IsUrgent, t.AssignedToName)).ToList());
+            d.Tasks.Select(t => new ClusterTaskDto(t.WorkTaskId, t.QueueCode, t.Title, t.Detail, t.DueDate, t.IsUrgent, t.AssignedToName)).ToList(),
+            d.Cluster.CanEdit && session.Has(Permissions.CaseEdit));
 }
 
 /// <summary>The standard report library: definitions, results with chart hints, and CSV or Excel exports.</summary>

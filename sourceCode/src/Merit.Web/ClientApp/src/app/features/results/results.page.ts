@@ -4,6 +4,7 @@ import { AnalyteOptionDto, PagedResult, ResultListItemDto } from '../../api/cont
 import { Display } from '../../shared/display.service';
 import { DataGridComponent, GridColumn, GridSort } from '../../shared/grid/data-grid.component';
 import { LatestRequest } from '../../shared/latest-request';
+import { ViewQuery, pageNumber, choice } from '../../shared/view-query';
 
 @Injectable()
 export class ResultsStore {
@@ -20,7 +21,7 @@ export class ResultsStore {
 @Component({
   selector: 'merit-results-page',
   imports: [DataGridComponent],
-  providers: [ResultsStore],
+  providers: [ResultsStore, ViewQuery],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <h1 tabindex="-1">Results</h1>
@@ -29,14 +30,14 @@ export class ResultsStore {
       <div><label class="usa-label" for="f-analyte">Analyte</label>
         <select class="usa-select" id="f-analyte" name="analyteId">
           <option value="">All</option>
-          @for (a of store.analytes(); track a.analyteId) { <option [value]="a.analyteId">{{ a.displayName }}</option> }
+          @for (a of store.analytes(); track a.analyteId) { <option [value]="a.analyteId" [selected]="a.analyteId === store.filters().analyteId">{{ a.displayName }}</option> }
         </select></div>
-      <div><label class="usa-label" for="f-from">Collected from</label><input class="usa-input" id="f-from" name="from" type="date" /></div>
-      <div><label class="usa-label" for="f-to">Collected to</label><input class="usa-input" id="f-to" name="to" type="date" /></div>
+      <div><label class="usa-label" for="f-from">Collected from</label><input class="usa-input" id="f-from" name="from" [value]="store.filters().from" type="date" /></div>
+      <div><label class="usa-label" for="f-to">Collected to</label><input class="usa-input" id="f-to" name="to" [value]="store.filters().to" type="date" /></div>
       <div><label class="usa-label" for="f-pop">Population</label>
-        <select class="usa-select" id="f-pop" name="population"><option value="">All</option><option value="child">Child</option><option value="adult">Adult</option><option value="pregnant">Pregnant</option><option value="unknown">Unknown</option></select></div>
-      <div><label class="usa-label" for="f-min">Value at least</label><input class="usa-input" id="f-min" name="minValue" inputmode="decimal" /></div>
-      <div class="usa-checkbox"><input class="usa-checkbox__input" id="f-unmatched" name="unmatched" type="checkbox" /><label class="usa-checkbox__label" for="f-unmatched">Unmatched only</label></div>
+        <select class="usa-select" id="f-pop" name="population" [value]="store.filters().population"><option value="">All</option><option value="child">Child</option><option value="adult">Adult</option><option value="pregnant">Pregnant</option><option value="unknown">Unknown</option></select></div>
+      <div><label class="usa-label" for="f-min">Value at least</label><input class="usa-input" id="f-min" name="minValue" [value]="store.filters().minValue" inputmode="decimal" /></div>
+      <div class="usa-checkbox"><input class="usa-checkbox__input" id="f-unmatched" name="unmatched" type="checkbox" [checked]="store.filters().unmatched" /><label class="usa-checkbox__label" for="f-unmatched">Unmatched only</label></div>
       <div><button class="usa-button" type="submit">Apply</button></div>
     </form>
     <merit-data-grid gridId="results" caption="Lab results" [columns]="columns" [rows]="store.result().items" [total]="store.result().totalCount"
@@ -53,11 +54,12 @@ export class ResultsPage implements OnInit {
   private readonly api = inject(ApiClient);
   private readonly display = inject(Display);
   private readonly resultsLoad = new LatestRequest();
+  private readonly view = inject(ViewQuery);
   protected readonly key = (r: ResultListItemDto): string => r.labResultId;
 
   protected readonly columns: GridColumn<ResultListItemDto>[] = [
-    { key: 'collectedDate', label: 'Collected', sortable: true, nowrap: true, cell: r => this.display.date(r.collectedDate), link: r => `/results/${r.labResultId}` },
-    { key: 'lastName', label: 'Person', sortable: true, cell: r => r.personName ?? '(unmatched)', link: r => (r.personId ? `/people/${r.personId}` : null) },
+    { key: 'collectedDate', label: 'Collected', sortable: true, nowrap: true, cell: r => this.display.date(r.collectedDate), link: r => this.view.detail(`/results/${r.labResultId}`) },
+    { key: 'lastName', label: 'Person', sortable: true, cell: r => r.personName ?? '(unmatched)', link: r => (r.personId ? this.view.detail(`/people/${r.personId}`) : null) },
     { key: 'analyteCode', label: 'Analyte', sortable: true, cell: r => `${this.display.of(r.analyteCode)}, ${this.display.of(r.specimen).toLowerCase()}` },
     { key: 'valueCanonical', label: 'Value', sortable: true, cell: r => `${r.operator === '=' ? '' : r.operator}${r.valueCanonical ?? ''} ${r.unitCanonical}`, badge: r => (r.isIndeterminate ? 'Indeterminate' : null) },
     { key: 'sampleType', label: 'Sample', cell: r => this.display.of(r.sampleType) },
@@ -71,7 +73,13 @@ export class ResultsPage implements OnInit {
 
   ngOnInit(): void {
     this.api.analytes().subscribe({ next: a => this.store.analytes.set(a), error: e => this.store.error.set(problemMessage(e)) });
-    this.load();
+    this.view.watch(q => {
+      this.store.filters.set({ analyteId: q.get('analyteId') ?? '', from: q.get('from') ?? '', to: q.get('to') ?? '',
+        population: choice(q.get('population'), ['child', 'adult', 'pregnant', 'unknown'], ''), minValue: q.get('minValue') ?? '', unmatched: q.get('unmatched') === 'true' });
+      this.store.sort.set({ key: choice(q.get('sort'), ['collectedDate', 'lastName', 'analyteCode', 'valueCanonical', 'receivedUtc'], 'collectedDate'), descending: q.get('desc') !== 'false' });
+      this.store.page.set(pageNumber(q.get('page')));
+      this.load();
+    });
   }
 
   protected apply(event: Event): void {
@@ -82,17 +90,21 @@ export class ResultsPage implements OnInit {
       population: String(f.get('population') ?? ''), minValue: String(f.get('minValue') ?? ''), unmatched: f.get('unmatched') !== null,
     });
     this.store.page.set(1);
-    this.load();
+    this.saveView();
   }
 
   protected onSort(s: GridSort): void {
     this.store.sort.set(s);
-    this.load();
+    this.saveView();
   }
 
   protected onPage(p: number): void {
     this.store.page.set(p);
-    this.load();
+    this.saveView();
+  }
+
+  private saveView(): void {
+    this.view.set({ ...this.store.filters(), sort: this.store.sort().key, desc: this.store.sort().descending, page: this.store.page() });
   }
 
   private load(): void {

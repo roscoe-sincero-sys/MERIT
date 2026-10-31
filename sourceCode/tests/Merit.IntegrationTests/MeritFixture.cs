@@ -66,6 +66,18 @@ public sealed partial class MeritFixture : IDisposable
     /// <summary>A client with no session.</summary>
     public MeritClient Anonymous() => new(Factory);
 
+    public async Task<int> ListAuditCountAsync(string entityType)
+    {
+        await using var c = new SqlConnection(TestEnvironment.AdminConnectionString());
+        await c.OpenAsync();
+        await using var cmd = new SqlCommand("""
+            SELECT COUNT (*) FROM logs.auditEvent AS e JOIN auth.appUser AS u ON u.appUserId = e.appUserId
+             WHERE e.eventAction = 'view' AND e.entityId IS NULL AND e.entityType = @type AND u.userName = N'supervisor';
+            """, c);
+        cmd.Parameters.AddWithValue("@type", entityType);
+        return (int)(await cmd.ExecuteScalarAsync())!;
+    }
+
     /// <summary>A client signed in as a demo user, enrolling MFA on first use the way a person would.</summary>
     public async Task<MeritClient> SignedInAsync(string userName)
     {

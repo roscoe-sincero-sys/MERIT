@@ -33,7 +33,8 @@ public sealed record WorkTaskDto(
     Guid? ExposureCaseId,
     string? CaseNumber,
     Guid? AssignedToUserId,
-    string? AssignedToName);
+    string? AssignedToName,
+    bool CanEdit = false);
 
 public sealed record BulkTaskActionRequest(IReadOnlyList<Guid> TaskIds, string Action, Guid? AssignToUserId, string? Note);
 
@@ -208,7 +209,8 @@ public sealed record ClusterDto(
     string? OwningTenantName,
     string RowVersion,
     IReadOnlyList<ClusterMemberDto> Members,
-    IReadOnlyList<ClusterTaskDto> Tasks);
+    IReadOnlyList<ClusterTaskDto> Tasks,
+    bool CanEdit = false);
 
 public sealed record ClusterUpdateRequest(string Status, string? Notes, string RowVersion);
 

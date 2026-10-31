@@ -2,6 +2,7 @@ using System.Buffers.Text;
 using System.Security.Cryptography;
 using System.Text.Json;
 using Microsoft.AspNetCore.Antiforgery;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.AspNetCore.Razor.TagHelpers;
@@ -99,6 +100,12 @@ public sealed class SecurityHeadersMiddleware(RequestDelegate next)
         h.CacheControl = context.Request.Path.StartsWithSegments("/lib", StringComparison.OrdinalIgnoreCase)
             ? h.CacheControl
             : "no-store";
+
+        if ((await context.AuthenticateAsync(AuthSchemes.Session)).Properties?.ExpiresUtc is { } expires)
+        {
+            // A conservative deadline from the current ticket, rather than assuming every read renews the cookie.
+            h["X-Merit-Session-Expires"] = expires.ToUnixTimeMilliseconds().ToString(System.Globalization.CultureInfo.InvariantCulture);
+        }
 
         // Both clients send the antiforgery token in X-XSRF-TOKEN: Angular reads it from this cookie through its
         // built-in XSRF support, and merit.js does the same for htmx requests.

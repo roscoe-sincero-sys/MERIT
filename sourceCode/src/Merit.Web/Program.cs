@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 
@@ -54,7 +55,7 @@ services.AddAuthentication(AuthSchemes.Session)
         o.AccessDeniedPath = "/account/denied";
         o.Events = new CookieAuthenticationEvents
         {
-            // An expired session on an htmx request returns HX-Redirect to sign-in; on the API, 401.
+            // Interactive clients retain their in-memory drafts on 401 and offer sign-in in another tab.
             OnRedirectToLogin = ctx =>
             {
                 if (ctx.Request.Path.StartsWithSegments("/api", StringComparison.OrdinalIgnoreCase))
@@ -64,7 +65,6 @@ services.AddAuthentication(AuthSchemes.Session)
                 else if (ctx.Request.IsHtmx())
                 {
                     ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
-                    ctx.Response.Headers["HX-Redirect"] = "/account/signin";
                 }
                 else
                 {
@@ -76,7 +76,15 @@ services.AddAuthentication(AuthSchemes.Session)
             OnRedirectToAccessDenied = ctx =>
             {
                 ctx.Response.StatusCode = StatusCodes.Status403Forbidden;
-                if (!ctx.Request.Path.StartsWithSegments("/api", StringComparison.OrdinalIgnoreCase) && !ctx.Request.IsHtmx())
+                if (ctx.Request.IsHtmx())
+                {
+                    ctx.Response.Headers["X-Merit-Denied"] = "true";
+                    if (ctx.HttpContext.Features.Get<IStatusCodePagesFeature>() is { } statusPages)
+                    {
+                        statusPages.Enabled = false;
+                    }
+                }
+                else if (!ctx.Request.Path.StartsWithSegments("/api", StringComparison.OrdinalIgnoreCase))
                 {
                     ctx.Response.Redirect(ctx.RedirectUri);
                 }

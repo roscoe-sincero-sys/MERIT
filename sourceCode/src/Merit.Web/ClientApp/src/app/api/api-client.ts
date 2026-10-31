@@ -147,8 +147,7 @@ export function problemMessage(error: unknown): string {
     return 'The connection to MERIT was lost. Check your network and try again.';
   }
   if (e.status === 401) {
-    window.location.href = '/account/signin?ReturnUrl=' + encodeURIComponent(window.location.pathname + window.location.search);
-    return 'Your session ended. Signing in again...';
+    return 'Your session ended. Your unsaved work is still here. Use Sign in in a new tab, then return to this tab.';
   }
   return e.error?.detail ?? e.error?.title ?? 'The request could not be completed.';
 }

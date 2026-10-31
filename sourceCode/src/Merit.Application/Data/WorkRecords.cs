@@ -81,6 +81,8 @@ public sealed record DashboardData(DashboardCountsRow Counts, IReadOnlyList<Dash
 
 public sealed class WorkTaskRow
 {
+    public bool CanEdit { get; init; }
+
     public Guid WorkTaskId { get; init; }
 
     public string QueueCode { get; init; } = string.Empty;

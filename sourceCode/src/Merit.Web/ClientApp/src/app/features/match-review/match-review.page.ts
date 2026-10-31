@@ -2,12 +2,15 @@ import { ChangeDetectionStrategy, Component, computed, ElementRef, inject, Injec
 import { ApiClient, problemMessage } from '../../api/api-client';
 import { Agreement, MatchCandidateDto, MatchDecision, MatchQueueItemDto, MatchReviewDto } from '../../api/contracts';
 import { LatestRequest } from '../../shared/latest-request';
+import { PagerComponent } from '../../shared/pager.component';
 
 /** Match review state: the queue, the record under review, the chosen candidate. Signals only; no HTTP, no DOM. */
 @Injectable()
 export class MatchReviewStore {
   readonly queue = signal<MatchQueueItemDto[]>([]);
   readonly total = signal(0);
+  readonly page = signal(1);
+  readonly pageSize = signal(200);
   readonly escalatedOnly = signal(false);
   readonly currentId = signal<string | null>(null);
   readonly review = signal<MatchReviewDto | null>(null);
@@ -17,6 +20,7 @@ export class MatchReviewStore {
   readonly reviewLoading = signal(false);
   readonly busy = signal(false);
   readonly message = signal<string | null>(null);
+  readonly announcement = signal('');
   readonly error = signal<string | null>(null);
 
   readonly loading = computed(() => this.queueLoading() || this.reviewLoading());
@@ -96,7 +100,8 @@ const AGREEMENT_TEXT: Record<Agreement, string> = { agree: 'Agrees', close: 'Clo
     </div>
   `,
   styles: `
-    .scroll { overflow-x: auto; }
+    :host { display: block; min-width: 0; }
+    .scroll { overflow-x: auto; max-width: 100%; }
     .compare { min-width: 100%; }
     .compare th, .compare td { vertical-align: top; }
     .chosen { background: #e7f2f8; }
@@ -164,7 +169,7 @@ export class CandidateHistoryComponent {
  */
 @Component({
   selector: 'merit-match-review-page',
-  imports: [MatchComparisonComponent, CandidateHistoryComponent],
+  imports: [MatchComparisonComponent, CandidateHistoryComponent, PagerComponent],
   providers: [MatchReviewStore],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { '(keydown)': 'onKey($event)' },
@@ -172,7 +177,7 @@ export class CandidateHistoryComponent {
     <h1 tabindex="-1" #heading>Person matching review</h1>
     <p class="merit-meta">{{ store.total() }} record(s) waiting. Keys: 1&ndash;5 choose a candidate, S same person, D different person,
       N not sure, C new person, H history, J next, K previous.</p>
-    <div class="usa-sr-only" role="status" aria-live="polite">{{ store.message() }}</div>
+    <div class="usa-sr-only" role="status" aria-live="polite">{{ store.message() }} {{ store.announcement() }}</div>
     @if (store.error(); as e) { <div class="usa-alert usa-alert--error usa-alert--slim" role="alert"><div class="usa-alert__body"><p class="usa-alert__text">{{ e }}</p></div></div> }
     @if (store.message(); as m) { <div class="usa-alert usa-alert--success usa-alert--slim"><div class="usa-alert__body"><p class="usa-alert__text">{{ m }}</p></div></div> }
 
@@ -183,6 +188,7 @@ export class CandidateHistoryComponent {
           <label class="usa-checkbox__label" for="escalated">Sent to a supervisor only</label>
         </div>
         @if (store.queue().length === 0) { <p class="merit-empty">Nothing to review.</p> }
+        <merit-pager label="Match records" [page]="store.page()" [size]="store.pageSize()" [total]="store.total()" [busy]="store.busy() || store.loading()" (change)="goPage($event)" />
         <ol class="queue">
           @for (q of store.queue(); track q.stagingRowId) {
             <li>
@@ -239,7 +245,7 @@ export class CandidateHistoryComponent {
     </div>
   `,
   styles: `
-    .layout { display: grid; grid-template-columns: minmax(12rem, 16rem) 1fr; gap: 1.5rem; }
+    .layout { display: grid; grid-template-columns: minmax(12rem, 16rem) minmax(0, 1fr); gap: 1.5rem; }
     .layout > * { min-width: 0; }
     #record-heading { overflow-wrap: anywhere; }
     .queue { list-style: none; padding: 0; }
@@ -250,7 +256,7 @@ export class CandidateHistoryComponent {
     .actions { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; margin-top: 1rem; }
     .incoming { display: grid; grid-template-columns: max-content 1fr; gap: .25rem 1rem; }
     .incoming dt { font-weight: 700; }
-    @media (max-width: 64em) { .layout { grid-template-columns: 1fr; } }
+    @media (max-width: 64em) { .layout { grid-template-columns: minmax(0, 1fr); } }
   `,
 })
 export class MatchReviewPage implements OnInit {
@@ -271,6 +277,7 @@ export class MatchReviewPage implements OnInit {
   protected toggleEscalated(): void {
     if (this.store.busy()) return;
     this.store.escalatedOnly.update(v => !v);
+    this.store.page.set(1);
     this.loadQueue(true);
   }
 
@@ -303,6 +310,7 @@ export class MatchReviewPage implements OnInit {
     this.api.matchDecision(rowId, { decision, personId: candidate?.personId ?? null, note: note.trim() || null }).subscribe({
       next: res => {
         this.store.busy.set(false);
+        this.heading()?.nativeElement.focus();
         this.store.review.set(null);
         this.store.message.set(res.message);
         if (res.released) {
@@ -342,14 +350,26 @@ export class MatchReviewPage implements OnInit {
     if (handled) event.preventDefault();
   }
 
+  protected goPage(page: number): void {
+    if (this.store.busy() || this.store.loading()) return;
+    this.store.page.set(page);
+    this.loadQueue(true);
+  }
+
   private step(delta: number): void {
     if (this.store.busy() || this.store.queueLoading()) return;
     const q = this.store.queue();
     const next = q[this.store.position() + delta];
     if (next) this.openRow(next.stagingRowId);
+    else if (delta > 0 && this.store.page() * this.store.pageSize() < this.store.total()) {
+      this.store.page.update(p => p + 1); this.loadQueue(true);
+    } else if (delta < 0 && this.store.page() > 1) {
+      this.store.page.update(p => p - 1); this.loadQueue(true, this.store.pageSize() - 1);
+    }
   }
 
   private openRow(id: string): void {
+    this.heading()?.nativeElement.focus();
     this.store.currentId.set(id);
     this.store.review.set(null);
     this.store.selected.set(0);
@@ -361,6 +381,7 @@ export class MatchReviewPage implements OnInit {
         this.store.reviewLoading.set(false);
         if (this.store.currentId() !== id || r.stagingRowId !== id) return;
         this.store.review.set(r);
+        this.store.announcement.set(`Reviewing row ${r.rowNumber} of ${r.fileName}.`);
       },
       error: e => {
         this.store.reviewLoading.set(false);
@@ -372,6 +393,7 @@ export class MatchReviewPage implements OnInit {
 
   private loadQueue(openFirst: boolean, index = 0, rowId?: string): void {
     if (openFirst) {
+      this.heading()?.nativeElement.focus();
       this.reviewLoad.cancel();
       this.store.reviewLoading.set(false);
       this.store.currentId.set(null);
@@ -379,11 +401,16 @@ export class MatchReviewPage implements OnInit {
     }
     this.store.error.set(null);
     this.store.queueLoading.set(true);
-    this.queueLoad.run(this.api.matchQueue({ escalated: this.store.escalatedOnly(), page: 1, pageSize: 200 }), {
+    this.queueLoad.run(this.api.matchQueue({ escalated: this.store.escalatedOnly(), page: this.store.page(), pageSize: this.store.pageSize() }), {
       next: p => {
         this.store.queueLoading.set(false);
+        this.store.page.set(p.pageNumber);
+        this.store.pageSize.set(p.pageSize);
         this.store.queue.set(p.items);
         this.store.total.set(p.totalCount);
+        if (index >= p.items.length && p.pageNumber * p.pageSize < p.totalCount) {
+          this.store.page.update(v => v + 1); this.loadQueue(true); return;
+        }
         if (rowId) {
           // The row asked for, even when it is past the first page of the queue or escalated.
           this.openRow(rowId);
@@ -397,7 +424,8 @@ export class MatchReviewPage implements OnInit {
           this.reviewLoad.cancel();
           this.store.reviewLoading.set(false);
           this.store.currentId.set(null);
-          this.store.review.set(null);
+          this.heading()?.nativeElement.focus();
+        this.store.review.set(null);
         }
         if (openFirst) this.heading()?.nativeElement.focus();
       },
