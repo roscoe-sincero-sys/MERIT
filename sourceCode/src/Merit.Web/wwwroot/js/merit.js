@@ -17,6 +17,88 @@
         return match ? decodeURIComponent(match.substring(name.length + 1)) : null;
     }
 
+    // Session recovery keeps drafts only in this document. Authentication happens in a separate tab.
+    function alertRegion() {
+        return document.querySelector('#dialog[open] #dialog-alert-region') || document.getElementById('alert-region');
+    }
+
+    function showError(message) {
+        const region = alertRegion();
+        if (!region) return null;
+        region.replaceChildren();
+        const div = document.createElement('div');
+        div.className = 'usa-alert usa-alert--error usa-alert--slim';
+        div.setAttribute('role', 'alert');
+        div.setAttribute('tabindex', '-1');
+        const body = document.createElement('div');
+        body.className = 'usa-alert__body';
+        const p = document.createElement('p');
+        p.className = 'usa-alert__text';
+        p.textContent = message;
+        body.appendChild(p);
+        div.appendChild(body);
+        region.appendChild(div);
+        return div;
+    }
+
+    let expiryTimer;
+    let warningTimer;
+    let sessionEnded = false;
+    function sessionMessage(ended) {
+        if (ended) sessionEnded = true;
+        const alert = showError(ended
+            ? 'Your session ended. Your unsaved work is still here. Sign in in a new tab, then return here and check your session before saving again.'
+            : 'Your session will expire soon. Your unsaved work is still here. Sign in in a new tab to continue.');
+        if (!alert) return;
+        const link = document.createElement('a');
+        link.className = 'usa-link';
+        link.textContent = 'Sign in in a new tab';
+        link.href = '/account/signin?ReturnUrl=' + encodeURIComponent(location.pathname + location.search);
+        link.target = '_blank';
+        link.rel = 'noopener';
+        alert.appendChild(link);
+        const check = document.createElement('button');
+        check.type = 'button';
+        check.className = 'usa-button usa-button--outline';
+        check.textContent = 'Check session';
+        check.addEventListener('click', async () => {
+            check.disabled = true;
+            try {
+                const response = await fetch('/api/v1/me', { cache: 'no-store' });
+                if (!response.ok) { sessionMessage(true); return; }
+                const me = await response.json();
+                if (me.userName !== document.body.dataset.sessionUser) {
+                    showError('A different user is signed in. Copy your unsaved work before refreshing, or sign in again as the original user.');
+                    return;
+                }
+                sessionEnded = false;
+                sessionActivity({ detail: response.headers.get('X-Merit-Session-Expires') });
+                alert.replaceChildren(document.createTextNode('You are signed in again. Review your draft and save when ready.'));
+                alert.focus();
+            } catch { showError('Could not check your session. Check your connection and try again.'); }
+            finally { check.disabled = false; }
+        });
+        alert.appendChild(check);
+        if (ended) alert.focus();
+    }
+
+    let sessionDeadline = Number(document.body.dataset.sessionExpires);
+    function sessionActivity(evt) {
+        if (sessionEnded) return;
+        const minutes = Number(document.body.dataset.sessionMinutes);
+        if (!minutes) return;
+        if (evt?.detail) sessionDeadline = Number(evt.detail);
+        if (!sessionDeadline) sessionDeadline = Date.now() + minutes * 60000;
+        const remaining = Math.max(0, sessionDeadline - Date.now());
+        clearTimeout(warningTimer);
+        clearTimeout(expiryTimer);
+        warningTimer = setTimeout(() => sessionMessage(false), Math.max(0, remaining - 2 * 60000));
+        expiryTimer = setTimeout(() => sessionMessage(true), remaining);
+    }
+    document.addEventListener('merit:sessionExpired', () => sessionMessage(true));
+    document.addEventListener('merit:sessionActivity', sessionActivity);
+    sessionActivity();
+
     // ------------------------------------------------------------------------------------------ phone menu
     // Below 40em the menu and the user block fold behind the Menu button (issue #47); Escape closes it.
     const header = document.querySelector(".merit-header");
@@ -48,6 +130,28 @@
         if (token && evt.detail && evt.detail.ctx && evt.detail.ctx.request) {
             evt.detail.ctx.request.headers["X-XSRF-TOKEN"] = token;
         }
+        const ctx = evt.detail && evt.detail.ctx;
+        if (ctx && ctx.sourceElement?.closest('#dialog[open]')) ctx.request.headers['X-Merit-Dialog'] = 'true';
+    });
+
+    // Stop before htmx constructs a swap for middleware's empty denial responses, preserving the form and dialog.
+    document.addEventListener('htmx:after:request', evt => {
+        const ctx = evt.detail && evt.detail.ctx;
+        const status = ctx?.response?.status;
+        if (status === 401) {
+            evt.preventDefault();
+            sessionMessage(true);
+        } else if (status === 403 && !ctx.text?.trim()) {
+            evt.preventDefault();
+            const alert = showError('Your current profile no longer permits this action. Your inputs are still here. Copy any unsaved work, then refresh the page to see your current access.');
+            const refresh = document.createElement('button');
+            refresh.type = 'button';
+            refresh.className = 'usa-button usa-button--outline';
+            refresh.textContent = 'Refresh current profile';
+            refresh.addEventListener('click', () => location.reload());
+            alert?.appendChild(refresh);
+            alert?.focus();
+        } else if (status && status < 400) sessionActivity({ detail: ctx.response.headers.get('X-Merit-Session-Expires') });
     });
 
     // ------------------------------------------------------------------------------------------ busy state
@@ -65,7 +169,7 @@
     document.addEventListener("htmx:error", evt => {
         const status = evt.detail && evt.detail.ctx && evt.detail.ctx.response && evt.detail.ctx.response.status;
         if (status) return; // the server answered; its alert partial is already swapped in
-        const region = document.getElementById("alert-region");
+        const region = alertRegion();
         if (region) {
             region.innerHTML = "";
             const div = document.createElement("div");
@@ -141,8 +245,8 @@
         // chosen by hx-status (a 422 re-rendering its form) carries no target, and an outerHTML swap leaves the target
         // detached, so the new content is looked up in the document.
         if (ctx && ctx.response && ctx.response.status >= 400) {
-            const scope = target && target.isConnected ? target : document;
-            const error = document.getElementById("error-summary") || scope.querySelector(".usa-error-message:not(:empty), .usa-alert--error");
+            const scope = document.querySelector('#dialog[open]') || (target && target.isConnected ? target : document);
+            const error = scope.querySelector("#error-summary, .usa-error-message:not(:empty), .usa-alert--error, .usa-alert--warning");
             if (error) {
                 error.setAttribute("tabindex", "-1");
                 error.focus();
@@ -162,6 +266,7 @@
 
         // Content swapped into the shared dialog opens it as a modal.
         if (target.id === "dialog-body") {
+            document.getElementById('dialog-alert-region')?.replaceChildren();
             const dialog = document.getElementById("dialog");
             if (dialog && target.childElementCount > 0 && !dialog.open) dialog.showModal();
             const first = target.querySelector("input:not([type=hidden]), select, textarea, button");
@@ -192,6 +297,7 @@
         if (evt.target && evt.target.id === "dialog") {
             const body = document.getElementById("dialog-body");
             if (body) body.innerHTML = "";
+            document.getElementById('dialog-alert-region')?.replaceChildren();
         }
     }, true);
 

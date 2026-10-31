@@ -125,10 +125,15 @@ BEGIN
                                         ELSE w.resolutionNote END
           FROM dbo.workTask AS w
           JOIN @ids AS i ON i.workTaskId = w.workTaskId
-         WHERE w.isDeleted = 0;
+         WHERE w.isDeleted = 0
+           AND ((@action IN ('complete', 'dismiss') AND w.taskStatus = 'open')
+                OR (@action = 'reopen' AND w.taskStatus <> 'open')
+                OR (@action IN ('assign', 'assignToMe') AND w.taskStatus = 'open'
+                    AND (w.assignedToUserId IS NULL OR w.assignedToUserId <> CASE WHEN @action = 'assignToMe' THEN @me ELSE @assignToUserId END)));
 
-        SET @Comments = CONCAT (@@ROWCOUNT, N' task(s) updated.');
-        SELECT @@ROWCOUNT AS updatedCount;
+        DECLARE @updatedCount INT = @@ROWCOUNT;
+        SET @Comments = CONCAT (@updatedCount, N' task(s) updated.');
+        SELECT @updatedCount AS updatedCount;
 
         -- =========================================================================================
         -- ===== End of the procedure's own work. ===================================================

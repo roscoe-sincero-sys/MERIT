@@ -51,7 +51,8 @@ public sealed partial class MeritExceptionFilter(ILogger<MeritExceptionFilter> l
         }
         else if (request.IsHtmx())
         {
-            context.HttpContext.Response.Headers["HX-Retarget"] = "#alert-region";
+            context.HttpContext.Response.Headers["HX-Retarget"] = request.Headers["X-Merit-Dialog"] == "true"
+                ? "#dialog-alert-region" : "#alert-region";
             context.HttpContext.Response.Headers["HX-Reswap"] = "innerHTML";
             context.Result = new PartialViewResult
             {

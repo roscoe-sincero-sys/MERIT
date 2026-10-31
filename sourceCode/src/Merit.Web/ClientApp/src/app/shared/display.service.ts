@@ -10,6 +10,9 @@ import { ApiClient } from '../api/api-client';
 @Injectable({ providedIn: 'root' })
 export class Display {
   private readonly api = inject(ApiClient);
+  private permissions: string[] = [];
+  can(permission: string): boolean { return this.permissions.includes(permission); }
+
   private codes: Record<string, string> = {};
   private fields: Record<string, string> = {};
   private order: string[] = [];
@@ -18,6 +21,7 @@ export class Display {
   async load(): Promise<void> {
     try {
       const [labels, me] = await Promise.all([firstValueFrom(this.api.labels()), firstValueFrom(this.api.me())]);
+      this.permissions = me.permissions;
       this.codes = labels.codes;
       this.fields = labels.fields;
       this.order = labels.fieldOrder;

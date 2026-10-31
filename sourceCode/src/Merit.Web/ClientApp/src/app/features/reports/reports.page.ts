@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject, Injectable, input, OnInit, signal } from '@angular/core';
-import { Router } from '@angular/router';
+import { ViewQuery } from '../../shared/view-query';
 import { ApiClient, problemMessage } from '../../api/api-client';
 import { AnalyteOptionDto, ReportCell, ReportDto, ReportSummaryDto } from '../../api/contracts';
 import { ChartSeries, SeriesChartComponent } from '../../shared/chart/series-chart.component';
@@ -26,7 +26,7 @@ export class ReportsStore {
 @Component({
   selector: 'merit-reports-page',
   imports: [SeriesChartComponent],
-  providers: [ReportsStore],
+  providers: [ReportsStore, ViewQuery],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <h1 tabindex="-1">Reports</h1>
@@ -69,8 +69,8 @@ export class ReportsStore {
           } @else {
             <div class="measure">
               <label class="usa-label" for="r-measure">Chart</label>
-              <select class="usa-select" id="r-measure" [value]="measureKey()" (change)="store.measure.set($any($event.target).value)">
-                @for (m of r.chart.measures; track m) { <option [value]="m">{{ label(r, m) }}</option> }
+              <select class="usa-select" id="r-measure" [value]="measureKey()" (change)="chooseMeasure($any($event.target).value)">
+                @for (m of r.chart.measures; track m) { <option [value]="m" [selected]="m === measureKey()">{{ label(r, m) }}</option> }
               </select>
             </div>
             <merit-series-chart [kind]="r.chart.kind" [categories]="chart().categories" [series]="chart().series"
@@ -110,7 +110,7 @@ export class ReportsPage implements OnInit {
   protected readonly store = inject(ReportsStore);
   private readonly api = inject(ApiClient);
   protected readonly display = inject(Display);
-  private readonly router = inject(Router);
+  private readonly view = inject(ViewQuery);
   private readonly libraryLoad = new LatestRequest();
   private readonly reportLoad = new LatestRequest();
   readonly codeParam = input<string | undefined>(undefined, { alias: 'code' });
@@ -145,6 +145,12 @@ export class ReportsPage implements OnInit {
   });
 
   ngOnInit(): void {
+    this.view.watch(q => {
+      this.store.filters.set({ from: q.get('from') ?? '', to: q.get('to') ?? '', analyteId: q.get('analyteId') ?? '' });
+      this.store.measure.set(q.get('measure'));
+      const code = q.get('code') ?? this.store.library()[0]?.code;
+      if (code && this.store.library().some(r => r.code === code)) this.run(code);
+    });
     this.api.analytes().subscribe({ next: a => this.store.analytes.set(a), error: () => this.store.analytes.set([]) });
     this.libraryLoad.run(this.api.reports(), {
       next: lib => {
@@ -159,8 +165,7 @@ export class ReportsPage implements OnInit {
   protected choose(event: Event, code: string): void {
     event.preventDefault();
     this.store.measure.set(null);
-    void this.router.navigate([], { queryParams: { code }, replaceUrl: true });
-    this.run(code);
+    this.view.set({ code, measure: null });
   }
 
   protected apply(event: Event): void {
@@ -168,8 +173,10 @@ export class ReportsPage implements OnInit {
     const f = new FormData(event.target as HTMLFormElement);
     this.store.filters.set({ from: String(f.get('from') ?? ''), to: String(f.get('to') ?? ''), analyteId: String(f.get('analyteId') ?? '') });
     const code = this.store.code();
-    if (code) this.run(code);
+    if (code) this.view.set({ code, ...this.store.filters() });
   }
+
+  protected chooseMeasure(measure: string): void { this.view.set({ measure }); }
 
   protected exportUrl(format: 'csv' | 'xlsx'): string {
     const r = this.store.report();

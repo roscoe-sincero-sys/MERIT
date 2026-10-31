@@ -53,7 +53,7 @@ export interface GridSort {
             </th>
             <td cdk-cell *cdkCellDef="let row; let i = index" class="grid-select">
               <div class="usa-checkbox">
-                <input class="usa-checkbox__input" type="checkbox" [id]="gridId() + '-sel-' + i" [checked]="selected().has(rowKey()(row))" [disabled]="selectionDisabled()" (change)="toggle(row)" />
+                <input class="usa-checkbox__input" type="checkbox" [id]="gridId() + '-sel-' + i" [checked]="selected().has(rowKey()(row))" [disabled]="selectionDisabled() || !rowSelectable()(row)" (change)="toggle(row)" />
                 <label class="usa-checkbox__label" [for]="gridId() + '-sel-' + i"><span class="usa-sr-only">Select row {{ i + 1 }}</span></label>
               </div>
             </td>
@@ -89,9 +89,9 @@ export interface GridSort {
       }
     </div>
     <nav class="grid-pager" [attr.aria-label]="caption() + ' pages'">
-      <button type="button" class="usa-button usa-button--outline usa-button--small" [disabled]="page() <= 1" (click)="pageChange.emit(page() - 1)">Previous</button>
+      <button type="button" class="usa-button usa-button--outline usa-button--small" [disabled]="loading() || page() <= 1" (click)="pageChange.emit(page() - 1)">Previous</button>
       <span>Page {{ page() }} of {{ pageCount() }}</span>
-      <button type="button" class="usa-button usa-button--outline usa-button--small" [disabled]="page() >= pageCount()" (click)="pageChange.emit(page() + 1)">Next</button>
+      <button type="button" class="usa-button usa-button--outline usa-button--small" [disabled]="loading() || page() >= pageCount()" (click)="pageChange.emit(page() + 1)">Next</button>
     </nav>
   `,
   styles: `
@@ -125,6 +125,7 @@ export class DataGridComponent<T> {
   readonly loading = input(false);
   readonly selectable = input(false);
   readonly selectionDisabled = input(false);
+  readonly rowSelectable = input<(row: T) => boolean>(() => true);
   readonly selected = input<ReadonlySet<string>>(new Set<string>());
   readonly rowKey = input.required<(row: T) => string>();
   readonly emptyText = input('Nothing to show.');
@@ -138,7 +139,7 @@ export class DataGridComponent<T> {
   readonly visibleColumns = computed(() => this.columns().filter(c => !this.isHidden(c)));
   readonly displayed = computed(() => [...(this.selectable() ? ['__select'] : []), ...this.visibleColumns().map(c => c.key)]);
   readonly pageCount = computed(() => Math.max(1, Math.ceil(this.total() / this.pageSize())));
-  readonly allSelected = computed(() => this.rows().length > 0 && this.rows().every(r => this.selected().has(this.rowKey()(r))));
+  readonly allSelected = computed(() => this.rows().some(r => this.rowSelectable()(r)) && this.rows().filter(r => this.rowSelectable()(r)).every(r => this.selected().has(this.rowKey()(r))));
 
   readonly trackRow = (_: number, row: T): string => this.rowKey()(row);
 
@@ -173,7 +174,7 @@ export class DataGridComponent<T> {
   }
 
   toggle(row: T): void {
-    if (this.selectionDisabled()) return;
+    if (this.selectionDisabled() || !this.rowSelectable()(row)) return;
     const key = this.rowKey()(row);
     const next = new Set(this.selected());
     next.has(key) ? next.delete(key) : next.add(key);
@@ -183,7 +184,7 @@ export class DataGridComponent<T> {
   toggleAll(): void {
     if (this.selectionDisabled()) return;
     const next = new Set(this.selected());
-    const keys = this.rows().map(r => this.rowKey()(r));
+    const keys = this.rows().filter(r => this.rowSelectable()(r)).map(r => this.rowKey()(r));
     if (this.allSelected()) {
       keys.forEach(k => next.delete(k));
     } else {

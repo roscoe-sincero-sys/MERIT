@@ -41,6 +41,7 @@ export interface WorkTaskDto {
   caseNumber: string | null;
   assignedToUserId: string | null;
   assignedToName: string | null;
+  canEdit: boolean;
 }
 
 export interface BulkTaskActionRequest {
@@ -296,6 +297,7 @@ export interface ClusterDto {
   notes: string | null;
   owningTenantName: string | null;
   rowVersion: string;
+  canEdit: boolean;
   members: ClusterMemberDto[];
   tasks: ClusterTaskDto[];
 }
