@@ -51,8 +51,10 @@ else
             <div class="@state.GroupClass("Creatinine")">
                 <label class="usa-label" for="Creatinine">Creatinine (g/L) @FormErrors.RequiredMark</label>
                 @state.ErrorMessage("Creatinine")
-                <input class="usa-input usa-input--small" id="Creatinine" name="Creatinine" inputmode="decimal" aria-describedby="@state.DescribedBy("Creatinine")" aria-invalid="@state.AriaInvalid("Creatinine")" />
+                <input class="usa-input usa-input--small" id="Creatinine" name="Creatinine" value="@Model.Creatinine?.ToString(System.Globalization.CultureInfo.InvariantCulture)" inputmode="decimal" aria-describedby="@state.DescribedBy("Creatinine")" aria-invalid="@state.AriaInvalid("Creatinine")" />
             </div>
         }
     </div>
 }
+
+@if (Model.CreatinineCleared) { <p class="merit-meta" role="status">Creatinine was cleared because it does not apply to this specimen.</p> }

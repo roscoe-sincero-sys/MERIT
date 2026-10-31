@@ -240,6 +240,8 @@ export class CandidateHistoryComponent {
   `,
   styles: `
     .layout { display: grid; grid-template-columns: minmax(12rem, 16rem) 1fr; gap: 1.5rem; }
+    .layout > * { min-width: 0; }
+    #record-heading { overflow-wrap: anywhere; }
     .queue { list-style: none; padding: 0; }
     .queue li { margin: .4rem 0; }
     .queue [aria-current='true'] { font-weight: 700; text-decoration: underline; }

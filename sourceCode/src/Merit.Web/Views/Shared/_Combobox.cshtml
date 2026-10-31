@@ -13,7 +13,7 @@
            role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="@Model.Id-list"
            aria-describedby="@state.DescribedBy(Model.Name, hintId, Model.Id + "-text")" aria-invalid="@state.AriaInvalid(Model.Name)"
            aria-required="@(required ? "true" : null)"
-           data-hidden="@Model.Id" name="q"
+           data-hidden="@Model.Id" data-field="@Model.Name" name="q"
            hx-get="@Model.Url" hx-trigger="input changed delay:400ms" hx-target="#@Model.Id-list" hx-swap="innerHTML"
            hx-vals='{"field":"@Model.Id"}' />
     <input type="hidden" id="@Model.Id" name="@Model.Name" value="@Model.Value" />

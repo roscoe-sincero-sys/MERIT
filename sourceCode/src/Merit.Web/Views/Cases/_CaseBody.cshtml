@@ -1,9 +1,10 @@
 @model CasePageModel
 @{
+    var draft = Model.Draft ?? FormDraft.Empty;
     var c = Model.Detail.Case;
     string rv = Options.Hex(c.RowVersion);
 }
-<div id="case-body">
+<div id="case-body" data-preserve-drafts>
     <div class="merit-page-header">
         <h1>Case @c.CaseNumber</h1>
         <p>
@@ -15,6 +16,10 @@
     @if (Model.Message is not null)
     {
         <div class="usa-alert usa-alert--info usa-alert--slim" role="status"><div class="usa-alert__body"><p class="usa-alert__text">@Model.Message</p></div></div>
+    }
+    @if (!ViewData.ModelState.IsValid)
+    {
+        <div class="usa-alert usa-alert--error usa-alert--slim" role="alert"><p class="usa-alert__text">@string.Join(" ", ViewData.ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage))</p></div>
     }
     <div class="merit-grid-2">
         <section class="merit-section" aria-labelledby="case-summary">
@@ -35,15 +40,15 @@
             </dl>
             @if (Model.CanEdit)
             {
-                <form class="usa-form" hx-post="/cases/@c.ExposureCaseId/update" hx-target="#case-body" hx-swap="outerHTML">
-                    <input type="hidden" name="rowVersion" value="@rv" />
+                <form class="usa-form" id="case-update-form" hx-post="/cases/@c.ExposureCaseId/update" hx-target="#case-body" hx-swap="outerHTML">
+                    <input type="hidden" name="rowVersion" value="@draft.Value("update", "rowVersion", rv)" />
                     <div class="merit-form-row">
                         <div class="usa-form-group"><label class="usa-label" for="assignedToUserId">Assigned to</label>
-                            <select class="usa-select" id="assignedToUserId" name="assignedToUserId">@foreach (var o in Model.Users) { <option value="@o.Value" selected="@o.Selected">@o.Label</option> }</select></div>
+                            <select class="usa-select" id="assignedToUserId" name="assignedToUserId">@foreach (var o in Model.Users) { <option value="@o.Value" selected="@(draft.Selected("update", "assignedToUserId", o))">@o.Label</option> }</select></div>
                         <div class="usa-form-group"><label class="usa-label" for="exposureCategory">Exposure category</label>
-                            <select class="usa-select" id="exposureCategory" name="exposureCategory">@foreach (var o in Options.Fixed(c.ExposureCategory, Options.ExposureCategories)) { <option value="@o.Value" selected="@o.Selected">@o.Label</option> }</select></div>
+                            <select class="usa-select" id="exposureCategory" name="exposureCategory">@foreach (var o in Options.Fixed(draft.Value("update", "exposureCategory", c.ExposureCategory), Options.ExposureCategories)) { <option value="@o.Value" selected="@o.Selected">@o.Label</option> }</select></div>
                         <div class="usa-form-group"><label class="usa-label" for="caseStatus">Status</label>
-                            <select class="usa-select" id="caseStatus" name="caseStatus"><option value="open" selected="@(c.CaseStatus == "open")">Open</option><option value="monitoring" selected="@(c.CaseStatus == "monitoring")">Monitoring</option></select></div>
+                            <select class="usa-select" id="caseStatus" name="caseStatus"><option value="open" selected="@(draft.Value("update", "caseStatus", c.CaseStatus) == "open")">Open</option><option value="monitoring" selected="@(draft.Value("update", "caseStatus", c.CaseStatus) == "monitoring")">Monitoring</option></select></div>
                     </div>
                     <button class="usa-button usa-button--outline" type="submit">Save</button>
                 </form>
@@ -108,16 +113,16 @@
         <h2 id="case-activities">Activity log</h2>
         @if (Model.CanEdit)
         {
-            <form class="usa-form merit-inline-form" hx-post="/cases/@c.ExposureCaseId/activities" hx-target="#case-body" hx-swap="outerHTML">
+            <form class="usa-form merit-inline-form" id="case-activity-form" hx-post="/cases/@c.ExposureCaseId/activities" hx-target="#case-body" hx-swap="outerHTML">
                 <div class="merit-form-row">
                     <div class="usa-form-group"><label class="usa-label" for="activityType">Activity</label>
-                        <select class="usa-select" id="activityType" name="activityType">@foreach (var o in Model.ActivityTypes) { <option value="@o.Value" selected="@o.Selected">@o.Label</option> }</select></div>
-                    <div class="usa-form-group"><label class="usa-label" for="activityDate">Date</label><input class="usa-input" id="activityDate" name="activityDate" type="date" value="@Options.Iso(Clock.Today)" /></div>
+                        <select class="usa-select" id="activityType" name="activityType">@foreach (var o in Model.ActivityTypes) { <option value="@o.Value" selected="@(draft.Selected("activity", "activityType", o))">@o.Label</option> }</select></div>
+                    <div class="usa-form-group"><label class="usa-label" for="activityDate">Date</label><input class="usa-input" id="activityDate" name="activityDate" type="date" value="@draft.Value("activity", "activityDate", Options.Iso(Clock.Today))" /></div>
                     <div class="usa-form-group"><label class="usa-label" for="outcome">Outcome</label>
-                        <select class="usa-select" id="outcome" name="outcome">@foreach (var o in Model.Outcomes) { <option value="@o.Value" selected="@o.Selected">@o.Label</option> }</select></div>
+                        <select class="usa-select" id="outcome" name="outcome">@foreach (var o in Model.Outcomes) { <option value="@o.Value" selected="@(draft.Selected("activity", "outcome", o))">@o.Label</option> }</select></div>
                 </div>
                 @if (Model.Detail.PrimaryContact is { } pc2) { <input type="hidden" name="contactPersonId" value="@pc2.ContactPersonId" /> }
-                <div class="usa-form-group"><label class="usa-label" for="note">Note</label><textarea class="usa-textarea" id="note" name="note" rows="2" maxlength="2000"></textarea></div>
+                <div class="usa-form-group"><label class="usa-label" for="note">Note</label><textarea class="usa-textarea" id="note" name="note" rows="2" maxlength="2000">@draft.Value("activity", "note")</textarea></div>
                 <button class="usa-button" type="submit">Log activity</button>
             </form>
         }
@@ -140,28 +145,28 @@
         <div class="merit-grid-2">
             <section class="merit-section" aria-labelledby="override-heading">
                 <h2 id="override-heading">Override classification</h2>
-                <form class="usa-form" hx-post="/cases/@c.ExposureCaseId/override" hx-target="#case-body" hx-swap="outerHTML">
-                    <input type="hidden" name="rowVersion" value="@rv" />
+                <form class="usa-form" id="case-override-form" hx-post="/cases/@c.ExposureCaseId/override" hx-target="#case-body" hx-swap="outerHTML">
+                    <input type="hidden" name="rowVersion" value="@draft.Value("override", "rowVersion", rv)" />
                     <div class="merit-form-row">
                         <div class="usa-form-group"><label class="usa-label" for="classification">Classification</label>
-                            <select class="usa-select" id="classification" name="classification"><option value="confirmed" selected="@(c.Classification == "confirmed")">Confirmed</option><option value="suspect" selected="@(c.Classification == "suspect")">Suspect</option><option value="notACase" selected="@(c.Classification == "notACase")">Not a case</option></select></div>
+                            <select class="usa-select" id="classification" name="classification"><option value="confirmed" selected="@(draft.Value("override", "classification", c.Classification) == "confirmed")">Confirmed</option><option value="suspect" selected="@(draft.Value("override", "classification", c.Classification) == "suspect")">Suspect</option><option value="notACase" selected="@(draft.Value("override", "classification", c.Classification) == "notACase")">Not a case</option></select></div>
                         <div class="usa-form-group"><label class="usa-label" for="population">Population</label>
-                            <select class="usa-select" id="population" name="population"><option value="child" selected="@(c.Population == "child")">Child</option><option value="adult" selected="@(c.Population == "adult")">Adult</option><option value="pregnant" selected="@(c.Population == "pregnant")">Pregnant</option></select></div>
+                            <select class="usa-select" id="population" name="population"><option value="child" selected="@(draft.Value("override", "population", c.Population) == "child")">Child</option><option value="adult" selected="@(draft.Value("override", "population", c.Population) == "adult")">Adult</option><option value="pregnant" selected="@(draft.Value("override", "population", c.Population) == "pregnant")">Pregnant</option></select></div>
                     </div>
-                    <div class="usa-form-group"><label class="usa-label" for="reason">Reason (required)</label><input class="usa-input" id="reason" name="reason" required /></div>
+                    <div class="usa-form-group"><label class="usa-label" for="reason">Reason (required)</label><input class="usa-input" id="reason" name="reason" value="@draft.Value("override", "reason")" required /></div>
                     <button class="usa-button usa-button--outline" type="submit">Override</button>
                 </form>
             </section>
             <section class="merit-section" aria-labelledby="close-heading">
                 <h2 id="close-heading">Close case</h2>
-                <form class="usa-form" hx-post="/cases/@c.ExposureCaseId/close" hx-target="#case-body" hx-swap="outerHTML" hx-confirm="Close this case?">
-                    <input type="hidden" name="rowVersion" value="@rv" />
+                <form class="usa-form" id="case-close-form" hx-post="/cases/@c.ExposureCaseId/close" hx-target="#case-body" hx-swap="outerHTML" hx-confirm="Close this case? Unsaved entries in other sections will be discarded when editing closes.">
+                    <input type="hidden" name="rowVersion" value="@draft.Value("close", "rowVersion", rv)" />
                     <div class="merit-form-row">
                         <div class="usa-form-group"><label class="usa-label" for="closureReason">Reason</label>
-                            <select class="usa-select" id="closureReason" name="closureReason" required>@foreach (var o in Model.ClosureReasons) { <option value="@o.Value">@o.Label</option> }</select></div>
-                        <div class="usa-form-group"><label class="usa-label" for="closedDate">Closed date</label><input class="usa-input" id="closedDate" name="closedDate" type="date" value="@Options.Iso(Clock.Today)" /></div>
+                            <select class="usa-select" id="closureReason" name="closureReason" required>@foreach (var o in Model.ClosureReasons) { <option value="@o.Value" selected="@(draft.Selected("close", "closureReason", o))">@o.Label</option> }</select></div>
+                        <div class="usa-form-group"><label class="usa-label" for="closedDate">Closed date</label><input class="usa-input" id="closedDate" name="closedDate" type="date" value="@draft.Value("close", "closedDate", Options.Iso(Clock.Today))" /></div>
                     </div>
-                    <div class="usa-form-group"><label class="usa-label" for="closeNote">Note</label><input class="usa-input" id="closeNote" name="note" /></div>
+                    <div class="usa-form-group"><label class="usa-label" for="closeNote">Note</label><input class="usa-input" id="closeNote" name="note" value="@draft.Value("close", "note")" /></div>
                     <button class="usa-button usa-button--secondary" type="submit">Close case</button>
                 </form>
             </section>

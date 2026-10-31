@@ -1,5 +1,6 @@
 @model InvestigationPageModel
 @{
+    var draft = Model.Draft ?? FormDraft.Empty;
     var i = Model.Detail.Investigation;
     string target = i.InvestigationType switch
     {
@@ -8,7 +9,7 @@
         _ => $"{i.AddressLine1} {i.Unit}, {i.City}, {i.State} {i.Zip5}",
     };
 }
-<div id="investigation-body">
+<div id="investigation-body" data-preserve-drafts>
     <div class="merit-page-header">
         <h1>Investigation @i.InvestigationNumber</h1>
         <span class="merit-badge">@Options.Humanize(i.InvestigationStatus)</span>
@@ -40,26 +41,26 @@
             <h2 id="inv-details">Status and findings</h2>
             @if (Model.CanEdit)
             {
-                <form class="usa-form" hx-post="/investigations/@i.InvestigationId" hx-target="#investigation-body" hx-swap="outerHTML">
-                    <input type="hidden" name="rowVersion" value="@Options.Hex(i.RowVersion)" />
+                <form class="usa-form" id="investigation-save-form" hx-post="/investigations/@i.InvestigationId" hx-target="#investigation-body" hx-swap="outerHTML">
+                    <input type="hidden" name="rowVersion" value="@draft.Value("save", "rowVersion", Options.Hex(i.RowVersion))" />
                     <div class="merit-form-row">
                         <div class="usa-form-group"><label class="usa-label" for="investigationStatus">Status</label>
-                            <select class="usa-select" id="investigationStatus" name="investigationStatus">@foreach (var o in Model.Statuses) { <option value="@o.Value" selected="@o.Selected">@o.Label</option> }</select></div>
+                            <select class="usa-select" id="investigationStatus" name="investigationStatus">@foreach (var o in Model.Statuses) { <option value="@o.Value" selected="@(draft.Selected("save", "investigationStatus", o))">@o.Label</option> }</select></div>
                         <div class="usa-form-group"><label class="usa-label" for="assignedToUserId">Investigator</label>
-                            <select class="usa-select" id="assignedToUserId" name="assignedToUserId">@foreach (var o in Model.Users) { <option value="@o.Value" selected="@o.Selected">@o.Label</option> }</select></div>
+                            <select class="usa-select" id="assignedToUserId" name="assignedToUserId">@foreach (var o in Model.Users) { <option value="@o.Value" selected="@(draft.Selected("save", "assignedToUserId", o))">@o.Label</option> }</select></div>
                     </div>
                     <div class="merit-form-row">
                         <div class="usa-form-group"><label class="usa-label">Requested</label><p>@Options.Date(i.RequestedDate)</p></div>
-                        <div class="usa-form-group"><label class="usa-label" for="scheduledDate">Scheduled</label><input class="usa-input" id="scheduledDate" name="scheduledDate" type="date" value="@Options.Iso(i.ScheduledDate)" /></div>
-                        <div class="usa-form-group"><label class="usa-label" for="completedDate">Completed</label><input class="usa-input" id="completedDate" name="completedDate" type="date" value="@Options.Iso(i.CompletedDate)" /></div>
+                        <div class="usa-form-group"><label class="usa-label" for="scheduledDate">Scheduled</label><input class="usa-input" id="scheduledDate" name="scheduledDate" type="date" value="@draft.Value("save", "scheduledDate", Options.Iso(i.ScheduledDate))" /></div>
+                        <div class="usa-form-group"><label class="usa-label" for="completedDate">Completed</label><input class="usa-input" id="completedDate" name="completedDate" type="date" value="@draft.Value("save", "completedDate", Options.Iso(i.CompletedDate))" /></div>
                     </div>
-                    <div class="usa-form-group"><label class="usa-label" for="findings">Findings</label><textarea class="usa-textarea" id="findings" name="findings" rows="3">@i.Findings</textarea></div>
+                    <div class="usa-form-group"><label class="usa-label" for="findings">Findings</label><textarea class="usa-textarea" id="findings" name="findings" rows="3">@draft.Value("save", "findings", i.Findings)</textarea></div>
                     <div class="merit-form-row">
                         <div class="usa-form-group"><label class="usa-label" for="regulatoryAction">Regulatory action</label>
-                            <select class="usa-select" id="regulatoryAction" name="regulatoryAction">@foreach (var o in Model.RegulatoryActions) { <option value="@o.Value" selected="@o.Selected">@o.Label</option> }</select></div>
-                        <div class="usa-form-group"><label class="usa-label" for="referralDate">Referral date</label><input class="usa-input" id="referralDate" name="referralDate" type="date" value="@Options.Iso(i.ReferralDate)" /></div>
+                            <select class="usa-select" id="regulatoryAction" name="regulatoryAction">@foreach (var o in Model.RegulatoryActions) { <option value="@o.Value" selected="@(draft.Selected("save", "regulatoryAction", o))">@o.Label</option> }</select></div>
+                        <div class="usa-form-group"><label class="usa-label" for="referralDate">Referral date</label><input class="usa-input" id="referralDate" name="referralDate" type="date" value="@draft.Value("save", "referralDate", Options.Iso(i.ReferralDate))" /></div>
                     </div>
-                    <div class="usa-form-group"><label class="usa-label" for="referralOutcome">Referral outcome</label><input class="usa-input" id="referralOutcome" name="referralOutcome" value="@i.ReferralOutcome" /></div>
+                    <div class="usa-form-group"><label class="usa-label" for="referralOutcome">Referral outcome</label><input class="usa-input" id="referralOutcome" name="referralOutcome" value="@draft.Value("save", "referralOutcome", i.ReferralOutcome)" /></div>
                     <button class="usa-button" type="submit">Save</button>
                 </form>
             }
@@ -96,21 +97,21 @@
         }
         @if (Model.CanEdit)
         {
-            <form class="usa-form merit-inline-form" hx-post="/investigations/@i.InvestigationId/samples" hx-target="#investigation-body" hx-swap="outerHTML">
+            <form class="usa-form merit-inline-form" id="investigation-sample-form" hx-post="/investigations/@i.InvestigationId/samples" hx-target="#investigation-body" hx-swap="outerHTML">
                 <div class="merit-form-row">
                     <div class="usa-form-group"><label class="usa-label" for="sampleType">Sample type</label>
-                        <select class="usa-select" id="sampleType" name="sampleType">@foreach (var o in Model.SampleTypes) { <option value="@o.Value" selected="@o.Selected">@o.Label</option> }</select></div>
-                    <div class="usa-form-group"><label class="usa-label" for="roomOrComponent">Room or component</label><input class="usa-input" id="roomOrComponent" name="roomOrComponent" /></div>
+                        <select class="usa-select" id="sampleType" name="sampleType">@foreach (var o in Model.SampleTypes) { <option value="@o.Value" selected="@(draft.Selected("sample", "sampleType", o))">@o.Label</option> }</select></div>
+                    <div class="usa-form-group"><label class="usa-label" for="roomOrComponent">Room or component</label><input class="usa-input" id="roomOrComponent" name="roomOrComponent" value="@draft.Value("sample", "roomOrComponent")" /></div>
                     <div class="usa-form-group"><label class="usa-label" for="surface">Surface</label>
-                        <select class="usa-select" id="surface" name="surface"><option value="">- None -</option><option value="floor">Floor</option><option value="windowSill">Window sill</option><option value="windowTrough">Window trough</option></select></div>
+                        <select class="usa-select" id="surface" name="surface"><option value="" selected="@(draft.Value("sample", "surface", "") == "")">- None -</option><option value="floor" selected="@(draft.Value("sample", "surface", "") == "floor")">Floor</option><option value="windowSill" selected="@(draft.Value("sample", "surface", "") == "windowSill")">Window sill</option><option value="windowTrough" selected="@(draft.Value("sample", "surface", "") == "windowTrough")">Window trough</option></select></div>
                 </div>
                 <div class="merit-form-row">
-                    <div class="usa-form-group"><label class="usa-label" for="sampleValue">Value</label><input class="usa-input" id="sampleValue" name="sampleValue" inputmode="decimal" required /></div>
+                    <div class="usa-form-group"><label class="usa-label" for="sampleValue">Value</label><input class="usa-input" id="sampleValue" name="sampleValue" value="@draft.Value("sample", "sampleValue")" inputmode="decimal" required /></div>
                     <div class="usa-form-group"><label class="usa-label" for="unit">Unit</label>
-                        <select class="usa-select" id="unit" name="unit"><option value="ug/ft2">ug/ft2</option><option value="mg/cm2">mg/cm2</option><option value="ppm">ppm</option><option value="ug/L">ug/L</option></select></div>
-                    <div class="usa-form-group"><label class="usa-label" for="sampleDate">Sample date</label><input class="usa-input" id="sampleDate" name="sampleDate" type="date" value="@Options.Iso(Clock.Today)" required /></div>
+                        <select class="usa-select" id="unit" name="unit"><option value="ug/ft2" selected="@(draft.Value("sample", "unit", "ug/ft2") == "ug/ft2")">ug/ft2</option><option value="mg/cm2" selected="@(draft.Value("sample", "unit", "ug/ft2") == "mg/cm2")">mg/cm2</option><option value="ppm" selected="@(draft.Value("sample", "unit", "ug/ft2") == "ppm")">ppm</option><option value="ug/L" selected="@(draft.Value("sample", "unit", "ug/ft2") == "ug/L")">ug/L</option></select></div>
+                    <div class="usa-form-group"><label class="usa-label" for="sampleDate">Sample date</label><input class="usa-input" id="sampleDate" name="sampleDate" type="date" value="@draft.Value("sample", "sampleDate", Options.Iso(Clock.Today))" required /></div>
                 </div>
-                <div class="usa-form-group"><label class="usa-label" for="notes">Notes</label><input class="usa-input" id="notes" name="notes" /></div>
+                <div class="usa-form-group"><label class="usa-label" for="notes">Notes</label><input class="usa-input" id="notes" name="notes" value="@draft.Value("sample", "notes")" /></div>
                 <button class="usa-button usa-button--outline" type="submit">Add sample</button>
             </form>
         }

@@ -16,7 +16,7 @@ namespace Merit.Web.Controllers;
 /// </summary>
 [Route("people/{personId:guid}/places")]
 public sealed class PlacesController(IClock clock, PlaceService places, PersonService people, PersonPageBuilder builder,
-                                     IReferenceDataProvider reference, ConfigService config) : Controller
+                                     IReferenceDataProvider reference, ConfigService config, LookupService lookup) : Controller
 {
     [HttpGet("")]
     [Authorize(Policy = Permissions.PersonView)]
@@ -196,6 +196,20 @@ public sealed class PlacesController(IClock clock, PlaceService places, PersonSe
     private async Task<PlaceFormModel> FormAsync(PlaceFormModel form, CancellationToken ct)
     {
         var refData = await reference.GetAsync(ct);
+        if (form.Role is "childCare" or "school")
+        {
+            var parts = form.OrganizationSite?.Split(':');
+            var site = parts is { Length: 2 } && Guid.TryParse(parts[0], out var siteId)
+                ? await lookup.SelectionAsync("site", siteId, ct, form.Role) : null;
+            form.OrganizationSite = site?.Value;
+            form.OrganizationLabel = site?.Label;
+        }
+        else
+        {
+            var location = await lookup.SelectionAsync("location", form.LocationId, ct);
+            form.LocationId = location is null ? null : form.LocationId;
+            form.LocationLabel = location?.Label;
+        }
         form.Roles = refData.Choices("locationRole", form.Role);
         form.Schedules = refData.Choices("scheduleType", form.ScheduleType, includeBlank: true);
         form.Reasons = refData.Choices("primaryReason", form.PrimaryReason, includeBlank: true);

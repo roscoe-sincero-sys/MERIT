@@ -15,7 +15,7 @@ namespace Merit.Web.Controllers;
 /// SVG. Every section URL also renders as a full page on its own, so anything htmx pushes into history works.
 /// </summary>
 [Route("people")]
-public sealed class PeopleController(IClock clock, PersonService people, PersonPageBuilder builder, IReferenceDataProvider reference) : Controller
+public sealed class PeopleController(IClock clock, PersonService people, PersonPageBuilder builder, IReferenceDataProvider reference, LookupService lookup) : Controller
 {
     // ------------------------------------------------------------------------------------------ person
     [HttpGet("new")]
@@ -312,6 +312,9 @@ public sealed class PeopleController(IClock clock, PersonService people, PersonP
 
     private async Task<RelationshipFormModel> RelationshipFormAsync(RelationshipFormModel form, CancellationToken ct)
     {
+        var selected = await lookup.SelectionAsync("person", form.RelatedPersonId, ct);
+        form.RelatedPersonId = selected is null ? null : form.RelatedPersonId;
+        form.RelatedPersonLabel = selected?.Label;
         form.Roles = (await reference.GetAsync(ct)).Choices("relationshipRole", form.Role);
         return form;
     }
@@ -319,6 +322,9 @@ public sealed class PeopleController(IClock clock, PersonService people, PersonP
     private async Task<EmploymentFormModel> EmploymentFormAsync(EmploymentFormModel form, CancellationToken ct)
     {
         var refData = await reference.GetAsync(ct);
+        var employer = await lookup.SelectionAsync("organization", form.OrganizationId, ct, "employer");
+        form.OrganizationId = employer is null ? null : form.OrganizationId;
+        form.OrganizationLabel = employer?.Label;
         form.Analytes = refData.ActiveAnalytes.Select(a => new SelectOption(a.AnalyteId.ToString(), a.DisplayName, form.AnalyteIds.Contains(a.AnalyteId))).ToList();
         return form;
     }

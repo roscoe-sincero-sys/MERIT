@@ -78,6 +78,61 @@
     });
 
     // ------------------------------------------------------------------------------------------ after a swap
+    // Preserve only user-edited sibling fields, together with the version they were edited against.
+    // The server alone redisplays the submitted form on validation failure.
+    const formEdits = new Map();
+    function recordEdit(evt) {
+        const field = evt.target;
+        const form = field.closest("[data-preserve-drafts] form[id]");
+        if (!form || !field.id || field.type === "hidden") return;
+        if (!formEdits.has(form.id)) formEdits.set(form.id, new Set());
+        formEdits.get(form.id).add(field.id);
+    }
+    document.addEventListener("input", recordEdit);
+    document.addEventListener("change", recordEdit);
+    document.addEventListener("htmx:before:swap", evt => {
+        const ctx = evt.detail && evt.detail.ctx;
+        if (!ctx) return;
+        const target = typeof ctx.target === "string" ? document.querySelector(ctx.target) : ctx.target;
+        if (!target || !target.matches("[data-preserve-drafts]")) return;
+        const submitted = ctx.sourceElement && ctx.sourceElement.closest("form");
+        const failed = ctx.response && ctx.response.status >= 400;
+        ctx.meritDrafts = [];
+        target.querySelectorAll("form[id]").forEach(form => {
+            if (form === submitted) {
+                if (!failed) formEdits.delete(form.id);
+                return;
+            }
+            const edited = formEdits.get(form.id);
+            if (!edited) return;
+            const fields = [...form.querySelectorAll("input[id], select[id], textarea[id]")]
+                .filter(field => edited.has(field.id) && field.type !== "hidden" && field.type !== "file")
+                .map(field => ({ id: field.id, value: field.value, checked: field.checked }));
+            ctx.meritDrafts.push({ id: form.id, fields,
+                version: form.querySelector('[name="rowVersion"]')?.value });
+        });
+    });
+    // htmx 4 completes its settle tasks before emitting this event with the request context.
+    document.addEventListener("htmx:after:swap", evt => {
+        const ctx = evt.detail && evt.detail.ctx;
+        for (const draft of (ctx && ctx.meritDrafts) || []) {
+            const form = document.getElementById(draft.id);
+            if (!form) continue;
+            for (const saved of draft.fields) {
+                const field = document.getElementById(saved.id);
+                if (!field || !form.contains(field) || field.disabled) continue;
+                field.value = saved.value;
+                if (saved.checked !== undefined) field.checked = saved.checked;
+            }
+            const version = form.querySelector('[name="rowVersion"]');
+            if (draft.fields.length && version && draft.version !== undefined) version.value = draft.version;
+        }
+        if (ctx && ctx.meritDrafts) {
+            delete ctx.meritDrafts;
+            for (const id of formEdits.keys()) if (!document.getElementById(id)) formEdits.delete(id);
+        }
+    });
+
     document.addEventListener("htmx:after:swap", evt => {
         const ctx = evt.detail && evt.detail.ctx;
         const target = ctx && ctx.target;
@@ -211,6 +266,18 @@
     });
 
     // ------------------------------------------------------------------------------------------ small conveniences
+    function invalidatePrimaryPreview(evt) {
+        const form = evt.target.closest("[data-primary-preview]");
+        if (!form) return;
+        const preview = form.closest("#set-primary");
+        const confirm = preview && preview.querySelector("[data-primary-confirm]");
+        if (confirm) confirm.disabled = true;
+        const message = preview && preview.querySelector("[data-preview-stale]");
+        if (message) message.hidden = false;
+    }
+    document.addEventListener("input", invalidatePrimaryPreview);
+    document.addEventListener("change", invalidatePrimaryPreview);
+
     // A select with data-autosubmit submits its form (used by plain GET filter forms; htmx forms trigger on change).
     document.addEventListener("change", evt => {
         const el = evt.target.closest("[data-autosubmit]");
@@ -243,10 +310,11 @@
             if ("disabled" in el) el.disabled = !active;
             el.querySelectorAll("input, select, textarea, button").forEach(ctrl => { ctrl.disabled = !active; });
             el.querySelectorAll("[role=combobox]").forEach(box => {
-                if (box.id === "OrganizationSite-text") {
+                if (box.getAttribute("data-field") === "OrganizationSite") {
+                    if (changedField === field) box.dispatchEvent(new Event("htmx:abort"));
                     box.setAttribute("hx-get", "/lookup/sites?type=" + (value === "school" ? "school" : "childCare"));
                 }
-                if (!active || (changedField && changedField.name === name && box.id === "OrganizationSite-text")) {
+                if (!active || (changedField === field && box.getAttribute("data-field") === "OrganizationSite")) {
                     clearCombobox(box);
                 }
             });

@@ -67,10 +67,22 @@ public sealed class IntakeService(IIntakeData intake, IWorkData work, Services.A
         return await intake.GetBatchAsync(batchId, false, ct).ConfigureAwait(false) ?? throw new NotFoundException();
     }
 
-    public async Task<IReadOnlyList<HeldGroupRow>> HeldGroupsAsync(CancellationToken ct = default)
+    public async Task<IReadOnlyList<HeldGroupRow>> HeldGroupsAsync(Guid? batchId = null, CancellationToken ct = default)
     {
         session.Require(Permissions.ResultReleaseHold);
-        return await intake.ListHeldGroupsAsync(ct).ConfigureAwait(false);
+        return await intake.ListHeldGroupsAsync(batchId, ct).ConfigureAwait(false);
+    }
+
+    public async Task<HeldOverview> HeldOverviewAsync(Guid? batchId, CancellationToken ct = default)
+    {
+        session.Require(Permissions.ResultReleaseHold);
+        return await intake.GetHeldOverviewAsync(batchId, ct).ConfigureAwait(false);
+    }
+
+    public async Task<HeldSummaryRow> HeldSummaryAsync(Guid? batchId, CancellationToken ct = default)
+    {
+        session.Require(Permissions.ResultReleaseHold);
+        return await intake.GetHeldSummaryAsync(batchId, ct).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -100,6 +112,8 @@ public sealed class IntakeService(IIntakeData intake, IWorkData work, Services.A
     public async Task CorrectAsync(Guid stagingRowId, IReadOnlyDictionary<string, string?> corrections, CancellationToken ct = default)
     {
         session.Require(Permissions.ResultReleaseHold);
+        new Validator().When(corrections.ContainsKey("matchPersonId") || corrections.ContainsKey("matchNewPerson"),
+            "Corrections", "Use Match review to choose an existing or new person.").ThrowIfInvalid();
         await intake.SaveCorrectionAsync(stagingRowId, JsonSerializer.Serialize(corrections), ct).ConfigureAwait(false);
     }
 

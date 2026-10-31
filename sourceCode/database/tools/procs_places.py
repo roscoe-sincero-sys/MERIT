@@ -5,6 +5,48 @@ PERSON_VISIBLE = not_found("@personId", "dbo.person", "personId", "The person")
 
 PROCS = [
     {
+        "schema": "dbo", "name": "uspGetLookupSelection", "kind": "read", "grants": WEB, "ticket": "#66",
+        "permission": "person.view",
+        "desc": "Rehydrates one selected lookup from its authorized identifier; RLS applies to every source.",
+        "params": "@kind VARCHAR (20) = NULL\n, @id UNIQUEIDENTIFIER = NULL\n, @organizationTypeCode VARCHAR (30) = NULL\n, @selectionsJson NVARCHAR (MAX) = NULL",
+        "key": "CONCAT (N'kind=', @kind, N', id=', @id, N', organizationTypeCode=', @organizationTypeCode)",
+        "body": """
+DECLARE @requested TABLE (kind VARCHAR (20), id UNIQUEIDENTIFIER, organizationTypeCode VARCHAR (30));
+IF @selectionsJson IS NULL
+    INSERT @requested VALUES (@kind, @id, @organizationTypeCode);
+ELSE
+    INSERT @requested SELECT kind, id, organizationTypeCode
+      FROM OPENJSON (@selectionsJson) WITH (kind VARCHAR (20), id UNIQUEIDENTIFIER, organizationTypeCode VARCHAR (30));
+
+SELECT r.kind, r.id, CONVERT (NVARCHAR (80), p.personId) AS value, p.lastName AS name,
+       p.firstName, CAST (NULL AS NVARCHAR (30)) AS credential, CAST (NULL AS NVARCHAR (30)) AS unit
+  FROM @requested AS r JOIN dbo.person AS p ON p.personId = r.id
+ WHERE r.kind = 'person' AND p.isDeleted = 0 AND p.mergedIntoPersonId IS NULL
+UNION ALL
+SELECT r.kind, r.id, CONVERT (NVARCHAR (80), o.organizationId), o.organizationName, NULL, NULL, NULL
+  FROM @requested AS r JOIN dbo.organization AS o ON o.organizationId = r.id
+ WHERE r.kind = 'organization' AND o.isDeleted = 0 AND o.isActive = 1
+   AND (r.organizationTypeCode IS NULL OR EXISTS (SELECT 1 FROM dbo.organizationType AS ot
+         WHERE ot.organizationId = o.organizationId AND ot.isDeleted = 0 AND ot.organizationTypeCode = r.organizationTypeCode))
+UNION ALL
+SELECT r.kind, r.id, CONVERT (NVARCHAR (80), p.providerId), p.lastName, p.firstName, p.credential, NULL
+  FROM @requested AS r JOIN dbo.provider AS p ON p.providerId = r.id
+ WHERE r.kind = 'provider' AND p.isDeleted = 0
+UNION ALL
+SELECT r.kind, r.id, CONVERT (NVARCHAR (80), l.locationId), l.addressLine1, NULL, NULL, l.unit
+  FROM @requested AS r JOIN dbo.location AS l ON l.locationId = r.id
+ WHERE r.kind = 'location' AND l.isDeleted = 0
+UNION ALL
+SELECT r.kind, r.id, CONCAT (s.organizationSiteId, N':', s.locationId), o.organizationName, NULL, NULL, NULL
+  FROM @requested AS r JOIN dbo.organizationSite AS s ON s.organizationSiteId = r.id
+  JOIN dbo.organization AS o ON o.organizationId = s.organizationId AND o.isDeleted = 0 AND o.isActive = 1
+  JOIN dbo.location AS l ON l.locationId = s.locationId AND l.isDeleted = 0
+ WHERE r.kind = 'site' AND s.isDeleted = 0 AND s.endDate IS NULL
+   AND (r.organizationTypeCode IS NULL OR EXISTS (SELECT 1 FROM dbo.organizationType AS ot
+         WHERE ot.organizationId = o.organizationId AND ot.isDeleted = 0 AND ot.organizationTypeCode = r.organizationTypeCode));
+""",
+    },
+    {
         "schema": "dbo", "name": "uspFindLocations", "kind": "read", "grants": BOTH, "ticket": "T042",
         "permission": "person.view",
         "desc": "Existing locations whose normalized address starts with the text typed, so address entry offers a "

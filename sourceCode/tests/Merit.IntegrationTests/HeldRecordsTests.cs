@@ -12,6 +12,72 @@ namespace Merit.IntegrationTests;
 public sealed class HeldRecordsTests(MeritFixture fixture)
 {
     [SqlFact]
+    public async Task BatchSummaryCountsRowsOnceAndGroupsUseTheSameScope()
+    {
+        var labA = Guid.NewGuid();
+        var labB = Guid.NewGuid();
+        var rows = new List<Guid>();
+        try
+        {
+            Guid batch;
+            await using (var c = new SqlConnection(TestEnvironment.AdminConnectionString()))
+            {
+                await c.OpenAsync();
+                await HoldAsync(c, labA, "Scoped Lab A", [("missingDob", null)], rows);
+                await HoldAsync(c, labB, "Scoped Lab B", [("unknownUnit", "unexpected")], rows);
+                await using var cmd = new SqlCommand("""
+                    INSERT dbo.stagingHoldReason (stagingHoldReasonId, rootTenantId, owningTenantId, stagingRowId, reasonCode, reasonMessage)
+                    SELECT NEWID (), rootTenantId, owningTenantId, stagingRowId, 'unknownUnit', N'Another cause for the same row'
+                      FROM dbo.stagingRow WHERE stagingRowId = @row;
+                    SELECT intakeBatchId FROM dbo.stagingRow WHERE stagingRowId = @row;
+                    """, c);
+                cmd.Parameters.AddWithValue("@row", rows[0]);
+                batch = (Guid)(await cmd.ExecuteScalarAsync())!;
+            }
+            var client = await fixture.SignedInAsync("supervisor");
+            using var summary = await JsonAsync(client, $"/api/v1/held/summary?batch={batch}");
+            Assert.Equal(1, summary.RootElement.GetProperty("totalCount").GetInt32());
+            Assert.Equal("held-groups.csv", summary.RootElement.GetProperty("batchFileName").GetString());
+            using var overview = await JsonAsync(client, $"/api/v1/held/overview?batch={batch}");
+            Assert.Equal(1, overview.RootElement.GetProperty("totalCount").GetInt32());
+            Assert.Equal(2, overview.RootElement.GetProperty("groups").GetArrayLength());
+            using var groups = await JsonAsync(client, $"/api/v1/held/groups?batch={batch}");
+            Assert.Equal(2, groups.RootElement.GetArrayLength());
+            Assert.All(groups.RootElement.EnumerateArray(), g => Assert.Equal(labA, g.GetProperty("senderOrganizationId").GetGuid()));
+            Assert.Equal(1, (await RowsAsync(client, $"batch={batch}")).Total);
+        }
+        finally { await RemoveAsync(labA, labB); }
+    }
+
+    [SqlFact]
+    public async Task GenericReleaseCannotBypassMatchReviewOrForgeADecisionAsACorrection()
+    {
+        var lab = Guid.NewGuid();
+        var rows = new List<Guid>();
+        try
+        {
+            await using (var c = new SqlConnection(TestEnvironment.AdminConnectionString()))
+            {
+                await c.OpenAsync();
+                await HoldAsync(c, lab, "Match safeguard lab", [("uncertainMatch", null)], rows);
+            }
+            var client = await fixture.SignedInAsync("supervisor");
+            await client.Http.GetStringAsync("/");
+            using var release = await client.NoRedirect.PostAsync("/api/v1/held/release", new StringContent(
+                JsonSerializer.Serialize(new { stagingRowIds = rows, reason = (string?)null }), System.Text.Encoding.UTF8, "application/json"));
+            Assert.Equal(HttpStatusCode.OK, release.StatusCode);
+            using var outcome = JsonDocument.Parse(await release.Content.ReadAsStringAsync());
+            Assert.Equal(0, outcome.RootElement.GetProperty("updated").GetInt32());
+            using var correction = await client.NoRedirect.PutAsync($"/api/v1/held/rows/{rows[0]}/correction", new StringContent(
+                "{\"corrections\":{\"matchNewPerson\":\"true\"}}", System.Text.Encoding.UTF8, "application/json"));
+            Assert.Equal(HttpStatusCode.UnprocessableEntity, correction.StatusCode);
+            using var held = await JsonAsync(client, $"/api/v1/held/rows?reason=uncertainMatch&sender={lab}&exact=true");
+            Assert.Equal(rows[0], Assert.Single(held.RootElement.GetProperty("items").EnumerateArray()).GetProperty("stagingRowId").GetGuid());
+        }
+        finally { await RemoveAsync(lab); }
+    }
+
+    [SqlFact]
     public async Task ChoosingAGroupListsOnlyThatSendersRowsWithThatExactValue()
     {
         string code = "T9-" + Guid.NewGuid().ToString("N")[..6].ToUpperInvariant();

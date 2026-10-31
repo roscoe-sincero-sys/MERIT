@@ -62,6 +62,8 @@ export class Display {
     return this.fields[key] ?? split(key);
   }
 
+  stagingFields(): string[] { return [...this.order]; }
+
   /** File field keys in the order a person checks them: known fields first. */
   fieldOrder(keys: string[]): string[] {
     const rank = (k: string) => { const i = this.order.indexOf(k); return i < 0 ? Number.MAX_SAFE_INTEGER : i; };

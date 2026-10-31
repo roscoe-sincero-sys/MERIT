@@ -124,8 +124,20 @@ public sealed class IntakeData(Db db) : IIntakeData
             })),
         }, ct);
 
-    public Task<IReadOnlyList<HeldGroupRow>> ListHeldGroupsAsync(CancellationToken ct = default)
-        => db.QueryAsync<HeldGroupRow>("dbo.uspListHeldGroups", null, ct);
+    public Task<IReadOnlyList<HeldGroupRow>> ListHeldGroupsAsync(Guid? intakeBatchId = null, CancellationToken ct = default)
+        => db.QueryAsync<HeldGroupRow>("dbo.uspListHeldGroups", new { intakeBatchId }, ct);
+
+    public Task<HeldOverview> GetHeldOverviewAsync(Guid? intakeBatchId, CancellationToken ct = default)
+        => db.MultipleAsync("dbo.uspListHeldGroups", new { intakeBatchId, includeSummary = true }, async grid =>
+        {
+            var groups = (await grid.ReadAsync<HeldGroupRow>().ConfigureAwait(false)).ToList();
+            var summary = await grid.ReadSingleAsync<HeldSummaryRow>().ConfigureAwait(false);
+            return new HeldOverview(groups, summary);
+        }, ct);
+
+    public async Task<HeldSummaryRow> GetHeldSummaryAsync(Guid? intakeBatchId, CancellationToken ct = default)
+        => await db.QuerySingleAsync<HeldSummaryRow>("dbo.uspGetHeldSummary", new { intakeBatchId }, ct).ConfigureAwait(false)
+           ?? new HeldSummaryRow(0, null);
 
     public Task<IReadOnlyList<HeldRowRow>> ListHeldRowsAsync(string? reasonCode, string? reportedValue, Guid? senderOrganizationId, bool exactGroup,
                                                              Guid? intakeBatchId, int pageNumber, int pageSize, CancellationToken ct = default)

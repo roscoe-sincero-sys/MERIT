@@ -15,6 +15,9 @@ namespace Merit.Web.Infrastructure;
 /// </summary>
 public static class Htmx
 {
+    public static Models.FormDraft SubmittedDraft(this Controller controller, string form)
+        => new(form, controller.Request.Form.ToDictionary(p => p.Key, p => p.Value.ToString(), StringComparer.OrdinalIgnoreCase));
+
     public static bool IsHtmx(this HttpRequest request) => request.Headers["HX-Request"] == "true";
 
     public static bool IsPartial(this HttpRequest request)

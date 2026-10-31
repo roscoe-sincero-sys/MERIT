@@ -1,3 +1,4 @@
+import { Router } from '@angular/router';
 import { ChangeDetectionStrategy, Component, computed, inject, Injectable, input, OnInit, signal } from '@angular/core';
 import { ApiClient, problemMessage } from '../../api/api-client';
 import { HeldGroupDto, HeldRowDto, PagedResult } from '../../api/contracts';
@@ -18,10 +19,11 @@ export class HeldStore {
   readonly message = signal<string | null>(null);
   readonly error = signal<string | null>(null);
   readonly focusRow = signal<HeldRowDto | null>(null);
-  readonly totalHeld = computed(() => this.groups().reduce((n, g) => n + g.rowCount, 0));
+  readonly totalHeld = signal(0);
+  readonly batchFileName = signal<string | null>(null);
   /** Selected rows that wait for a match decision: releasing reruns matching, which holds them again (issue #42). */
   readonly selectedForMatch = computed(() => this.rows().items.filter(r => this.selected().has(r.stagingRowId) && needsMatchReview(r)));
-  readonly releasable = computed(() => [...this.selected()].filter(id => !this.selectedForMatch().some(r => r.stagingRowId === id)));
+  readonly releasable = computed(() => this.rows().items.filter(r => this.selected().has(r.stagingRowId) && !needsMatchReview(r)).map(r => r.stagingRowId));
 }
 
 /** A row held for an uncertain person match is decided on Match review, not released. */
@@ -45,10 +47,14 @@ export function needsMatchReview(r: HeldRowDto): boolean {
     @if (store.error(); as e) { <div class="usa-alert usa-alert--error usa-alert--slim" role="alert"><div class="usa-alert__body"><p class="usa-alert__text">{{ e }}</p></div></div> }
     @if (store.message(); as m) { <div class="usa-alert usa-alert--success usa-alert--slim" role="status"><div class="usa-alert__body"><p class="usa-alert__text">{{ m }}</p></div></div> }
 
+    @if (store.batch()) {
+      <p class="usa-alert usa-alert--info usa-alert--slim">Showing batch: <strong>{{ store.batchFileName() ?? store.batch() }}</strong>.
+        <button type="button" class="usa-button usa-button--unstyled" (click)="clearBatch()">Show all batches</button></p>
+    }
     <h2>By cause</h2>
     @if (store.groups().length === 0) { <p class="merit-empty">Nothing is held.</p> }
     <ul class="groups">
-      <li><button type="button" class="usa-button usa-button--unstyled" [attr.aria-pressed]="store.group() === null" (click)="choose(null)">All held rows</button></li>
+      <li><button type="button" class="usa-button usa-button--unstyled" [attr.aria-pressed]="store.group() === null" (click)="choose(null)">{{ store.batch() ? 'All held rows in this batch' : 'All held rows' }}</button></li>
       @for (g of store.groups(); track groupKey(g)) {
         <li>
           <button type="button" class="usa-button usa-button--unstyled" [attr.aria-pressed]="isChosen(g)" (click)="choose(g)">
@@ -65,15 +71,15 @@ export function needsMatchReview(r: HeldRowDto): boolean {
       @if (store.group(); as g) {
         Showing {{ label(g.reasonCode) }}@if (g.reportedValue) { : <code>{{ g.reportedValue }}</code> } from {{ sender(g) }} only.
       } @else {
-        Showing every held row.
+        Showing every held row{{ store.batch() ? ' in this batch' : '' }}.
       }
     </p>
     <div class="bulk" role="group" aria-label="Actions on selected rows" aria-describedby="held-scope">
-      <button class="usa-button" type="button" [disabled]="store.releasable().length === 0" (click)="release()"
+      <button class="usa-button" type="button" [disabled]="store.loading() || store.releasable().length === 0" (click)="release()"
               [attr.aria-describedby]="store.selectedForMatch().length > 0 ? 'release-match-note' : null">Release selected</button>
       <label class="usa-label" for="reject-reason">Reject reason</label>
       <input class="usa-input" id="reject-reason" #reason />
-      <button class="usa-button usa-button--secondary" type="button" [disabled]="store.selected().size === 0" (click)="reject(reason.value)">Reject selected</button>
+      <button class="usa-button usa-button--secondary" type="button" [disabled]="store.loading() || store.selected().size === 0" (click)="reject(reason.value)">Reject selected</button>
     </div>
     @if (store.selectedForMatch().length > 0) {
       <p class="merit-meta" id="release-match-note">
@@ -86,7 +92,7 @@ export function needsMatchReview(r: HeldRowDto): boolean {
       </p>
     }
     <merit-data-grid gridId="held" caption="Held rows" [columns]="columns" [rows]="store.rows().items" [total]="store.rows().totalCount"
-                     [page]="store.page()" [pageSize]="50" [loading]="store.loading()" [selectable]="true" [selected]="store.selected()"
+                     [page]="store.page()" [pageSize]="50" [loading]="store.loading()" [selectable]="true" [selectionDisabled]="store.loading()" [selected]="store.selected()"
                      [rowKey]="key" emptyText="No held rows in this group." (pageChange)="onPage($event)" (selectionChange)="onSelect($event)" />
 
     @if (store.focusRow(); as r) {
@@ -96,7 +102,7 @@ export function needsMatchReview(r: HeldRowDto): boolean {
           <thead><tr><th scope="col">Field</th><th scope="col">As reported</th><th scope="col">Correction</th></tr></thead>
           <tbody>
             @for (k of fields(r); track k) {
-              <tr><th scope="row">{{ display.field(k) }}</th><td>{{ r.reported[k] }}</td>
+              <tr><th scope="row">{{ display.field(k) }}</th><td>{{ hasReported(r, k) ? (r.reported[k] ?? '(empty)') : '(not supplied)' }}</td>
                 <td><label class="usa-sr-only" [for]="'fix-' + k">Correct {{ display.field(k) }}</label><input class="usa-input" [id]="'fix-' + k" [value]="r.corrected[k] ?? ''" (change)="setFix(k, $event)" /></td></tr>
             }
           </tbody>
@@ -118,6 +124,7 @@ export class HeldPage implements OnInit {
   protected readonly store = inject(HeldStore);
   private readonly api = inject(ApiClient);
   protected readonly display = inject(Display);
+  private readonly router = inject(Router);
   private readonly groupsLoad = new LatestRequest();
   private readonly rowsLoad = new LatestRequest();
   readonly batchParam = input<string | undefined>(undefined, { alias: 'batch' });
@@ -138,7 +145,12 @@ export class HeldPage implements OnInit {
   ];
 
   ngOnInit(): void {
-    this.store.batch.set(this.batchParam() ?? null);
+    const batch = this.batchParam();
+    if (batch && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(batch)) {
+      this.store.batch.set(null);
+      this.store.message.set('That batch link is not valid. Showing all batches.');
+      void this.router.navigate([], { queryParams: { batch: null }, queryParamsHandling: 'merge', replaceUrl: true });
+    } else this.store.batch.set(batch ?? null);
     this.loadGroups();
     this.loadRows();
   }
@@ -173,11 +185,13 @@ export class HeldPage implements OnInit {
 
   protected onPage(p: number): void {
     this.store.page.set(p);
+    this.clearSelection();
     this.loadRows();
   }
 
   /** Selecting exactly one row opens its reported values beside a correction form. */
   protected onSelect(ids: ReadonlySet<string>): void {
+    if (this.store.loading()) return;
     this.store.selected.set(ids);
     const only = ids.size === 1 ? [...ids][0] : null;
     this.store.focusRow.set(this.store.rows().items.find(r => r.stagingRowId === only) ?? null);
@@ -185,7 +199,27 @@ export class HeldPage implements OnInit {
   }
 
   protected fields(r: HeldRowDto): string[] {
-    return this.display.fieldOrder(Object.keys(r.reported));
+    return this.display.fieldOrder([...new Set([...this.display.stagingFields(), ...Object.keys(r.reported), ...Object.keys(r.corrected)])]
+      .filter(k => k !== 'matchPersonId' && k !== 'matchNewPerson'));
+  }
+
+  protected hasReported(r: HeldRowDto, key: string): boolean { return Object.hasOwn(r.reported, key); }
+
+  private clearSelection(): void {
+    this.store.selected.set(new Set<string>());
+    this.store.focusRow.set(null);
+    this.fixes = {};
+  }
+
+  protected clearBatch(): void {
+    this.store.batch.set(null);
+    this.store.batchFileName.set(null);
+    this.store.group.set(null);
+    this.store.page.set(1);
+    this.clearSelection();
+    void this.router.navigate([], { queryParams: { batch: null }, queryParamsHandling: 'merge', replaceUrl: true });
+    this.loadGroups();
+    this.loadRows();
   }
 
   protected setFix(key: string, event: Event): void {
@@ -202,6 +236,7 @@ export class HeldPage implements OnInit {
   }
 
   protected release(): void {
+    if (this.store.loading() || this.store.releasable().length === 0) return;
     const waiting = this.store.selectedForMatch().length;
     this.api.releaseHeld({ stagingRowIds: this.store.releasable(), reason: null }).subscribe({
       next: r => this.done(`${r.updated} row(s) released; they rerun validation and matching in the background.`
@@ -211,6 +246,7 @@ export class HeldPage implements OnInit {
   }
 
   protected reject(reason: string): void {
+    if (this.store.loading() || this.store.selected().size === 0) return;
     if (!reason.trim()) {
       this.store.error.set('A reason is required to reject held records.');
       return;
@@ -231,8 +267,12 @@ export class HeldPage implements OnInit {
   }
 
   private loadGroups(): void {
-    this.groupsLoad.run(this.api.heldGroups(), {
-      next: g => this.store.groups.set(g),
+    this.groupsLoad.run(this.api.heldOverview(this.store.batch()), {
+      next: s => {
+        this.store.groups.set(s.groups);
+        this.store.totalHeld.set(s.totalCount);
+        this.store.batchFileName.set(s.batchFileName);
+      },
       error: e => this.store.error.set(problemMessage(e)),
     });
   }

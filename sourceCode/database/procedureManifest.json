@@ -1819,6 +1819,22 @@
   ]
  },
  {
+  "name": "dbo.uspGetHeldSummary",
+  "kind": "read",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": "result.release_hold",
+  "params": [
+   {
+    "name": "intakeBatchId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
   "name": "dbo.uspGetIntakeBatch",
   "kind": "read",
   "grants": [
@@ -1905,6 +1921,40 @@
     "name": "labResultId",
     "type": "UNIQUEIDENTIFIER",
     "hasDefault": false,
+    "isOutput": false
+   }
+  ]
+ },
+ {
+  "name": "dbo.uspGetLookupSelection",
+  "kind": "read",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": "person.view",
+  "params": [
+   {
+    "name": "kind",
+    "type": "VARCHAR (20)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "id",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "organizationTypeCode",
+    "type": "VARCHAR (30)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "selectionsJson",
+    "type": "NVARCHAR (MAX)",
+    "hasDefault": true,
     "isOutput": false
    }
   ]
@@ -2345,7 +2395,20 @@
    "meritWebRole"
   ],
   "permission": "result.release_hold",
-  "params": []
+  "params": [
+   {
+    "name": "intakeBatchId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "includeSummary",
+    "type": "BIT",
+    "hasDefault": true,
+    "isOutput": false
+   }
+  ]
  },
  {
   "name": "dbo.uspListHeldRows",

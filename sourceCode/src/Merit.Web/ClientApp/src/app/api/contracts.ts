@@ -59,6 +59,13 @@ export interface AssignableUserDto {
   displayName: string;
 }
 
+export interface HeldOverviewDto extends HeldSummaryDto { groups: HeldGroupDto[]; }
+
+export interface HeldSummaryDto {
+  totalCount: number;
+  batchFileName: string | null;
+}
+
 export interface HeldGroupDto {
   reasonCode: string;
   reportedValue: string | null;

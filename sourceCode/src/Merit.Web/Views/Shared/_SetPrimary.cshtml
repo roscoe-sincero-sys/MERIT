@@ -7,7 +7,7 @@
     {
         <div class="usa-alert usa-alert--error usa-alert--slim" role="alert"><div class="usa-alert__body"><p class="usa-alert__text">@string.Join(" ", ViewData.ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage))</p></div></div>
     }
-    <form class="usa-form" hx-post="/people/@Model.PersonId/places/@Model.PersonLocationId/primary/preview" hx-target="#set-primary" hx-swap="outerHTML">
+    <form class="usa-form" data-primary-preview hx-post="/people/@Model.PersonId/places/@Model.PersonLocationId/primary/preview" hx-target="#set-primary" hx-swap="outerHTML">
         <div class="usa-form-group">
             <label class="usa-label" for="sp-start">Primary from</label>
             <input class="usa-input" id="sp-start" name="StartDate" type="date" value="@Options.Iso(Model.StartDate)" required />
@@ -36,7 +36,9 @@
         <form hx-post="/people/@Model.PersonId/places/@Model.PersonLocationId/primary" hx-target="#section-places" hx-swap="outerHTML">
             <input type="hidden" name="StartDate" value="@Options.Iso(Model.StartDate)" />
             <input type="hidden" name="PrimaryReason" value="@Model.PrimaryReason" />
-            <button class="usa-button" type="submit">Confirm and save</button>
+            <p>Effective date: <strong>@Options.Date(Model.StartDate)</strong>. Reason: <strong>@Model.Reasons.FirstOrDefault(r => r.Selected)?.Label</strong>.</p>
+            <p data-preview-stale hidden role="status">The inputs changed. Preview the change again before confirming.</p>
+            <button class="usa-button" data-primary-confirm type="submit">Confirm and save</button>
             <button class="usa-button usa-button--unstyled" type="button" data-close-dialog>Cancel</button>
         </form>
     }

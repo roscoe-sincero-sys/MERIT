@@ -14,7 +14,7 @@ namespace Merit.Web.Controllers;
 /// Result entry (htmx): fields cascade from the analyte lookup, one partial per change, so users only see what applies;
 /// on save the form shows the canonical value and whether any threshold was crossed, from the server rules.
 /// </summary>
-public sealed class ResultsController(IClock clock, ResultService results, PersonService people, IReferenceDataProvider reference) : Controller
+public sealed class ResultsController(IClock clock, ResultService results, PersonService people, IReferenceDataProvider reference, LookupService lookup) : Controller
 {
     [HttpGet("people/{personId:guid}/results/new")]
     [Authorize(Policy = Permissions.ResultEdit)]
@@ -34,8 +34,8 @@ public sealed class ResultsController(IClock clock, ResultService results, Perso
     [HttpGet("results/fields")]
     [Authorize(Policy = Permissions.ResultEdit)]
     public async Task<IActionResult> Fields(Guid? analyteId, Guid? analyteSpecimenId, string? unit, string? sampleType,
-                                            string? speciation, CancellationToken ct)
-        => PartialView("_ResultFields", await FieldsAsync(analyteId, analyteSpecimenId, unit, sampleType, speciation, ct));
+                                            string? speciation, decimal? creatinine, CancellationToken ct)
+        => PartialView("_ResultFields", await FieldsAsync(analyteId, analyteSpecimenId, unit, sampleType, speciation, creatinine, ct));
 
     [HttpPost("people/{personId:guid}/results")]
     [Authorize(Policy = Permissions.ResultEdit)]
@@ -96,7 +96,12 @@ public sealed class ResultsController(IClock clock, ResultService results, Perso
         form.Methods = refData.Choices("testMethod", form.TestMethod, includeBlank: true);
         form.Reasons = refData.Choices("reasonForTest", form.ReasonForTest, includeBlank: true);
         form.Payers = refData.Choices("payerType", form.PayerType, includeBlank: true);
-        form.Fields = await FieldsAsync(form.AnalyteId, form.AnalyteSpecimenId, form.Unit, form.SampleType, form.Speciation, ct);
+        form.Fields = await FieldsAsync(form.AnalyteId, form.AnalyteSpecimenId, form.Unit, form.SampleType, form.Speciation, form.Creatinine, ct);
+        var (lab, provider) = await lookup.ResultSelectionsAsync(form.LabOrganizationId, form.OrderingProviderId, ct);
+        form.LabOrganizationId = lab is null ? null : form.LabOrganizationId;
+        form.LabLabel = lab?.Label;
+        form.OrderingProviderId = provider is null ? null : form.OrderingProviderId;
+        form.ProviderLabel = provider?.Label;
         if (string.IsNullOrEmpty(form.PersonName))
         {
             var h = await people.GetHeaderAsync(form.PersonId, ct);
@@ -107,10 +112,10 @@ public sealed class ResultsController(IClock clock, ResultService results, Perso
     }
 
     private async Task<ResultFieldsModel> FieldsAsync(Guid? analyteId, Guid? analyteSpecimenId, string? unit, string? sampleType,
-                                                      string? speciation, CancellationToken ct)
+                                                      string? speciation, decimal? creatinine, CancellationToken ct)
     {
         var refData = await reference.GetAsync(ct);
-        var model = new ResultFieldsModel();
+        var model = new ResultFieldsModel { CreatinineCleared = creatinine is not null };
         if (analyteId is null)
         {
             return model;
@@ -132,6 +137,8 @@ public sealed class ResultsController(IClock clock, ResultService results, Perso
         model.SampleTypes = refData.Choices("sampleType", sampleType ?? "unknown");
         model.Speciations = chosen.SpeciationList.Select(s => new SelectOption(s, Options.Humanize(s), s == speciation)).ToList();
         model.RequiresCreatinine = chosen.RequiresCreatinine;
+        model.Creatinine = chosen.RequiresCreatinine ? creatinine : null;
+        model.CreatinineCleared = !chosen.RequiresCreatinine && creatinine is not null;
         return model;
     }
 }

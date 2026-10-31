@@ -39,7 +39,14 @@ public sealed class CasesController(IClock clock, CaseService cases, PersonServi
     public async Task<IActionResult> Update(Guid id, Guid? assignedToUserId, string exposureCategory, string caseStatus, string rowVersion,
                                             CancellationToken ct)
     {
-        await cases.UpdateAsync(id, assignedToUserId, exposureCategory, caseStatus, Options.FromHex(rowVersion) ?? [], ct);
+        try
+        {
+            await cases.UpdateAsync(id, assignedToUserId, exposureCategory, caseStatus, Options.FromHex(rowVersion) ?? [], ct);
+        }
+        catch (ValidationException ex)
+        {
+            return this.Invalid("_CaseBody", (await PageAsync(id, null, ct)) with { Draft = this.SubmittedDraft("update") }, ex);
+        }
         Response.Announce("Case updated.");
         return PartialView("_CaseBody", await PageAsync(id, "Case updated.", ct));
     }
@@ -55,8 +62,8 @@ public sealed class CasesController(IClock clock, CaseService cases, PersonServi
         }
         catch (ValidationException ex)
         {
-            var model = await PageAsync(id, string.Join(" ", ex.Errors.Values.SelectMany(v => v)), ct);
-            return this.Invalid("_CaseBody", model);
+            var model = (await PageAsync(id, null, ct)) with { Draft = this.SubmittedDraft("override") };
+            return this.Invalid("_CaseBody", model, ex);
         }
 
         Response.Announce("Classification overridden; the computed value is kept beside it.");
@@ -76,7 +83,7 @@ public sealed class CasesController(IClock clock, CaseService cases, PersonServi
         }
         catch (ValidationException ex)
         {
-            return this.Invalid("_CaseBody", await PageAsync(id, string.Join(" ", ex.Errors.Values.SelectMany(v => v)), ct));
+            return this.Invalid("_CaseBody", (await PageAsync(id, null, ct)) with { Draft = this.SubmittedDraft("activity") }, ex);
         }
 
         Response.Announce("Activity logged. " + message);
@@ -94,7 +101,7 @@ public sealed class CasesController(IClock clock, CaseService cases, PersonServi
         }
         catch (ValidationException ex)
         {
-            return this.Invalid("_CaseBody", await PageAsync(id, string.Join(" ", ex.Errors.Values.SelectMany(v => v)), ct));
+            return this.Invalid("_CaseBody", (await PageAsync(id, null, ct)) with { Draft = this.SubmittedDraft("close") }, ex);
         }
 
         Response.Announce("Case closed.");
@@ -210,7 +217,7 @@ public sealed class InvestigationsController(InvestigationService investigations
                 ModelState.AddModelError(k, string.Join(" ", v));
             }
 
-            return this.Invalid("_InvestigationBody", await PageAsync(id, ct));
+            return this.Invalid("_InvestigationBody", (await PageAsync(id, ct)) with { Draft = this.SubmittedDraft("save") });
         }
 
         Response.Announce("Investigation saved.");
@@ -225,11 +232,19 @@ public sealed class InvestigationsController(InvestigationService investigations
         if (sampleValue is null || sampleDate is null || string.IsNullOrWhiteSpace(unit))
         {
             ModelState.AddModelError("sampleValue", "Enter the value, unit and sample date.");
-            return this.Invalid("_InvestigationBody", await PageAsync(id, ct));
+            return this.Invalid("_InvestigationBody", (await PageAsync(id, ct)) with { Draft = this.SubmittedDraft("sample") });
         }
 
-        var exceeds = await investigations.AddSampleAsync(new EnvironmentalSampleSave(Guid.Empty, id, sampleType,
-            roomOrComponent, surface, sampleValue.Value, unit, sampleDate.Value, notes, false), ct);
+        bool? exceeds;
+        try
+        {
+            exceeds = await investigations.AddSampleAsync(new EnvironmentalSampleSave(Guid.Empty, id, sampleType,
+                roomOrComponent, surface, sampleValue.Value, unit, sampleDate.Value, notes, false), ct);
+        }
+        catch (ValidationException ex)
+        {
+            return this.Invalid("_InvestigationBody", (await PageAsync(id, ct)) with { Draft = this.SubmittedDraft("sample") }, ex);
+        }
         Response.Announce(exceeds switch
         {
             true => "Sample saved: exceeds the standard.",
