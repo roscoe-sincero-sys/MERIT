@@ -333,6 +333,21 @@ A separate `CONTRIBUTING.md` can expand on this when the project opens to outsid
 
 ---
 
+## AI models and coding agent harnesses
+
+MERIT was developed and reviewed using several AI models across multiple coding agent harnesses:
+
+- **Harnesses and models:**
+  - **Claude Code CLI:** Opus 5.5
+  - **Antigravity CLI:** Gemini 4 Argon, Opus 5.5, and Gemini 3.8 Flash
+  - **Codex CLI:** GPT 6.0 Astra, GPT 6.1 Sol
+
+- **Tasks and model usage:**
+  - **Coding:** Opus 5.5, GPT 6.0 Astra, Gemini 4 Argon, and GPT 6.1 Sol were used for coding.
+  - **PR reviews:** GPT 6.1 Sol, Opus 5.5, and Gemini 3.8 Flash were used for PR reviews.
+
+---
+
 ## License and acknowledgments
 
 **License:** [Apache License 2.0](LICENSE). Anyone may use, modify and distribute it, including commercially. It comes
