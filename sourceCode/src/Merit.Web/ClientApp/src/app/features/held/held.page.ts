@@ -238,7 +238,7 @@ export class HeldPage implements OnInit {
     this.beginWrite();
     this.api.correctHeld(r.stagingRowId, { ...this.fixes }).subscribe({
       next: () => { this.store.busy.set(false); this.store.message.set('Correction saved beside the reported values. Release the row to load it.'); this.fixes = {}; this.loadRows(); },
-      error: e => { this.store.busy.set(false); this.store.error.set(problemMessage(e)); },
+      error: e => { this.store.busy.set(false); this.store.error.set(problemMessage(e)); this.loadGroups(true); },
     });
   }
 
@@ -249,7 +249,7 @@ export class HeldPage implements OnInit {
     this.api.releaseHeld({ stagingRowIds: this.store.releasable(), reason: null }).subscribe({
       next: r => this.done(`${r.updated} row(s) released; they rerun validation and matching in the background.`
         + (waiting > 0 ? ` ${waiting} left for Match review.` : '')),
-      error: e => { this.store.busy.set(false); this.store.error.set(problemMessage(e)); },
+      error: e => { this.store.busy.set(false); this.store.error.set(problemMessage(e)); this.loadGroups(true); },
     });
   }
 
@@ -262,7 +262,7 @@ export class HeldPage implements OnInit {
     this.beginWrite();
     this.api.rejectHeld({ stagingRowIds: [...this.store.selected()], reason }).subscribe({
       next: r => this.done(`${r.updated} row(s) rejected.`),
-      error: e => { this.store.busy.set(false); this.store.error.set(problemMessage(e)); },
+      error: e => { this.store.busy.set(false); this.store.error.set(problemMessage(e)); this.loadGroups(true); },
     });
   }
 
@@ -284,14 +284,14 @@ export class HeldPage implements OnInit {
     this.loadRows();
   }
 
-  private loadGroups(): void {
+  private loadGroups(preserveError = false): void {
     this.groupsLoad.run(this.api.heldOverview(this.store.batch()), {
       next: s => {
         this.store.groups.set(s.groups);
         this.store.totalHeld.set(s.totalCount);
         this.store.batchFileName.set(s.batchFileName);
       },
-      error: e => this.store.error.set(problemMessage(e)),
+      error: e => { if (!preserveError) this.store.error.set(problemMessage(e)); },
     });
   }
 

@@ -1,6 +1,5 @@
 using System.Text.Json;
 using Merit.Application.Data;
-using Merit.Web.Infrastructure;
 using Merit.Application.Intake;
 using Merit.Application.Reference;
 using Merit.Application.Security;
@@ -44,8 +43,8 @@ public sealed class QueuesController(QueueService queues, CaseService cases, ICu
     {
         page = Math.Max(page, 1);
         pageSize = Math.Clamp(pageSize, 1, 500);
-        var result = await Paging.ReadAsync(page, pageSize, p => queues.ListAsync(new WorkTaskQuery(string.IsNullOrEmpty(queue) ? null : queue,
-            string.IsNullOrEmpty(status) ? null : status, mine, urgent, sort, desc, p, pageSize), ct), r => r.TotalCount);
+        var result = await queues.ListAsync(new WorkTaskQuery(string.IsNullOrEmpty(queue) ? null : queue,
+            string.IsNullOrEmpty(status) ? null : status, mine, urgent, sort, desc, page, pageSize), ct);
         var rows = result.Rows;
         return new PagedResult<WorkTaskDto>(rows.Select(r => new WorkTaskDto(r.WorkTaskId, r.QueueCode, r.Title, r.Detail, r.IsUrgent,
                 r.DueDate, r.TaskStatus, r.CreatedDateUtc, r.PersonId,
@@ -125,7 +124,7 @@ public sealed class HeldRecordsController(IntakeService intake, IReferenceDataPr
     {
         page = Math.Max(page, 1);
         pageSize = Math.Clamp(pageSize, 1, 500);
-        var result = await Paging.ReadAsync(page, pageSize, p => intake.HeldRowsAsync(reason, value, sender, exact, batch, p, pageSize, ct), r => r.TotalCount);
+        var result = await intake.HeldRowsAsync(reason, value, sender, exact, batch, page, pageSize, ct);
         var rows = result.Rows;
         var names = (await reference.GetAsync(ct)).Names;
         return new PagedResult<HeldRowDto>(rows.Select(r => new HeldRowDto(r.StagingRowId, r.IntakeBatchId, r.FileName, r.SenderName,

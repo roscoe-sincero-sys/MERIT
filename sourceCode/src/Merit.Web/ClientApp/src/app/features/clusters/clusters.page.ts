@@ -16,6 +16,7 @@ const STATUS_LABELS: Record<ClusterStatus, string> = { open: 'Open', underReview
 @Injectable()
 export class ClustersStore {
   readonly page = signal(1);
+  readonly pageSize = signal(200);
   readonly total = signal(0);
   readonly loading = signal(false);
   readonly status = signal('');
@@ -39,7 +40,7 @@ export class ClustersStore {
         <option value="">All</option><option value="open">Open</option><option value="underReview">Under review</option><option value="closed">Closed</option>
       </select>
     </div>
-    <merit-pager label="Clusters" [page]="store.page()" [total]="store.total()" [busy]="store.loading()" (change)="goPage($event)" />
+    <merit-pager label="Clusters" [page]="store.page()" [size]="store.pageSize()" [total]="store.total()" [busy]="store.loading()" (change)="goPage($event)" />
     @if (store.clusters().length === 0 && !store.loading()) { <p class="merit-empty">No clusters.</p> } @else {
       <div class="merit-table-wrap" tabindex="0" role="region" aria-label="Clusters; scroll sideways for more columns">
       <table class="usa-table usa-table--borderless">
@@ -92,8 +93,8 @@ export class ClustersPage implements OnInit {
   private load(): void {
     this.store.loading.set(true);
     this.store.error.set(null);
-    this.clustersLoad.run(this.api.clusters({ status: this.store.status(), page: this.store.page(), pageSize: 200 }), {
-      next: p => { this.store.clusters.set(p.items); this.store.total.set(p.totalCount); this.store.page.set(p.pageNumber); this.store.loading.set(false); },
+    this.clustersLoad.run(this.api.clusters({ status: this.store.status(), page: this.store.page(), pageSize: this.store.pageSize() }), {
+      next: p => { this.store.clusters.set(p.items); this.store.total.set(p.totalCount); this.store.page.set(p.pageNumber); this.store.pageSize.set(p.pageSize); this.store.loading.set(false); },
       error: e => { this.store.error.set(problemMessage(e)); this.store.loading.set(false); },
     });
   }

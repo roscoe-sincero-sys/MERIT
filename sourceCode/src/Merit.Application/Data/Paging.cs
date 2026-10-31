@@ -1,4 +1,4 @@
-namespace Merit.Web.Infrastructure;
+namespace Merit.Application.Data;
 
 /// <summary>Recover an offset emptied by a concurrent change without mistaking it for an empty dataset.</summary>
 public static class Paging

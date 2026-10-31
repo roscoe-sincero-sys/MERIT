@@ -194,7 +194,7 @@ export class QueuesPage implements OnInit {
         this.loadQueues();
         this.load();
       },
-      error: e => { this.busy.set(false); this.store.error.set(problemMessage(e)); },
+      error: e => { this.busy.set(false); this.store.error.set(problemMessage(e)); this.loadQueues(true); },
     });
   }
 
@@ -207,10 +207,10 @@ export class QueuesPage implements OnInit {
     return this.store.queues().find(q => q.queueCode === code)?.queueName ?? code;
   }
 
-  private loadQueues(): void {
+  private loadQueues(preserveError = false): void {
     this.queuesLoad.run(this.api.queues(), {
       next: q => this.store.queues.set(q),
-      error: e => this.store.error.set(problemMessage(e)),
+      error: e => { if (!preserveError) this.store.error.set(problemMessage(e)); },
     });
   }
 
@@ -229,7 +229,7 @@ export class QueuesPage implements OnInit {
           this.pendingSelectionReset = false;
         }
         this.store.result.set(r);
-        if (this.store.page() !== r.pageNumber) { this.store.page.set(r.pageNumber); this.view.set({ page: r.pageNumber }, true); }
+        if (this.store.page() !== r.pageNumber) { this.store.page.set(r.pageNumber); this.view.replaceLoaded({ page: r.pageNumber }); }
         this.store.loading.set(false);
       },
       error: e => { this.store.error.set(problemMessage(e)); this.store.loading.set(false); },

@@ -44,11 +44,18 @@
     let expiryTimer;
     let warningTimer;
     let sessionEnded = false;
-    function sessionMessage(ended) {
-        if (ended) sessionEnded = true;
+    function sessionMessage(ended, confirmed = ended) {
+        if (sessionEnded) return;
+        if (ended) {
+            clearTimeout(warningTimer);
+            clearTimeout(expiryTimer);
+            sessionEnded = confirmed;
+        }
         const alert = showError(ended
-            ? 'Your session ended. Your unsaved work is still here. Sign in in a new tab, then return here and check your session before saving again.'
-            : 'Your session will expire soon. Your unsaved work is still here. Sign in in a new tab to continue.');
+            ? (confirmed
+                ? 'Your session ended. Your unsaved work is still here. Sign in in a new tab, then return here and check your session before saving again.'
+                : 'Your session may have ended. Your unsaved work is still here. Check your session before saving, or sign in in a new tab.')
+            : 'Your session may expire soon. Your unsaved work is still here. Check your session or sign in in a new tab to continue.');
         if (!alert) return;
         const link = document.createElement('a');
         link.className = 'usa-link';
@@ -65,7 +72,11 @@
             check.disabled = true;
             try {
                 const response = await fetch('/api/v1/me', { cache: 'no-store' });
-                if (!response.ok) { sessionMessage(true); return; }
+                if (!response.ok) {
+                    if (response.status === 401) sessionMessage(true);
+                    else showError('Could not check your session. Try again when MERIT is available.');
+                    return;
+                }
                 const me = await response.json();
                 if (me.userName !== document.body.dataset.sessionUser) {
                     showError('A different user is signed in. Copy your unsaved work before refreshing, or sign in again as the original user.');
@@ -79,7 +90,7 @@
             finally { check.disabled = false; }
         });
         alert.appendChild(check);
-        if (ended) alert.focus();
+        if (confirmed) alert.focus();
     }
 
     let sessionDeadline = Number(document.body.dataset.sessionExpires);
@@ -92,8 +103,9 @@
         const remaining = Math.max(0, sessionDeadline - Date.now());
         clearTimeout(warningTimer);
         clearTimeout(expiryTimer);
+        if (remaining === 0) { sessionMessage(true, false); return; }
         warningTimer = setTimeout(() => sessionMessage(false), Math.max(0, remaining - 2 * 60000));
-        expiryTimer = setTimeout(() => sessionMessage(true), remaining);
+        expiryTimer = setTimeout(() => sessionMessage(true, false), remaining);
     }
     document.addEventListener('merit:sessionExpired', () => sessionMessage(true));
     document.addEventListener('merit:sessionActivity', sessionActivity);
@@ -134,14 +146,14 @@
         if (ctx && ctx.sourceElement?.closest('#dialog[open]')) ctx.request.headers['X-Merit-Dialog'] = 'true';
     });
 
-    // Stop before htmx constructs a swap for middleware's empty denial responses, preserving the form and dialog.
+    // Explicit middleware denials must never swap an error page over the user's form or dialog.
     document.addEventListener('htmx:after:request', evt => {
         const ctx = evt.detail && evt.detail.ctx;
         const status = ctx?.response?.status;
         if (status === 401) {
             evt.preventDefault();
             sessionMessage(true);
-        } else if (status === 403 && !ctx.text?.trim()) {
+        } else if (status === 403 && (ctx.response.headers.get('X-Merit-Denied') === 'true' || !ctx.text?.trim())) {
             evt.preventDefault();
             const alert = showError('Your current profile no longer permits this action. Your inputs are still here. Copy any unsaved work, then refresh the page to see your current access.');
             const refresh = document.createElement('button');

@@ -73,7 +73,7 @@ test('clusters expose the 201st record without resolving earlier records', async
   await expect(page.getByRole('link', { name: 'Cluster 201', exact: true })).toBeVisible();
   await expect(page.getByRole('navigation', { name: 'Clusters pages' })).toContainText('201–201 of 201');
   await page.getByLabel('Status', { exact: true }).selectOption('closed');
-  await expect(page.getByRole('navigation', { name: 'Clusters pages' })).toContainText('page 1 of 2');
+  await expect(page.getByRole('navigation', { name: 'Clusters pages' })).toContainText('Page 1 of 2');
 });
 
 test('read-only capabilities hide edits and prevent selecting tasks in a read-only tenant', async ({ asUser }) => {
@@ -231,9 +231,11 @@ test('idle expiration warns before the deadline and leaves typed work in place',
   const remaining = await page.evaluate(() => Number(document.body.dataset.sessionExpires) - Date.now());
   expect(remaining).toBeGreaterThan(2 * 60000);
   await page.clock.fastForward(remaining - 2 * 60000 + 1000);
-  await expect(page.getByRole('alert')).toContainText('will expire soon');
+  await expect(page.getByRole('alert')).toContainText('may expire soon');
   await page.clock.fastForward(2 * 60000);
-  await expect(page.getByRole('alert')).toContainText('Your session ended');
+  await expect(page.getByRole('alert')).toContainText('Your session may have ended');
+  // Browser time alone cannot establish server expiry: the actual session is still valid.
+  expect((await page.request.get('/api/v1/me')).ok()).toBe(true);
   await expect(page.locator('#findings')).toHaveValue('Work typed during an idle period');
 });
 

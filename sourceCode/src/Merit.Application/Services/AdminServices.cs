@@ -25,12 +25,13 @@ public sealed class QueueService(IWorkData work, AuditService audit, ICurrentSes
         return await work.GetDashboardAsync(ct).ConfigureAwait(false);
     }
 
-    public async Task<IReadOnlyList<WorkTaskRow>> ListAsync(WorkTaskQuery query, CancellationToken ct = default)
+    public async Task<(IReadOnlyList<WorkTaskRow> Rows, int Total, int Page)> ListAsync(WorkTaskQuery query, CancellationToken ct = default)
     {
         session.Require(Permissions.TaskView);
-        var rows = await work.ListTasksAsync(query, ct).ConfigureAwait(false);
-        await audit.ListedAsync("workTask", rows.Count, ct).ConfigureAwait(false);
-        return rows;
+        var result = await Paging.ReadAsync(query.PageNumber, query.PageSize,
+            p => work.ListTasksAsync(query with { PageNumber = p }, ct), r => r.TotalCount).ConfigureAwait(false);
+        await audit.ListedAsync("workTask", result.Rows.Count, ct).ConfigureAwait(false);
+        return result;
     }
 
     public async Task<int> BulkAsync(IReadOnlyList<Guid> taskIds, string action, Guid? assignTo, string? note, CancellationToken ct = default)

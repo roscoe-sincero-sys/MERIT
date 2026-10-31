@@ -45,7 +45,9 @@ public sealed class HeldRecordsTests(MeritFixture fixture)
             Assert.Equal(2, groups.RootElement.GetArrayLength());
             Assert.All(groups.RootElement.EnumerateArray(), g => Assert.Equal(labA, g.GetProperty("senderOrganizationId").GetGuid()));
             Assert.Equal(1, (await RowsAsync(client, $"batch={batch}")).Total);
+            int auditCount = await fixture.ListAuditCountAsync("stagingRow");
             using var beyond = await JsonAsync(client, $"/api/v1/held/rows?batch={batch}&page=100000&pageSize=1");
+            Assert.Equal(auditCount + 1, await fixture.ListAuditCountAsync("stagingRow"));
             Assert.Equal(1, beyond.RootElement.GetProperty("totalCount").GetInt32());
             Assert.Equal(1, beyond.RootElement.GetProperty("pageNumber").GetInt32());
             Assert.Single(beyond.RootElement.GetProperty("items").EnumerateArray());

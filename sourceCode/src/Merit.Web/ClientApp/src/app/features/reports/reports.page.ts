@@ -1,5 +1,6 @@
-import { ChangeDetectionStrategy, Component, computed, inject, Injectable, input, OnInit, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, Injectable, OnInit, signal } from '@angular/core';
 import { ViewQuery } from '../../shared/view-query';
+import { ParamMap } from '@angular/router';
 import { ApiClient, problemMessage } from '../../api/api-client';
 import { AnalyteOptionDto, ReportCell, ReportDto, ReportSummaryDto } from '../../api/contracts';
 import { ChartSeries, SeriesChartComponent } from '../../shared/chart/series-chart.component';
@@ -113,7 +114,7 @@ export class ReportsPage implements OnInit {
   private readonly view = inject(ViewQuery);
   private readonly libraryLoad = new LatestRequest();
   private readonly reportLoad = new LatestRequest();
-  readonly codeParam = input<string | undefined>(undefined, { alias: 'code' });
+  private reportQuery: string | null = null;
 
   protected readonly measureKey = computed(() => {
     const r = this.store.report();
@@ -145,21 +146,27 @@ export class ReportsPage implements OnInit {
   });
 
   ngOnInit(): void {
-    this.view.watch(q => {
-      this.store.filters.set({ from: q.get('from') ?? '', to: q.get('to') ?? '', analyteId: q.get('analyteId') ?? '' });
-      this.store.measure.set(q.get('measure'));
-      const code = q.get('code') ?? this.store.library()[0]?.code;
-      if (code && this.store.library().some(r => r.code === code)) this.run(code);
-    });
+    this.view.watch((query, refresh) => this.readView(query, refresh));
     this.api.analytes().subscribe({ next: a => this.store.analytes.set(a), error: () => this.store.analytes.set([]) });
     this.libraryLoad.run(this.api.reports(), {
       next: lib => {
         this.store.library.set(lib);
-        const first = lib.find(r => r.code === this.codeParam()) ?? lib[0];
-        if (first) this.run(first.code);
+        this.view.refresh();
       },
       error: e => this.store.error.set(problemMessage(e)),
     });
+  }
+
+  private readView(query: ParamMap, refresh: boolean): void {
+    this.store.filters.set({ from: query.get('from') ?? '', to: query.get('to') ?? '', analyteId: query.get('analyteId') ?? '' });
+    this.store.measure.set(query.get('measure'));
+    const library = this.store.library();
+    const report = library.find(r => r.code === query.get('code')) ?? library[0];
+    if (!report) return;
+    const key = JSON.stringify([report.code, this.store.filters()]);
+    if (!refresh && key === this.reportQuery) return;
+    this.reportQuery = key;
+    this.run(report.code);
   }
 
   protected choose(event: Event, code: string): void {

@@ -10,6 +10,7 @@ export class MatchReviewStore {
   readonly queue = signal<MatchQueueItemDto[]>([]);
   readonly total = signal(0);
   readonly page = signal(1);
+  readonly pageSize = signal(200);
   readonly escalatedOnly = signal(false);
   readonly currentId = signal<string | null>(null);
   readonly review = signal<MatchReviewDto | null>(null);
@@ -187,7 +188,7 @@ export class CandidateHistoryComponent {
           <label class="usa-checkbox__label" for="escalated">Sent to a supervisor only</label>
         </div>
         @if (store.queue().length === 0) { <p class="merit-empty">Nothing to review.</p> }
-        <merit-pager label="Match records" [page]="store.page()" [total]="store.total()" [busy]="store.busy() || store.loading()" (change)="goPage($event)" />
+        <merit-pager label="Match records" [page]="store.page()" [size]="store.pageSize()" [total]="store.total()" [busy]="store.busy() || store.loading()" (change)="goPage($event)" />
         <ol class="queue">
           @for (q of store.queue(); track q.stagingRowId) {
             <li>
@@ -360,10 +361,10 @@ export class MatchReviewPage implements OnInit {
     const q = this.store.queue();
     const next = q[this.store.position() + delta];
     if (next) this.openRow(next.stagingRowId);
-    else if (delta > 0 && this.store.page() * 200 < this.store.total()) {
+    else if (delta > 0 && this.store.page() * this.store.pageSize() < this.store.total()) {
       this.store.page.update(p => p + 1); this.loadQueue(true);
     } else if (delta < 0 && this.store.page() > 1) {
-      this.store.page.update(p => p - 1); this.loadQueue(true, 199);
+      this.store.page.update(p => p - 1); this.loadQueue(true, this.store.pageSize() - 1);
     }
   }
 
@@ -400,13 +401,14 @@ export class MatchReviewPage implements OnInit {
     }
     this.store.error.set(null);
     this.store.queueLoading.set(true);
-    this.queueLoad.run(this.api.matchQueue({ escalated: this.store.escalatedOnly(), page: this.store.page(), pageSize: 200 }), {
+    this.queueLoad.run(this.api.matchQueue({ escalated: this.store.escalatedOnly(), page: this.store.page(), pageSize: this.store.pageSize() }), {
       next: p => {
         this.store.queueLoading.set(false);
         this.store.page.set(p.pageNumber);
+        this.store.pageSize.set(p.pageSize);
         this.store.queue.set(p.items);
         this.store.total.set(p.totalCount);
-        if (index >= p.items.length && p.pageNumber * 200 < p.totalCount) {
+        if (index >= p.items.length && p.pageNumber * p.pageSize < p.totalCount) {
           this.store.page.update(v => v + 1); this.loadQueue(true); return;
         }
         if (rowId) {

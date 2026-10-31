@@ -1,4 +1,5 @@
 import { CdkTableModule } from '@angular/cdk/table';
+import { PagerComponent } from '../pager.component';
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
 
 export interface GridColumn<T> {
@@ -26,7 +27,7 @@ export interface GridSort {
  */
 @Component({
   selector: 'merit-data-grid',
-  imports: [CdkTableModule],
+  imports: [CdkTableModule, PagerComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="grid-toolbar">
@@ -88,11 +89,7 @@ export interface GridSort {
         <p class="grid-empty">{{ emptyText() }}</p>
       }
     </div>
-    <nav class="grid-pager" [attr.aria-label]="caption() + ' pages'">
-      <button type="button" class="usa-button usa-button--outline usa-button--small" [disabled]="loading() || page() <= 1" (click)="pageChange.emit(page() - 1)">Previous</button>
-      <span>Page {{ page() }} of {{ pageCount() }}</span>
-      <button type="button" class="usa-button usa-button--outline usa-button--small" [disabled]="loading() || page() >= pageCount()" (click)="pageChange.emit(page() + 1)">Next</button>
-    </nav>
+    <merit-pager [label]="caption()" [page]="page()" [size]="pageSize()" [total]="total()" [busy]="loading()" (change)="pageChange.emit($event)" />
   `,
   styles: `
     .nowrap { white-space: nowrap; }
@@ -110,7 +107,6 @@ export interface GridSort {
     .grid-select .usa-checkbox__label::before { margin-left: 0; }
     .grid-badge { display: inline-block; margin-left: .25rem; padding: 0 .4rem; border-radius: 1rem; background: #b50909; color: #fff; font-size: .75rem; font-weight: 700; }
     .grid-empty { color: #565c65; font-style: italic; }
-    .grid-pager { display: flex; align-items: center; gap: 1rem; margin-top: .5rem; }
   `,
 })
 export class DataGridComponent<T> {
@@ -138,7 +134,6 @@ export class DataGridComponent<T> {
 
   readonly visibleColumns = computed(() => this.columns().filter(c => !this.isHidden(c)));
   readonly displayed = computed(() => [...(this.selectable() ? ['__select'] : []), ...this.visibleColumns().map(c => c.key)]);
-  readonly pageCount = computed(() => Math.max(1, Math.ceil(this.total() / this.pageSize())));
   readonly allSelected = computed(() => this.rows().some(r => this.rowSelectable()(r)) && this.rows().filter(r => this.rowSelectable()(r)).every(r => this.selected().has(this.rowKey()(r))));
 
   readonly trackRow = (_: number, row: T): string => this.rowKey()(row);

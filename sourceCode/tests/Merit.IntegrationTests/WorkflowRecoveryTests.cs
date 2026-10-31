@@ -61,15 +61,31 @@ public sealed class WorkflowRecoveryTests(MeritFixture fixture)
         using var first = JsonDocument.Parse(await client.Http.GetStringAsync("/api/v1/tasks?pageSize=1"));
         int total = first.RootElement.GetProperty("totalCount").GetInt32();
         Assert.True(total > 0);
+        int auditCount = await fixture.ListAuditCountAsync("workTask");
         using var last = JsonDocument.Parse(await client.Http.GetStringAsync("/api/v1/tasks?page=100000&pageSize=1"));
+        Assert.Equal(auditCount + 1, await fixture.ListAuditCountAsync("workTask"));
         Assert.Equal(total, last.RootElement.GetProperty("totalCount").GetInt32());
         Assert.Equal(total, last.RootElement.GetProperty("pageNumber").GetInt32());
         Assert.Single(last.RootElement.GetProperty("items").EnumerateArray());
 
         using var empty = JsonDocument.Parse(await client.Http.GetStringAsync("/api/v1/tasks?queue=missing-queue&page=100000"));
+        Assert.Equal(auditCount + 2, await fixture.ListAuditCountAsync("workTask"));
         Assert.Equal(0, empty.RootElement.GetProperty("totalCount").GetInt32());
         Assert.Equal(1, empty.RootElement.GetProperty("pageNumber").GetInt32());
         Assert.Empty(empty.RootElement.GetProperty("items").EnumerateArray());
+    }
+
+    [SqlFact]
+    public async Task HtmxPermissionDenialIsMarkedAndStatusPagesDoNotReplaceIt()
+    {
+        var client = await fixture.SignedInAsync("cmbalt");
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/admin/tenants");
+        request.Headers.Add("HX-Request", "true");
+        request.Headers.Add("HX-Request-Type", "partial");
+        using var response = await client.NoRedirect.SendAsync(request);
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal("true", response.Headers.GetValues("X-Merit-Denied").Single());
+        Assert.Empty(await response.Content.ReadAsStringAsync());
     }
 
     [SqlFact]
