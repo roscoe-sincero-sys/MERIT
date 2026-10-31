@@ -3,7 +3,7 @@
     <h3>@(Model.PregnancyEpisodeId is null ? "Add a pregnancy episode" : "Edit pregnancy episode")</h3>
     @if (!ViewData.ModelState.IsValid)
     {
-        <div class="usa-alert usa-alert--error usa-alert--slim" role="alert"><div class="usa-alert__body"><p class="usa-alert__text">@string.Join(" ", ViewData.ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage))</p></div></div>
+        <partial name="_ErrorSummary" model='new ErrorSummaryModel(["StartDate", "ExpectedEndDate", "ActualEndDate", "Outcome", "Source"], new Dictionary<string, string> { ["StartDate"] = "pregnancy-StartDate", ["ExpectedEndDate"] = "pregnancy-ExpectedEndDate", ["ActualEndDate"] = "pregnancy-ActualEndDate", ["Outcome"] = "pregnancy-Outcome", ["Source"] = "pregnancy-Source" }, SummaryId: "shared-pregnancyform-errors")' />
     }
     <form class="usa-form" hx-post="/people/@Model.PersonId/pregnancies" hx-target="#pregnancy-form-body" hx-swap="outerHTML">
         <input type="hidden" name="PregnancyEpisodeId" value="@Model.PregnancyEpisodeId" />

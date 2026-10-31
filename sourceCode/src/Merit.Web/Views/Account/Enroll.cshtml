@@ -18,10 +18,11 @@
         <div class="merit-qr" role="img" aria-label="QR code for your authenticator app">@Html.Raw(Model.QrSvg)</div>
         <p class="merit-meta">Can't scan? Enter this key in the app: <code>@Model.SecretBase32</code></p>
     </div>
+    <partial name="_ErrorSummary" model='new ErrorSummaryModel(["Code"], new Dictionary<string, string> { ["Code"] = "Code" }, SummaryId: "account-enroll-errors")' />
     <form class="usa-form" method="post" asp-action="Enroll">
         <div class="usa-form-group">
             <label class="usa-label" asp-for="Code">Code from the app</label>
-            <input class="usa-input usa-input--medium" asp-for="Code" autocomplete="one-time-code" inputmode="numeric" />
+            <input class="usa-input usa-input--medium" asp-for="Code" autocomplete="one-time-code" inputmode="numeric" required />
         </div>
         <button class="usa-button" type="submit">Turn on and sign in</button>
     </form>

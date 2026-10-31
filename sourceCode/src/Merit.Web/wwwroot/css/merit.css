@@ -199,3 +199,6 @@ th .merit-sort:hover, th .merit-sort:focus { color: var(--merit-primary); }
     .merit-signin { grid-template-columns: minmax(0, 1fr); padding: 1.5rem 1rem; }
     .merit-signin__about { padding-top: 0; }
 }
+
+/* Required instructions remain readable on the tinted inline editor background. */
+.merit-inline-form .usa-hint { color: #454b54; }

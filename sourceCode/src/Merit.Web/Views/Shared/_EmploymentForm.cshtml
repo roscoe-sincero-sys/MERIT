@@ -3,7 +3,7 @@
     <h3>@(Model.EmploymentId is null ? "Add a job" : "Edit or end job")</h3>
     @if (!ViewData.ModelState.IsValid)
     {
-        <div class="usa-alert usa-alert--error usa-alert--slim" role="alert"><div class="usa-alert__body"><p class="usa-alert__text">@string.Join(" ", ViewData.ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage))</p></div></div>
+        <partial name="_ErrorSummary" model='new ErrorSummaryModel(["NewOrganizationName", "WorksiteAddressLine1", "WorksiteCity", "WorksiteState", "WorksiteZip5", "JobTitle", "IndustryText", "OccupationCode", "NaicsOverride", "MetalTasks", "PpeNotes", "HoursPerWeek", "StartDate", "EndDate", "Verify"], new Dictionary<string, string> { ["NewOrganizationName"] = "employment-NewOrganizationName", ["WorksiteAddressLine1"] = "employment-WorksiteAddressLine1", ["WorksiteCity"] = "employment-WorksiteCity", ["WorksiteState"] = "employment-WorksiteState", ["WorksiteZip5"] = "employment-WorksiteZip5", ["JobTitle"] = "employment-JobTitle", ["IndustryText"] = "employment-IndustryText", ["OccupationCode"] = "employment-OccupationCode", ["NaicsOverride"] = "employment-NaicsOverride", ["MetalTasks"] = "employment-MetalTasks", ["PpeNotes"] = "employment-PpeNotes", ["HoursPerWeek"] = "employment-HoursPerWeek", ["StartDate"] = "employment-StartDate", ["EndDate"] = "employment-EndDate", ["Verify"] = "employment-job-verify" }, SummaryId: "shared-employmentform-errors")' />
     }
     <form class="usa-form" hx-post="/people/@Model.PersonId/employment" hx-target="#section-employment" hx-swap="outerHTML"
           hx-status:422="target:#employment-form-body swap:outerHTML">
@@ -32,7 +32,7 @@
             <div class="merit-form-row">
                 @foreach (var a in Model.Analytes)
                 {
-                    <div class="usa-checkbox"><input class="usa-checkbox__input" id="employment-an-@a.Value" type="checkbox" name="AnalyteIds" value="@a.Value" @(a.Selected ? "checked" : "") /><label class="usa-checkbox__label" for="employment-an-@a.Value">@a.Label</label></div>
+                    <div class="usa-checkbox"><input class="usa-checkbox__input" id="employment-an-@a.Value" type="checkbox" name="AnalyteIds" value="@a.Value" checked="@(a.Selected)" /><label class="usa-checkbox__label" for="employment-an-@a.Value">@a.Label</label></div>
                 }
             </div>
         </fieldset>

@@ -14,7 +14,7 @@
                         @if (Model.CanEdit)
                         {
                             <form class="merit-form-row" hx-post="/config/analytes/@a.AnalyteId" hx-target="#analyte-table" hx-swap="innerHTML">
-                                <div class="usa-checkbox"><input class="usa-checkbox__input" id="act-@a.Code" type="checkbox" name="isActive" value="true" @(a.IsActive ? "checked" : "") /><label class="usa-checkbox__label" for="act-@a.Code">Active</label></div>
+                                <div class="usa-checkbox"><input class="usa-checkbox__input" id="act-@a.Code" type="checkbox" name="isActive" value="true" checked="@(a.IsActive)" /><label class="usa-checkbox__label" for="act-@a.Code">Active</label></div>
                                 <input type="hidden" name="isActive" value="false" />
                                 <label class="usa-sr-only" for="ord-@a.Code">Sort order</label><input class="usa-input usa-input--small" id="ord-@a.Code" name="sortOrder" value="@a.SortOrder" />
                                 <button class="usa-button usa-button--outline usa-button--small" type="submit">Save</button>

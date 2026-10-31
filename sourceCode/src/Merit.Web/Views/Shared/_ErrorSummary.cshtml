@@ -6,9 +6,9 @@
 }
 @if (!state.IsValid)
 {
-    <div class="usa-alert usa-alert--error merit-error-summary" id="error-summary" role="alert" tabindex="-1" aria-labelledby="error-summary-heading">
+    <div class="usa-alert usa-alert--error merit-error-summary" id="@Model.SummaryId" role="alert" tabindex="-1" aria-labelledby="@Model.SummaryId-heading">
         <div class="usa-alert__body">
-            <h2 class="usa-alert__heading" id="error-summary-heading">Some fields need attention</h2>
+            <h2 class="usa-alert__heading" id="@Model.SummaryId-heading">Some fields need attention</h2>
             <ul class="usa-list">
                 @foreach (var key in keys)
                 {

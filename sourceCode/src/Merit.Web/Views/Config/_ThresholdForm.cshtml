@@ -2,7 +2,7 @@
 <div id="threshold-form">
     @if (!ViewData.ModelState.IsValid)
     {
-        <div class="usa-alert usa-alert--error usa-alert--slim" role="alert"><div class="usa-alert__body"><p class="usa-alert__text">@string.Join(" ", ViewData.ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage))</p></div></div>
+        <partial name="_ErrorSummary" model='new ErrorSummaryModel(["AnalyteSpecimenId", "Population", "ThresholdType", "Comparator", "LowerValue", "UpperValue", "SampleType", "Speciation", "AgeMinMonths", "AgeMaxMonths", "ActionCodeId", "DueIntervalDays", "EffectiveFrom", "EffectiveTo", "Authority", "IsActive"], new Dictionary<string, string> { ["AnalyteSpecimenId"] = "AnalyteSpecimenId", ["Population"] = "Population", ["ThresholdType"] = "ThresholdType", ["Comparator"] = "Comparator", ["LowerValue"] = "LowerValue", ["UpperValue"] = "UpperValue", ["SampleType"] = "SampleType", ["Speciation"] = "Speciation", ["AgeMinMonths"] = "AgeMinMonths", ["AgeMaxMonths"] = "AgeMaxMonths", ["ActionCodeId"] = "ActionCodeId", ["DueIntervalDays"] = "DueIntervalDays", ["EffectiveFrom"] = "EffectiveFrom", ["EffectiveTo"] = "EffectiveTo", ["Authority"] = "Authority", ["IsActive"] = "IsActive" }, SummaryId: "config-thresholdform-errors")' />
     }
     <form class="usa-form usa-form--large" hx-post="/config/thresholds" hx-target="#threshold-form" hx-swap="outerHTML">
         <input type="hidden" name="ThresholdId" value="@Model.ThresholdId" />
@@ -38,7 +38,7 @@
             <div class="usa-form-group"><label class="usa-label" for="EffectiveTo">Effective to</label><input class="usa-input" id="EffectiveTo" name="EffectiveTo" type="date" value="@Options.Iso(Model.EffectiveTo)" /></div>
         </div>
         <div class="usa-form-group"><label class="usa-label" for="Authority">Authority (regulation or guidance)</label><input class="usa-input" id="Authority" name="Authority" value="@Model.Authority" /></div>
-        <div class="usa-checkbox"><input class="usa-checkbox__input" id="IsActive" type="checkbox" name="IsActive" value="true" @(Model.IsActive ? "checked" : "") /><label class="usa-checkbox__label" for="IsActive">Active</label></div>
+        <div class="usa-checkbox"><input class="usa-checkbox__input" id="IsActive" type="checkbox" name="IsActive" value="true" checked="@(Model.IsActive)" /><label class="usa-checkbox__label" for="IsActive">Active</label></div>
         <input type="hidden" name="IsActive" value="false" />
         <button class="usa-button" type="submit">Save level</button>
     </form>

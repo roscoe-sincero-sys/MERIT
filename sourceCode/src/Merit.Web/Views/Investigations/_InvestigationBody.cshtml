@@ -18,7 +18,7 @@
     </div>
     @if (!ViewData.ModelState.IsValid)
     {
-        <div class="usa-alert usa-alert--error usa-alert--slim" role="alert"><div class="usa-alert__body"><p class="usa-alert__text">@string.Join(" ", ViewData.ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage))</p></div></div>
+        <partial name="_ErrorSummary" model='new ErrorSummaryModel(["investigationStatus", "assignedToUserId", "scheduledDate", "completedDate", "findings", "regulatoryAction", "referralDate", "referralOutcome", "sampleType", "roomOrComponent", "surface", "sampleValue", "unit", "sampleDate", "notes", "file"], new Dictionary<string, string> { ["investigationStatus"] = "investigationStatus", ["assignedToUserId"] = "assignedToUserId", ["scheduledDate"] = "scheduledDate", ["completedDate"] = "completedDate", ["findings"] = "findings", ["regulatoryAction"] = "regulatoryAction", ["referralDate"] = "referralDate", ["referralOutcome"] = "referralOutcome", ["sampleType"] = "sampleType", ["roomOrComponent"] = "roomOrComponent", ["surface"] = "surface", ["sampleValue"] = "sampleValue", ["unit"] = "unit", ["sampleDate"] = "sampleDate", ["notes"] = "notes", ["file"] = "sample-import-file" }, SummaryId: "investigations-investigationbody-errors")' />
     }
     <p><strong>@Options.Humanize(i.InvestigationType)</strong> &middot; @target
         @if (i.YearBuilt is int y && y < 1978) { <span class="merit-badge merit-badge--suspect">Built @y (pre-1978)</span> }

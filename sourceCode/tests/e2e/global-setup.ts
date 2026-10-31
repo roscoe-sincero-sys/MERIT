@@ -31,7 +31,7 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
     await page.keyboard.press('Enter');
     await page.waitForURL(/\/account\/enroll/);
     const secret = (await page.locator('code').first().innerText()).trim();
-    await page.getByLabel('Code from the app', { exact: true }).focus();
+    await page.getByRole('textbox', { name: 'Code from the app', exact: true }).focus();
     await page.keyboard.type(totp(secret));
     await page.keyboard.press('Enter');
     // Enrollment answers with the one-time recovery codes; continue past them as a person would.

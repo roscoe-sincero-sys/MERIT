@@ -7,7 +7,7 @@
 <h1>@(Model.AppUserId is null ? "Add a user" : Model.DisplayName)</h1>
 @if (!ViewData.ModelState.IsValid)
 {
-    <div class="usa-alert usa-alert--error usa-alert--slim" role="alert"><div class="usa-alert__body"><p class="usa-alert__text">@string.Join(" ", ViewData.ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage))</p></div></div>
+    <partial name="_ErrorSummary" model='new ErrorSummaryModel(["UserName", "DisplayName", "Email", "HomeTenantId", "NewPassword", "IsActive", "roleId", "tenantId", "accessLevel", "includeDescendants"], new Dictionary<string, string> { ["UserName"] = "UserName", ["DisplayName"] = "DisplayName", ["Email"] = "Email", ["HomeTenantId"] = "HomeTenantId", ["NewPassword"] = "NewPassword", ["IsActive"] = "IsActive", ["roleId"] = "roleId", ["tenantId"] = "tenantId", ["accessLevel"] = "accessLevel", ["includeDescendants"] = "includeDescendants" }, SummaryId: "admin-edituser-errors")' />
 }
 @if (TempData["userError"] is string err)
 {
@@ -32,7 +32,7 @@
                 <div class="usa-hint">At least 8 characters; no composition rules; checked against breached-password lists (NIST SP 800-63B-4).</div>
                 <input class="usa-input" id="NewPassword" name="NewPassword" type="password" autocomplete="new-password" />
             </div>
-            <div class="usa-checkbox"><input class="usa-checkbox__input" id="IsActive" type="checkbox" name="IsActive" value="true" @(Model.IsActive ? "checked" : "") /><label class="usa-checkbox__label" for="IsActive">Active (clear to deactivate; the account and its history are kept)</label></div>
+            <div class="usa-checkbox"><input class="usa-checkbox__input" id="IsActive" type="checkbox" name="IsActive" value="true" checked="@(Model.IsActive)" /><label class="usa-checkbox__label" for="IsActive">Active (clear to deactivate; the account and its history are kept)</label></div>
             <input type="hidden" name="IsActive" value="false" />
             <button class="usa-button" type="submit">Save</button>
         </form>

@@ -3,7 +3,7 @@
     <h2 id="dialog-title">Request an investigation for case @Model.CaseNumber</h2>
     @if (!ViewData.ModelState.IsValid)
     {
-        <div class="usa-alert usa-alert--error usa-alert--slim" role="alert"><div class="usa-alert__body"><p class="usa-alert__text">@string.Join(" ", ViewData.ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage))</p></div></div>
+        <partial name="_ErrorSummary" model='new ErrorSummaryModel(["InvestigationType", "JoinInvestigationId"], new Dictionary<string, string> { ["InvestigationType"] = "InvestigationType", ["JoinInvestigationId"] = "join-none" }, SummaryId: "cases-investigationrequest-errors")' />
     }
     <form class="usa-form" hx-post="/cases/@Model.ExposureCaseId/investigations" hx-target="#investigation-request" hx-swap="outerHTML">
         <input type="hidden" name="Checked" value="@(Model.Checked ? "true" : "false")" />
@@ -22,7 +22,7 @@
             @for (int i = 0; i < Model.Targets.Count; i++)
             {
                 var t = Model.Targets[i];
-                <div class="usa-radio"><input class="usa-radio__input" id="target-@i" type="radio" name="Target" value="@t.Value" @(t.Selected ? "checked" : "") /><label class="usa-radio__label" for="target-@i">@t.Label</label></div>
+                <div class="usa-radio"><input class="usa-radio__input" id="target-@i" type="radio" name="Target" value="@t.Value" checked="@(t.Selected)" /><label class="usa-radio__label" for="target-@i">@t.Label</label></div>
             }
         </fieldset>
         @if (Model.Existing.Count > 0)

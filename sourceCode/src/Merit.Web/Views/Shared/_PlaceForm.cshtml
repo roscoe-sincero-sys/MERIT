@@ -10,14 +10,14 @@
     }
     else if (!ViewData.ModelState.IsValid)
     {
-        <div class="usa-alert usa-alert--error usa-alert--slim" role="alert"><div class="usa-alert__body"><p class="usa-alert__text">@string.Join(" ", ViewData.ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage))</p></div></div>
+        <partial name="_ErrorSummary" model='new ErrorSummaryModel(["Role", "StartDate", "EndDate", "AddressLine1", "Unit", "City", "State", "Zip5", "CountyFips", "YearBuilt", "IsCityOnly", "ScheduleType", "HoursPerWeek", "ScheduleNote", "Source", "PrimaryChoice", "PrimaryReason"], new Dictionary<string, string> { ["Role"] = "place-Role", ["StartDate"] = "place-StartDate", ["EndDate"] = "place-EndDate", ["AddressLine1"] = "place-AddressLine1", ["Unit"] = "place-Unit", ["City"] = "place-City", ["State"] = "place-State", ["Zip5"] = "place-Zip5", ["CountyFips"] = "place-CountyFips", ["YearBuilt"] = "place-YearBuilt", ["IsCityOnly"] = "place-IsCityOnly", ["ScheduleType"] = "place-ScheduleType", ["HoursPerWeek"] = "place-HoursPerWeek", ["ScheduleNote"] = "place-ScheduleNote", ["Source"] = "place-Source", ["PrimaryChoice"] = "pc-existing", ["PrimaryReason"] = "place-PrimaryReason" }, SummaryId: "shared-placeform-errors")' />
     }
     <form class="usa-form" hx-post="/people/@Model.PersonId/places/add" hx-target="#section-places" hx-swap="outerHTML"
           hx-status:422="target:#place-form-body swap:outerHTML">
         <div class="merit-form-row">
             <div class="usa-form-group">
                 <label class="usa-label" for="place-Role">Role</label>
-                <select class="usa-select" id="place-Role" name="Role">@foreach (var o in Model.Roles) { <option value="@o.Value" selected="@o.Selected">@o.Label</option> }</select>
+                <select class="usa-select" id="place-Role" name="Role" required>@foreach (var o in Model.Roles) { <option value="@o.Value" selected="@o.Selected">@o.Label</option> }</select>
             </div>
             <div class="usa-form-group">
                 <label class="usa-label" for="place-StartDate">Start date</label>
@@ -51,7 +51,7 @@
                         <select class="usa-select" id="place-CountyFips" name="CountyFips">@foreach (var o in Model.Counties) { <option value="@o.Value" selected="@o.Selected">@o.Label</option> }</select></div>
                     <div class="usa-form-group"><label class="usa-label" for="place-YearBuilt">Year built</label><input class="usa-input usa-input--small" id="place-YearBuilt" name="YearBuilt" value="@Model.YearBuilt" inputmode="numeric" /></div>
                 </div>
-                <div class="usa-checkbox"><input class="usa-checkbox__input" id="place-IsCityOnly" type="checkbox" name="IsCityOnly" value="true" @(Model.IsCityOnly ? "checked" : "") /><label class="usa-checkbox__label" for="place-IsCityOnly">City only (no fixed address)</label></div>
+                <div class="usa-checkbox"><input class="usa-checkbox__input" id="place-IsCityOnly" type="checkbox" name="IsCityOnly" value="true" checked="@(Model.IsCityOnly)" /><label class="usa-checkbox__label" for="place-IsCityOnly">City only (no fixed address)</label></div>
             </fieldset>
         </fieldset>
 
@@ -69,8 +69,8 @@
             @* Adding an overlapping residence opens the primary choice inline; it cannot be saved without one. *@
             <fieldset class="usa-fieldset merit-inline-form">
                 <legend class="usa-legend">Which residence is primary?</legend>
-                <div class="usa-radio"><input class="usa-radio__input" id="pc-new" type="radio" name="PrimaryChoice" value="new" @(Model.PrimaryChoice == "new" ? "checked" : "") /><label class="usa-radio__label" for="pc-new">This new residence becomes primary from its start date</label></div>
-                <div class="usa-radio"><input class="usa-radio__input" id="pc-existing" type="radio" name="PrimaryChoice" value="existing" @(Model.PrimaryChoice == "existing" ? "checked" : "") /><label class="usa-radio__label" for="pc-existing">The current primary residence stays primary</label></div>
+                <div class="usa-radio"><input class="usa-radio__input" id="pc-new" type="radio" name="PrimaryChoice" value="new" checked="@(Model.PrimaryChoice == "new")" /><label class="usa-radio__label" for="pc-new">This new residence becomes primary from its start date</label></div>
+                <div class="usa-radio"><input class="usa-radio__input" id="pc-existing" type="radio" name="PrimaryChoice" value="existing" checked="@(Model.PrimaryChoice == "existing")" /><label class="usa-radio__label" for="pc-existing">The current primary residence stays primary</label></div>
                 <div class="usa-form-group"><label class="usa-label" for="place-PrimaryReason">Reason (required when residences overlap)</label>
                     <select class="usa-select" id="place-PrimaryReason" name="PrimaryReason">@foreach (var o in Model.Reasons) { <option value="@o.Value" selected="@o.Selected">@o.Label</option> }</select></div>
             </fieldset>
