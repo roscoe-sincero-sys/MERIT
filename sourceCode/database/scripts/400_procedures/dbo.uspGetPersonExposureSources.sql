@@ -85,7 +85,7 @@ BEGIN
 
         SELECT s.exposureSourceId, s.exposureCaseId, s.sourceType, COALESCE (lv.displayName, s.sourceType) AS sourceTypeLabel,
                s.sourceDescription, s.productId, pr.productName, pr.brand, s.locationId, l.addressLine1, l.city,
-               s.startDate, s.endDate, s.isConfirmed
+               s.startDate, s.endDate, s.isConfirmed, s.modifiedDateUtc, pr.countryOfOrigin AS productCountry
           FROM dbo.exposureSource AS s
           LEFT JOIN config.lookupValue AS lv ON lv.lookupType = 'exposureSourceType' AND lv.code = s.sourceType
           LEFT JOIN dbo.product AS pr ON pr.productId = s.productId

@@ -464,6 +464,8 @@ public sealed class CaseInvestigationRow
 
 public sealed class CaseTaskRow
 {
+    public bool CanEdit { get; init; }
+
     public Guid WorkTaskId { get; init; }
 
     public string QueueCode { get; init; } = string.Empty;
@@ -649,6 +651,7 @@ public sealed class InvestigationCaseRow
 
 public sealed class EnvironmentalSampleRow
 {
+    public DateTime ModifiedDateUtc { get; init; }
     public Guid EnvironmentalSampleId { get; init; }
 
     public string SampleType { get; init; } = string.Empty;
@@ -676,6 +679,9 @@ public sealed class EnvironmentalSampleRow
 
 public sealed record InvestigationDetail(InvestigationRow Investigation, IReadOnlyList<InvestigationCaseRow> Cases,
                                          IReadOnlyList<EnvironmentalSampleRow> Samples);
+
+public sealed record InvestigationQuery(bool OpenOnly = true, string? Search = null, string? Assigned = null,
+    string? Status = null, string? Type = null, string Sort = "requested", bool Descending = true, int PageNumber = 1);
 
 public sealed class InvestigationListRow
 {
@@ -709,4 +715,4 @@ public sealed record InvestigationUpdate(Guid InvestigationId, string Investigat
 
 public sealed record EnvironmentalSampleSave(Guid EnvironmentalSampleId, Guid InvestigationId, string SampleType,
                                              string? RoomOrComponent, string? Surface, decimal SampleValue, string Unit,
-                                             DateOnly SampleDate, string? Notes, bool IsDeleted);
+                                             DateOnly SampleDate, string? Notes, bool IsDeleted, DateTime? OriginalModifiedUtc = null);

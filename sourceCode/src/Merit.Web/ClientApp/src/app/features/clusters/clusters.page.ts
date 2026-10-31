@@ -6,6 +6,8 @@ import { CLASSIFICATIONS } from '../map/case-map.page';
 import { Display } from '../../shared/display.service';
 import { LatestRequest } from '../../shared/latest-request';
 import { PagerComponent } from '../../shared/pager.component';
+import { ViewQuery, pageNumber, choice } from '../../shared/view-query';
+import { RouterLink } from '@angular/router';
 
 const TYPE_LABELS: Record<string, string> = {
   location: 'Shared location', building: 'Shared building', childCareSite: 'Child-care site', worksite: 'Shared worksite',
@@ -27,8 +29,8 @@ export class ClustersStore {
 /** Cluster review list: groups flagged by detection, open first. Nothing was merged; staff review each. */
 @Component({
   selector: 'merit-clusters-page',
-  imports: [PagerComponent],
-  providers: [ClustersStore],
+  imports: [PagerComponent, RouterLink],
+  providers: [ClustersStore, ViewQuery],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <h1 tabindex="-1">Clusters</h1>
@@ -49,7 +51,7 @@ export class ClustersStore {
         <tbody>
           @for (c of store.clusters(); track c.clusterId) {
             <tr>
-              <th scope="row"><a class="usa-link" [href]="'/app/clusters/' + c.clusterId">{{ c.title }}</a></th>
+              <th scope="row"><a class="usa-link" [routerLink]="['/clusters', c.clusterId]" [queryParams]="{ returnTo: '/clusters' + listQuery() }">{{ c.title }}</a></th>
               <td>{{ typeLabel(c.clusterType) }}</td>
               <td>{{ statusLabel(c.status) }}</td>
               <td>{{ c.memberCount }}</td>
@@ -69,15 +71,21 @@ export class ClustersPage implements OnInit {
   private readonly api = inject(ApiClient);
   protected readonly display = inject(Display);
   private readonly clustersLoad = new LatestRequest();
+  protected listQuery(): string { return window.location.search; }
+  private readonly view = inject(ViewQuery);
 
   ngOnInit(): void {
-    this.load();
+    this.view.watch(q => {
+      this.store.status.set(choice(q.get('status'), ['open', 'underReview', 'closed'], ''));
+      this.store.page.set(pageNumber(q.get('page')));
+      this.load();
+    });
   }
 
   protected setStatus(status: string): void {
     this.store.status.set(status);
     this.store.page.set(1);
-    this.load();
+    this.view.set({ status: status || null, page: 1 });
   }
 
   protected typeLabel(t: string): string {
@@ -88,13 +96,13 @@ export class ClustersPage implements OnInit {
     return STATUS_LABELS[s];
   }
 
-  protected goPage(page: number): void { if (!this.store.loading()) { this.store.page.set(page); this.load(); } }
+  protected goPage(page: number): void { if (!this.store.loading()) { this.store.page.set(page); this.view.set({ page }); } }
 
   private load(): void {
     this.store.loading.set(true);
     this.store.error.set(null);
     this.clustersLoad.run(this.api.clusters({ status: this.store.status(), page: this.store.page(), pageSize: this.store.pageSize() }), {
-      next: p => { this.store.clusters.set(p.items); this.store.total.set(p.totalCount); this.store.page.set(p.pageNumber); this.store.pageSize.set(p.pageSize); this.store.loading.set(false); },
+      next: p => { this.store.clusters.set(p.items); this.store.total.set(p.totalCount); if (this.store.page() !== p.pageNumber) this.view.replaceLoaded({ page: p.pageNumber }); this.store.page.set(p.pageNumber); this.store.pageSize.set(p.pageSize); this.store.loading.set(false); },
       error: e => { this.store.error.set(problemMessage(e)); this.store.loading.set(false); },
     });
   }
@@ -111,11 +119,11 @@ export class ClusterStore {
 /** One cluster: its cases on a map and in a table, status and notes, and cases joining or leaving. */
 @Component({
   selector: 'merit-cluster-page',
-  imports: [PointMapComponent],
+  imports: [PointMapComponent, RouterLink],
   providers: [ClusterStore],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <p><a class="usa-link" href="/app/clusters">All clusters</a></p>
+    <p><a class="usa-link" [routerLink]="returnPath()" [queryParams]="returnQuery()">Return to clusters</a></p>
     @if (store.error(); as e) { <div class="usa-alert usa-alert--error usa-alert--slim" role="alert"><div class="usa-alert__body"><p class="usa-alert__text">{{ e }}</p></div></div> }
     @if (store.message(); as m) { <div class="usa-alert usa-alert--success usa-alert--slim" role="status"><div class="usa-alert__body"><p class="usa-alert__text">{{ m }}</p></div></div> }
     @if (store.cluster(); as c) {
@@ -200,6 +208,14 @@ export class ClusterPage implements OnInit {
   protected readonly display = inject(Display);
   private readonly clusterLoad = new LatestRequest();
   readonly clusterId = input.required<string>();
+  readonly returnTo = input<string>('');
+  protected returnPath(): string { return '/clusters'; }
+  protected returnQuery(): Record<string, string> {
+    const target = this.returnTo() ?? '';
+    if (target.split('?')[0] !== '/clusters') return {};
+    const params = new URLSearchParams(target.split('?')[1] ?? '');
+    return Object.fromEntries([...params].filter(([key]) => ['status', 'page'].includes(key)));
+  }
   protected readonly statuses: ClusterStatus[] = ['open', 'underReview', 'closed'];
   protected readonly classifications = CLASSIFICATIONS;
 

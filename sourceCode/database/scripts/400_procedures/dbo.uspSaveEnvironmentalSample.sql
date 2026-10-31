@@ -59,6 +59,7 @@ CREATE OR ALTER PROCEDURE dbo.uspSaveEnvironmentalSample
       , @sampleDate            DATE
       , @notes                 NVARCHAR (1000) = NULL
       , @isDeleted             BIT = 0
+      , @originalModifiedUtc DATETIME2 (3) = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -121,8 +122,13 @@ BEGIN
 
         IF EXISTS (SELECT 1 FROM dbo.environmentalSample WHERE environmentalSampleId = @environmentalSampleId)
         BEGIN
-            UPDATE dbo.environmentalSample SET isDeleted = @isDeleted
-             WHERE environmentalSampleId = @environmentalSampleId AND investigationId = @investigationId AND isDeleted = 0;
+            UPDATE dbo.environmentalSample SET isDeleted = @isDeleted, sampleType = @sampleType,
+                roomOrComponent = @roomOrComponent, surface = @surface, sampleValue = @sampleValue, unit = @unit,
+                sampleDate = @sampleDate, environmentalStandardId = @standardId, notes = @notes,
+                exceedsStandard = CASE WHEN @standardId IS NULL THEN NULL WHEN @sampleValue >= @standardValue THEN 1 ELSE 0 END
+             WHERE environmentalSampleId = @environmentalSampleId AND investigationId = @investigationId AND isDeleted = 0
+               AND modifiedDateUtc = @originalModifiedUtc;
+            IF @@ROWCOUNT <> 1 THROW 51409, N'This reading changed. Reload before editing.', 1;
         END
         ELSE
         BEGIN

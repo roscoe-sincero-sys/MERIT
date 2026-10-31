@@ -38,18 +38,18 @@ public sealed class QueuesController(QueueService queues, CaseService cases, ICu
     [HttpGet("tasks")]
     [Authorize(Policy = Permissions.TaskView)]
     public async Task<PagedResult<WorkTaskDto>> Tasks(string? queue, string? status = "open", bool mine = false, bool urgent = false,
-                                                      string sort = "dueDate", bool desc = false, int page = 1, int pageSize = 50,
+                                                      string sort = "dueDate", bool desc = false, int page = 1, int pageSize = 50, bool overdue = false,
                                                       CancellationToken ct = default)
     {
         page = Math.Max(page, 1);
         pageSize = Math.Clamp(pageSize, 1, 500);
         var result = await queues.ListAsync(new WorkTaskQuery(string.IsNullOrEmpty(queue) ? null : queue,
-            string.IsNullOrEmpty(status) ? null : status, mine, urgent, sort, desc, page, pageSize), ct);
+            string.IsNullOrEmpty(status) ? null : status, mine, urgent, sort, desc, page, pageSize, overdue), ct);
         var rows = result.Rows;
         return new PagedResult<WorkTaskDto>(rows.Select(r => new WorkTaskDto(r.WorkTaskId, r.QueueCode, r.Title, r.Detail, r.IsUrgent,
                 r.DueDate, r.TaskStatus, r.CreatedDateUtc, r.PersonId,
                 r.LastName is null ? null : $"{r.LastName}, {r.FirstName}", r.ExposureCaseId, r.CaseNumber, r.AssignedToUserId,
-                r.AssignedToName, r.CanEdit && session.Has(Permissions.TaskEdit))).ToList(),
+                r.AssignedToName, r.CanEdit && session.Has(Permissions.TaskEdit), r.IsOverdue)).ToList(),
             result.Total, result.Page, pageSize);
     }
 
@@ -144,6 +144,11 @@ public sealed class HeldRecordsController(IntakeService intake, IReferenceDataPr
     [Authorize(Policy = Permissions.ResultReleaseHold)]
     public async Task<BulkActionResponse> Release(HeldActionRequest request, CancellationToken ct)
         => new(await intake.ReleaseAsync(request.StagingRowIds, ct));
+
+    [HttpPost("group-correction")]
+    [Authorize(Policy = Permissions.ResultReleaseHold)]
+    public async Task<BulkActionResponse> CorrectGroup(HeldGroupCorrectionRequest r, CancellationToken ct)
+        => new(await intake.CorrectGroupAsync(r.Reason, r.ReportedValue, r.Sender, r.Batch, r.Field, r.Value, r.SelectedIds, ct));
 
     [HttpPost("reject")]
     [Authorize(Policy = Permissions.ResultReleaseHold)]

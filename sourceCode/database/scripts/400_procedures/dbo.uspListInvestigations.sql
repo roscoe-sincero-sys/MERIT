@@ -51,6 +51,12 @@ CREATE OR ALTER PROCEDURE dbo.uspListInvestigations
       , @assignedToMe BIT = 0
       , @pageNumber   INT = 1
       , @pageSize     INT = 25
+      , @searchText NVARCHAR (200) = NULL
+      , @assignedFilter VARCHAR (40) = NULL
+      , @statusFilter VARCHAR (20) = NULL
+      , @typeFilter VARCHAR (30) = NULL
+      , @sortBy VARCHAR (20) = 'requested'
+      , @sortDescending BIT = 1
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -104,7 +110,19 @@ BEGIN
          WHERE i.isDeleted = 0
            AND (@openOnly = 0 OR i.investigationStatus NOT IN ('cleared', 'closed'))
            AND (@assignedToMe = 0 OR i.assignedToUserId = @me)
-         ORDER BY i.requestedDate DESC, i.investigationId
+           AND (NULLIF (@searchText, N'') IS NULL OR i.investigationNumber LIKE N'%' + @searchText + N'%'
+                OR l.addressLine1 LIKE N'%' + @searchText + N'%' OR o.organizationName LIKE N'%' + @searchText + N'%')
+           AND (NULLIF (@statusFilter, '') IS NULL OR i.investigationStatus = @statusFilter)
+           AND (NULLIF (@typeFilter, '') IS NULL OR i.investigationType = @typeFilter)
+           AND (NULLIF (@assignedFilter, '') IS NULL OR (@assignedFilter = 'me' AND i.assignedToUserId = @me)
+                OR (@assignedFilter = 'unassigned' AND i.assignedToUserId IS NULL)
+                OR i.assignedToUserId = TRY_CAST (@assignedFilter AS UNIQUEIDENTIFIER))
+         ORDER BY CASE WHEN @sortBy = 'number' AND @sortDescending = 0 THEN i.investigationNumber END ASC,
+                  CASE WHEN @sortBy = 'number' AND @sortDescending = 1 THEN i.investigationNumber END DESC,
+                  CASE WHEN @sortBy = 'status' AND @sortDescending = 0 THEN i.investigationStatus END ASC,
+                  CASE WHEN @sortBy = 'status' AND @sortDescending = 1 THEN i.investigationStatus END DESC,
+                  CASE WHEN @sortBy = 'requested' AND @sortDescending = 0 THEN i.requestedDate END ASC,
+                  CASE WHEN @sortBy = 'requested' AND @sortDescending = 1 THEN i.requestedDate END DESC, i.investigationId
         OFFSET (@pageNumber - 1) * @pageSize ROWS
          FETCH NEXT @pageSize ROWS ONLY;
 

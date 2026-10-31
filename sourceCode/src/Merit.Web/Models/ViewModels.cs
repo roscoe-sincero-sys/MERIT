@@ -268,6 +268,20 @@ public sealed class PlaceFormModel
     public IReadOnlyList<SelectOption> Counties { get; set; } = [];
 }
 
+public sealed class PlaceEditModel
+{
+    public IReadOnlyList<SelectOption> Schedules { get; set; } = [];
+    public Guid PersonId { get; set; }
+    public Guid PersonLocationId { get; set; }
+    public string? RowVersion { get; set; }
+    public string? AddressLabel { get; set; }
+    public string? Unit { get; set; }
+    public int? YearBuilt { get; set; }
+    public string? ScheduleType { get; set; }
+    public decimal? HoursPerWeek { get; set; }
+    public string? ScheduleNote { get; set; }
+}
+
 public sealed class SetPrimaryModel
 {
     public Guid PersonId { get; set; }
@@ -298,6 +312,10 @@ public sealed class SetPrimaryModel
 
 public sealed class EmploymentFormModel
 {
+    public Guid? EmploymentId { get; set; }
+    public string? RowVersion { get; set; }
+    public bool Verify { get; set; }
+
     public Guid PersonId { get; set; }
 
     public Guid? OrganizationId { get; set; }
@@ -345,6 +363,10 @@ public sealed class EmploymentFormModel
 
 public sealed class SourceFormModel
 {
+    public Guid? ExposureSourceId { get; set; }
+    public DateTime? OriginalModifiedUtc { get; set; }
+    public DateOnly? EndDate { get; set; }
+
     public Guid PersonId { get; set; }
 
     public string SourceType { get; set; } = "consumerProduct";
@@ -477,7 +499,8 @@ public sealed record ResultDetailModel(LabResultDetailRow Result, IReadOnlyList<
 
 public sealed record CasePageModel(CaseDetail Detail, IReadOnlyList<SelectOption> Users, IReadOnlyList<SelectOption> ClosureReasons,
                                    IReadOnlyList<SelectOption> ActivityTypes, IReadOnlyList<SelectOption> Outcomes, bool CanEdit,
-                                   bool CanInvestigate, string? Message = null, FormDraft? Draft = null);
+                                   bool CanInvestigate, string? Message = null, FormDraft? Draft = null, IReadOnlyList<SelectOption>? ContactOptions = null,
+                                   bool HasInvestigationTargets = false);
 
 /// <summary>
 /// The case list's filters and sort, bound from the query string, so a filtered list is a link (issue #50). Assigned is
@@ -588,9 +611,43 @@ public sealed class InvestigationRequestModel
 
 public sealed record InvestigationPageModel(InvestigationDetail Detail, IReadOnlyList<SelectOption> Users,
                                             IReadOnlyList<SelectOption> Statuses, IReadOnlyList<SelectOption> RegulatoryActions,
-                                            IReadOnlyList<SelectOption> SampleTypes, bool CanEdit, FormDraft? Draft = null);
+                                            IReadOnlyList<SelectOption> SampleTypes, bool CanEdit, FormDraft? Draft = null,
+                                            IReadOnlyDictionary<string, string[]>? SampleUnits = null)
+{
+    public Guid ImportId { get; init; } = Guid.NewGuid();
+}
 
-public sealed record InvestigationListModel(IReadOnlyList<InvestigationListRow> Rows, bool OpenOnly, int PageNumber);
+public sealed class SampleEditModel
+{
+    public Guid InvestigationId { get; set; }
+    public Guid SampleId { get; set; }
+    public string SampleType { get; set; } = "dustWipe";
+    public string? RoomOrComponent { get; set; }
+    public string? Surface { get; set; }
+    public decimal SampleValue { get; set; }
+    public string Unit { get; set; } = "ug/ft2";
+    public DateOnly SampleDate { get; set; }
+    public string? Notes { get; set; }
+    public DateTime OriginalModifiedUtc { get; set; }
+    public IReadOnlyDictionary<string, string[]> Units { get; set; } = EnvironmentalSamples.DefaultUnits;
+}
+
+public sealed record InvestigationListModel(IReadOnlyList<InvestigationListRow> Rows, bool OpenOnly, int PageNumber,
+    int TotalCount = 0, InvestigationFilterModel? Filter = null, IReadOnlyList<SelectOption>? Users = null);
+
+public sealed class InvestigationFilterModel
+{
+    public bool OpenOnly { get; set; } = true;
+    public string? Q { get; set; }
+    public string? Assigned { get; set; }
+    public string? Status { get; set; }
+    public string? Type { get; set; }
+    public string Sort { get; set; } = "requested";
+    public bool Desc { get; set; } = true;
+    public int Page { get; set; } = 1;
+    public InvestigationQuery ToQuery() => new(OpenOnly, Q, Assigned, Status, Type,
+        Sort is "requested" or "number" or "status" ? Sort : "requested", Desc, Math.Max(Page, 1));
+}
 
 // ------------------------------------------------------------------------------------------------ configuration and admin
 
@@ -688,7 +745,7 @@ public sealed class UserFormModel
 
 /// <param name="DuplicateOf">The batch that already holds the file just uploaded, when the upload was refused as a repeat.</param>
 public sealed record IntakeModel(IReadOnlyList<IntakeProfileListRow> Profiles, IReadOnlyList<IntakeBatchRow> Batches, string? Message,
-                                 Guid? DuplicateOf = null);
+                                 Guid? DuplicateOf = null, string MessageKind = "info");
 
 public sealed record ExtractsModel(IReadOnlyList<ExtractRunRow> Runs, bool AnyRunning, int Year, int Quarter);
 

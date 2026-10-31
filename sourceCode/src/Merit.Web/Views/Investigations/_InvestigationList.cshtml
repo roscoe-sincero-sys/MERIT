@@ -1,4 +1,12 @@
 @model InvestigationListModel
+@{
+    var filter = Model.Filter ?? new InvestigationFilterModel();
+    int pages = Math.Max(1, (int)Math.Ceiling(Model.TotalCount / 25d));
+    string Link(int page, string? sort = null) => Url.Action("Index", "Investigations", new { filter.OpenOnly, filter.Q, filter.Assigned, filter.Status, filter.Type,
+        sort = sort ?? filter.Sort, desc = sort is null ? filter.Desc : filter.Sort == sort ? !filter.Desc : false, page })!;
+}
+<p role="status">@Model.TotalCount investigations. Page @Model.PageNumber of @pages.</p>
+<p>Sort: <a href="@Link(1, "number")" hx-get="@Link(1, "number")" hx-target="#investigation-list" hx-push-url="true">Number</a> &middot; <a href="@Link(1, "requested")" hx-get="@Link(1, "requested")" hx-target="#investigation-list" hx-push-url="true">Requested date</a> &middot; <a href="@Link(1, "status")" hx-get="@Link(1, "status")" hx-target="#investigation-list" hx-push-url="true">Status</a></p>
 <div id="investigation-list-body">
     @if (Model.Rows.Count == 0)
     {
@@ -27,3 +35,8 @@
         </div>
     }
 </div>
+
+<nav aria-label="Investigation pages">
+    @if (Model.PageNumber > 1) { <a class="usa-button usa-button--outline" href="@Link(Model.PageNumber - 1)" hx-get="@Link(Model.PageNumber - 1)" hx-target="#investigation-list" hx-push-url="true">Previous page</a> }
+    @if (Model.PageNumber < pages) { <a class="usa-button usa-button--outline" href="@Link(Model.PageNumber + 1)" hx-get="@Link(Model.PageNumber + 1)" hx-target="#investigation-list" hx-push-url="true">Next page</a> }
+</nav>

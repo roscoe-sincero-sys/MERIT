@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import importlib
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -351,11 +352,23 @@ GO
 def manifest_entry(p: dict) -> dict:
     """Name, kind, grants, permission and parameters (with whether each has a default) for the cross-tenant test suite."""
     params = []
-    for line in (p.get("params") or "").splitlines():
-        line = line.strip().lstrip(",").strip()
-        if not line.startswith("@"):
+    declarations = p.get("params") or ""
+    # Split only parameter separators, preserving decimal precision and quoted defaults
+    # (which can themselves contain commas and @ characters).
+    parts = []
+    start = 0
+    for match in re.finditer(r"'(?:''|[^'])*'|,\s*(?=@)", declarations):
+        if match.group().startswith(","):
+            parts.append(declarations[start:match.start()])
+            start = match.end()
+    parts.append(declarations[start:])
+    for part in parts:
+        line = part.strip()
+        if not line:
             continue
-        name, _, rest = line.partition(" ")
+        if not line.startswith("@"):
+            raise ValueError(f"Invalid parameters for {p['name']}: {line}")
+        name, rest = line.split(None, 1)
         declared, eq, _default = rest.partition("=")
         params.append({"name": name[1:], "type": " ".join(declared.split()).replace(" OUTPUT", ""),
                        "hasDefault": bool(eq), "isOutput": "OUTPUT" in declared})

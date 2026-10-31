@@ -2,7 +2,7 @@
     string? returnTo = Context.Request.Query["returnTo"].FirstOrDefault();
     string? listPath = returnTo?.Split('?')[0];
 }
-@if (returnTo is not null && Url.IsLocalUrl(returnTo) && listPath is "/app/results" or "/app/queues")
+@if (returnTo is not null && Url.IsLocalUrl(returnTo) && listPath is "/app/results" or "/app/queues" or "/app/map")
 {
-    <p><a class="usa-link" href="@returnTo">Return to @(listPath == "/app/results" ? "filtered results" : "work queue")</a></p>
+    <p><a class="usa-link" href="@returnTo">Return to @(listPath == "/app/results" ? "filtered results" : listPath == "/app/map" ? "filtered map" : "work queue")</a></p>
 }

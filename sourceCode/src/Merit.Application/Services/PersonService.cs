@@ -67,11 +67,11 @@ public sealed record EmploymentInput(
     DateOnly? StartDate,
     DateOnly? EndDate,
     string Source,
-    IReadOnlyList<Guid> AnalyteIds);
+    IReadOnlyList<Guid> AnalyteIds, byte[]? RowVersion = null, bool Verify = false);
 
 public sealed record ExposureSourceInput(Guid PersonId, string SourceType, string? Description, string? ProductName,
                                          string? ProductBrand, string? ProductCountry, DateOnly? StartDate, DateOnly? EndDate,
-                                         bool IsConfirmed);
+                                         bool IsConfirmed, Guid? ExposureSourceId = null, DateTime? OriginalModifiedUtc = null);
 
 public sealed record PregnancyInput(Guid? PregnancyEpisodeId, Guid PersonId, DateOnly StartDate, DateOnly? ExpectedEndDate,
                                     DateOnly? ActualEndDate, string? Outcome, string Source, byte[]? RowVersion);
@@ -267,7 +267,11 @@ public sealed class PersonService(
     public async Task SaveEmploymentAsync(EmploymentInput input, CancellationToken ct = default)
     {
         session.Require(Permissions.PersonEdit);
+        var existing = input.EmploymentId is Guid employmentId
+            ? (await data.GetEmploymentAsync(input.PersonId, ct).ConfigureAwait(false)).FirstOrDefault(e => e.EmploymentId == employmentId) ?? throw new NotFoundException()
+            : null;
         var v = new Validator();
+        v.When(existing is not null && input.RowVersion?.Length != 8, "RowVersion", "Reload the job before editing it.");
         v.When(input.OrganizationId is null && string.IsNullOrWhiteSpace(input.NewOrganizationName), "OrganizationId",
             "Pick the employer or enter its name.");
         v.When(input.OccupationCode is { Length: > 4 }, "OccupationCode", "Census occupation codes are up to four digits.");
@@ -282,26 +286,34 @@ public sealed class PersonService(
 
         v.ThrowIfInvalid();
 
+        if (existing is not null && !existing.RowVersion.SequenceEqual(input.RowVersion!)) throw new ConcurrencyException();
         Guid orgId = input.OrganizationId ?? await CreateOrganizationAsync(input.NewOrganizationName!, ["employer"], ct).ConfigureAwait(false);
-        Guid? worksite = input.WorksiteLocationId;
-        if (worksite is null && input.WorksiteAddress is { } addr)
+        Guid? worksite = input.WorksiteLocationId ?? existing?.WorksiteLocationId;
+        if (input.WorksiteAddress is { } addr)
         {
             worksite = await placeService.SaveAddressAsync(addr, ct).ConfigureAwait(false);
         }
 
         await places.SaveEmploymentAsync(new EmploymentSave(input.EmploymentId ?? TimeOrderedId.New(), input.PersonId, orgId, worksite,
-            Clean(input.JobTitle), Clean(input.IndustryText), Clean(input.OccupationCode), input.OccupationCode is null ? null : "2002",
+            Clean(input.JobTitle), Clean(input.IndustryText), Clean(input.OccupationCode), input.OccupationCode is null ? null
+                : existing is not null && input.OccupationCode == existing.OccupationCode ? existing.OccupationCodeVersion : "2002",
             Clean(input.NaicsOverride), Clean(input.MetalTasks), Clean(input.PpeNotes), input.HoursPerWeek, input.StartDate,
-            input.EndDate, input.Source, null, input.AnalyteIds, false, null), ct).ConfigureAwait(false);
+            input.EndDate, input.Source, input.Verify ? clock.Today : existing?.VerifiedDate, input.AnalyteIds, false, input.RowVersion), ct).ConfigureAwait(false);
         await audit.ChangedAsync("person", input.PersonId, ct).ConfigureAwait(false);
     }
 
     public async Task SaveExposureSourceAsync(ExposureSourceInput input, CancellationToken ct = default)
     {
         session.Require(Permissions.PersonEdit);
-        new Validator().Required("SourceType", input.SourceType, "Source type").ThrowIfInvalid();
-        Guid? productId = null;
-        if (!string.IsNullOrWhiteSpace(input.ProductName))
+        var existing = input.ExposureSourceId is Guid sourceId
+            ? (await data.GetExposureSourcesAsync(input.PersonId, ct).ConfigureAwait(false)).FirstOrDefault(s => s.ExposureSourceId == sourceId) ?? throw new NotFoundException()
+            : null;
+        new Validator().Required("SourceType", input.SourceType, "Source type")
+            .When(input.EndDate is not null && input.StartDate is not null && input.EndDate < input.StartDate, "EndDate", "The end date is before the start date.")
+            .When(existing is not null && input.OriginalModifiedUtc is null, "OriginalModifiedUtc", "Reload the source before editing it.").ThrowIfInvalid();
+        if (existing is not null && existing.ModifiedDateUtc != input.OriginalModifiedUtc) throw new ConcurrencyException();
+        Guid? productId = string.IsNullOrWhiteSpace(input.ProductName) ? null : existing?.ProductId;
+        if (!string.IsNullOrWhiteSpace(input.ProductName) && (existing is null || input.ProductName != existing.ProductName || input.ProductBrand != existing.Brand || input.ProductCountry != existing.ProductCountry))
         {
             productId = TimeOrderedId.New();
             await places.SaveProductAsync(productId.Value, Clean(input.ProductBrand), input.ProductName.Trim(),
@@ -309,8 +321,8 @@ public sealed class PersonService(
         }
 
         var open = (await data.GetCasesAsync(input.PersonId, ct).ConfigureAwait(false)).FirstOrDefault(c => c.CaseStatus != "closed");
-        await places.SaveExposureSourceAsync(new ExposureSourceSave(TimeOrderedId.New(), input.PersonId, open?.ExposureCaseId,
-            input.SourceType, Clean(input.Description), productId, null, input.StartDate, input.EndDate, input.IsConfirmed, false), ct)
+        await places.SaveExposureSourceAsync(new ExposureSourceSave(input.ExposureSourceId ?? TimeOrderedId.New(), input.PersonId, existing is null ? open?.ExposureCaseId : existing.ExposureCaseId,
+            input.SourceType, Clean(input.Description), productId, existing?.LocationId, input.StartDate, input.EndDate, input.IsConfirmed, false, input.OriginalModifiedUtc), ct)
             .ConfigureAwait(false);
         await audit.ChangedAsync("person", input.PersonId, ct).ConfigureAwait(false);
     }

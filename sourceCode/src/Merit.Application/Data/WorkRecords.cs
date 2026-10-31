@@ -81,6 +81,8 @@ public sealed record DashboardData(DashboardCountsRow Counts, IReadOnlyList<Dash
 
 public sealed class WorkTaskRow
 {
+    public bool IsOverdue { get; init; }
+
     public bool CanEdit { get; init; }
 
     public Guid WorkTaskId { get; init; }
@@ -125,7 +127,7 @@ public sealed class WorkTaskRow
 }
 
 public sealed record WorkTaskQuery(string? QueueCode, string? TaskStatus, bool AssignedToMe, bool UrgentOnly, string SortBy,
-                                   bool SortDescending, int PageNumber, int PageSize);
+                                   bool SortDescending, int PageNumber, int PageSize, bool OverdueOnly = false);
 
 public sealed record WorkTaskCreate(
     Guid WorkTaskId,

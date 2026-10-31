@@ -2,6 +2,8 @@
 @{
     var draft = Model.Draft ?? FormDraft.Empty;
     var i = Model.Detail.Investigation;
+    var units = Model.SampleUnits ?? Merit.Application.Services.EnvironmentalSamples.DefaultUnits;
+    var sampleType = draft.Value("sample", "sampleType", "dustWipe") ?? "dustWipe";
     string target = i.InvestigationType switch
     {
         "workplace" => $"{i.OrganizationName} {(i.WorksiteAddress is null ? "" : "- " + i.WorksiteAddress + ", " + i.WorksiteCity)}",
@@ -32,7 +34,7 @@
                     @foreach (var c in Model.Detail.Cases)
                     {
                         <li>@if (c.ExposureCaseId is Guid cid) { <a class="usa-link" href="/cases/@cid">@c.CaseNumber</a> }
-                            @c.LastName, @c.FirstName &middot; @c.AnalyteCode @Options.Humanize(c.Classification) @(c.JobTitle is null ? "" : "· " + c.JobTitle)</li>
+                            @c.LastName, @c.FirstName &middot; @Options.Humanize(c.AnalyteCode) @Options.Humanize(c.Classification) @(c.JobTitle is null ? "" : "· " + c.JobTitle)</li>
                     }
                 </ul>
             }
@@ -50,7 +52,7 @@
                             <select class="usa-select" id="assignedToUserId" name="assignedToUserId">@foreach (var o in Model.Users) { <option value="@o.Value" selected="@(draft.Selected("save", "assignedToUserId", o))">@o.Label</option> }</select></div>
                     </div>
                     <div class="merit-form-row">
-                        <div class="usa-form-group"><label class="usa-label">Requested</label><p>@Options.Date(i.RequestedDate)</p></div>
+                        <div class="usa-form-group"><span class="usa-label">Requested</span><p>@Options.Date(i.RequestedDate)</p></div>
                         <div class="usa-form-group"><label class="usa-label" for="scheduledDate">Scheduled</label><input class="usa-input" id="scheduledDate" name="scheduledDate" type="date" value="@draft.Value("save", "scheduledDate", Options.Iso(i.ScheduledDate))" /></div>
                         <div class="usa-form-group"><label class="usa-label" for="completedDate">Completed</label><input class="usa-input" id="completedDate" name="completedDate" type="date" value="@draft.Value("save", "completedDate", Options.Iso(i.CompletedDate))" /></div>
                     </div>
@@ -79,7 +81,7 @@
         {
             <div class="merit-table-wrap" tabindex="0" role="region" aria-label="Table; scroll sideways for more columns">
                 <table class="usa-table usa-table--borderless usa-table--compact">
-                    <thead><tr><th scope="col">Date</th><th scope="col">Type</th><th scope="col">Room or component</th><th scope="col">Surface</th><th scope="col">Value</th><th scope="col">Standard</th><th scope="col">Result</th></tr></thead>
+                    <thead><tr><th scope="col">Date</th><th scope="col">Type</th><th scope="col">Room or component</th><th scope="col">Surface</th><th scope="col">Value</th><th scope="col">Standard</th><th scope="col">Result</th>@if (Model.CanEdit) { <th scope="col">Actions</th> }</tr></thead>
                     <tbody>
                         @foreach (var s in Model.Detail.Samples)
                         {
@@ -89,6 +91,14 @@
                                 <td>@(s.StandardValue is null ? "none" : $"{s.StandardValue:0.###} {s.StandardUnit}")<div class="merit-meta">@s.Authority</div></td>
                                 <td>@(s.ExceedsStandard switch { true => "Exceeds", false => "Below", _ => "n/a" })
                                     @if (s.ExceedsStandard == true) { <span class="merit-badge merit-badge--urgent">Hazard</span> }</td>
+                                @if (Model.CanEdit) {
+                                    <td><button class="usa-button usa-button--unstyled" type="button" hx-get="/investigations/@i.InvestigationId/samples/@s.EnvironmentalSampleId/edit" hx-target="#dialog-body" hx-swap="innerHTML">Edit reading</button>
+                                    <details><summary>Void reading</summary><form hx-post="/investigations/@i.InvestigationId/samples/@s.EnvironmentalSampleId/void" hx-target="#investigation-body" hx-swap="outerHTML" hx-confirm="Void this reading? The original will remain in the audit history.">
+                                        <input type="hidden" name="originalModifiedUtc" value="@s.ModifiedDateUtc.ToString("O")" />
+                                        <label class="usa-label" for="void-@s.EnvironmentalSampleId">Reason for voiding</label><input class="usa-input" id="void-@s.EnvironmentalSampleId" name="reason" required maxlength="250" />
+                                        <button class="usa-button usa-button--secondary" type="submit">Void sample</button>
+                                    </form></details></td>
+                                }
                             </tr>
                         }
                     </tbody>
@@ -97,23 +107,31 @@
         }
         @if (Model.CanEdit)
         {
-            <form class="usa-form merit-inline-form" id="investigation-sample-form" hx-post="/investigations/@i.InvestigationId/samples" hx-target="#investigation-body" hx-swap="outerHTML">
+            <form class="usa-form merit-inline-form" id="investigation-sample-form" data-sample-units="@System.Text.Json.JsonSerializer.Serialize(units)" hx-post="/investigations/@i.InvestigationId/samples" hx-target="#investigation-body" hx-swap="outerHTML">
                 <div class="merit-form-row">
                     <div class="usa-form-group"><label class="usa-label" for="sampleType">Sample type</label>
-                        <select class="usa-select" id="sampleType" name="sampleType">@foreach (var o in Model.SampleTypes) { <option value="@o.Value" selected="@(draft.Selected("sample", "sampleType", o))">@o.Label</option> }</select></div>
+                        <select class="usa-select" id="sampleType" name="sampleType" data-sample-type>@foreach (var o in Model.SampleTypes) { <option value="@o.Value" selected="@(draft.Selected("sample", "sampleType", o))">@o.Label</option> }</select></div>
                     <div class="usa-form-group"><label class="usa-label" for="roomOrComponent">Room or component</label><input class="usa-input" id="roomOrComponent" name="roomOrComponent" value="@draft.Value("sample", "roomOrComponent")" /></div>
                     <div class="usa-form-group"><label class="usa-label" for="surface">Surface</label>
-                        <select class="usa-select" id="surface" name="surface"><option value="" selected="@(draft.Value("sample", "surface", "") == "")">- None -</option><option value="floor" selected="@(draft.Value("sample", "surface", "") == "floor")">Floor</option><option value="windowSill" selected="@(draft.Value("sample", "surface", "") == "windowSill")">Window sill</option><option value="windowTrough" selected="@(draft.Value("sample", "surface", "") == "windowTrough")">Window trough</option></select></div>
+                        <select class="usa-select" id="surface" name="surface" data-sample-surface><option value="" selected="@(draft.Value("sample", "surface", "") == "")">- None -</option><option value="floor" selected="@(draft.Value("sample", "surface", "") == "floor")">Floor</option><option value="windowSill" selected="@(draft.Value("sample", "surface", "") == "windowSill")">Window sill</option><option value="windowTrough" selected="@(draft.Value("sample", "surface", "") == "windowTrough")">Window trough</option></select></div>
                 </div>
                 <div class="merit-form-row">
                     <div class="usa-form-group"><label class="usa-label" for="sampleValue">Value</label><input class="usa-input" id="sampleValue" name="sampleValue" value="@draft.Value("sample", "sampleValue")" inputmode="decimal" required /></div>
                     <div class="usa-form-group"><label class="usa-label" for="unit">Unit</label>
-                        <select class="usa-select" id="unit" name="unit"><option value="ug/ft2" selected="@(draft.Value("sample", "unit", "ug/ft2") == "ug/ft2")">ug/ft2</option><option value="mg/cm2" selected="@(draft.Value("sample", "unit", "ug/ft2") == "mg/cm2")">mg/cm2</option><option value="ppm" selected="@(draft.Value("sample", "unit", "ug/ft2") == "ppm")">ppm</option><option value="ug/L" selected="@(draft.Value("sample", "unit", "ug/ft2") == "ug/L")">ug/L</option></select></div>
+                        <select class="usa-select" id="unit" name="unit" data-sample-unit>@foreach (var unit in units.GetValueOrDefault(sampleType, []).Append(draft.Value("sample", "unit", "") ?? "").Where(u => u.Length > 0).Distinct()) { <option value="@unit" selected="@(draft.Value("sample", "unit", units.GetValueOrDefault(sampleType, []).FirstOrDefault()) == unit)">@unit</option> }</select></div>
                     <div class="usa-form-group"><label class="usa-label" for="sampleDate">Sample date</label><input class="usa-input" id="sampleDate" name="sampleDate" type="date" value="@draft.Value("sample", "sampleDate", Options.Iso(Clock.Today))" required /></div>
                 </div>
                 <div class="usa-form-group"><label class="usa-label" for="notes">Notes</label><input class="usa-input" id="notes" name="notes" value="@draft.Value("sample", "notes")" /></div>
                 <button class="usa-button usa-button--outline" type="submit">Add sample</button>
             </form>
+            <details><summary>Import samples / XRF CSV</summary>
+                <p>Upload up to 500 readings. Required columns: sampleType, sampleValue, unit, sampleDate (yyyy-MM-dd). Optional: roomOrComponent, surface, notes. XRF paint readings use xrfPaint and mg/cm2. Export or convert instrument files to these columns first. The whole file is checked before any readings are saved.</p>
+                <form class="usa-form" method="post" enctype="multipart/form-data" hx-post="/investigations/@i.InvestigationId/samples/import" hx-encoding="multipart/form-data" hx-target="#investigation-body" hx-swap="outerHTML" data-upload-busy>
+                    <input type="hidden" name="importId" value="@Model.ImportId" />
+                    <label class="usa-label" for="sample-import-file">Samples CSV (up to 1 MB)</label><input class="usa-file-input" type="file" id="sample-import-file" name="file" accept=".csv,text/csv" required />
+                    <button class="usa-button" type="submit">Import samples</button>
+                </form>
+            </details>
         }
     </section>
 </div>

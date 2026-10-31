@@ -55,6 +55,7 @@ CREATE OR ALTER PROCEDURE dbo.uspSearch
       , @dob             DATE = NULL
       , @addressKey      NVARCHAR (300) = NULL
       , @maxRows         INT = 50
+      , @namePairsJson   NVARCHAR (MAX) = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -104,6 +105,10 @@ BEGIN
         DECLARE @found INT = 0, @elsewhere BIT = 0;
         DECLARE @term NVARCHAR (200) = LTRIM (RTRIM (@searchText));
         DECLARE @persons TABLE (personId UNIQUEIDENTIFIER PRIMARY KEY, matchedOn NVARCHAR (40));
+        DECLARE @pairs TABLE (key1 NVARCHAR (60), key2 NVARCHAR (60));
+        INSERT @pairs VALUES (@nameKey1, @nameKey2);
+        IF ISJSON (@namePairsJson) = 1
+            INSERT @pairs SELECT key1, key2 FROM OPENJSON (@namePairsJson) WITH (key1 NVARCHAR (60), key2 NVARCHAR (60));
 
         IF @nameKey1 IS NOT NULL
         BEGIN
@@ -113,16 +118,18 @@ BEGIN
               FROM (SELECT p.personId, N'name' AS matchedOn
                       FROM dbo.person AS p
                      WHERE p.isDeleted = 0 AND p.mergedIntoPersonId IS NULL
-                       AND ((p.lastNameKey LIKE @nameKey1 + N'%' AND (@nameKey2 IS NULL OR p.firstNameKey LIKE @nameKey2 + N'%'))
-                         OR (@nameKey2 IS NOT NULL AND p.lastNameKey LIKE @nameKey2 + N'%' AND p.firstNameKey LIKE @nameKey1 + N'%'))
+                       AND EXISTS (SELECT 1 FROM @pairs AS nk
+                                    WHERE (p.lastNameKey LIKE nk.key1 + N'%' AND (nk.key2 IS NULL OR p.firstNameKey LIKE nk.key2 + N'%'))
+                                       OR (nk.key2 IS NOT NULL AND p.lastNameKey LIKE nk.key2 + N'%' AND p.firstNameKey LIKE nk.key1 + N'%'))
                        AND (@dob IS NULL OR p.dob = @dob)
                     UNION
                     SELECT a.personId, N'alias'
                       FROM dbo.personAlias AS a
                       JOIN dbo.person AS p ON p.personId = a.personId AND p.isDeleted = 0 AND p.mergedIntoPersonId IS NULL
                      WHERE a.isDeleted = 0
-                       AND ((a.lastNameKey LIKE @nameKey1 + N'%' AND (@nameKey2 IS NULL OR a.firstNameKey LIKE @nameKey2 + N'%'))
-                         OR (@nameKey2 IS NOT NULL AND a.lastNameKey LIKE @nameKey2 + N'%' AND a.firstNameKey LIKE @nameKey1 + N'%'))
+                       AND EXISTS (SELECT 1 FROM @pairs AS nk
+                                    WHERE (a.lastNameKey LIKE nk.key1 + N'%' AND (nk.key2 IS NULL OR a.firstNameKey LIKE nk.key2 + N'%'))
+                                       OR (nk.key2 IS NOT NULL AND a.lastNameKey LIKE nk.key2 + N'%' AND a.firstNameKey LIKE nk.key1 + N'%'))
                        AND (@dob IS NULL OR p.dob = @dob)) AS x
              GROUP BY x.personId;
         END
@@ -190,7 +197,7 @@ BEGIN
         SET @found = @found + @@ROWCOUNT;
 
         -- Outside scope: only on an exact name and DOB match, through the match-key table, and every hit is audited.
-        IF @found = 0 AND @nameKey1 IS NOT NULL AND @nameKey2 IS NOT NULL AND @dob IS NOT NULL
+        IF NOT EXISTS (SELECT 1 FROM OPENJSON (COALESCE (@namePairsJson, N'[]'))) AND @found = 0 AND @nameKey1 IS NOT NULL AND @nameKey2 IS NOT NULL AND @dob IS NOT NULL
            AND EXISTS (SELECT 1 FROM dbo.personMatchKey AS mk
                         WHERE mk.rootTenantId = auth.udfSessionRootTenantId () AND mk.isDeleted = 0 AND mk.dob = @dob
                           AND ((mk.lastNameKey = @nameKey1 AND mk.firstNameKey = @nameKey2)

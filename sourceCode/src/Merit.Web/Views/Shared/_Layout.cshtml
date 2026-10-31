@@ -31,6 +31,7 @@
                 <button class="usa-button usa-button--outline usa-button--inverse merit-menu-button" type="button" aria-expanded="false" aria-controls="merit-nav merit-user">Menu</button>
                 <nav id="merit-nav" class="merit-header__nav" aria-label="Primary">
                     <ul class="merit-nav">
+                        @if (CurrentSession.Has(Permissions.PersonView)) { <li><a href="/search" aria-current="@(path.StartsWith("/people", StringComparison.OrdinalIgnoreCase) ? "page" : Current("/search"))">People</a></li> }
                         @if (CurrentSession.Has(Permissions.TaskView)) { <li><a href="/" aria-current="@Current("/")">Home</a></li> }
                         @if (CurrentSession.Has(Permissions.TaskView)) { <li><a href="/app/queues" aria-current="@Current("/app/queues")">Work queues</a></li> }
                         @if (CurrentSession.Has(Permissions.ResultReleaseHold)) { <li><a href="/app/held" aria-current="@Current("/app/held")">Held records</a></li> }
@@ -44,7 +45,7 @@
                         @if (CurrentSession.Has(Permissions.IntakeUpload)) { <li><a href="/intake" aria-current="@Current("/intake")">Intake</a></li> }
                         @if (CurrentSession.Has(Permissions.ExtractRun)) { <li><a href="/extracts" aria-current="@Current("/extracts")">Extracts</a></li> }
                         @if (CurrentSession.Has(Permissions.PersonView)) { <li><a href="/reporters" aria-current="@Current("/reporters")">Reporters</a></li> }
-                        <li><a href="/config/thresholds" aria-current="@Current("/config")">Configuration</a></li>
+                        @if (!CurrentSession.IsPlatformAdmin) { <li><a href="/config/thresholds" aria-current="@Current("/config")">@(CurrentSession.Has(Permissions.ConfigEdit) ? "Configuration" : "Reference levels")</a></li> }
                         @if (CurrentSession.Has(Permissions.TenantAdminister)) { <li><a href="/admin/users" aria-current="@Current("/admin/users")">Users</a></li> }
                         @if (CurrentSession.Has(Permissions.TenantCreate)) { <li><a href="/admin/tenants" aria-current="@Current("/admin/tenants")">Tenants</a></li> }
                     </ul>
@@ -53,7 +54,7 @@
                 {
                     <form class="merit-header__search" role="search" method="get" action="/search">
                         <label class="usa-sr-only" for="header-search">Search people, cases and accession numbers</label>
-                        <input class="usa-input" id="header-search" name="q" type="search" placeholder="Name, DOB, case or accession" />
+                        <input class="usa-input" id="header-search" name="q" type="search" value="@(path == "/search" ? Context.Request.Query["q"].ToString() : "")" placeholder="Name, DOB, case or accession" />
                         <button class="usa-button usa-button--accent-cool" type="submit">Search</button>
                     </form>
                 }

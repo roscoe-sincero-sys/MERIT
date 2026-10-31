@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Merit.Application.Errors;
 using Merit.Application.Reference;
 using Merit.Application.Security;
@@ -195,6 +196,23 @@ public sealed class PeopleController(IClock clock, PersonService people, PersonP
     public async Task<IActionResult> AddEmployment(Guid id, CancellationToken ct)
         => PartialView("_EmploymentForm", await EmploymentFormAsync(new EmploymentFormModel { PersonId = id }, ct));
 
+    [HttpGet("{id:guid}/employment/{employmentId:guid}/edit")]
+    [Authorize(Policy = Permissions.PersonEdit)]
+    public async Task<IActionResult> EditEmployment(Guid id, Guid employmentId, CancellationToken ct)
+    {
+        var e = (await people.GetPageAsync(id, ct)).Employment.FirstOrDefault(x => x.EmploymentId == employmentId) ?? throw new NotFoundException();
+        var ids = string.IsNullOrWhiteSpace(e.AnalyteIdsJson)
+            ? []
+            : JsonSerializer.Deserialize<List<Dictionary<string, Guid>>>(e.AnalyteIdsJson) ?? [];
+        return PartialView("_EmploymentForm", await EmploymentFormAsync(new EmploymentFormModel {
+            PersonId = id, EmploymentId = employmentId, OrganizationId = e.OrganizationId, JobTitle = e.JobTitle,
+            IndustryText = e.IndustryText, OccupationCode = e.OccupationCode, NaicsOverride = e.NaicsOverride,
+            MetalTasks = e.MetalTasks, PpeNotes = e.PpeNotes, HoursPerWeek = e.HoursPerWeek,
+            StartDate = e.StartDate, EndDate = e.EndDate, Source = e.Source, RowVersion = Options.Hex(e.RowVersion),
+            AnalyteIds = ids.Select(x => x["analyteId"]).ToList()
+        }, ct));
+    }
+
     [HttpPost("{id:guid}/employment")]
     [Authorize(Policy = Permissions.PersonEdit)]
     public async Task<IActionResult> AddEmployment(Guid id, EmploymentFormModel form, CancellationToken ct)
@@ -206,9 +224,9 @@ public sealed class PeopleController(IClock clock, PersonService people, PersonP
                 CountyFips: form.WorksiteCountyFips);
         try
         {
-            await people.SaveEmploymentAsync(new EmploymentInput(null, id, form.OrganizationId, form.NewOrganizationName, worksite, null,
+            await people.SaveEmploymentAsync(new EmploymentInput(form.EmploymentId, id, form.OrganizationId, form.NewOrganizationName, worksite, null,
                 form.JobTitle, form.IndustryText, form.OccupationCode, form.NaicsOverride, form.MetalTasks, form.PpeNotes,
-                form.HoursPerWeek, form.StartDate, form.EndDate, form.Source, form.AnalyteIds), ct);
+                form.HoursPerWeek, form.StartDate, form.EndDate, form.Source, form.AnalyteIds, Options.FromHex(form.RowVersion), form.Verify), ct);
         }
         catch (ValidationException ex)
         {
@@ -225,6 +243,18 @@ public sealed class PeopleController(IClock clock, PersonService people, PersonP
     public async Task<IActionResult> AddSource(Guid id, CancellationToken ct)
         => PartialView("_SourceForm", await SourceFormAsync(new SourceFormModel { PersonId = id }, ct));
 
+    [HttpGet("{id:guid}/sources/{sourceId:guid}/edit")]
+    [Authorize(Policy = Permissions.PersonEdit)]
+    public async Task<IActionResult> EditSource(Guid id, Guid sourceId, CancellationToken ct)
+    {
+        var s = (await people.GetPageAsync(id, ct)).ExposureSources.FirstOrDefault(x => x.ExposureSourceId == sourceId) ?? throw new NotFoundException();
+        return PartialView("_SourceForm", await SourceFormAsync(new SourceFormModel {
+            PersonId = id, ExposureSourceId = sourceId, SourceType = s.SourceType, Description = s.SourceDescription,
+            ProductName = s.ProductName, ProductBrand = s.Brand, ProductCountry = s.ProductCountry,
+            StartDate = s.StartDate, EndDate = s.EndDate, IsConfirmed = s.IsConfirmed, OriginalModifiedUtc = s.ModifiedDateUtc
+        }, ct));
+    }
+
     [HttpPost("{id:guid}/sources")]
     [Authorize(Policy = Permissions.PersonEdit)]
     public async Task<IActionResult> AddSource(Guid id, SourceFormModel form, CancellationToken ct)
@@ -233,7 +263,7 @@ public sealed class PeopleController(IClock clock, PersonService people, PersonP
         try
         {
             await people.SaveExposureSourceAsync(new ExposureSourceInput(id, form.SourceType, form.Description, form.ProductName,
-                form.ProductBrand, form.ProductCountry, form.StartDate, null, form.IsConfirmed), ct);
+                form.ProductBrand, form.ProductCountry, form.StartDate, form.EndDate, form.IsConfirmed, form.ExposureSourceId, form.OriginalModifiedUtc), ct);
         }
         catch (ValidationException ex)
         {
@@ -325,7 +355,7 @@ public sealed class PeopleController(IClock clock, PersonService people, PersonP
         var employer = await lookup.SelectionAsync("organization", form.OrganizationId, ct, "employer");
         form.OrganizationId = employer is null ? null : form.OrganizationId;
         form.OrganizationLabel = employer?.Label;
-        form.Analytes = refData.ActiveAnalytes.Select(a => new SelectOption(a.AnalyteId.ToString(), a.DisplayName, form.AnalyteIds.Contains(a.AnalyteId))).ToList();
+        form.Analytes = refData.Set.Analytes.Where(a => a.IsActive || form.AnalyteIds.Contains(a.AnalyteId)).Select(a => new SelectOption(a.AnalyteId.ToString(), a.DisplayName, form.AnalyteIds.Contains(a.AnalyteId))).ToList();
         return form;
     }
 

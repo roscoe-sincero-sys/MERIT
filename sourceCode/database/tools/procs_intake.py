@@ -341,6 +341,33 @@ OFFSET (@pageNumber - 1) * @pageSize ROWS
 """,
     },
     {
+        "schema": "dbo", "name": "uspCorrectHeldGroup", "kind": "write", "grants": WEB, "ticket": "T105",
+        "permission": "result.release_hold", "desc": "Corrects one field of an exact held group, optionally limited to selected rows and a batch.",
+        "params": """@reason VARCHAR (30)
+, @reportedValue NVARCHAR (200) = NULL
+, @sender UNIQUEIDENTIFIER = NULL
+, @batch UNIQUEIDENTIFIER = NULL
+, @field VARCHAR (60)
+, @value NVARCHAR (1000) = NULL
+, @selectedIdsJson NVARCHAR (MAX) = NULL""",
+        "key": "N'group correction'",
+        "validate": """IF NULLIF (@reason, '') IS NULL OR @field LIKE '%[^a-zA-Z0-9]%' OR @field IN ('matchPersonId', 'matchNewPerson')
+    THROW 50000, N'Choose a cause and a reported field.', 1;""",
+        "body": """
+UPDATE s SET correctedJson = JSON_MODIFY (COALESCE (s.correctedJson, N'{}'), CONCAT (N'$.', @field), @value)
+FROM dbo.stagingRow AS s JOIN dbo.intakeBatch AS b ON b.intakeBatchId = s.intakeBatchId
+WHERE s.rowStatus = 'held' AND s.isDeleted = 0 AND b.isDeleted = 0
+  AND b.senderOrganizationId IS NOT DISTINCT FROM @sender
+  AND (@batch IS NULL OR s.intakeBatchId = @batch)
+  AND (@selectedIdsJson IS NULL OR s.stagingRowId IN (SELECT TRY_CONVERT (UNIQUEIDENTIFIER, [value]) FROM OPENJSON (@selectedIdsJson)))
+  AND EXISTS (SELECT 1 FROM dbo.stagingHoldReason AS h WHERE h.stagingRowId = s.stagingRowId
+    AND h.reasonCode = @reason AND h.reportedValue IS NOT DISTINCT FROM @reportedValue AND h.isResolved = 0 AND h.isDeleted = 0);
+DECLARE @count INT = @@ROWCOUNT;
+SELECT @count AS updated;
+SET @Comments = CONCAT (@count, N' rows corrected.');
+""",
+    },
+    {
         "schema": "dbo", "name": "uspSaveStagingCorrection", "kind": "write", "grants": WEB, "ticket": "T105",
         "permission": "result.release_hold",
         "desc": "Saves corrections to a held row, kept beside the reported values. The parsed row and any result's "

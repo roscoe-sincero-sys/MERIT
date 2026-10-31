@@ -11,7 +11,7 @@
 <ul class="merit-tiles" aria-label="Your work">
     <li><a class="merit-tile" href="/cases?mine=true"><span class="merit-tile__count">@c.MyOpenCases</span><span class="merit-tile__label">My open cases</span></a></li>
     <li><a class="merit-tile" href="/app/queues?mine=true"><span class="merit-tile__count">@c.MyOpenTasks</span><span class="merit-tile__label">My open tasks</span></a></li>
-    <li><a class="merit-tile @(c.OverdueTasks > 0 ? "merit-tile--urgent" : "")" href="/app/queues"><span class="merit-tile__count">@c.OverdueTasks</span><span class="merit-tile__label">Overdue tasks</span></a></li>
+    <li><a class="merit-tile @(c.OverdueTasks > 0 ? "merit-tile--urgent" : "")" href="/app/queues?overdue=true"><span class="merit-tile__count">@c.OverdueTasks</span><span class="merit-tile__label">Overdue tasks</span></a></li>
     <li><a class="merit-tile @(c.UrgentHeld > 0 ? "merit-tile--urgent" : "")" href="/app/held"><span class="merit-tile__count">@c.UrgentHeld</span><span class="merit-tile__label">Elevated results held at intake</span></a></li>
     <li><a class="merit-tile" href="/cases"><span class="merit-tile__count">@c.OpenCasesInScope</span><span class="merit-tile__label">Open cases in your scope</span></a></li>
 </ul>

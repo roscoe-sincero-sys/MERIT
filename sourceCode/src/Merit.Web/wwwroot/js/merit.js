@@ -112,7 +112,7 @@
     sessionActivity();
 
     // ------------------------------------------------------------------------------------------ phone menu
-    // Below 40em the menu and the user block fold behind the Menu button (issue #47); Escape closes it.
+    // Below 64em the menu and the user block fold behind the Menu button (issue #47); Escape closes it.
     const header = document.querySelector(".merit-header");
     const menuButton = header && header.querySelector(".merit-menu-button");
     if (menuButton) {
@@ -191,6 +191,31 @@
             div.querySelector("p").textContent = "The connection to MERIT was lost. Check your network and try again.";
             region.appendChild(div);
         }
+    });
+
+    document.addEventListener('htmx:before:swap', evt => {
+        const ctx = evt.detail?.ctx;
+        if (!ctx) return;
+        ctx.meritOpenDetails = [...document.querySelectorAll('details[data-preserve-open][id][open]')].map(el => el.id);
+        const active = document.activeElement;
+        if (active?.closest('#person-header')) ctx.meritContactFocus = active.id || 'person-contact-details';
+    });
+    document.addEventListener('htmx:after:swap', evt => {
+        const ctx = evt.detail?.ctx;
+        for (const id of ctx?.meritOpenDetails || []) {
+            const details = document.getElementById(id);
+            if (details) details.open = true;
+        }
+        if (ctx?.meritContactFocus && document.activeElement === document.body) (document.getElementById(ctx.meritContactFocus)?.querySelector('summary') || document.getElementById(ctx.meritContactFocus))?.focus();
+    });
+    document.addEventListener('submit', evt => {
+        const form = evt.target.closest('form[data-upload-busy]');
+        if (!form) return;
+        if (form.dataset.submitting) { evt.preventDefault(); return; }
+        form.dataset.submitting = 'true';
+        form.setAttribute('aria-busy', 'true');
+        form.querySelectorAll('[type=submit]:not(:disabled)').forEach(button => { button.dataset.uploadDisabled = 'true'; button.disabled = true; });
+        const status = document.createElement('p'); status.setAttribute('role', 'status'); status.dataset.uploadStatus = 'true'; status.textContent = 'Uploading file…'; form.appendChild(status);
     });
 
     // ------------------------------------------------------------------------------------------ after a swap
@@ -443,3 +468,31 @@
     document.addEventListener("htmx:after:settle", evt => syncToggles(evt.detail && evt.detail.ctx && evt.detail.ctx.target));
     document.addEventListener("DOMContentLoaded", () => syncToggles());
 })();
+
+document.addEventListener('change', function (event) {
+    var type = event.target.closest('[data-sample-type]');
+    if (!type) return;
+    var form = type.closest('[data-sample-units]');
+    var units = JSON.parse(form.dataset.sampleUnits)[type.value] || [];
+    var select = form.querySelector('[data-sample-unit]');
+    var previous = select.value;
+    select.replaceChildren(...units.map(function (unit) { return new Option(unit, unit, false, unit === previous); }));
+    var surface = form.querySelector('[data-sample-surface]');
+    surface.disabled = !['dustWipe', 'surfaceWipe'].includes(type.value);
+    if (surface.disabled) surface.value = '';
+});
+
+// A programmatically focused heading follows the last input method, including when it was already focused.
+document.addEventListener('pointerdown', () => document.body.classList.remove('merit-keyboard-mode'), true);
+document.addEventListener('keydown', event => {
+    if (!event.metaKey && !event.ctrlKey && !event.altKey) document.body.classList.add('merit-keyboard-mode');
+}, true);
+
+function resetUploadForm(form) {
+    if (!form) return;
+    delete form.dataset.submitting; form.removeAttribute('aria-busy');
+    form.querySelectorAll('[data-upload-disabled]').forEach(button => { button.disabled = false; delete button.dataset.uploadDisabled; });
+    form.querySelector('[data-upload-status]')?.remove();
+}
+window.addEventListener('pageshow', () => document.querySelectorAll('form[data-upload-busy]').forEach(resetUploadForm));
+document.addEventListener('htmx:after:request', event => resetUploadForm(event.detail?.ctx?.sourceElement?.closest('form[data-upload-busy]')));

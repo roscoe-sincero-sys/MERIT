@@ -4,6 +4,7 @@ import { AnalyteOptionDto, CaseMapPointDto } from '../../api/contracts';
 import { MapCategory, MapPoint, PointMapComponent } from '../../shared/map/point-map.component';
 import { Display } from '../../shared/display.service';
 import { LatestRequest } from '../../shared/latest-request';
+import { ViewQuery } from '../../shared/view-query';
 
 export const CLASSIFICATIONS: MapCategory[] = [
   { key: 'confirmed', label: 'Confirmed' },
@@ -28,7 +29,7 @@ export class CaseMapStore {
 @Component({
   selector: 'merit-case-map-page',
   imports: [PointMapComponent],
-  providers: [CaseMapStore],
+  providers: [CaseMapStore, ViewQuery],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <h1 tabindex="-1">Case map</h1>
@@ -37,11 +38,11 @@ export class CaseMapStore {
       <div><label class="usa-label" for="m-analyte">Analyte</label>
         <select class="usa-select" id="m-analyte" name="analyteId">
           <option value="">All</option>
-          @for (a of store.analytes(); track a.analyteId) { <option [value]="a.analyteId">{{ a.displayName }}</option> }
+          @for (a of store.analytes(); track a.analyteId) { <option [value]="a.analyteId" [selected]="a.analyteId === store.filters().analyteId">{{ a.displayName }}</option> }
         </select></div>
-      <div><label class="usa-label" for="m-from">Opened from</label><input class="usa-input" id="m-from" name="from" type="date" /></div>
-      <div><label class="usa-label" for="m-to">Opened to</label><input class="usa-input" id="m-to" name="to" type="date" /></div>
-      <div class="usa-checkbox"><input class="usa-checkbox__input" id="m-open" name="openOnly" type="checkbox" checked /><label class="usa-checkbox__label" for="m-open">Open cases only</label></div>
+      <div><label class="usa-label" for="m-from">Opened from</label><input class="usa-input" id="m-from" name="from" type="date" [value]="store.filters().from" /></div>
+      <div><label class="usa-label" for="m-to">Opened to</label><input class="usa-input" id="m-to" name="to" type="date" [value]="store.filters().to" /></div>
+      <div class="usa-checkbox"><input class="usa-checkbox__input" id="m-open" name="openOnly" type="checkbox" [checked]="store.filters().openOnly" /><label class="usa-checkbox__label" for="m-open">Open cases only</label></div>
       <div><button class="usa-button" type="submit">Apply</button></div>
     </form>
     <p class="merit-meta">{{ store.located().length }} case(s) on the map; {{ store.unlocated().length }} without coordinates (listed below).
@@ -51,7 +52,7 @@ export class CaseMapStore {
     @if (selectedCase(); as c) {
       <div class="usa-summary-box" role="status">
         <div class="usa-summary-box__body">
-          <h2 class="usa-summary-box__heading"><a class="usa-link" [href]="'/cases/' + c.exposureCaseId">{{ c.caseNumber }}</a>: {{ c.personName }}</h2>
+          <h2 class="usa-summary-box__heading"><a class="usa-link" [href]="view.detail('/cases/' + c.exposureCaseId)">{{ c.caseNumber }}</a>: {{ c.personName }}</h2>
           <p>{{ display.of(c.analyteCode) }}, {{ display.of(c.population).toLowerCase() }}, {{ display.of(c.classification).toLowerCase() }}, opened {{ display.date(c.openedDate) }}@if (c.highestValue !== null) {, highest {{ c.highestValue }} {{ c.highestUnit }}}.
             {{ c.addressLabel }}@if (c.inOpenCluster) { &middot; in an open cluster}</p>
         </div>
@@ -65,8 +66,8 @@ export class CaseMapStore {
         <tbody>
           @for (c of store.cases(); track c.exposureCaseId) {
             <tr>
-              <td><a class="usa-link" [href]="'/cases/' + c.exposureCaseId">{{ c.caseNumber }}</a></td>
-              <td><a class="usa-link" [href]="'/people/' + c.personId">{{ c.personName }}</a></td>
+              <td><a class="usa-link" [href]="view.detail('/cases/' + c.exposureCaseId)">{{ c.caseNumber }}</a></td>
+              <td><a class="usa-link" [href]="view.detail('/people/' + c.personId)">{{ c.personName }}</a></td>
               <td>{{ display.of(c.classification) }}@if (c.inOpenCluster) { (cluster)}</td>
               <td class="nowrap">{{ display.date(c.openedDate) }}</td>
               <td>{{ c.addressLabel ?? 'No primary residence' }}</td>
@@ -88,6 +89,7 @@ export class CaseMapPage implements OnInit {
   private readonly api = inject(ApiClient);
   protected readonly display = inject(Display);
   private readonly mapLoad = new LatestRequest();
+  protected readonly view = inject(ViewQuery);
   protected readonly categories = CLASSIFICATIONS;
 
   protected readonly points = computed<MapPoint[]>(() => this.store.located().map(c => ({
@@ -100,7 +102,10 @@ export class CaseMapPage implements OnInit {
 
   ngOnInit(): void {
     this.api.analytes().subscribe({ next: a => this.store.analytes.set(a), error: () => this.store.analytes.set([]) });
-    this.load();
+    this.view.watch(q => {
+      this.store.filters.set({ analyteId: q.get('analyteId') ?? '', from: q.get('from') ?? '', to: q.get('to') ?? '', openOnly: q.get('openOnly') !== 'false' });
+      this.load();
+    });
   }
 
   protected apply(event: Event): void {
@@ -108,7 +113,7 @@ export class CaseMapPage implements OnInit {
     const f = new FormData(event.target as HTMLFormElement);
     this.store.filters.set({ analyteId: String(f.get('analyteId') ?? ''), from: String(f.get('from') ?? ''), to: String(f.get('to') ?? ''),
       openOnly: f.get('openOnly') !== null });
-    this.load();
+    this.view.set(this.store.filters());
   }
 
   private load(): void {

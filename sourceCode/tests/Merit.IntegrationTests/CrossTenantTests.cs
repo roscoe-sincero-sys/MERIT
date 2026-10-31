@@ -92,6 +92,21 @@ public sealed class CrossTenantProcedureTests(MeritFixture fixture, ITestOutputH
             .ToList();
 
     [SqlFact]
+    public async Task ManifestIncludesEveryDeployedWebProcedureParameter()
+    {
+        await using var c = await AdminAsync();
+        foreach (var proc in WebProcedures())
+        {
+            await using var cmd = new SqlCommand("SELECT name FROM sys.parameters WHERE object_id = OBJECT_ID (@name) AND parameter_id > 0 ORDER BY parameter_id", c);
+            cmd.Parameters.AddWithValue("@name", proc.Name);
+            var actual = new List<string>();
+            await using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync()) actual.Add(reader.GetString(0)[1..]);
+            Assert.True(actual.SequenceEqual(proc.Params.Select(p => p.Name)), $"Parameter manifest does not match {proc.Name}: {string.Join(", ", actual)}");
+        }
+    }
+
+    [SqlFact]
     public async Task NoProcedureLeaksOrChangesAnotherTenantsRows()
     {
         var caller = await UserIdAsync("cmbaltco");
@@ -124,7 +139,7 @@ public sealed class CrossTenantProcedureTests(MeritFixture fixture, ITestOutputH
                     leaks.Add($"{proc.Name} returned {cell}, a record outside the caller's tenants.");
                 }
             }
-            catch (SqlException)
+            catch (SqlException ex) when (IsExpectedRefusal(ex))
             {
                 // Refused: not found, permission, validation or a block predicate. Any of these is the safe outcome.
                 calls++;
@@ -228,7 +243,7 @@ public sealed class CrossTenantProcedureTests(MeritFixture fixture, ITestOutputH
                     leaks.Add($"{proc.Name} returned {cell} with no session.");
                 }
             }
-            catch (SqlException)
+            catch (SqlException ex) when (IsExpectedRefusal(ex))
             {
                 // Fail closed by refusing is also fine.
             }
@@ -238,6 +253,11 @@ public sealed class CrossTenantProcedureTests(MeritFixture fixture, ITestOutputH
     }
 
     // ------------------------------------------------------------------------------------------------ helpers
+
+    // Signature/type errors are broken test calls, not evidence that tenant isolation worked.
+    private static bool IsExpectedRefusal(SqlException ex)
+        => ex.Errors.Cast<SqlError>().All(e => e.Number is 50000 or 51403 or 51404 or 51409 or 51422
+            or 33504 or 515 or 547 or 2601 or 2627 or 3621);
 
     private sealed record Targets(Guid Person, Guid Case, Guid Result, Guid Investigation, Guid Cluster, Guid StagingRow, Guid Batch,
                                   Guid PersonLocation, IReadOnlyList<Guid> Tasks, IReadOnlyList<Guid> Persons);

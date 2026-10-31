@@ -26,6 +26,7 @@
                             <td>NAICS @(e.NaicsOverride ?? e.OrganizationNaics ?? "999")<br />COC @(e.OccupationCode ?? "990")</td>
                             <td>@e.MetalTasks @if (!string.IsNullOrEmpty(e.Analytes)) { <span class="merit-badge">@e.Analytes</span> }<div class="merit-meta">@e.PpeNotes</div></td>
                             <td>@Options.Date(e.StartDate) &ndash; @(e.EndDate is null ? "current" : Options.Date(e.EndDate))
+                                @if (Model.CanEdit) { <button class="usa-button usa-button--unstyled" type="button" hx-get="/people/@Model.PersonId/employment/@e.EmploymentId/edit" hx-target="#employment-form">Edit / end job</button> }
                                 @if (e.VerifiedDate is null) { <div class="merit-meta">@Options.Humanize(e.Source), unverified</div> }</td>
                         </tr>
                     }

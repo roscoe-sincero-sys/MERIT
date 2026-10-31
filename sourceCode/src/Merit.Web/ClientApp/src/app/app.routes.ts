@@ -24,5 +24,5 @@ export const routes: Routes = [
     title: 'Cluster - MERIT',
   },
   { path: 'reports', loadComponent: () => import('./features/reports/reports.page').then(m => m.ReportsPage), title: 'Reports - MERIT' },
-  { path: '**', redirectTo: 'queues' },
+  { path: '**', loadComponent: () => import('./shared/not-found.page').then(m => m.NotFoundPage), title: 'Page not found - MERIT' },
 ];

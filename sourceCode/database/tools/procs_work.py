@@ -162,7 +162,8 @@ SELECT TOP (10) c.exposureCaseId, c.caseNumber, c.personId, p.lastName, p.firstN
 , @sortBy         VARCHAR (30) = 'dueDate'
 , @sortDescending BIT = 0
 , @pageNumber     INT = 1
-, @pageSize       INT = 50""",
+, @pageSize       INT = 50
+, @overdueOnly    BIT = 0""",
         "key": "CONCAT (N'queueCode=', @queueCode, N', pageNumber=', @pageNumber, N', pageSize=', @pageSize, N', sortBy=', @sortBy)",
         "validate": """IF @pageNumber < 1 OR @pageSize NOT BETWEEN 1 AND 500
 BEGIN
@@ -180,6 +181,7 @@ SELECT w.workTaskId, w.queueCode, w.title, w.detail, w.isUrgent, w.dueDate, w.ta
        w.personId, p.lastName, p.firstName, w.exposureCaseId, c.caseNumber, w.labResultId, w.investigationId,
        w.stagingRowId, w.assignedToUserId, u.displayName AS assignedToName, w.rowVersion,
        CAST (CASE WHEN EXISTS (SELECT 1 FROM auth.tvfTenantWritePredicate (w.rootTenantId, w.owningTenantId, w.isDeleted)) THEN 1 ELSE 0 END AS BIT) AS canEdit,
+       CAST (CASE WHEN w.taskStatus = 'open' AND w.dueDate < auth.udfSessionToday () THEN 1 ELSE 0 END AS BIT) AS isOverdue,
        COUNT (*) OVER () AS totalCount
   FROM dbo.workTask AS w
   LEFT JOIN dbo.person AS p ON p.personId = w.personId
@@ -190,6 +192,7 @@ SELECT w.workTaskId, w.queueCode, w.title, w.detail, w.isUrgent, w.dueDate, w.ta
    AND (@taskStatus IS NULL OR w.taskStatus = @taskStatus)
    AND (@assignedToMe = 0 OR w.assignedToUserId = @me)
    AND (@urgentOnly = 0 OR w.isUrgent = 1)
+   AND (@overdueOnly = 0 OR (w.taskStatus = 'open' AND w.dueDate < auth.udfSessionToday ()))
  ORDER BY w.isUrgent DESC,
           CASE WHEN @sortBy = 'dueDate'        AND @sortDescending = 0 THEN COALESCE (w.dueDate, '9999-12-31') END ASC,
           CASE WHEN @sortBy = 'dueDate'        AND @sortDescending = 1 THEN w.dueDate END DESC,

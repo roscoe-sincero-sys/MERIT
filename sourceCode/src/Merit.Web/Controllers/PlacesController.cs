@@ -40,6 +40,30 @@ public sealed class PlacesController(IClock clock, PlaceService places, PersonSe
             StartDate = clock.Today,
         }, ct));
 
+    [HttpGet("{personLocationId:guid}/edit")]
+    [Authorize(Policy = Permissions.PersonEdit)]
+    public async Task<IActionResult> Edit(Guid personId, Guid personLocationId, CancellationToken ct)
+    {
+        var row = (await places.GetPlacesAsync(personId, ct)).FirstOrDefault(p => p.PersonLocationId == personLocationId) ?? throw new NotFoundException();
+        return PartialView("_PlaceEdit", new PlaceEditModel { PersonId = personId, PersonLocationId = personLocationId,
+            AddressLabel = row.AddressLabel, Unit = row.Unit, YearBuilt = row.YearBuilt, ScheduleType = row.ScheduleType,
+            HoursPerWeek = row.HoursPerWeek, ScheduleNote = row.ScheduleNote, RowVersion = Options.Hex(row.RowVersion),
+            Schedules = (await reference.GetAsync(ct)).Choices("scheduleType", row.ScheduleType, includeBlank: true) });
+    }
+
+    [HttpPost("{personLocationId:guid}/edit")]
+    [Authorize(Policy = Permissions.PersonEdit)]
+    public async Task<IActionResult> Edit(Guid personId, Guid personLocationId, PlaceEditModel form, CancellationToken ct)
+    {
+        form.PersonId = personId; form.PersonLocationId = personLocationId;
+        try { await places.EditPlaceAsync(personId, personLocationId, form.Unit, form.YearBuilt, form.ScheduleType,
+            form.HoursPerWeek, form.ScheduleNote, Options.FromHex(form.RowVersion) ?? [], ct); }
+        catch (ValidationException ex) { form.Schedules = (await reference.GetAsync(ct)).Choices("scheduleType", form.ScheduleType, includeBlank: true); return this.Invalid("_PlaceEdit", form, ex); }
+        Response.Refresh("merit:closeDialog", "merit:personHeader");
+        Response.Announce("Place details saved.");
+        return PartialView("_Places", await builder.PlacesAsync(personId, await places.GetPlacesAsync(personId, ct), true, ct));
+    }
+
     /// <summary>Adds a place. An overlapping residence re-renders the form with the primary choice; it cannot save without one.</summary>
     [HttpPost("add")]
     [Authorize(Policy = Permissions.PersonEdit)]

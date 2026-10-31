@@ -15,7 +15,8 @@ PROCS = [
 , @nameKey2        NVARCHAR (60) = NULL
 , @dob             DATE = NULL
 , @addressKey      NVARCHAR (300) = NULL
-, @maxRows         INT = 50""",
+, @maxRows         INT = 50
+, @namePairsJson   NVARCHAR (MAX) = NULL""",
         "key": "CONCAT (N'maxRows=', @maxRows, N', hasDob=', IIF (@dob IS NULL, 0, 1))",
         "notes": "The application normalizes the text into name keys (upper case, letters only) and an address key; the "
                  "raw text is used as-is for accession and case numbers. Search text never reaches @KeyParameters or the "
@@ -24,6 +25,10 @@ PROCS = [
 DECLARE @found INT = 0, @elsewhere BIT = 0;
 DECLARE @term NVARCHAR (200) = LTRIM (RTRIM (@searchText));
 DECLARE @persons TABLE (personId UNIQUEIDENTIFIER PRIMARY KEY, matchedOn NVARCHAR (40));
+DECLARE @pairs TABLE (key1 NVARCHAR (60), key2 NVARCHAR (60));
+INSERT @pairs VALUES (@nameKey1, @nameKey2);
+IF ISJSON (@namePairsJson) = 1
+    INSERT @pairs SELECT key1, key2 FROM OPENJSON (@namePairsJson) WITH (key1 NVARCHAR (60), key2 NVARCHAR (60));
 
 IF @nameKey1 IS NOT NULL
 BEGIN
@@ -33,16 +38,18 @@ BEGIN
       FROM (SELECT p.personId, N'name' AS matchedOn
               FROM dbo.person AS p
              WHERE p.isDeleted = 0 AND p.mergedIntoPersonId IS NULL
-               AND ((p.lastNameKey LIKE @nameKey1 + N'%' AND (@nameKey2 IS NULL OR p.firstNameKey LIKE @nameKey2 + N'%'))
-                 OR (@nameKey2 IS NOT NULL AND p.lastNameKey LIKE @nameKey2 + N'%' AND p.firstNameKey LIKE @nameKey1 + N'%'))
+               AND EXISTS (SELECT 1 FROM @pairs AS nk
+                            WHERE (p.lastNameKey LIKE nk.key1 + N'%' AND (nk.key2 IS NULL OR p.firstNameKey LIKE nk.key2 + N'%'))
+                               OR (nk.key2 IS NOT NULL AND p.lastNameKey LIKE nk.key2 + N'%' AND p.firstNameKey LIKE nk.key1 + N'%'))
                AND (@dob IS NULL OR p.dob = @dob)
             UNION
             SELECT a.personId, N'alias'
               FROM dbo.personAlias AS a
               JOIN dbo.person AS p ON p.personId = a.personId AND p.isDeleted = 0 AND p.mergedIntoPersonId IS NULL
              WHERE a.isDeleted = 0
-               AND ((a.lastNameKey LIKE @nameKey1 + N'%' AND (@nameKey2 IS NULL OR a.firstNameKey LIKE @nameKey2 + N'%'))
-                 OR (@nameKey2 IS NOT NULL AND a.lastNameKey LIKE @nameKey2 + N'%' AND a.firstNameKey LIKE @nameKey1 + N'%'))
+               AND EXISTS (SELECT 1 FROM @pairs AS nk
+                            WHERE (a.lastNameKey LIKE nk.key1 + N'%' AND (nk.key2 IS NULL OR a.firstNameKey LIKE nk.key2 + N'%'))
+                               OR (nk.key2 IS NOT NULL AND a.lastNameKey LIKE nk.key2 + N'%' AND a.firstNameKey LIKE nk.key1 + N'%'))
                AND (@dob IS NULL OR p.dob = @dob)) AS x
      GROUP BY x.personId;
 END
@@ -110,7 +117,7 @@ SELECT TOP (@maxRows) o.organizationId, o.organizationName, o.naicsCode, o.cliaN
 SET @found = @found + @@ROWCOUNT;
 
 -- Outside scope: only on an exact name and DOB match, through the match-key table, and every hit is audited.
-IF @found = 0 AND @nameKey1 IS NOT NULL AND @nameKey2 IS NOT NULL AND @dob IS NOT NULL
+IF NOT EXISTS (SELECT 1 FROM OPENJSON (COALESCE (@namePairsJson, N'[]'))) AND @found = 0 AND @nameKey1 IS NOT NULL AND @nameKey2 IS NOT NULL AND @dob IS NOT NULL
    AND EXISTS (SELECT 1 FROM dbo.personMatchKey AS mk
                 WHERE mk.rootTenantId = auth.udfSessionRootTenantId () AND mk.isDeleted = 0 AND mk.dob = @dob
                   AND ((mk.lastNameKey = @nameKey1 AND mk.firstNameKey = @nameKey2)
@@ -246,10 +253,11 @@ SELECT pl.personLocationId, pl.locationId, pl.organizationSiteId, os.siteName, o
         "body": """
 SELECT e.employmentId, e.organizationId, o.organizationName, o.naicsCode AS organizationNaics, e.worksiteLocationId,
        l.addressLine1 AS worksiteAddress, l.city AS worksiteCity, l.state AS worksiteState,
-       e.jobTitle, e.industryText, e.occupationCode, e.naicsOverride, e.metalTasks, e.ppeNotes, e.hoursPerWeek,
+       e.jobTitle, e.industryText, e.occupationCode, e.occupationCodeVersion, e.naicsOverride, e.metalTasks, e.ppeNotes, e.hoursPerWeek,
        e.startDate, e.endDate, e.source, e.verifiedDate, e.rowVersion,
        (SELECT STRING_AGG (a.code, ', ') FROM dbo.employmentAnalyte AS ea JOIN config.analyte AS a ON a.analyteId = ea.analyteId
-         WHERE ea.employmentId = e.employmentId AND ea.isDeleted = 0) AS analytes
+         WHERE ea.employmentId = e.employmentId AND ea.isDeleted = 0) AS analytes,
+       COALESCE ((SELECT ea.analyteId FROM dbo.employmentAnalyte AS ea WHERE ea.employmentId = e.employmentId AND ea.isDeleted = 0 FOR JSON PATH), N'[]') AS analyteIdsJson
   FROM dbo.employment AS e
   JOIN dbo.organization AS o ON o.organizationId = e.organizationId
   LEFT JOIN dbo.location AS l ON l.locationId = e.worksiteLocationId
@@ -266,7 +274,7 @@ SELECT e.employmentId, e.organizationId, o.organizationName, o.naicsCode AS orga
         "body": """
 SELECT s.exposureSourceId, s.exposureCaseId, s.sourceType, COALESCE (lv.displayName, s.sourceType) AS sourceTypeLabel,
        s.sourceDescription, s.productId, pr.productName, pr.brand, s.locationId, l.addressLine1, l.city,
-       s.startDate, s.endDate, s.isConfirmed
+       s.startDate, s.endDate, s.isConfirmed, s.modifiedDateUtc, pr.countryOfOrigin AS productCountry
   FROM dbo.exposureSource AS s
   LEFT JOIN config.lookupValue AS lv ON lv.lookupType = 'exposureSourceType' AND lv.code = s.sourceType
   LEFT JOIN dbo.product AS pr ON pr.productId = s.productId

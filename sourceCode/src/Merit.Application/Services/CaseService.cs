@@ -14,7 +14,7 @@ public sealed record InvestigationRequest(Guid ExposureCaseId, string Investigat
 
 /// <summary>Case management: one person's elevated exposure to one analyte, from opening to closure.</summary>
 public sealed class CaseService(IClock clock, ICaseData cases, IWorkData work, IAccountData accounts, ISettingsProvider settings,
-                                AuditService audit, ICurrentSession session)
+                                AuditService audit, ICurrentSession session, IPersonData persons)
 {
     private static readonly string[] ClosureReasons =
         ["belowLevelOnRetest", "lostToFollowUp", "movedOutOfState", "declined", "deceased", "duplicate", "other"];
@@ -72,6 +72,14 @@ public sealed class CaseService(IClock clock, ICaseData cases, IWorkData work, I
             .When(input.ActivityDate > clock.Today, "ActivityDate", "The date cannot be in the future.")
             .MaxLength("Note", input.Note, 2000, "Note")
             .ThrowIfInvalid();
+        if (input.ContactPersonId is Guid contact)
+        {
+            var detail = await cases.GetCaseAsync(input.ExposureCaseId, ct).ConfigureAwait(false) ?? throw new NotFoundException();
+            var related = session.Has(Permissions.PersonView) ? await persons.GetRelationshipsAsync(detail.Case.PersonId, ct).ConfigureAwait(false) : [];
+            new Validator().When(contact != detail.Case.PersonId && !related.Any(r => r.OtherPersonId == contact
+                && (r.StartDate is null || r.StartDate <= input.ActivityDate) && (r.EndDate is null || r.EndDate >= input.ActivityDate)),
+                "ContactPersonId", "Choose the patient, a related contact on this date, or no external contact.").ThrowIfInvalid();
+        }
         int failed = await cases.SaveActivityAsync(TimeOrderedId.New(), input.ExposureCaseId, input.ActivityType, input.ActivityDate,
             input.ContactPersonId, input.Outcome, input.Note, ct).ConfigureAwait(false);
         await audit.ChangedAsync("exposureCase", input.ExposureCaseId, ct).ConfigureAwait(false);
@@ -87,6 +95,15 @@ public sealed class CaseService(IClock clock, ICaseData cases, IWorkData work, I
         }
 
         return null;
+    }
+
+    public async Task ReopenAsync(Guid id, string? reason, byte[] rowVersion, CancellationToken ct = default)
+    {
+        session.Require(Permissions.CaseEdit);
+        new Validator().Required("Reason", reason, "Reason").MaxLength("Reason", reason, 2000, "Reason")
+            .When(rowVersion.Length != 8, "RowVersion", "Reload the case before reopening.").ThrowIfInvalid();
+        await cases.ReopenCaseAsync(id, reason!.Trim(), rowVersion, ct).ConfigureAwait(false);
+        await audit.ChangedAsync("exposureCase", id, ct).ConfigureAwait(false);
     }
 
     public async Task CloseAsync(Guid exposureCaseId, string? closureReason, DateOnly? closedDate, string? note, byte[] rowVersion,
@@ -136,7 +153,7 @@ public sealed class CaseService(IClock clock, ICaseData cases, IWorkData work, I
 }
 
 /// <summary>Investigations: one target each, possibly serving several cases, with environmental samples.</summary>
-public sealed class InvestigationService(IClock clock, ICaseData cases, AuditService audit, ICurrentSession session)
+public sealed class InvestigationService(IClock clock, ICaseData cases, AuditService audit, ICurrentSession session, IConfigData config)
 {
     private static readonly string[] Statuses = ["requested", "scheduled", "inProgress", "findingsIssued", "remediation", "cleared", "closed"];
 
@@ -148,11 +165,12 @@ public sealed class InvestigationService(IClock clock, ICaseData cases, AuditSer
         return detail;
     }
 
-    public async Task<IReadOnlyList<InvestigationListRow>> ListAsync(bool openOnly, bool assignedToMe, int pageNumber,
-                                                                    CancellationToken ct = default)
+    public async Task<(IReadOnlyList<InvestigationListRow> Rows, int Total, int Page)> ListAsync(InvestigationQuery query, CancellationToken ct = default)
     {
         session.Require(Permissions.CaseView);
-        return await cases.ListInvestigationsAsync(openOnly, assignedToMe, pageNumber, 25, ct).ConfigureAwait(false);
+        return await Paging.ReadAsync(Math.Max(1, query.PageNumber), 25,
+            p => cases.ListInvestigationsAsync(query.OpenOnly, false, p, 25, ct, query.Search, query.Assigned,
+                query.Status, query.Type, query.Sort, query.Descending), r => r.TotalCount).ConfigureAwait(false);
     }
 
     public async Task SaveAsync(InvestigationUpdate update, CancellationToken ct = default)
@@ -173,17 +191,37 @@ public sealed class InvestigationService(IClock clock, ICaseData cases, AuditSer
     public async Task<bool?> AddSampleAsync(EnvironmentalSampleSave sample, CancellationToken ct = default)
     {
         session.Require(Permissions.InvestigationEdit);
-        new Validator().Required("SampleType", sample.SampleType, "Sample type").Required("Unit", sample.Unit, "Unit")
-            .When(sample.SampleValue < 0, "SampleValue", "The value cannot be negative.")
-            .When(sample.SampleDate > clock.Today, "SampleDate", "The date cannot be in the future.")
-            .ThrowIfInvalid();
+        if (!sample.IsDeleted) EnvironmentalSamples.Validate(sample, clock.Today, await SampleUnitsAsync(ct).ConfigureAwait(false));
         if (sample.EnvironmentalSampleId == Guid.Empty)
         {
             sample = sample with { EnvironmentalSampleId = TimeOrderedId.New() };
+        }
+        else
+        {
+            var detail = await cases.GetInvestigationAsync(sample.InvestigationId, ct).ConfigureAwait(false) ?? throw new NotFoundException();
+            if (!detail.Samples.Any(s => s.EnvironmentalSampleId == sample.EnvironmentalSampleId)) throw new NotFoundException();
+            new Validator().When(sample.OriginalModifiedUtc is null, "OriginalModifiedUtc", "Reload the reading before changing it.").ThrowIfInvalid();
         }
 
         var exceeds = await cases.SaveEnvironmentalSampleAsync(sample, ct).ConfigureAwait(false);
         await audit.ChangedAsync("investigation", sample.InvestigationId, ct).ConfigureAwait(false);
         return exceeds;
+    }
+
+    public async Task<IReadOnlyDictionary<string, string[]>> SampleUnitsAsync(CancellationToken ct = default)
+    {
+        session.Require(Permissions.CaseView);
+        var standards = await config.GetEnvironmentalStandardsAsync(ct).ConfigureAwait(false);
+        return EnvironmentalSamples.DefaultUnits.ToDictionary(k => k.Key,
+            k => k.Value.Concat(standards.Where(s => s.SampleType == k.Key).Select(s => s.Unit)).Distinct().ToArray());
+    }
+
+    public async Task<int> ImportSamplesAsync(Guid investigationId, Guid importId, string csv, CancellationToken ct = default)
+    {
+        session.Require(Permissions.InvestigationEdit);
+        var samples = EnvironmentalSamples.ParseCsv(investigationId, importId, csv, clock.Today, await SampleUnitsAsync(ct).ConfigureAwait(false));
+        int count = await cases.ImportEnvironmentalSamplesAsync(investigationId, samples, ct).ConfigureAwait(false);
+        await audit.ChangedAsync("investigation", investigationId, ct).ConfigureAwait(false);
+        return count;
     }
 }

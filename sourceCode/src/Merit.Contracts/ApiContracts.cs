@@ -34,7 +34,7 @@ public sealed record WorkTaskDto(
     string? CaseNumber,
     Guid? AssignedToUserId,
     string? AssignedToName,
-    bool CanEdit = false);
+    bool CanEdit = false, bool IsOverdue = false);
 
 public sealed record BulkTaskActionRequest(IReadOnlyList<Guid> TaskIds, string Action, Guid? AssignToUserId, string? Note);
 
@@ -74,6 +74,8 @@ public sealed record HeldRowDto(
 public sealed record HeldActionRequest(IReadOnlyList<Guid> StagingRowIds, string? Reason);
 
 public sealed record HeldCorrectionRequest(IReadOnlyDictionary<string, string?> Corrections);
+public sealed record HeldGroupCorrectionRequest(string Reason, string? ReportedValue, Guid? Sender, Guid? Batch,
+    string Field, string? Value, IReadOnlyList<Guid>? SelectedIds);
 
 public sealed record ResultListItemDto(
     Guid LabResultId,

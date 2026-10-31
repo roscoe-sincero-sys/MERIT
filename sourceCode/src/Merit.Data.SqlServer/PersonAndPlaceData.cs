@@ -8,8 +8,8 @@ namespace Merit.Data.SqlServer;
 public sealed class PersonData(Db db) : IPersonData
 {
     public Task<SearchResults> SearchAsync(string searchText, string? nameKey1, string? nameKey2, DateOnly? dob, string? addressKey,
-                                           int maxRows, CancellationToken ct = default)
-        => db.MultipleAsync("dbo.uspSearch", new { searchText, nameKey1, nameKey2, dob, addressKey, maxRows }, async g =>
+                                           int maxRows, CancellationToken ct = default, string? namePairsJson = null)
+        => db.MultipleAsync("dbo.uspSearch", new { searchText, nameKey1, nameKey2, dob, addressKey, maxRows, namePairsJson }, async g =>
         {
             var persons = (await g.ReadAsync<SearchPersonRow>().ConfigureAwait(false)).AsList();
             var cases = (await g.ReadAsync<SearchCaseRow>().ConfigureAwait(false)).AsList();
@@ -101,6 +101,9 @@ public sealed class PersonData(Db db) : IPersonData
 
 public sealed class PlaceData(Db db) : IPlaceData
 {
+    public Task CorrectPersonPlaceAsync(Guid personId, string changesJson, string? unit, int? yearBuilt, string addressKey,
+        string? buildingAddressKey, bool correctLocation, CancellationToken ct = default)
+        => db.ExecuteAsync("dbo.uspCorrectPersonPlace", new { personId, changesJson, unit, yearBuilt, addressKey, buildingAddressKey, correctLocation }, ct);
     public Task<IReadOnlyList<LookupSelectionRow>> GetLookupSelectionsAsync(IReadOnlyList<LookupSelectionRequest> requests, CancellationToken ct = default)
         => db.QueryAsync<LookupSelectionRow>("dbo.uspGetLookupSelection", new
         {
@@ -155,11 +158,15 @@ public sealed class PlaceData(Db db) : IPlaceData
         }, ct);
 
     public Task SaveExposureSourceAsync(ExposureSourceSave s, CancellationToken ct = default)
-        => db.ExecuteAsync("dbo.uspSaveExposureSource", new
+    {
+        var parameters = new Dapper.DynamicParameters(new
         {
             s.ExposureSourceId, s.PersonId, s.ExposureCaseId, s.SourceType, s.SourceDescription, s.ProductId, s.LocationId,
             s.StartDate, s.EndDate, s.IsConfirmed, s.IsDeleted,
-        }, ct);
+        });
+        parameters.Add("originalModifiedUtc", s.OriginalModifiedUtc, System.Data.DbType.DateTime2);
+        return db.ExecuteAsync("dbo.uspSaveExposureSource", parameters, ct);
+    }
 
     public Task<IReadOnlyList<ProductRow>> SearchProductsAsync(string text, int maxRows, CancellationToken ct = default)
         => db.QueryAsync<ProductRow>("dbo.uspSearchProducts", new { text, maxRows }, ct);

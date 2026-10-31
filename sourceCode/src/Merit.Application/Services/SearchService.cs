@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json;
 using Merit.Application.Data;
 using Merit.Application.Security;
 using Merit.Domain.Text;
@@ -55,12 +56,13 @@ public sealed class SearchService(IPersonData data, ICurrentSession session)
             return new SearchResults([], [], [], false);
         }
 
-        return await data.SearchAsync(query.Raw, query.NameKey1, query.NameKey2, query.Dob, query.AddressKey, 50, ct)
+        return await data.SearchAsync(query.Raw, query.NameKey1, query.NameKey2, query.Dob, query.AddressKey, 50, ct, JsonSerializer.Serialize(query.NamePairs.Select(p => new { key1 = p.Key1, key2 = p.Key2 })))
             .ConfigureAwait(false);
     }
 
     public sealed record ParsedQuery(string Raw, string? NameKey1, string? NameKey2, DateOnly? Dob, string? AddressKey)
     {
+        public IReadOnlyList<(string Key1, string Key2)> NamePairs { get; init; } = [];
         public bool IsEmpty => string.IsNullOrWhiteSpace(Raw);
     }
 
@@ -75,27 +77,40 @@ public sealed class SearchService(IPersonData data, ICurrentSession session)
 
         DateOnly? dob = null;
         var nameTokens = new List<string>();
+        var remaining = new List<string>();
         foreach (var token in raw.Replace(',', ' ').Split(' ', StringSplitOptions.RemoveEmptyEntries))
         {
             if (dob is null && DateOnly.TryParseExact(token, DateFormats, CultureInfo.InvariantCulture, DateTimeStyles.None, out var d))
             {
                 dob = d;
             }
-            else if (!token.Any(char.IsDigit))
+            else
             {
-                nameTokens.Add(token);
+                remaining.Add(token);
+                if (!token.Any(char.IsDigit)) nameTokens.Add(token);
             }
         }
 
-        string? addressKey = char.IsDigit(raw[0]) && raw.Any(char.IsLetter) ? MatchKeys.AddressSearchPrefix(raw) : null;
+        string rest = string.Join(" ", remaining);
+        string? addressKey = remaining.Count > 1 && char.IsDigit(rest[0]) && rest.Any(char.IsLetter) ? MatchKeys.AddressSearchPrefix(rest) : null;
         string? k1 = nameTokens.Count > 0 ? MatchKeys.NameKey(nameTokens[0]) : null;
-        string? k2 = nameTokens.Count > 1 ? MatchKeys.NameKey(nameTokens[1]) : null;
+        string? k2 = nameTokens.Count > 1 ? MatchKeys.NameKey(nameTokens[^1]) : null;
         if (addressKey is not null)
         {
             k1 = null;
             k2 = null;
         }
 
-        return new ParsedQuery(raw, k1, k2, dob, addressKey);
+        var pairs = new HashSet<(string Key1, string Key2)>();
+        if (addressKey is null && nameTokens.Count > 2)
+        {
+            for (int split = 1; split < nameTokens.Count; split++)
+            {
+                string left = MatchKeys.NameKey(string.Join(" ", nameTokens.Take(split)))!;
+                string right = MatchKeys.NameKey(string.Join(" ", nameTokens.Skip(split)))!;
+                pairs.Add((left, right));
+            }
+        }
+        return new ParsedQuery(raw, k1, k2, dob, addressKey) { NamePairs = pairs.ToList() };
     }
 }

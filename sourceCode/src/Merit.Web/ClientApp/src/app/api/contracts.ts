@@ -27,6 +27,7 @@ export interface QueueCountDto {
 }
 
 export interface WorkTaskDto {
+  isOverdue: boolean;
   workTaskId: string;
   queueCode: string;
   title: string;

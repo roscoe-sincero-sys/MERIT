@@ -36,6 +36,7 @@ import { LatestRequest } from '../../shared/latest-request';
       </nav>
       <section [attr.aria-label]="store.currentQueueName()">
         <h2>{{ store.currentQueueName() }}</h2>
+        <p class="merit-meta">Queue counts show open tasks.</p>
         <div class="filters">
           <label class="usa-label" for="status">Status</label>
           <select class="usa-select" id="status" [value]="store.status()" [disabled]="busy()" (change)="setStatus($event)">
@@ -44,6 +45,8 @@ import { LatestRequest } from '../../shared/latest-request';
           <div class="usa-checkbox"><input class="usa-checkbox__input" id="mine" type="checkbox" [checked]="store.mine()" [disabled]="busy()" (change)="toggleMine()" /><label class="usa-checkbox__label" for="mine">Assigned to me</label></div>
           <div class="usa-checkbox"><input class="usa-checkbox__input" id="urgent" type="checkbox" [checked]="store.urgentOnly()" [disabled]="busy()" (change)="toggleUrgent()" /><label class="usa-checkbox__label" for="urgent">Urgent only</label></div>
         </div>
+        <div class="usa-checkbox"><input class="usa-checkbox__input" id="overdue" type="checkbox" [checked]="store.overdueOnly()" [disabled]="busy()" (change)="toggleOverdue()" /><label class="usa-checkbox__label" for="overdue">Overdue only</label></div>
+        @if (store.selected().size > 0) { <p role="status">{{ store.selected().size }} selected across pages. <button class="usa-button usa-button--unstyled" type="button" [disabled]="busy()" (click)="clearSelection()">Clear selection</button></p> }
         @if (display.can('task.edit')) {
         <div class="bulk" role="group" aria-label="Bulk actions on selected tasks">
           @if (store.status() === 'open') {
@@ -56,6 +59,7 @@ import { LatestRequest } from '../../shared/latest-request';
           </select>
           <button class="usa-button usa-button--outline" type="button" [disabled]="store.selected().size === 0 || !assignee() || store.loading() || busy()" (click)="bulk('assign', assignee())">Assign</button>
           <button class="usa-button" type="button" [disabled]="store.selected().size === 0 || store.loading() || busy()" (click)="bulk('complete')">Complete</button>
+          <label class="usa-label" for="dismiss-reason">Reason for dismissal</label><input class="usa-input" id="dismiss-reason" maxlength="1000" [value]="dismissReason()" [disabled]="busy()" (input)="dismissReason.set($any($event.target).value)" />
           <button class="usa-button usa-button--secondary" type="button" [disabled]="store.selected().size === 0 || store.loading() || busy()" (click)="bulk('dismiss')">Dismiss</button>
           } @else {
             <button class="usa-button" type="button" [disabled]="store.selected().size === 0 || store.loading() || busy()" (click)="bulk('reopen')">Reopen selected</button>
@@ -87,6 +91,7 @@ export class QueuesPage implements OnInit {
   private readonly tasksLoad = new LatestRequest();
   private pendingSelectionReset = false;
   protected readonly busy = signal(false);
+  protected readonly dismissReason = signal('');
   protected readonly canSelect = (t: WorkTaskDto): boolean => t.canEdit;
 
   protected readonly key = (t: WorkTaskDto): string => t.workTaskId;
@@ -96,22 +101,23 @@ export class QueuesPage implements OnInit {
     { key: 'queueCode', label: 'Queue', sortable: true, cell: t => this.queueName(t.queueCode) },
     { key: 'person', label: 'Person', cell: t => t.personName ?? '', link: t => (t.personId ? this.view.detail(`/people/${t.personId}`) : null) },
     { key: 'case', label: 'Case', nowrap: true, cell: t => t.caseNumber ?? '', link: t => (t.exposureCaseId ? this.view.detail(`/cases/${t.exposureCaseId}`) : null) },
-    { key: 'dueDate', label: 'Due', sortable: true, nowrap: true, cell: t => this.display.date(t.dueDate) },
+    { key: 'dueDate', label: 'Due', sortable: true, nowrap: true, cell: t => this.display.date(t.dueDate), badge: t => t.isOverdue ? 'Overdue' : null },
     { key: 'assigned', label: 'Assigned', cell: t => t.assignedToName ?? '' },
     { key: 'createdDateUtc', label: 'Created', sortable: true, nowrap: true, cell: t => this.display.dateOf(t.createdUtc) },
-    { key: 'detail', label: 'Detail', hidden: true, cell: t => t.detail ?? '' },
+    { key: 'detail', label: 'Detail', cell: t => t.detail ?? '' },
   ];
 
   ngOnInit(): void {
     this.view.watch(q => {
-      const oldScope = JSON.stringify([this.store.queue(), this.store.status(), this.store.mine(), this.store.urgentOnly()]);
+      const oldScope = JSON.stringify([this.store.queue(), this.store.status(), this.store.mine(), this.store.urgentOnly(), this.store.overdueOnly()]);
       this.store.queue.set(q.get('queue'));
       this.store.status.set(choice(q.get('status'), ['open', 'done', 'dismissed'], 'open'));
       this.store.mine.set(q.get('mine') === 'true');
       this.store.urgentOnly.set(q.get('urgent') === 'true');
+      this.store.overdueOnly.set(q.get('overdue') === 'true');
       this.store.page.set(pageNumber(q.get('page')));
       this.store.sort.set({ key: choice(q.get('sort'), ['dueDate', 'createdDateUtc', 'title', 'queueCode'], 'dueDate'), descending: q.get('desc') === 'true' });
-      const scopeChanged = oldScope !== JSON.stringify([this.store.queue(), this.store.status(), this.store.mine(), this.store.urgentOnly()]);
+      const scopeChanged = oldScope !== JSON.stringify([this.store.queue(), this.store.status(), this.store.mine(), this.store.urgentOnly(), this.store.overdueOnly()]);
       this.load(scopeChanged);
     });
     this.loadQueues();
@@ -141,6 +147,13 @@ export class QueuesPage implements OnInit {
     this.store.mine.update(v => !v);
     this.store.page.set(1);
     this.saveView();
+  }
+
+  protected clearSelection(): void { if (!this.busy()) this.store.selected.set(new Set<string>()); }
+  protected toggleOverdue(): void {
+    if (this.busy()) return;
+    this.pendingSelectionReset = true;
+    this.store.overdueOnly.update(v => !v); this.store.page.set(1); this.saveView();
   }
 
   protected toggleUrgent(): void {
@@ -174,6 +187,7 @@ export class QueuesPage implements OnInit {
 
   protected bulk(action: BulkTaskActionRequest['action'], assignTo?: string): void {
     if (this.busy() || this.store.loading() || this.pendingSelectionReset || !this.display.can('task.edit') || this.store.selected().size === 0) return;
+    if (action === 'dismiss' && !this.dismissReason().trim()) { this.store.error.set('Enter a reason for dismissal.'); return; }
     const ids = [...this.store.selected()];
     if ((action === 'complete' || action === 'dismiss') && !window.confirm(
       `${action === 'complete' ? 'Complete' : 'Dismiss'} ${ids.length} selected task(s), including selections on other pages? You can reopen them from Done or Dismissed.`)) return;
@@ -182,7 +196,7 @@ export class QueuesPage implements OnInit {
     this.busy.set(true);
     const to = this.assigneeName();
     this.store.error.set(null);
-    this.api.bulkTasks({ taskIds: ids, action, assignToUserId: assignTo ?? null, note: null }).subscribe({
+    this.api.bulkTasks({ taskIds: ids, action, assignToUserId: assignTo ?? null, note: action === 'dismiss' ? this.dismissReason().trim() : null }).subscribe({
       next: r => {
         // Say what happened and, for an assignment, to whom.
         const tasks = r.updated === 1 ? '1 task' : `${r.updated} tasks`;
@@ -190,6 +204,7 @@ export class QueuesPage implements OnInit {
           : action === 'complete' ? `${tasks} completed.` : action === 'reopen' ? `${tasks} reopened.` : `${tasks} dismissed.`);
         this.busy.set(false);
         this.assignee.set('');
+        this.dismissReason.set('');
         this.store.selected.set(new Set<string>());
         this.loadQueues();
         this.load();

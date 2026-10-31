@@ -1,0 +1,4 @@
+sampleType,sampleValue,unit,sampleDate,roomOrComponent,surface,notes
+xrfPaint,1.2,mg/cm2,2026-01-15,Kitchen door,,XRF paint reading
+dustWipe,12,ug/ft2,2026-01-15,Kitchen,floor,Dust wipe
+water,2.5,ug/L,2026-01-15,Kitchen tap,,Water sample
