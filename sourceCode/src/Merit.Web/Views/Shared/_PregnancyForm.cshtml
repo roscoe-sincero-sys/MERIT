@@ -9,15 +9,15 @@
         <input type="hidden" name="PregnancyEpisodeId" value="@Model.PregnancyEpisodeId" />
         <input type="hidden" name="RowVersion" value="@Model.RowVersion" />
         <div class="merit-form-row">
-            <div class="usa-form-group"><label class="usa-label" for="StartDate">Start (estimated conception or first known pregnant date)</label><input class="usa-input" id="StartDate" name="StartDate" type="date" value="@Options.Iso(Model.StartDate)" required /></div>
-            <div class="usa-form-group"><label class="usa-label" for="ExpectedEndDate">Expected delivery</label><input class="usa-input" id="ExpectedEndDate" name="ExpectedEndDate" type="date" value="@Options.Iso(Model.ExpectedEndDate)" /></div>
-            <div class="usa-form-group"><label class="usa-label" for="ActualEndDate">Actual end</label><input class="usa-input" id="ActualEndDate" name="ActualEndDate" type="date" value="@Options.Iso(Model.ActualEndDate)" /></div>
+            <div class="usa-form-group"><label class="usa-label" for="pregnancy-StartDate">Start (estimated conception or first known pregnant date)</label><input class="usa-input" id="pregnancy-StartDate" name="StartDate" type="date" value="@Options.Iso(Model.StartDate)" required /></div>
+            <div class="usa-form-group"><label class="usa-label" for="pregnancy-ExpectedEndDate">Expected delivery</label><input class="usa-input" id="pregnancy-ExpectedEndDate" name="ExpectedEndDate" type="date" value="@Options.Iso(Model.ExpectedEndDate)" /></div>
+            <div class="usa-form-group"><label class="usa-label" for="pregnancy-ActualEndDate">Actual end</label><input class="usa-input" id="pregnancy-ActualEndDate" name="ActualEndDate" type="date" value="@Options.Iso(Model.ActualEndDate)" /></div>
         </div>
         <div class="merit-form-row">
-            <div class="usa-form-group"><label class="usa-label" for="Outcome">Outcome</label>
-                <select class="usa-select" id="Outcome" name="Outcome"><option value="">- Not yet -</option>@foreach (var o in Options.Fixed(Model.Outcome, Options.Outcomes)) { <option value="@o.Value" selected="@o.Selected">@o.Label</option> }</select></div>
-            <div class="usa-form-group"><label class="usa-label" for="Source">Source</label>
-                <select class="usa-select" id="Source" name="Source"><option value="provider" selected="@(Model.Source == "provider")">Provider</option><option value="interview" selected="@(Model.Source == "interview")">Interview</option><option value="labReport" selected="@(Model.Source == "labReport")">Lab report</option><option value="eicr" selected="@(Model.Source == "eicr")">eICR</option></select></div>
+            <div class="usa-form-group"><label class="usa-label" for="pregnancy-Outcome">Outcome</label>
+                <select class="usa-select" id="pregnancy-Outcome" name="Outcome"><option value="">- Not yet -</option>@foreach (var o in Options.Fixed(Model.Outcome, Options.Outcomes)) { <option value="@o.Value" selected="@o.Selected">@o.Label</option> }</select></div>
+            <div class="usa-form-group"><label class="usa-label" for="pregnancy-Source">Source</label>
+                <select class="usa-select" id="pregnancy-Source" name="Source"><option value="provider" selected="@(Model.Source == "provider")">Provider</option><option value="interview" selected="@(Model.Source == "interview")">Interview</option><option value="labReport" selected="@(Model.Source == "labReport")">Lab report</option><option value="eicr" selected="@(Model.Source == "eicr")">eICR</option></select></div>
         </div>
         <p class="merit-meta">Saving reruns classification: results collected during the episode take the pregnant population.</p>
         <button class="usa-button" type="submit">Save episode</button>

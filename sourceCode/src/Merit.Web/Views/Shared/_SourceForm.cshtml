@@ -1,27 +1,27 @@
 @model SourceFormModel
 <div class="merit-inline-form" id="source-form-body">
     <h3>@(Model.ExposureSourceId is null ? "Add an exposure source" : "Edit or end exposure source")</h3>
-    @if (!ViewData.ModelState.IsValid) { <partial name="_ErrorSummary" model='new ErrorSummaryModel(["SourceType", "Description", "StartDate", "EndDate"], new Dictionary<string, string> { ["EndDate"] = "source-end" })' /> }
+    @if (!ViewData.ModelState.IsValid) { <partial name="_ErrorSummary" model='new ErrorSummaryModel(["SourceType", "Description", "StartDate", "EndDate"], new Dictionary<string, string> { ["EndDate"] = "source-end", ["SourceType"] = "source-SourceType", ["Description"] = "source-Description", ["StartDate"] = "source-StartDate" })' /> }
     <form class="usa-form" hx-post="/people/@Model.PersonId/sources" hx-target="#section-sources" hx-swap="outerHTML"
           hx-status:422="target:#source-form-body swap:outerHTML">
         <input type="hidden" name="ExposureSourceId" value="@Model.ExposureSourceId" />
         <input type="hidden" name="OriginalModifiedUtc" value="@Model.OriginalModifiedUtc?.ToString("O")" />
         <div class="usa-form-group"><label class="usa-label" for="source-end">End date</label><input class="usa-input" type="date" id="source-end" name="EndDate" value="@Options.Iso(Model.EndDate)" /></div>
         <div class="merit-form-row">
-            <div class="usa-form-group"><label class="usa-label" for="SourceType">Source type</label>
-                <select class="usa-select" id="SourceType" name="SourceType">@foreach (var o in Model.SourceTypes) { <option value="@o.Value" selected="@o.Selected">@o.Label</option> }</select></div>
-            <div class="usa-form-group"><label class="usa-label" for="StartDate">Since</label><input class="usa-input" id="StartDate" name="StartDate" type="date" value="@Options.Iso(Model.StartDate)" /></div>
+            <div class="usa-form-group"><label class="usa-label" for="source-SourceType">Source type</label>
+                <select class="usa-select" id="source-SourceType" name="SourceType">@foreach (var o in Model.SourceTypes) { <option value="@o.Value" selected="@o.Selected">@o.Label</option> }</select></div>
+            <div class="usa-form-group"><label class="usa-label" for="source-StartDate">Since</label><input class="usa-input" id="source-StartDate" name="StartDate" type="date" value="@Options.Iso(Model.StartDate)" /></div>
         </div>
-        <div class="usa-form-group"><label class="usa-label" for="Description">Description (product, brand, country of origin; sent as the ABLES Process narrative)</label>
-            <textarea class="usa-textarea" id="Description" name="Description" rows="2">@Model.Description</textarea></div>
+        <div class="usa-form-group"><label class="usa-label" for="source-Description">Description (product, brand, country of origin; sent as the ABLES Process narrative)</label>
+            <textarea class="usa-textarea" id="source-Description" name="Description" rows="2">@Model.Description</textarea></div>
         <fieldset class="usa-fieldset"><legend class="usa-legend">Product (for the product registry)</legend>
             <div class="merit-form-row">
-                <div class="usa-form-group"><label class="usa-label" for="ProductName">Product name</label><input class="usa-input" id="ProductName" name="ProductName" value="@Model.ProductName" /></div>
-                <div class="usa-form-group"><label class="usa-label" for="ProductBrand">Brand</label><input class="usa-input" id="ProductBrand" name="ProductBrand" value="@Model.ProductBrand" /></div>
-                <div class="usa-form-group"><label class="usa-label" for="ProductCountry">Country (2 letters)</label><input class="usa-input usa-input--small" id="ProductCountry" name="ProductCountry" value="@Model.ProductCountry" maxlength="2" /></div>
+                <div class="usa-form-group"><label class="usa-label" for="source-ProductName">Product name</label><input class="usa-input" id="source-ProductName" name="ProductName" value="@Model.ProductName" /></div>
+                <div class="usa-form-group"><label class="usa-label" for="source-ProductBrand">Brand</label><input class="usa-input" id="source-ProductBrand" name="ProductBrand" value="@Model.ProductBrand" /></div>
+                <div class="usa-form-group"><label class="usa-label" for="source-ProductCountry">Country (2 letters)</label><input class="usa-input usa-input--small" id="source-ProductCountry" name="ProductCountry" value="@Model.ProductCountry" maxlength="2" /></div>
             </div>
         </fieldset>
-        <div class="usa-checkbox"><input class="usa-checkbox__input" id="IsConfirmed" type="checkbox" name="IsConfirmed" value="true" checked="@Model.IsConfirmed" /><label class="usa-checkbox__label" for="IsConfirmed">Confirmed by a sample</label></div>
+        <div class="usa-checkbox"><input class="usa-checkbox__input" id="source-IsConfirmed" type="checkbox" name="IsConfirmed" value="true" checked="@Model.IsConfirmed" /><label class="usa-checkbox__label" for="source-IsConfirmed">Confirmed by a sample</label></div>
         <button class="usa-button" type="submit">Save source</button>
         <button class="usa-button usa-button--unstyled" type="button" data-clear-target="#sources-form">Cancel</button>
     </form>

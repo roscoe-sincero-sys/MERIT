@@ -144,6 +144,13 @@
         }
         const ctx = evt.detail && evt.detail.ctx;
         if (ctx && ctx.sourceElement?.closest('#dialog[open]')) ctx.request.headers['X-Merit-Dialog'] = 'true';
+        if (ctx?.sourceElement?.matches('[role=combobox]')) {
+            const input = ctx.sourceElement;
+            ctx.meritLookupQuery = input.value;
+            ctx.meritLookupVersion = lookupVersions.get(input) || 0;
+            ctx.request.body.set('q', input.value);
+            ctx.request.body.delete(input.name);
+        }
     });
 
     // Explicit middleware denials must never swap an error page over the user's form or dialog.
@@ -168,13 +175,18 @@
 
     // ------------------------------------------------------------------------------------------ busy state
     document.addEventListener("htmx:before:request", evt => {
-        const target = evt.detail && evt.detail.ctx && evt.detail.ctx.target;
+        const ctx = evt.detail?.ctx;
+        const target = ctx?.target;
+        if (ctx) ctx.meritBusyTarget = target;
         if (target && target.setAttribute) target.setAttribute("aria-busy", "true");
     });
 
     document.addEventListener("htmx:finally:request", evt => {
-        const target = evt.detail && evt.detail.ctx && evt.detail.ctx.target;
-        if (target && target.removeAttribute) target.removeAttribute("aria-busy");
+        const ctx = evt.detail?.ctx;
+        // A 422 status rule can retarget the swap, leaving the original region dimmed and busy.
+        for (const target of [ctx?.meritBusyTarget, ctx?.target]) {
+            if (target?.removeAttribute) target.removeAttribute("aria-busy");
+        }
     });
 
     // A request that fails for lack of a connection shows a USWDS alert; nothing is queued in the browser.
@@ -315,6 +327,29 @@
     document.addEventListener("merit:announce", evt => announce(evt.detail && (evt.detail.value || evt.detail)));
 
     // ------------------------------------------------------------------------------------------ dialog
+    const formOpeners = new Map();
+    function rememberOpener(source) {
+        return { node: source, id: source.id, url: source.getAttribute('hx-get'),
+            sectionId: source.closest('section[id]')?.id };
+    }
+    function restoreOpener(opener) {
+        if (!opener) return;
+        const section = document.getElementById(opener.sectionId);
+        const replacement = opener.id && document.getElementById(opener.id);
+        const trigger = opener.node.isConnected ? opener.node : replacement ||
+            [...(section?.querySelectorAll('[hx-get]') || [])].find(el => el.getAttribute('hx-get') === opener.url);
+        if (trigger && !trigger.disabled && trigger.getClientRects().length) { trigger.focus(); return; }
+        const heading = section?.querySelector('h2, h3');
+        if (heading) { heading.setAttribute('tabindex', '-1'); heading.focus(); }
+    }
+    document.addEventListener('htmx:before:request', evt => {
+        const ctx = evt.detail?.ctx;
+        const source = ctx?.sourceElement;
+        const id = ctx?.target?.id;
+        if (source?.hasAttribute('hx-get') && (id === 'dialog-body' || id?.endsWith('-form')) && !ctx.target.contains(source)) {
+            formOpeners.set(id, rememberOpener(source));
+        }
+    });
     document.addEventListener("click", evt => {
         const closer = evt.target.closest("[data-close-dialog]");
         if (closer) {
@@ -326,7 +361,12 @@
         const cancel = evt.target.closest("[data-clear-target]");
         if (cancel) {
             const t = document.querySelector(cancel.getAttribute("data-clear-target"));
-            if (t) t.innerHTML = "";
+            if (t) {
+                const opener = formOpeners.get(t.id);
+                t.replaceChildren();
+                restoreOpener(opener);
+                formOpeners.delete(t.id);
+            }
         }
     });
 
@@ -335,6 +375,10 @@
             const body = document.getElementById("dialog-body");
             if (body) body.innerHTML = "";
             document.getElementById('dialog-alert-region')?.replaceChildren();
+            // The opener's section may have been replaced by the save response.
+            const opener = formOpeners.get('dialog-body');
+            requestAnimationFrame(() => restoreOpener(opener));
+            formOpeners.delete('dialog-body');
         }
     }, true);
 
@@ -347,18 +391,27 @@
     // ------------------------------------------------------------------------------------------ combobox type-ahead
     // ARIA combobox pattern: the text input's hx-get returns a listbox of options (Views/Shared/_Options); arrow keys move,
     // Enter or click chooses, Escape closes, and the chosen value posts as a hidden id.
+    const lookupVersions = new WeakMap();
     function options(listbox) {
-        return Array.from(listbox.querySelectorAll("[role=option]"));
+        return Array.from(listbox.querySelectorAll('[role=option]:not([aria-disabled=true])[data-value]'));
+    }
+
+    function closeCombobox(input) {
+        lookupVersions.set(input, (lookupVersions.get(input) || 0) + 1);
+        const listbox = document.getElementById(input.getAttribute('aria-controls'));
+        if (listbox) { listbox.replaceChildren(); listbox.hidden = true; }
+        input.setAttribute('aria-expanded', 'false');
+        input.removeAttribute('aria-activedescendant');
     }
 
     function choose(option) {
+        if (option.getAttribute('aria-disabled') === 'true' || !option.hasAttribute('data-value')) return;
         const listbox = option.closest("[role=listbox]");
         const input = document.getElementById(listbox.getAttribute("data-for"));
         const hidden = document.getElementById(input.getAttribute("data-hidden"));
         hidden.value = option.getAttribute("data-value");
         input.value = option.getAttribute("data-label");
-        input.setAttribute("aria-expanded", "false");
-        listbox.innerHTML = "";
+        closeCombobox(input);
         hidden.dispatchEvent(new Event("change", { bubbles: true }));
         announce("Selected " + input.value);
     }
@@ -381,8 +434,9 @@
             evt.preventDefault();
             choose(opts[index]);
         } else if (evt.key === "Escape") {
-            listbox.innerHTML = "";
-            input.setAttribute("aria-expanded", "false");
+            evt.preventDefault();
+            evt.stopPropagation();
+            closeCombobox(input);
         }
     });
 
@@ -391,6 +445,30 @@
         if (!input) return;
         const hidden = document.getElementById(input.getAttribute("data-hidden"));
         if (hidden) hidden.value = "";
+        closeCombobox(input);
+    });
+
+    // Keep focus on the input until an option click has selected its value.
+    document.addEventListener('pointerdown', evt => {
+        if (evt.target.closest('[role=listbox][data-for] [role=option]')) evt.preventDefault();
+        document.querySelectorAll('[role=combobox]').forEach(input => {
+            if (!input.closest('.merit-combobox').contains(evt.target)) closeCombobox(input);
+        });
+    });
+    document.addEventListener('focusout', evt => {
+        const input = evt.target.closest('[role=combobox]');
+        if (input) closeCombobox(input);
+    });
+    document.addEventListener('htmx:before:request', evt => {
+        const input = evt.detail?.ctx?.sourceElement;
+        if (input?.matches('[role=combobox]') && (input !== document.activeElement || input.disabled)) evt.preventDefault();
+    });
+    document.addEventListener('htmx:before:swap', evt => {
+        const ctx = evt.detail?.ctx;
+        const input = ctx?.sourceElement;
+        if (input?.matches('[role=combobox]') &&
+            (input !== document.activeElement || input.disabled || input.value !== ctx.meritLookupQuery ||
+                (lookupVersions.get(input) || 0) !== ctx.meritLookupVersion)) evt.preventDefault();
     });
 
     document.addEventListener("click", evt => {
@@ -403,7 +481,11 @@
         if (target && target.getAttribute && target.getAttribute("role") === "listbox") {
             const input = document.getElementById(target.getAttribute("data-for"));
             const count = options(target).length;
-            if (input) input.setAttribute("aria-expanded", count > 0 ? "true" : "false");
+            if (input) {
+                target.hidden = false;
+                input.removeAttribute('aria-activedescendant');
+                input.setAttribute("aria-expanded", "true");
+            }
             announce(count === 0 ? "No matches" : count + " matches. Use the arrow keys to choose.");
         }
     });
@@ -429,8 +511,7 @@
 
     function clearCombobox(box) {
         box.value = "";
-        box.setAttribute("aria-expanded", "false");
-        box.removeAttribute("aria-activedescendant");
+        closeCombobox(box);
         const hidden = document.getElementById(box.getAttribute("data-hidden"));
         if (hidden) hidden.value = "";
         const listbox = document.getElementById(box.getAttribute("aria-controls"));

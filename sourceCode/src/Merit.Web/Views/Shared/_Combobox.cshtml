@@ -3,19 +3,28 @@
 @{
     var state = ViewData.ModelState;
     bool required = ViewData["Required"] is true;
-    string? hintId = Model.Hint is null ? null : Model.Id + "-hint";
+    string hintId = Model.Id + "-hint";
+    string queryName = Model.Id + "-query";
+    string? text = Model.Text;
+    // Selected labels come from the authorized server lookup. Unselected search text is only a draft,
+    // never an identity, and must survive validation independently for each picker.
+    if (string.IsNullOrEmpty(Model.Value) && text is null && Context.Request.HasFormContentType)
+    {
+        var posted = await Context.Request.ReadFormAsync();
+        text = posted[queryName].FirstOrDefault();
+    }
 }
 <div class="@state.GroupClass(Model.Name) merit-combobox">
     <label class="usa-label" for="@Model.Id-text">@Model.Label @if (required) { @FormErrors.RequiredMark }</label>
-    @if (Model.Hint is not null) { <div class="usa-hint" id="@hintId">@Model.Hint</div> }
+    <div class="usa-hint" id="@hintId">@Model.Hint Choose a match from the list using the arrow keys and Enter, or click a match.</div>
     @state.ErrorMessage(Model.Name, Model.Id + "-text")
-    <input class="usa-input" id="@Model.Id-text" type="text" autocomplete="off" value="@Model.Text"
+    <input class="usa-input" id="@Model.Id-text" type="text" autocomplete="off" value="@text"
            role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="@Model.Id-list"
            aria-describedby="@state.DescribedBy(Model.Name, hintId, Model.Id + "-text")" aria-invalid="@state.AriaInvalid(Model.Name)"
            aria-required="@(required ? "true" : null)"
-           data-hidden="@Model.Id" data-field="@Model.Name" name="q"
+           data-hidden="@Model.Id" data-field="@Model.Name" name="@queryName"
            hx-get="@Model.Url" hx-trigger="input changed delay:400ms" hx-target="#@Model.Id-list" hx-swap="innerHTML"
            hx-vals='{"field":"@Model.Id"}' />
     <input type="hidden" id="@Model.Id" name="@Model.Name" value="@Model.Value" />
-    <ul class="merit-listbox" id="@Model.Id-list" role="listbox" data-for="@Model.Id-text" aria-label="@Model.Label matches"></ul>
+    <ul class="merit-listbox" id="@Model.Id-list" role="listbox" data-for="@Model.Id-text" aria-label="@Model.Label matches" hidden></ul>
 </div>
