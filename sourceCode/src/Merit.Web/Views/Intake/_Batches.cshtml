@@ -13,10 +13,14 @@
         <div class="merit-grid-2 merit-cards">
             @foreach (var b in Model.Batches)
             {
+                var held = b.BatchStatus == "loaded" && b.HeldCount > 0;
+                var incomplete = b.BatchStatus == "loaded" && (b.HeldCount > 0 || b.RejectedCount > 0 || b.LoadedCount == 0);
+                var label = held ? (b.LoadedCount == 0 && b.RejectedCount == 0 ? "All rows held" : "Processed with holds")
+                    : incomplete ? (b.RejectedCount > 0 ? "Processed with rejections" : "No rows loaded") : Options.Humanize(b.BatchStatus);
                 <div class="usa-card__container" id="batch-@b.IntakeBatchId">
                     <div class="usa-card__header"><h3 class="usa-card__heading merit-card__file">@FileNames.Breakable(b.FileName)</h3></div>
                     <div class="usa-card__body">
-                        <p><span class="merit-badge @(b.BatchStatus == "paused" ? "merit-badge--urgent" : b.BatchStatus == "loaded" ? "merit-badge--ok" : "")">@Options.Humanize(b.BatchStatus)</span>
+                        <p><span class="merit-badge @(b.BatchStatus == "paused" ? "merit-badge--urgent" : incomplete ? "merit-badge--suspect" : b.BatchStatus == "loaded" ? "merit-badge--ok" : "")">@label</span>
                             <span class="merit-meta">@b.SenderName &middot; @Options.Date(b.ReceivedUtc) &middot; @b.SubmittedBy</span></p>
                         @if (b.PauseReason is not null) { <p>@b.PauseReason</p> }
                         <p>Received @b.ReceivedCount &middot; loaded @b.LoadedCount &middot;

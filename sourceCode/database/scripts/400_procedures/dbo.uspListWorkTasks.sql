@@ -55,6 +55,7 @@ CREATE OR ALTER PROCEDURE dbo.uspListWorkTasks
       , @sortDescending BIT = 0
       , @pageNumber     INT = 1
       , @pageSize       INT = 50
+      , @overdueOnly    BIT = 0
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -106,6 +107,7 @@ BEGIN
                w.personId, p.lastName, p.firstName, w.exposureCaseId, c.caseNumber, w.labResultId, w.investigationId,
                w.stagingRowId, w.assignedToUserId, u.displayName AS assignedToName, w.rowVersion,
                CAST (CASE WHEN EXISTS (SELECT 1 FROM auth.tvfTenantWritePredicate (w.rootTenantId, w.owningTenantId, w.isDeleted)) THEN 1 ELSE 0 END AS BIT) AS canEdit,
+               CAST (CASE WHEN w.taskStatus = 'open' AND w.dueDate < auth.udfSessionToday () THEN 1 ELSE 0 END AS BIT) AS isOverdue,
                COUNT (*) OVER () AS totalCount
           FROM dbo.workTask AS w
           LEFT JOIN dbo.person AS p ON p.personId = w.personId
@@ -116,6 +118,7 @@ BEGIN
            AND (@taskStatus IS NULL OR w.taskStatus = @taskStatus)
            AND (@assignedToMe = 0 OR w.assignedToUserId = @me)
            AND (@urgentOnly = 0 OR w.isUrgent = 1)
+           AND (@overdueOnly = 0 OR (w.taskStatus = 'open' AND w.dueDate < auth.udfSessionToday ()))
          ORDER BY w.isUrgent DESC,
                   CASE WHEN @sortBy = 'dueDate'        AND @sortDescending = 0 THEN COALESCE (w.dueDate, '9999-12-31') END ASC,
                   CASE WHEN @sortBy = 'dueDate'        AND @sortDescending = 1 THEN w.dueDate END DESC,

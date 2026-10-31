@@ -108,6 +108,28 @@ public sealed class PlaceService(IClock clock, IPlaceData places, IPersonData pe
     }
 
     /// <summary>Ends a place on a date (the person no longer lives or spends time there).</summary>
+    public async Task EditPlaceAsync(Guid personId, Guid placeId, string? unit, int? yearBuilt, string? scheduleType,
+        decimal? hoursPerWeek, string? note, byte[] rowVersion, CancellationToken ct = default)
+    {
+        session.Require(Permissions.PersonEdit);
+        var existing = (await persons.GetPlacesAsync(personId, ct).ConfigureAwait(false)).FirstOrDefault(p => p.PersonLocationId == placeId)
+            ?? throw new NotFoundException();
+        new Validator().When(hoursPerWeek is < 0 or > 168, "HoursPerWeek", "Enter 0 to 168 hours.")
+            .When(yearBuilt is int year && (year < 1700 || year > clock.Today.Year), "YearBuilt", $"Enter a year from 1700 to {clock.Today.Year}.")
+            .When(rowVersion.Length != 8, "RowVersion", "Reload the place before editing.")
+            .MaxLength("Unit", unit, 30, "Apartment / unit")
+            .MaxLength("ScheduleNote", note, 500, "Schedule note").ThrowIfInvalid();
+        if (!rowVersion.SequenceEqual(existing.RowVersion)) throw new ConcurrencyException();
+        bool correctLocation = unit != existing.Unit || yearBuilt != existing.YearBuilt;
+        if (correctLocation && existing.OrganizationSiteId is not null) throw new ValidationException("Unit", "Change the organization site's address through its registry; edit only its schedule here.");
+        var changed = ToPlaceRow(existing) with { ScheduleType = scheduleType, HoursPerWeek = hoursPerWeek,
+            ScheduleNote = note, RowVersionHex = ToHex(rowVersion) };
+        var plan = new PlacePlan([new PlaceChange(ChangeKind.Update, changed, "Place details corrected.")], [], [], null, null);
+        await places.CorrectPersonPlaceAsync(personId, ToChangesJson(plan), Clean(unit), yearBuilt,
+            MatchKeys.AddressKey(existing.AddressLine1, unit, existing.City, existing.State, existing.Zip5),
+            string.IsNullOrWhiteSpace(unit) ? null : MatchKeys.BuildingKey(existing.AddressLine1, existing.City, existing.State, existing.Zip5), correctLocation, ct).ConfigureAwait(false);
+    }
+
     public async Task EndPlaceAsync(Guid personId, Guid personLocationId, DateOnly endDate, CancellationToken ct = default)
     {
         session.Require(Permissions.PersonEdit);

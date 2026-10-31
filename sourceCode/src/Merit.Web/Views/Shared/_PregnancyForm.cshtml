@@ -17,7 +17,7 @@
             <div class="usa-form-group"><label class="usa-label" for="Outcome">Outcome</label>
                 <select class="usa-select" id="Outcome" name="Outcome"><option value="">- Not yet -</option>@foreach (var o in Options.Fixed(Model.Outcome, Options.Outcomes)) { <option value="@o.Value" selected="@o.Selected">@o.Label</option> }</select></div>
             <div class="usa-form-group"><label class="usa-label" for="Source">Source</label>
-                <select class="usa-select" id="Source" name="Source"><option value="provider">Provider</option><option value="interview">Interview</option><option value="labReport">Lab report</option><option value="eicr">eICR</option></select></div>
+                <select class="usa-select" id="Source" name="Source"><option value="provider" selected="@(Model.Source == "provider")">Provider</option><option value="interview" selected="@(Model.Source == "interview")">Interview</option><option value="labReport" selected="@(Model.Source == "labReport")">Lab report</option><option value="eicr" selected="@(Model.Source == "eicr")">eICR</option></select></div>
         </div>
         <p class="merit-meta">Saving reruns classification: results collected during the episode take the pregnant population.</p>
         <button class="usa-button" type="submit">Save episode</button>

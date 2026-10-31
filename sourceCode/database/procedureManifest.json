@@ -1137,6 +1137,50 @@
   ]
  },
  {
+  "name": "dbo.uspCorrectHeldGroup",
+  "kind": "write",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": "result.release_hold",
+  "params": [
+   {
+    "name": "reason",
+    "type": "VARCHAR (30), @reportedValue NVARCHAR (200)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "batch",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
+  "name": "dbo.uspCorrectPersonPlace",
+  "kind": "write",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": "person.edit",
+  "params": [
+   {
+    "name": "personId",
+    "type": "UNIQUEIDENTIFIER, @changesJson NVARCHAR (MAX), @unit NVARCHAR (30)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "yearBuilt",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
   "name": "dbo.uspCreateCaseFollowUpTasks",
   "kind": "write",
   "grants": [
@@ -2193,6 +2237,22 @@
   ]
  },
  {
+  "name": "dbo.uspImportEnvironmentalSamples",
+  "kind": "write",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": "investigation.edit",
+  "params": [
+   {
+    "name": "investigationId",
+    "type": "UNIQUEIDENTIFIER, @samplesJson NVARCHAR (MAX)",
+    "hasDefault": false,
+    "isOutput": false
+   }
+  ]
+ },
+ {
   "name": "dbo.uspImportReporters",
   "kind": "write",
   "grants": [
@@ -2519,6 +2579,42 @@
     "type": "INT",
     "hasDefault": true,
     "isOutput": false
+   },
+   {
+    "name": "searchText",
+    "type": "NVARCHAR (200)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "assignedFilter",
+    "type": "VARCHAR (40)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "statusFilter",
+    "type": "VARCHAR (20)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "typeFilter",
+    "type": "VARCHAR (30)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "sortBy",
+    "type": "VARCHAR (20)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "sortDescending",
+    "type": "BIT",
+    "hasDefault": true,
+    "isOutput": false
    }
   ]
  },
@@ -2714,6 +2810,12 @@
    {
     "name": "pageSize",
     "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "overdueOnly",
+    "type": "BIT",
     "hasDefault": true,
     "isOutput": false
    }
@@ -2930,6 +3032,22 @@
   ]
  },
  {
+  "name": "dbo.uspReopenCase",
+  "kind": "write",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": "case.edit",
+  "params": [
+   {
+    "name": "exposureCaseId",
+    "type": "UNIQUEIDENTIFIER, @reason NVARCHAR (2000), @rowVersion BINARY (8)",
+    "hasDefault": false,
+    "isOutput": false
+   }
+  ]
+ },
+ {
   "name": "dbo.uspReportCaseTimeliness",
   "kind": "read",
   "grants": [
@@ -3059,6 +3177,22 @@
     "name": "analyteId",
     "type": "UNIQUEIDENTIFIER",
     "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
+  "name": "dbo.uspResolveExtractFindingPersons",
+  "kind": "read",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": "extract.run",
+  "params": [
+   {
+    "name": "extractRunId",
+    "type": "UNIQUEIDENTIFIER, @recordIdsJson NVARCHAR (MAX)",
+    "hasDefault": false,
     "isOutput": false
    }
   ]
@@ -3336,6 +3470,12 @@
     "type": "BIT",
     "hasDefault": true,
     "isOutput": false
+   },
+   {
+    "name": "originalModifiedUtc",
+    "type": "DATETIME2 (3)",
+    "hasDefault": true,
+    "isOutput": false
    }
   ]
  },
@@ -3411,6 +3551,12 @@
    {
     "name": "isDeleted",
     "type": "BIT",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "originalModifiedUtc",
+    "type": "DATETIME2 (3)",
     "hasDefault": true,
     "isOutput": false
    }
@@ -4701,6 +4847,12 @@
    {
     "name": "maxRows",
     "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "namePairsJson",
+    "type": "NVARCHAR (MAX)",
     "hasDefault": true,
     "isOutput": false
    }

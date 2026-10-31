@@ -37,7 +37,7 @@
                 <div class="usa-radio"><input class="usa-radio__input" id="join-none" type="radio" name="JoinInvestigationId" value="" /><label class="usa-radio__label" for="join-none">Create a separate investigation anyway</label></div>
             </fieldset>
         }
-        <button class="usa-button" type="submit">@(Model.Existing.Count > 0 ? "Continue" : "Request investigation")</button>
+        <button class="usa-button" type="submit" disabled="@(Model.Targets.Count == 0)">@(Model.Existing.Count > 0 ? "Continue" : "Request investigation")</button>
         <button class="usa-button usa-button--unstyled" type="button" data-close-dialog>Cancel</button>
     </form>
 </div>

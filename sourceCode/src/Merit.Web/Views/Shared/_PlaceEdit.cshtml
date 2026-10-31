@@ -1,0 +1,17 @@
+@model PlaceEditModel
+<div id="place-edit">
+    <h2 id="dialog-title">Edit place details</h2><p>@Model.AddressLabel</p>
+    <p class="usa-hint">Year built is shared by records at the same address and unit. Changing the apartment corrects this person's place.</p>
+    <partial name="_ErrorSummary" model='new ErrorSummaryModel(["Unit", "YearBuilt", "HoursPerWeek", "ScheduleNote"], new Dictionary<string, string> { ["Unit"] = "place-edit-unit", ["YearBuilt"] = "place-edit-year", ["HoursPerWeek"] = "place-edit-hours", ["ScheduleNote"] = "place-edit-note" })' />
+    <form class="usa-form" hx-post="/people/@Model.PersonId/places/@Model.PersonLocationId/edit" hx-target="#section-places" hx-swap="outerHTML" hx-status:422="target:#place-edit swap:outerHTML">
+        <input type="hidden" name="RowVersion" value="@Model.RowVersion" />
+        <label class="usa-label" for="place-edit-unit">Apartment / unit</label><input class="usa-input" id="place-edit-unit" name="Unit" value="@Model.Unit" />
+        <label class="usa-label" for="place-edit-year">Year built</label><input class="usa-input" type="number" min="1700" max="@Clock.Today.Year" id="place-edit-year" name="YearBuilt" value="@Model.YearBuilt" />
+        <label class="usa-label" for="place-edit-schedule">Schedule</label><select class="usa-select" id="place-edit-schedule" name="ScheduleType">
+            @foreach (var option in Model.Schedules) { <option value="@option.Value" selected="@option.Selected">@option.Label</option> }
+        </select>
+        <label class="usa-label" for="place-edit-hours">Hours per week</label><input class="usa-input" type="number" step="0.01" min="0" max="168" id="place-edit-hours" name="HoursPerWeek" value="@Model.HoursPerWeek" />
+        <label class="usa-label" for="place-edit-note">Schedule note</label><textarea class="usa-textarea" id="place-edit-note" name="ScheduleNote" maxlength="500">@Model.ScheduleNote</textarea>
+        <button class="usa-button" type="submit">Save place details</button>
+    </form>
+</div>

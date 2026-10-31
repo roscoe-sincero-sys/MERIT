@@ -22,7 +22,8 @@
                     @if (s.ProductName is not null) { <span>&middot; @s.Brand @s.ProductName</span> }
                     @if (s.SourceDescription is not null) { <span>&middot; @s.SourceDescription</span> }
                     @if (s.IsConfirmed) { <span class="merit-badge merit-badge--confirmed">Confirmed by sample</span> }
-                    <span class="merit-meta">@Options.Date(s.StartDate)</span>
+                    <span class="merit-meta">@Options.Date(s.StartDate) to @(s.EndDate is null ? "current" : Options.Date(s.EndDate))</span>
+                    @if (Model.CanEdit) { <button class="usa-button usa-button--unstyled" type="button" hx-get="/people/@Model.PersonId/sources/@s.ExposureSourceId/edit" hx-target="#sources-form">Edit / confirm / end source</button> }
                 </li>
             }
         </ul>

@@ -7,6 +7,12 @@ namespace Merit.Web.Infrastructure;
 /// <summary>Drop-down options built from reference data, for view models. Display only; no rules here.</summary>
 public static class Options
 {
+    public static string Language(string? code)
+    {
+        if (string.IsNullOrWhiteSpace(code)) return "Not recorded";
+        try { return CultureInfo.GetCultureInfo(code).EnglishName; }
+        catch (CultureNotFoundException) { return Humanize(code); }
+    }
     public static IReadOnlyList<SelectOption> Choices(this ReferenceData data, string lookupType, string? selected = null,
                                                      bool includeBlank = false)
     {

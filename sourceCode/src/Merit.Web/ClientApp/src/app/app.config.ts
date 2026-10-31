@@ -2,7 +2,8 @@ import { ApplicationConfig, inject, provideAppInitializer, provideBrowserGlobalE
 import { APP_BASE_HREF } from '@angular/common';
 import { provideHttpClient, withFetch, withXsrfConfiguration, withInterceptors, HttpResponse } from '@angular/common/http';
 import { tap } from 'rxjs';
-import { provideRouter, withComponentInputBinding } from '@angular/router';
+import { provideRouter, withComponentInputBinding, TitleStrategy } from '@angular/router';
+import { PageTitleStrategy } from './shared/page-title.strategy';
 import { routes } from './app.routes';
 import { Display } from './shared/display.service';
 
@@ -13,6 +14,7 @@ export const appConfig: ApplicationConfig = {
     // The Razor host page has no <base> element (its links are site-absolute), so the router is told its root here.
     { provide: APP_BASE_HREF, useValue: '/app/' },
     provideRouter(routes, withComponentInputBinding()),
+    { provide: TitleStrategy, useClass: PageTitleStrategy },
     // The antiforgery token travels in X-XSRF-TOKEN, read from the XSRF-TOKEN cookie the server sets - the same header
     // htmx sends from merit.js, so both front ends share one antiforgery scheme.
     provideHttpClient(withFetch(), withXsrfConfiguration({ cookieName: 'XSRF-TOKEN', headerName: 'X-XSRF-TOKEN' }),

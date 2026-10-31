@@ -133,7 +133,8 @@ BEGIN
          WHERE ic.exposureCaseId = @exposureCaseId AND ic.isDeleted = 0
          ORDER BY i.requestedDate DESC;
 
-        SELECT w.workTaskId, w.queueCode, w.title, w.detail, w.dueDate, w.isUrgent, w.taskStatus, u.displayName AS assignedToName
+        SELECT w.workTaskId, w.queueCode, w.title, w.detail, w.dueDate, w.isUrgent, w.taskStatus, u.displayName AS assignedToName,
+               CAST (CASE WHEN auth.udfHasPermission (N'task.edit') = 1 AND EXISTS (SELECT 1 FROM auth.tvfTenantWritePredicate (w.rootTenantId, w.owningTenantId, w.isDeleted)) THEN 1 ELSE 0 END AS BIT) AS canEdit
           FROM dbo.workTask AS w
           LEFT JOIN auth.appUser AS u ON u.appUserId = w.assignedToUserId
          WHERE w.exposureCaseId = @exposureCaseId AND w.isDeleted = 0 AND w.taskStatus = 'open'

@@ -20,6 +20,7 @@ body { background: #fff; color: var(--merit-ink); }
    starts there. USWDS rings every :focus, which boxed the heading for mouse users; the ring stays for keyboard focus
    (issue #51). */
 [tabindex="-1"]:focus:not(:focus-visible) { outline: none; }
+body:not(.merit-keyboard-mode) [tabindex="-1"]:focus { outline: none; }
 
 /* The error summary at the top of a form (issue #46). */
 .merit-error-summary .usa-list { margin-bottom: 0; }
@@ -121,7 +122,7 @@ dialog.merit-dialog::backdrop { background: rgba(0,0,0,.5); }
 /* On a phone: the brand and a Menu button, search on a full-width row, and the menu and user block behind the button
    (issue #47). merit.js adds merit-header--js; without script the menu stays open. */
 .merit-menu-button { display: none; }
-@media (max-width: 40em) {
+@media (max-width: 64em) {
     .merit-header__inner { gap: .75rem; }
     /* USWDS makes every button full width on a phone, which left the search box a sliver beside its button. */
     .merit-header .usa-button { width: auto; }

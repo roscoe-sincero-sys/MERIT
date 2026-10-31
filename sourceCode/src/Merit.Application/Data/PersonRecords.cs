@@ -288,6 +288,7 @@ public sealed class PlaceListRow
 
 public sealed class EmploymentRow
 {
+    public string? OccupationCodeVersion { get; init; }
     public Guid EmploymentId { get; init; }
 
     public Guid OrganizationId { get; init; }
@@ -329,10 +330,14 @@ public sealed class EmploymentRow
     public byte[] RowVersion { get; init; } = [];
 
     public string? Analytes { get; init; }
+    public string AnalyteIdsJson { get; init; } = "[]";
 }
 
 public sealed class ExposureSourceRow
 {
+    public string? ProductCountry { get; init; }
+    public DateTime ModifiedDateUtc { get; init; }
+
     public Guid ExposureSourceId { get; init; }
 
     public Guid? ExposureCaseId { get; init; }
@@ -722,7 +727,7 @@ public sealed record ExposureSourceSave(
     DateOnly? StartDate,
     DateOnly? EndDate,
     bool IsConfirmed,
-    bool IsDeleted);
+    bool IsDeleted, DateTime? OriginalModifiedUtc = null);
 
 public sealed class ProductRow
 {

@@ -1,3 +1,4 @@
+import { of, switchMap } from 'rxjs';
 import { Router } from '@angular/router';
 import { ChangeDetectionStrategy, Component, computed, inject, Injectable, input, OnInit, signal } from '@angular/core';
 import { ApiClient, problemMessage } from '../../api/api-client';
@@ -68,6 +69,16 @@ export function needsMatchReview(r: HeldRowDto): boolean {
     </ul>
 
     @if (store.busy()) { <p role="status">Saving changes&hellip;</p> }
+    @if (store.group(); as g) {
+      <section class="merit-section" aria-labelledby="group-correction">
+        <h2 id="group-correction">Correct this cause</h2>
+        <p>Set a correction beside the reported value for selected rows or every row in this cause, sender and batch. Release afterwards to rerun validation. This does not change the sender's permanent mapping.</p>
+        <label class="usa-label" for="group-field">Field</label><select class="usa-select" id="group-field" #groupField [disabled]="store.busy()">@for (field of display.stagingFields(); track field) { <option [value]="field">{{ display.field(field) }}</option> }</select>
+        <label class="usa-label" for="group-value">Correction (blank restores the reported value)</label><input class="usa-input" id="group-value" #groupValue [disabled]="store.busy()" />
+        <button class="usa-button" type="button" [disabled]="store.busy() || store.loading() || !store.selected().size" (click)="correctGroup(groupField.value, groupValue.value, false)">Correct selected in this group</button>
+        <button class="usa-button usa-button--outline" type="button" [disabled]="store.busy() || store.loading()" (click)="correctGroup(groupField.value, groupValue.value, true)">Correct entire group</button>
+      </section>
+    }
     <h2>Rows</h2>
     <p class="merit-meta" id="held-scope" aria-live="polite">
       @if (store.group(); as g) {
@@ -99,17 +110,20 @@ export function needsMatchReview(r: HeldRowDto): boolean {
 
     @if (store.focusRow(); as r) {
       <section class="merit-section" aria-labelledby="row-detail">
-        <h2 id="row-detail">Row {{ r.rowNumber }} of {{ r.fileName }}</h2>
+        <h2 id="row-detail" tabindex="-1">Row {{ r.rowNumber }} of {{ r.fileName }}</h2>
+        <p>Held for: {{ r.reasons }}. Corrections are separate from bulk row selection.</p>
         <table class="usa-table usa-table--borderless usa-table--compact">
           <thead><tr><th scope="col">Field</th><th scope="col">As reported</th><th scope="col">Correction</th></tr></thead>
           <tbody>
             @for (k of fields(r); track k) {
-              <tr><th scope="row">{{ display.field(k) }}</th><td>{{ hasReported(r, k) ? (r.reported[k] ?? '(empty)') : '(not supplied)' }}</td>
-                <td><label class="usa-sr-only" [for]="'fix-' + k">Correct {{ display.field(k) }}</label><input class="usa-input" [id]="'fix-' + k" [value]="r.corrected[k] ?? ''" [disabled]="store.busy() || store.loading()" (input)="setFix(k, $event)" /></td></tr>
+              <tr [class.usa-form-group--error]="needsAttention(r, k)"><th scope="row">{{ display.field(k) }}@if (needsAttention(r, k)) { <span class="usa-hint">Needs attention</span> }</th><td>{{ hasReported(r, k) ? (r.reported[k] ?? '(empty)') : '(not supplied)' }}</td>
+                <td><label class="usa-sr-only" [for]="'fix-' + k">Correct {{ display.field(k) }}</label><input class="usa-input" [id]="'fix-' + k" [type]="fieldType(k)" [attr.inputmode]="k === 'value' ? 'decimal' : null" [attr.aria-describedby]="'hint-' + k" [value]="r.corrected[k] ?? ''" [disabled]="store.busy() || store.loading()" (input)="setFix(k, $event)" /><span class="usa-hint" [id]="'hint-' + k">{{ fieldHint(k) }}</span></td></tr>
             }
           </tbody>
         </table>
         <button class="usa-button usa-button--outline" type="button" [disabled]="store.busy() || store.loading()" (click)="saveFix(r)">Save correction</button>
+        <button class="usa-button" type="button" [disabled]="store.busy() || store.loading() || needsMatch(r)" (click)="saveFix(r, true)">Save and release this row</button>
+        @if (needsMatch(r)) { <p>Decide this person's match in Match review before release.</p> }
       </section>
     }
   `,
@@ -135,6 +149,7 @@ export class HeldPage implements OnInit {
   protected readonly key = (r: HeldRowDto): string => r.stagingRowId;
 
   protected readonly columns: GridColumn<HeldRowDto>[] = [
+    { key: 'inspect', label: 'Inspect / edit', cell: () => 'Inspect / edit', action: r => this.inspect(r) },
     { key: 'reasons', label: 'Reasons', cell: r => r.reasons ?? '', badge: r => (r.isUrgent ? 'Urgent' : null) },
     { key: 'patient', label: 'Patient as reported', cell: r => `${r.reported['lastName'] ?? ''}, ${r.reported['firstName'] ?? ''} ${r.reported['dob'] ?? ''}` },
     { key: 'value', label: 'Result as reported', cell: r => `${r.reported['loinc'] ?? ''} ${r.reported['value'] ?? ''} ${r.reported['unit'] ?? ''}` },
@@ -197,14 +212,47 @@ export class HeldPage implements OnInit {
   protected onSelect(ids: ReadonlySet<string>): void {
     if (this.store.loading() || this.store.busy()) return;
     this.store.selected.set(ids);
-    const only = ids.size === 1 ? [...ids][0] : null;
-    this.store.focusRow.set(this.store.rows().items.find(r => r.stagingRowId === only) ?? null);
-    this.fixes = {};
+    if (ids.size === 1 && !this.store.focusRow()) this.inspect(this.store.rows().items.find(r => ids.has(r.stagingRowId))!, false);
+  }
+
+  protected readonly needsMatch = needsMatchReview;
+
+  protected inspect(row: HeldRowDto, moveFocus = true): void {
+    if (!row || this.store.busy()) return;
+    if (this.store.focusRow()?.stagingRowId !== row.stagingRowId && Object.keys(this.fixes).length && !window.confirm('Discard the unsaved corrections for the open row?')) return;
+    this.store.focusRow.set(row); this.fixes = {};
+    if (moveFocus) setTimeout(() => document.getElementById('row-detail')?.focus());
+  }
+
+  protected fieldType(key: string): string { return ['dob', 'collectedDate', 'analyzedDate', 'reportedDate'].includes(key) ? 'date' : 'text'; }
+  protected needsAttention(row: HeldRowDto, key: string): boolean {
+    const fields: Record<string, string> = { unknownSender: 'labCliaNumber', unknownTestCode: 'loinc', inactiveAnalyte: 'loinc',
+      missingResultValue: 'value', invalidValue: 'value', unknownUnit: 'unit', impossibleDates: 'collectedDate', missingDob: 'dob' };
+    return row.reasonCodes.some(reason => fields[reason] === key);
+  }
+  protected fieldHint(key: string): string {
+    if (this.fieldType(key) === 'date') return 'Use the calendar date.';
+    if (key === 'value') return 'Numeric result; use a decimal point.';
+    if (key === 'unit') return 'Use a configured unit, such as ug/dL or umol/L for blood lead.';
+    if (key === 'loinc') return 'Use the configured LOINC test code, for example 5671-3.';
+    if (key === 'sex') return 'Use M, F or U (unknown).';
+    return '';
+  }
+
+  protected correctGroup(field: string, value: string, entire: boolean): void {
+    const g = this.store.group(); if (!g || this.store.busy() || this.store.loading()) return;
+    if (entire && !window.confirm(`Apply this correction to all ${g.rowCount} rows in this cause, sender and batch?`)) return;
+    this.beginWrite();
+    this.api.correctHeldGroup({ reason: g.reasonCode, reportedValue: g.reportedValue, sender: g.senderOrganizationId,
+      batch: this.store.batch(), field, value: value || null, selectedIds: entire ? null : [...this.store.selected()] }).subscribe({
+      next: r => this.done(`${r.updated} row(s) corrected; release them to rerun validation.`),
+      error: e => { this.store.busy.set(false); this.store.error.set(problemMessage(e)); },
+    });
   }
 
   protected fields(r: HeldRowDto): string[] {
     return this.display.fieldOrder([...new Set([...this.display.stagingFields(), ...Object.keys(r.reported), ...Object.keys(r.corrected)])]
-      .filter(k => k !== 'matchPersonId' && k !== 'matchNewPerson'));
+      .filter(k => k !== 'matchPersonId' && k !== 'matchNewPerson')).sort((a, b) => Number(this.needsAttention(r, b)) - Number(this.needsAttention(r, a)));
   }
 
   protected hasReported(r: HeldRowDto, key: string): boolean { return Object.hasOwn(r.reported, key); }
@@ -233,11 +281,12 @@ export class HeldPage implements OnInit {
   }
 
   /** Sends only the fields changed since the row was opened; the server merges them into what is stored (issue #10). */
-  protected saveFix(r: HeldRowDto): void {
+  protected saveFix(r: HeldRowDto, releaseAfter = false): void {
     if (this.store.loading() || this.store.busy() || this.store.focusRow()?.stagingRowId !== r.stagingRowId) return;
     this.beginWrite();
-    this.api.correctHeld(r.stagingRowId, { ...this.fixes }).subscribe({
-      next: () => { this.store.busy.set(false); this.store.message.set('Correction saved beside the reported values. Release the row to load it.'); this.fixes = {}; this.loadRows(); },
+    this.api.correctHeld(r.stagingRowId, { ...this.fixes }).pipe(switchMap(() => releaseAfter && !needsMatchReview(r)
+      ? this.api.releaseHeld({ stagingRowIds: [r.stagingRowId], reason: null }) : of(null))).subscribe({
+      next: () => { this.store.busy.set(false); this.store.message.set(releaseAfter ? 'Correction saved and row released for validation.' : 'Correction saved beside the reported values. Release the row to load it.'); this.fixes = {}; this.loadGroups(); this.loadRows(); },
       error: e => { this.store.busy.set(false); this.store.error.set(problemMessage(e)); this.loadGroups(true); },
     });
   }

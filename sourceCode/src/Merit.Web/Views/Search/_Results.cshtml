@@ -39,7 +39,7 @@
                                 <td>@Options.Humanize(p.Sex)</td>
                                 <td>@p.CurrentCounty</td>
                                 <td>@foreach (var c in p.OpenCases) { <partial name="_CaseChip" model="c" /> }</td>
-                                <td>@p.MatchedOn</td>
+                                <td>@Options.Humanize(p.MatchedOn)</td>
                             </tr>
                         }
                     </tbody>
@@ -53,9 +53,14 @@
             <ul class="usa-list">
                 @foreach (var o in r.Organizations)
                 {
-                    <li>@o.OrganizationName <span class="merit-meta">@o.OrganizationTypes @(o.CliaNumber is null ? "" : "CLIA " + o.CliaNumber)</span></li>
+                    <li><a class="usa-link" href="/reporters?q=@Uri.EscapeDataString(o.OrganizationName)">@o.OrganizationName</a> <span class="merit-meta">@string.Join(", ", (o.OrganizationTypes ?? "").Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).Select(Options.Humanize)) @(o.CliaNumber is null ? "" : "CLIA " + o.CliaNumber)</span></li>
                 }
             </ul>
         }
     }
 </div>
+
+@if (User.HasClaim(MeritClaims.Permission, Permissions.PersonEdit) && !string.IsNullOrWhiteSpace(Model.Query))
+{
+    <p><a class="usa-button usa-button--outline" href="/people/new">Add a person</a></p>
+}

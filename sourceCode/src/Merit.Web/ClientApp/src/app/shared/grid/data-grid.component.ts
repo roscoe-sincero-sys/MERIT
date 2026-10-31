@@ -9,6 +9,7 @@ export interface GridColumn<T> {
   hidden?: boolean;
   cell: (row: T) => string;
   link?: (row: T) => string | null;
+  action?: (row: T) => void;
   badge?: (row: T) => string | null;
   /** Identifiers and dates stay on one line; text columns take the wrapping (issue #39). */
   nowrap?: boolean;
@@ -72,7 +73,9 @@ export interface GridSort {
               }
             </th>
             <td cdk-cell *cdkCellDef="let row" [class.nowrap]="c.nowrap">
-              @if (c.link && c.link(row); as href) {
+              @if (c.action) {
+                <button type="button" class="usa-button usa-button--unstyled" [disabled]="loading()" (click)="c.action(row)">{{ c.cell(row) }}</button>
+              } @else if (c.link && c.link(row); as href) {
                 <a class="usa-link" [href]="href">{{ c.cell(row) }}</a>
               } @else {
                 {{ c.cell(row) }}

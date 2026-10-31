@@ -304,8 +304,21 @@ public sealed class IntakeController(IntakeService intake) : Controller
 {
     [HttpGet("")]
     [Authorize(Policy = Permissions.IntakeUpload)]
-    public async Task<IActionResult> Index(string? message, Guid? duplicateOf, CancellationToken ct)
-        => this.PageOrPartial("Index", "_Batches", new IntakeModel(await intake.ProfilesAsync(ct), await intake.BatchesAsync(ct), message, duplicateOf));
+    public async Task<IActionResult> Index(CancellationToken ct)
+    {
+        bool partial = Request.IsPartial();
+        var flash = !partial && TempData["intakeFlash"] is string json
+            ? System.Text.Json.JsonSerializer.Deserialize<IntakeFlash>(json) : null;
+        return this.PageOrPartial("Index", "_Batches", new IntakeModel(await intake.ProfilesAsync(ct), await intake.BatchesAsync(ct), flash?.Message, flash?.Duplicate, flash?.Kind ?? "info"));
+    }
+
+    private sealed record IntakeFlash(string Message, string Kind, Guid? Duplicate);
+
+    private IActionResult Flash(string message, string kind, Guid? duplicate = null)
+    {
+        TempData["intakeFlash"] = System.Text.Json.JsonSerializer.Serialize(new IntakeFlash(message, kind, duplicate));
+        return RedirectToAction(nameof(Index));
+    }
 
     [HttpPost("upload")]
     [Authorize(Policy = Permissions.IntakeUpload)]
@@ -314,13 +327,13 @@ public sealed class IntakeController(IntakeService intake) : Controller
     {
         if (file is null || file.Length == 0)
         {
-            return RedirectToAction(nameof(Index), new { message = "Choose a file to upload." });
+            return Flash("Choose a file to upload.", "error");
         }
 
         // The limit is in bytes: check the upload's size before reading it (issue #20).
         if (file.Length > IntakeService.MaxFileBytes)
         {
-            return RedirectToAction(nameof(Index), new { message = "The file is larger than 20 MB; split it or send it through the secure file drop." });
+            return Flash("The file is larger than 20 MB; split it or send it through the secure file drop.", "error");
         }
 
         using var reader = new StreamReader(file.OpenReadStream());
@@ -331,18 +344,14 @@ public sealed class IntakeController(IntakeService intake) : Controller
         }
         catch (ValidationException ex)
         {
-            return RedirectToAction(nameof(Index), new { message = string.Join(" ", ex.Errors.Values.SelectMany(v => v)) });
+            return Flash(string.Join(" ", ex.Errors.Values.SelectMany(v => v)), "error");
         }
         catch (FileAlreadyReceivedException ex)
         {
-            return RedirectToAction(nameof(Index), new
-            {
-                message = $"This file was already received on {Options.Date(ex.ReceivedUtc)} as {ex.FileName}. It was not processed again.",
-                duplicateOf = ex.IntakeBatchId,
-            });
+            return Flash($"This file was already received on {Options.Date(ex.ReceivedUtc)} as {ex.FileName}. It was not processed again.", "warning", ex.IntakeBatchId);
         }
 
-        return RedirectToAction(nameof(Index), new { message = "File received. It is being processed; this page updates as it runs." });
+        return Flash("File received. It is being processed; this page updates as it runs.", "success");
     }
 }
 

@@ -1,8 +1,9 @@
 @model SearchModel
 @{
-    ViewData["Title"] = "Search";
+    ViewData["Title"] = "Find or add a person";
 }
-<h1>Search</h1>
+<h1>Find or add a person</h1>
+<p>Search first to check for an existing record before adding a person.</p>
 <form class="usa-search usa-search--big" role="search" method="get" action="/search">
     <label class="usa-sr-only" for="search-q">Search</label>
     <input class="usa-input" id="search-q" type="search" name="q" value="@Model.Query"
@@ -18,7 +19,3 @@
 <div id="search-results">
     <partial name="_Results" model="Model" />
 </div>
-@if (User.HasClaim(MeritClaims.Permission, Permissions.PersonEdit))
-{
-    <p><a class="usa-button usa-button--outline" href="/people/new">Add a person</a></p>
-}

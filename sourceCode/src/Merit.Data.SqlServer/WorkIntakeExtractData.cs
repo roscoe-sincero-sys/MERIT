@@ -26,7 +26,7 @@ public sealed class WorkData(Db db) : IWorkData
     public Task<IReadOnlyList<WorkTaskRow>> ListTasksAsync(WorkTaskQuery q, CancellationToken ct = default)
         => db.QueryAsync<WorkTaskRow>("dbo.uspListWorkTasks", new
         {
-            q.QueueCode, q.TaskStatus, q.AssignedToMe, q.UrgentOnly, q.SortBy, q.SortDescending, q.PageNumber, q.PageSize,
+            q.QueueCode, q.TaskStatus, q.AssignedToMe, q.UrgentOnly, q.SortBy, q.SortDescending, q.PageNumber, q.PageSize, q.OverdueOnly,
         }, ct);
 
     public async Task<int> UpdateTasksAsync(IReadOnlyList<Guid> taskIds, string action, Guid? assignToUserId, string? note, CancellationToken ct = default)
@@ -147,6 +147,11 @@ public sealed class IntakeData(Db db) : IIntakeData
     public Task SaveCorrectionAsync(Guid stagingRowId, string correctedJson, CancellationToken ct = default)
         => db.ExecuteAsync("dbo.uspSaveStagingCorrection", new { stagingRowId, correctedJson }, ct);
 
+    public Task<int> CorrectHeldGroupAsync(string reason, string? reportedValue, Guid? sender, Guid? batch, string field,
+        string? value, IReadOnlyList<Guid>? selectedIds, CancellationToken ct = default)
+        => db.QuerySingleAsync<int>("dbo.uspCorrectHeldGroup", new { reason, reportedValue, sender, batch, field, value,
+            selectedIdsJson = selectedIds is null ? null : System.Text.Json.JsonSerializer.Serialize(selectedIds) }, ct);
+
     public async Task<int> ReleaseRowsAsync(IReadOnlyList<Guid> stagingRowIds, CancellationToken ct = default)
         => await db.QuerySingleAsync<int>("dbo.uspReleaseStagingRows",
             new { stagingRowIdsJson = JsonSerializer.Serialize(stagingRowIds) }, ct).ConfigureAwait(false);
@@ -158,6 +163,9 @@ public sealed class IntakeData(Db db) : IIntakeData
 
 public sealed class ExtractData(Db db) : IExtractData
 {
+    public Task<IReadOnlyList<ExtractFindingPerson>> ResolveFindingPersonsAsync(Guid extractRunId, IReadOnlyList<string> recordIds, CancellationToken ct = default)
+        => db.QueryAsync<ExtractFindingPerson>("dbo.uspResolveExtractFindingPersons", new { extractRunId, recordIdsJson = JsonSerializer.Serialize(recordIds) }, ct);
+
     public Task CreateRunAsync(Guid extractRunId, string extractType, DateOnly periodStart, DateOnly periodEnd, Guid jobId, CancellationToken ct = default)
         => db.ExecuteAsync("dbo.uspCreateExtractRun", new { extractRunId, extractType, periodStart, periodEnd, jobId }, ct);
 

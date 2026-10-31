@@ -5,6 +5,13 @@
     string rv = Options.Hex(c.RowVersion);
 }
 <div id="case-body" data-preserve-drafts>
+    @if (c.CaseStatus == "closed" && User.HasClaim(MeritClaims.Permission, Permissions.CaseEdit)) {
+        <form id="case-reopen-form" class="usa-form" hx-post="/cases/@c.ExposureCaseId/reopen" hx-target="#case-body" hx-swap="outerHTML">
+            <input type="hidden" name="rowVersion" value="@draft.Value("reopen", "rowVersion", rv)" />
+            <label class="usa-label" for="reopen-reason">Reason for reopening</label><textarea class="usa-textarea" id="reopen-reason" name="reason" required maxlength="2000">@draft.Value("reopen", "reason")</textarea>
+            <button class="usa-button" type="submit">Reopen case</button>
+        </form>
+    }
     <div class="merit-page-header">
         <h1>Case @c.CaseNumber</h1>
         <p>
@@ -64,7 +71,12 @@
                     @foreach (var t in Model.Detail.Tasks)
                     {
                         <li>@if (t.IsUrgent) { <span class="merit-badge merit-badge--urgent">Urgent</span> } <strong>@t.Title</strong>
-                            @(t.DueDate is null ? "" : "· due " + Options.Date(t.DueDate)) <div class="merit-meta">@t.Detail</div></li>
+                            @(t.DueDate is null ? "" : "· due " + Options.Date(t.DueDate)) <div class="merit-meta">@t.Detail</div>
+                            @if (t.CanEdit) { <form hx-post="/cases/@c.ExposureCaseId/tasks/@t.WorkTaskId" hx-target="#case-body" hx-swap="outerHTML">
+                                <button class="usa-button usa-button--unstyled" type="submit" name="action" value="assignToMe">Assign to me</button>
+                                <button class="usa-button usa-button--unstyled" type="submit" name="action" value="complete">Complete task</button>
+                            </form> }
+                        </li>
                     }
                 </ul>
                 <p><a class="usa-link" href="/app/queues">Work these in the queue</a></p>
@@ -82,7 +94,8 @@
             }
             @if (Model.CanInvestigate && c.CaseStatus != "closed")
             {
-                <button class="usa-button usa-button--outline" type="button" hx-get="/cases/@c.ExposureCaseId/investigations/new" hx-target="#dialog-body" hx-swap="innerHTML">Request an investigation</button>
+                <button class="usa-button usa-button--outline" type="button" disabled="@(!Model.HasInvestigationTargets)" hx-get="/cases/@c.ExposureCaseId/investigations/new" hx-target="#dialog-body" hx-swap="innerHTML">Request an investigation</button>
+                @if (!Model.HasInvestigationTargets) { <p>Add an eligible place or employer to the person record before requesting an investigation.</p> }
             }
         </section>
     </div>
@@ -121,7 +134,9 @@
                     <div class="usa-form-group"><label class="usa-label" for="outcome">Outcome</label>
                         <select class="usa-select" id="outcome" name="outcome">@foreach (var o in Model.Outcomes) { <option value="@o.Value" selected="@(draft.Selected("activity", "outcome", o))">@o.Label</option> }</select></div>
                 </div>
-                @if (Model.Detail.PrimaryContact is { } pc2) { <input type="hidden" name="contactPersonId" value="@pc2.ContactPersonId" /> }
+                <label class="usa-label" for="contactPersonId">Contacted person</label><select class="usa-select" id="contactPersonId" name="contactPersonId">
+                    @foreach (var contact in Model.ContactOptions ?? []) { <option value="@contact.Value" selected="@(draft.Value("activity", "contactPersonId", "") == contact.Value)">@contact.Label</option> }
+                </select>
                 <div class="usa-form-group"><label class="usa-label" for="note">Note</label><textarea class="usa-textarea" id="note" name="note" rows="2" maxlength="2000">@draft.Value("activity", "note")</textarea></div>
                 <button class="usa-button" type="submit">Log activity</button>
             </form>

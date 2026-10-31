@@ -49,6 +49,9 @@ public sealed class ResultData(Db db) : IResultData
 
 public sealed class CaseData(Db db) : ICaseData
 {
+    public Task ReopenCaseAsync(Guid exposureCaseId, string reason, byte[] rowVersion, CancellationToken ct = default)
+        => db.ExecuteAsync("dbo.uspReopenCase", new { exposureCaseId, reason, rowVersion }, ct);
+
     public async Task<OpenCaseResult> OpenCaseAsync(Guid exposureCaseId, Guid personId, Guid analyteId, string population, string classification,
                                                     Guid qualifyingLabResultId, string workflowTemplate, DateOnly openedDate,
                                                     CancellationToken ct = default)
@@ -148,13 +151,21 @@ public sealed class CaseData(Db db) : ICaseData
         }, ct);
 
     public Task<bool?> SaveEnvironmentalSampleAsync(EnvironmentalSampleSave s, CancellationToken ct = default)
-        => db.QuerySingleAsync<bool?>("dbo.uspSaveEnvironmentalSample", new
+    {
+        var parameters = new DynamicParameters(new
         {
             s.EnvironmentalSampleId, s.InvestigationId, s.SampleType, s.RoomOrComponent, s.Surface, s.SampleValue, s.Unit,
             s.SampleDate, s.Notes, s.IsDeleted,
-        }, ct);
+        });
+        parameters.Add("originalModifiedUtc", s.OriginalModifiedUtc, System.Data.DbType.DateTime2);
+        return db.QuerySingleAsync<bool?>("dbo.uspSaveEnvironmentalSample", parameters, ct);
+    }
+
+    public Task<int> ImportEnvironmentalSamplesAsync(Guid investigationId, IReadOnlyList<EnvironmentalSampleSave> samples, CancellationToken ct = default)
+        => db.QuerySingleAsync<int>("dbo.uspImportEnvironmentalSamples", new { investigationId,
+            samplesJson = System.Text.Json.JsonSerializer.Serialize(samples, new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase }) }, ct);
 
     public Task<IReadOnlyList<InvestigationListRow>> ListInvestigationsAsync(bool openOnly, bool assignedToMe, int pageNumber, int pageSize,
-                                                                            CancellationToken ct = default)
-        => db.QueryAsync<InvestigationListRow>("dbo.uspListInvestigations", new { openOnly, assignedToMe, pageNumber, pageSize }, ct);
+                                                                            CancellationToken ct = default, string? searchText = null, string? assignedFilter = null, string? statusFilter = null, string? typeFilter = null, string sortBy = "requested", bool sortDescending = true)
+        => db.QueryAsync<InvestigationListRow>("dbo.uspListInvestigations", new { openOnly, assignedToMe, pageNumber, pageSize, searchText, assignedFilter, statusFilter, typeFilter, sortBy, sortDescending }, ct);
 }

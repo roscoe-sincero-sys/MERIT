@@ -1,6 +1,6 @@
 @model EmploymentFormModel
 <div class="merit-inline-form" id="employment-form-body">
-    <h3>Add a job</h3>
+    <h3>@(Model.EmploymentId is null ? "Add a job" : "Edit or end job")</h3>
     @if (!ViewData.ModelState.IsValid)
     {
         <div class="usa-alert usa-alert--error usa-alert--slim" role="alert"><div class="usa-alert__body"><p class="usa-alert__text">@string.Join(" ", ViewData.ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage))</p></div></div>
@@ -8,6 +8,8 @@
     <form class="usa-form" hx-post="/people/@Model.PersonId/employment" hx-target="#section-employment" hx-swap="outerHTML"
           hx-status:422="target:#employment-form-body swap:outerHTML">
         <partial name="_Combobox" model='("OrganizationId", "OrganizationId", "Employer", "/lookup/organizations?type=employer", Model.OrganizationId?.ToString(), Model.OrganizationLabel, (string?)"Pick an employer already on file, or enter a new one below. Self-employed workers get an organization of their own.")' />
+        <input type="hidden" name="EmploymentId" value="@Model.EmploymentId" /><input type="hidden" name="RowVersion" value="@Model.RowVersion" />
+        <input type="hidden" name="Source" value="@Model.Source" />
         <div class="usa-form-group"><label class="usa-label" for="NewOrganizationName">New employer name</label><input class="usa-input" id="NewOrganizationName" name="NewOrganizationName" value="@Model.NewOrganizationName" /></div>
         <fieldset class="usa-fieldset">
             <legend class="usa-legend">Worksite address</legend>
@@ -39,6 +41,7 @@
             <div class="usa-form-group"><label class="usa-label" for="StartDate">Start date</label><input class="usa-input" id="StartDate" name="StartDate" type="date" value="@Options.Iso(Model.StartDate)" /></div>
             <div class="usa-form-group"><label class="usa-label" for="EndDate">End date</label><input class="usa-input" id="EndDate" name="EndDate" type="date" value="@Options.Iso(Model.EndDate)" /></div>
         </div>
+        <div class="usa-checkbox"><input class="usa-checkbox__input" id="job-verify" name="Verify" type="checkbox" value="true" /><label class="usa-checkbox__label" for="job-verify">Verified today</label></div>
         <button class="usa-button" type="submit">Save job</button>
         <button class="usa-button usa-button--unstyled" type="button" data-clear-target="#employment-form">Cancel</button>
     </form>

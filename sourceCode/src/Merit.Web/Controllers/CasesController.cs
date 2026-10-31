@@ -12,7 +12,7 @@ namespace Merit.Web.Controllers;
 
 /// <summary>Case pages (htmx): forms and activity logs.</summary>
 [Route("cases")]
-public sealed class CasesController(IClock clock, CaseService cases, PersonService people, IReferenceDataProvider reference, ICurrentSession session)
+public sealed class CasesController(IClock clock, CaseService cases, PersonService people, IReferenceDataProvider reference, ICurrentSession session, QueueService queues)
     : Controller
 {
     [HttpGet("")]
@@ -108,6 +108,27 @@ public sealed class CasesController(IClock clock, CaseService cases, PersonServi
         return PartialView("_CaseBody", await PageAsync(id, "Case closed.", ct));
     }
 
+    [HttpPost("{id:guid}/tasks/{taskId:guid}")]
+    [Authorize(Policy = Permissions.TaskEdit)]
+    public async Task<IActionResult> TaskAction(Guid id, Guid taskId, string action, CancellationToken ct)
+    {
+        var task = (await cases.GetAsync(id, ct)).Tasks.FirstOrDefault(t => t.WorkTaskId == taskId) ?? throw new NotFoundException();
+        if (!task.CanEdit || action is not ("assignToMe" or "complete")) throw new PermissionDeniedException(Permissions.TaskEdit);
+        await queues.BulkAsync([taskId], action, null, null, ct);
+        Response.Announce("Task updated.");
+        return PartialView("_CaseBody", await PageAsync(id, "Task updated.", ct));
+    }
+
+    [HttpPost("{id:guid}/reopen")]
+    [Authorize(Policy = Permissions.CaseEdit)]
+    public async Task<IActionResult> Reopen(Guid id, string? reason, string rowVersion, CancellationToken ct)
+    {
+        try { await cases.ReopenAsync(id, reason, Options.FromHex(rowVersion) ?? [], ct); }
+        catch (ValidationException ex) { return this.Invalid("_CaseBody", (await PageAsync(id, null, ct)) with { Draft = this.SubmittedDraft("reopen") }, ex); }
+        Response.Announce("Case reopened; review the new follow-up task.");
+        return PartialView("_CaseBody", await PageAsync(id, "Case reopened.", ct));
+    }
+
     /// <summary>The investigation request form: the person's places and jobs as targets, and any open investigation of each.</summary>
     [HttpGet("{id:guid}/investigations/new")]
     [Authorize(Policy = Permissions.InvestigationEdit)]
@@ -177,9 +198,17 @@ public sealed class CasesController(IClock clock, CaseService cases, PersonServi
             .Concat((await cases.AssignableUsersAsync(ct)).Select(u =>
                 new SelectOption(u.AppUserId.ToString(), u.DisplayName, u.AppUserId == detail.Case.AssignedToUserId)))
             .ToList();
+        var contacts = new List<SelectOption> { new("", "None / internal work"), new(detail.Case.PersonId.ToString(), "Patient") };
+        bool hasTargets = false;
+        if (session.Has(Permissions.PersonView))
+        {
+            var person = await people.GetPageAsync(detail.Case.PersonId, ct);
+            contacts.AddRange(person.Relationships.Select(r => new SelectOption(r.OtherPersonId.ToString(), $"{r.OtherFirstName} {r.OtherLastName} ({r.RoleLabel})")));
+            hasTargets = person.Places.Any(p => p.EndDate is null || p.EndDate >= clock.Today.AddDays(-365)) || person.Employment.Count > 0;
+        }
         return new CasePageModel(detail, users, refData.Choices("closureReason", null, includeBlank: true),
             refData.Choices("activityType", "contactAttempt"), refData.Choices("activityOutcome", null, includeBlank: true),
-            session.Has(Permissions.CaseEdit) && detail.Case.CaseStatus != "closed", session.Has(Permissions.InvestigationEdit), message);
+            session.Has(Permissions.CaseEdit) && detail.Case.CaseStatus != "closed", session.Has(Permissions.InvestigationEdit), message, ContactOptions: contacts, HasInvestigationTargets: hasTargets);
     }
 }
 
@@ -190,9 +219,13 @@ public sealed class InvestigationsController(InvestigationService investigations
 {
     [HttpGet("")]
     [Authorize(Policy = Permissions.CaseView)]
-    public async Task<IActionResult> Index(bool openOnly = true, int page = 1, CancellationToken ct = default)
-        => this.PageOrPartial("Index", "_InvestigationList",
-            new InvestigationListModel(await investigations.ListAsync(openOnly, false, Math.Max(page, 1), ct), openOnly, Math.Max(page, 1)));
+    public async Task<IActionResult> Index([FromQuery] InvestigationFilterModel filter, CancellationToken ct = default)
+    {
+        var result = await investigations.ListAsync(filter.ToQuery(), ct);
+        filter.Page = result.Page;
+        var users = (await cases.AssignableUsersAsync(ct)).Select(u => new SelectOption(u.AppUserId.ToString(), u.DisplayName)).ToList();
+        return this.PageOrPartial("Index", "_InvestigationList", new InvestigationListModel(result.Rows, filter.OpenOnly, result.Page, result.Total, filter, users));
+    }
 
     [HttpGet("{id:guid}")]
     [Authorize(Policy = Permissions.CaseView)]
@@ -254,6 +287,67 @@ public sealed class InvestigationsController(InvestigationService investigations
         return PartialView("_InvestigationBody", await PageAsync(id, ct));
     }
 
+    [HttpGet("{id:guid}/samples/{sampleId:guid}/edit")]
+    [Authorize(Policy = Permissions.InvestigationEdit)]
+    public async Task<IActionResult> EditSample(Guid id, Guid sampleId, CancellationToken ct)
+    {
+        var s = (await investigations.GetAsync(id, ct)).Samples.FirstOrDefault(s => s.EnvironmentalSampleId == sampleId) ?? throw new NotFoundException();
+        return PartialView("_SampleEdit", new SampleEditModel { InvestigationId = id, SampleId = sampleId,
+            SampleType = s.SampleType, RoomOrComponent = s.RoomOrComponent, Surface = s.Surface, SampleValue = s.SampleValue,
+            Unit = s.Unit, SampleDate = s.SampleDate, Notes = s.Notes, OriginalModifiedUtc = s.ModifiedDateUtc, Units = await investigations.SampleUnitsAsync(ct) });
+    }
+
+    [HttpPost("{id:guid}/samples/{sampleId:guid}")]
+    [Authorize(Policy = Permissions.InvestigationEdit)]
+    public async Task<IActionResult> EditSample(Guid id, Guid sampleId, SampleEditModel form, CancellationToken ct)
+    {
+        form.InvestigationId = id; form.SampleId = sampleId;
+        try
+        {
+            if (!ModelState.IsValid) throw new ValidationException("sampleValue", "Check the value, date and concurrency token.");
+            await investigations.AddSampleAsync(new EnvironmentalSampleSave(sampleId, id, form.SampleType, form.RoomOrComponent,
+                form.Surface, form.SampleValue, form.Unit, form.SampleDate, form.Notes, false, form.OriginalModifiedUtc), ct);
+        }
+        catch (ValidationException ex) { form.Units = await investigations.SampleUnitsAsync(ct); return this.Invalid("_SampleEdit", form, ex); }
+        Response.Refresh("merit:closeDialog");
+        Response.Announce("Sample corrected; exceedance recalculated.");
+        return PartialView("_InvestigationBody", await PageAsync(id, ct));
+    }
+
+    [HttpPost("{id:guid}/samples/{sampleId:guid}/void")]
+    [Authorize(Policy = Permissions.InvestigationEdit)]
+    public async Task<IActionResult> VoidSample(Guid id, Guid sampleId, string? reason, DateTime originalModifiedUtc, CancellationToken ct)
+    {
+        var s = (await investigations.GetAsync(id, ct)).Samples.FirstOrDefault(s => s.EnvironmentalSampleId == sampleId) ?? throw new NotFoundException();
+        try
+        {
+            new Validator().Required("reason", reason, "Reason").MaxLength("reason", reason, 250, "Reason").ThrowIfInvalid();
+            var notes = $"{s.Notes}\nVoided: {reason}".Trim();
+            new Validator().MaxLength("reason", notes, 1000, "Notes and void reason together").ThrowIfInvalid();
+            await investigations.AddSampleAsync(new EnvironmentalSampleSave(sampleId, id, s.SampleType, s.RoomOrComponent, s.Surface,
+                s.SampleValue, s.Unit, s.SampleDate, notes, true, originalModifiedUtc), ct);
+        }
+        catch (ValidationException ex) { return this.Invalid("_InvestigationBody", await PageAsync(id, ct), ex); }
+        Response.Announce("Sample voided; the original reading remains in the audit history.");
+        return PartialView("_InvestigationBody", await PageAsync(id, ct));
+    }
+
+    [HttpPost("{id:guid}/samples/import")]
+    [Authorize(Policy = Permissions.InvestigationEdit)]
+    [RequestSizeLimit(1_100_000)]
+    public async Task<IActionResult> ImportSamples(Guid id, Guid importId, IFormFile? file, CancellationToken ct)
+    {
+        try
+        {
+            if (file is null || file.Length == 0 || file.Length > 1_000_000) throw new ValidationException("file", "Upload a CSV file up to 1 MB.");
+            using var reader = new StreamReader(file.OpenReadStream());
+            int count = await investigations.ImportSamplesAsync(id, importId, await reader.ReadToEndAsync(ct), ct);
+            Response.Announce($"{count} samples imported; repeated submissions add no duplicate readings.");
+        }
+        catch (ValidationException ex) { return this.Invalid("_InvestigationBody", (await PageAsync(id, ct)) with { ImportId = importId }, ex); }
+        return PartialView("_InvestigationBody", await PageAsync(id, ct));
+    }
+
     private async Task<InvestigationPageModel> PageAsync(Guid id, CancellationToken ct)
     {
         var detail = await investigations.GetAsync(id, ct);
@@ -264,6 +358,6 @@ public sealed class InvestigationsController(InvestigationService investigations
             .ToList();
         return new InvestigationPageModel(detail, users, Options.Fixed(detail.Investigation.InvestigationStatus, Options.InvestigationStatuses),
             refData.Choices("regulatoryAction", detail.Investigation.RegulatoryAction, includeBlank: true),
-            refData.Choices("environmentalSampleType", "dustWipe"), session.Has(Permissions.InvestigationEdit));
+            refData.Choices("environmentalSampleType", "dustWipe"), session.Has(Permissions.InvestigationEdit), SampleUnits: await investigations.SampleUnitsAsync(ct));
     }
 }

@@ -1,0 +1,23 @@
+@model SampleEditModel
+<div id="sample-edit">
+    <h2 id="dialog-title">Edit environmental sample</h2>
+    <partial name="_ErrorSummary" model='new ErrorSummaryModel(["sampleType", "sampleValue", "unit", "sampleDate", "surface"], new Dictionary<string, string> { ["sampleType"] = "se-type", ["sampleValue"] = "se-value", ["unit"] = "se-unit", ["sampleDate"] = "se-date", ["surface"] = "se-surface" })' />
+    <form class="usa-form" hx-post="/investigations/@Model.InvestigationId/samples/@Model.SampleId" hx-target="#investigation-body" hx-swap="outerHTML" hx-status:422="target:#sample-edit swap:outerHTML"
+          data-sample-units="@System.Text.Json.JsonSerializer.Serialize(Model.Units)">
+        <input type="hidden" name="OriginalModifiedUtc" value="@Model.OriginalModifiedUtc.ToString("O")" />
+        <label class="usa-label" for="se-type">Sample type</label><select class="usa-select" id="se-type" name="sampleType" data-sample-type>
+            @foreach (var type in Model.Units.Keys) { <option value="@type" selected="@(type == Model.SampleType)">@Options.Humanize(type)</option> }
+        </select>
+        <label class="usa-label" for="se-room">Room or component</label><input class="usa-input" id="se-room" name="roomOrComponent" value="@Model.RoomOrComponent" />
+        <label class="usa-label" for="se-surface">Surface</label><select class="usa-select" id="se-surface" name="surface" data-sample-surface disabled="@(Model.SampleType is not ("dustWipe" or "surfaceWipe"))">
+            @foreach (var surface in new[] { "", "floor", "windowSill", "windowTrough", Model.Surface ?? "" }.Distinct()) { <option value="@surface" selected="@(surface == (Model.Surface ?? ""))">@Options.Humanize(surface)</option> }
+        </select>
+        <label class="usa-label" for="se-value">Value</label><input class="usa-input" id="se-value" name="sampleValue" value="@Model.SampleValue" inputmode="decimal" required />
+        <label class="usa-label" for="se-unit">Unit</label><select class="usa-select" id="se-unit" name="unit" data-sample-unit>
+            @foreach (var unit in Model.Units.GetValueOrDefault(Model.SampleType, []).Append(Model.Unit).Distinct()) { <option value="@unit" selected="@(unit == Model.Unit)">@unit</option> }
+        </select>
+        <label class="usa-label" for="se-date">Sample date</label><input class="usa-input" type="date" id="se-date" name="sampleDate" value="@Options.Iso(Model.SampleDate)" required />
+        <label class="usa-label" for="se-notes">Notes</label><textarea class="usa-textarea" id="se-notes" name="notes" maxlength="1000">@Model.Notes</textarea>
+        <button class="usa-button" type="submit">Save sample correction</button>
+    </form>
+</div>

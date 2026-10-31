@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.Data.SqlClient;
 
@@ -11,6 +12,33 @@ namespace Merit.IntegrationTests;
 [Collection(MeritCollection.Name)]
 public sealed class HeldRecordsTests(MeritFixture fixture)
 {
+    [SqlFact]
+    public async Task GroupCorrectionsRespectCauseSenderBatchAndSelectedIds()
+    {
+        var a = Guid.NewGuid(); var b = Guid.NewGuid(); var rows = new List<Guid>();
+        await using var c = new SqlConnection(TestEnvironment.AdminConnectionString()); await c.OpenAsync();
+        try
+        {
+            await HoldAsync(c, a, "Group correction A", [("unknownUnit", "bad"), ("unknownUnit", "bad"), ("missingDob", null)], rows);
+            await HoldAsync(c, b, "Group correction B", [("unknownUnit", "bad")], rows);
+            await using var batchCmd = new SqlCommand("SELECT intakeBatchId FROM dbo.stagingRow WHERE stagingRowId = @id", c); batchCmd.Parameters.AddWithValue("@id", rows[0]);
+            var batch = (Guid)(await batchCmd.ExecuteScalarAsync())!;
+            var user = await fixture.SignedInAsync("supervisor"); await user.Http.GetStringAsync("/");
+            using var response = await user.NoRedirect.PostAsJsonAsync("/api/v1/held/group-correction", new { reason = "unknownUnit", reportedValue = "bad", sender = a, batch,
+                field = "unit", value = "ug/dL", selectedIds = new[] { rows[0], rows[2], rows[3] } });
+            response.EnsureSuccessStatusCode(); using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync()); Assert.Equal(1, json.RootElement.GetProperty("updated").GetInt32());
+            for (int i = 0; i < rows.Count; i++)
+            {
+                await using var cmd = new SqlCommand("SELECT JSON_VALUE(correctedJson, '$.unit') FROM dbo.stagingRow WHERE stagingRowId = @id", c); cmd.Parameters.AddWithValue("@id", rows[i]);
+                Assert.Equal(i == 0 ? "ug/dL" : DBNull.Value, await cmd.ExecuteScalarAsync());
+            }
+            using var wrongBatch = await user.NoRedirect.PostAsJsonAsync("/api/v1/held/group-correction", new { reason = "unknownUnit", reportedValue = "bad", sender = a, batch = Guid.NewGuid(), field = "unit", value = "ppm" });
+            wrongBatch.EnsureSuccessStatusCode(); using var none = JsonDocument.Parse(await wrongBatch.Content.ReadAsStringAsync()); Assert.Equal(0, none.RootElement.GetProperty("updated").GetInt32());
+            using var technical = await user.NoRedirect.PostAsJsonAsync("/api/v1/held/group-correction", new { reason = "unknownUnit", sender = a, field = "matchPersonId", value = Guid.NewGuid().ToString() });
+            Assert.Equal(HttpStatusCode.UnprocessableEntity, technical.StatusCode);
+        }
+        finally { await RemoveAsync(a, b); }
+    }
     [SqlFact]
     public async Task BatchSummaryCountsRowsOnceAndGroupsUseTheSameScope()
     {

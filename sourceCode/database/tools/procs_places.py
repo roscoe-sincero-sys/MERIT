@@ -5,6 +5,43 @@ PERSON_VISIBLE = not_found("@personId", "dbo.person", "personId", "The person")
 
 PROCS = [
     {
+        "schema": "dbo", "name": "uspCorrectPersonPlace", "kind": "write", "grants": WEB, "ticket": "T076",
+        "permission": "person.edit", "desc": "Atomically corrects one person's place and its shared year built after checking the original row version.",
+        "params": """@personId UNIQUEIDENTIFIER, @changesJson NVARCHAR (MAX), @unit NVARCHAR (30) = NULL,
+@yearBuilt INT = NULL, @addressKey NVARCHAR (300), @buildingAddressKey NVARCHAR (300) = NULL, @correctLocation BIT = 0""",
+        "key": "CONCAT (N'personId=', @personId)", "validate": PERSON_VISIBLE,
+        "body": """
+IF ISJSON (@changesJson, ARRAY) <> 1 OR (SELECT COUNT (*) FROM OPENJSON (@changesJson)) <> 1
+    THROW 50000, N'Correct one place at a time.', 1;
+DECLARE @place UNIQUEIDENTIFIER = TRY_CONVERT (UNIQUEIDENTIFIER, JSON_VALUE (@changesJson, '$[0].personLocationId')),
+        @version BINARY (8) = TRY_CONVERT (BINARY (8), JSON_VALUE (@changesJson, '$[0].rowVersion'), 1),
+        @location UNIQUEIDENTIFIER, @site UNIQUEIDENTIFIER;
+SELECT @location = locationId, @site = organizationSiteId FROM dbo.personLocation WITH (UPDLOCK, HOLDLOCK)
+ WHERE personLocationId = @place AND personId = @personId AND isDeleted = 0 AND rowVersion = @version;
+IF @location IS NULL THROW 51409, N'This place changed. Reload before editing.', 1;
+IF @correctLocation = 1
+BEGIN
+    IF @site IS NOT NULL THROW 51422, N'Edit an organization site address through its registry.', 1;
+    DECLARE @country CHAR (2), @street NVARCHAR (120), @city NVARCHAR (60), @state CHAR (2), @zip CHAR (5),
+            @region NVARCHAR (60), @postal NVARCHAR (20), @county CHAR (3), @cityOnly BIT,
+            @housing VARCHAR (20), @tenure VARCHAR (20), @newLocation UNIQUEIDENTIFIER = NEWID ();
+    SELECT @country = country, @street = addressLine1, @city = city, @state = state, @zip = zip5,
+           @region = region, @postal = postalCode, @county = countyFips, @cityOnly = isCityOnly,
+           @housing = housingType, @tenure = tenure FROM dbo.location WHERE locationId = @location AND isDeleted = 0;
+    DECLARE @saved TABLE (locationId UNIQUEIDENTIFIER, wasExisting BIT);
+    INSERT @saved EXEC dbo.uspSaveLocation @locationId = @newLocation, @country = @country, @addressLine1 = @street,
+        @unit = @unit, @city = @city, @state = @state, @zip5 = @zip, @region = @region, @postalCode = @postal,
+        @countyFips = @county, @isCityOnly = @cityOnly, @addressKey = @addressKey, @buildingAddressKey = @buildingAddressKey,
+        @yearBuilt = @yearBuilt, @housingType = @housing, @tenure = @tenure;
+    SELECT @location = locationId FROM @saved;
+    UPDATE dbo.location SET yearBuilt = @yearBuilt WHERE locationId = @location AND yearBuilt IS DISTINCT FROM @yearBuilt;
+    SET @changesJson = JSON_MODIFY (@changesJson, '$[0].locationId', CONVERT (VARCHAR (36), @location));
+END;
+EXEC dbo.uspSavePersonLocations @personId = @personId, @changesJson = @changesJson;
+SET @Comments = N'Place details corrected.';
+""",
+    },
+    {
         "schema": "dbo", "name": "uspGetLookupSelection", "kind": "read", "grants": WEB, "ticket": "#66",
         "permission": "person.view",
         "desc": "Rehydrates one selected lookup from its authorized identifier; RLS applies to every source.",
@@ -521,7 +558,8 @@ SET @Comments = N'Employment saved.';
 , @startDate         DATE = NULL
 , @endDate           DATE = NULL
 , @isConfirmed       BIT = 0
-, @isDeleted         BIT = 0""",
+, @isDeleted         BIT = 0
+, @originalModifiedUtc DATETIME2 (3) = NULL""",
         "key": "CONCAT (N'exposureSourceId=', @exposureSourceId, N', personId=', @personId)",
         "validate": PERSON_VISIBLE,
         "body": """
@@ -531,7 +569,12 @@ BEGIN
        SET exposureCaseId = @exposureCaseId, sourceType = @sourceType, sourceDescription = @sourceDescription,
            productId = @productId, locationId = @locationId, startDate = @startDate, endDate = @endDate,
            isConfirmed = @isConfirmed, isDeleted = @isDeleted
-     WHERE exposureSourceId = @exposureSourceId AND personId = @personId AND isDeleted = 0;
+     WHERE exposureSourceId = @exposureSourceId AND personId = @personId AND isDeleted = 0
+       AND (@originalModifiedUtc IS NULL OR modifiedDateUtc = @originalModifiedUtc);
+    IF @@ROWCOUNT <> 1
+    BEGIN
+        ;THROW 51409, N'The exposure source changed. Reload it before saving.', 1;
+    END;
 END
 ELSE
 BEGIN

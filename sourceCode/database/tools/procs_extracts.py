@@ -13,6 +13,21 @@ REPORTING_COUNTY = """OUTER APPLY (SELECT TOP (1) l.countyFips, l.zip5, l.state,
 
 PROCS = [
     {
+        "schema": "dbo", "name": "uspResolveExtractFindingPersons", "kind": "read", "grants": WEB, "ticket": "T084",
+        "permission": "extract.run", "desc": "Resolves finding surrogate ids to visible persons in the extract root, only with person.view. Ambiguous surrogate ids have no link.",
+        "params": "@extractRunId UNIQUEIDENTIFIER, @recordIdsJson NVARCHAR (MAX)",
+        "key": "CONCAT (N'extractRunId=', @extractRunId)",
+        "body": """
+SELECT ids.recordId, TRY_CONVERT (UNIQUEIDENTIFIER, MIN (CONVERT (CHAR (36), p.personId))) AS personId
+  FROM OPENJSON (@recordIdsJson) WITH (recordId VARCHAR (15) '$') AS ids
+  JOIN dbo.person AS p ON UPPER (LEFT (REPLACE (CONVERT (CHAR (36), p.personId), '-', ''), 15)) = ids.recordId
+  JOIN dbo.extractRun AS run ON run.extractRunId = @extractRunId AND run.rootTenantId = p.rootTenantId AND run.isDeleted = 0
+ WHERE p.isDeleted = 0 AND auth.udfHasPermission (N'person.view') = 1
+ GROUP BY ids.recordId
+HAVING COUNT (DISTINCT p.personId) = 1;
+""",
+    },
+    {
         "schema": "dbo", "name": "uspCreateExtractRun", "kind": "write", "grants": WEB, "ticket": "T084",
         "permission": "extract.run",
         "desc": "Requests a federal extract for a period with the active layout, and queues the job that builds and "

@@ -64,6 +64,10 @@ export class ApiClient {
     return this.http.put<void>(`${this.base}/held/rows/${id}/correction`, { corrections });
   }
 
+  correctHeldGroup(request: { reason: string; reportedValue: string | null; sender: string | null; batch: string | null; field: string; value: string | null; selectedIds: string[] | null }): Observable<BulkActionResponse> {
+    return this.http.post<BulkActionResponse>(`${this.base}/held/group-correction`, request);
+  }
+
   releaseHeld(request: HeldActionRequest): Observable<BulkActionResponse> {
     return this.http.post<BulkActionResponse>(`${this.base}/held/release`, request);
   }

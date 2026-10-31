@@ -53,13 +53,18 @@
                                     {
                                         <button class="usa-button usa-button--unstyled" type="button" hx-get="/people/@Model.PersonId/places/@r.PersonLocationId/primary" hx-target="#dialog-body" hx-swap="innerHTML">Set as primary</button>
                                     }
+                                    <button class="usa-button usa-button--unstyled" type="button" hx-get="/people/@Model.PersonId/places/@r.PersonLocationId/edit" hx-target="#dialog-body">Edit details</button>
                                     @if (r.VerifiedDate is null)
                                     {
                                         <button class="usa-button usa-button--unstyled" type="button" hx-post="/people/@Model.PersonId/places/@r.PersonLocationId/verify" hx-target="#section-places" hx-swap="outerHTML">Verify</button>
                                     }
                                     @if (!r.IsPrimary)
                                     {
-                                        <button class="usa-button usa-button--unstyled" type="button" hx-post="/people/@Model.PersonId/places/@r.PersonLocationId/end" hx-target="#section-places" hx-swap="outerHTML" hx-confirm="End this place as of today?">End today</button>
+                                        <form hx-post="/people/@Model.PersonId/places/@r.PersonLocationId/end" hx-target="#section-places" hx-swap="outerHTML">
+                                            <label class="usa-sr-only" for="end-@r.PersonLocationId">End date for @r.AddressLabel</label>
+                                            <input class="usa-input" type="date" id="end-@r.PersonLocationId" name="endDate" value="@Options.Iso(Clock.Today)" required />
+                                            <button class="usa-button usa-button--unstyled" type="submit">End place</button>
+                                        </form>
                                     }
                                 }
                             </td>

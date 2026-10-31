@@ -67,7 +67,11 @@ public sealed class ExtractService(IExtractData extracts, AuditService audit, IC
         var findings = string.IsNullOrWhiteSpace(run.ValidationReportJson)
             ? []
             : JsonSerializer.Deserialize<List<ExtractFinding>>(run.ValidationReportJson) ?? [];
-        return (run, findings);
+        var links = session.Has(Permissions.PersonView)
+            ? await extracts.ResolveFindingPersonsAsync(runId, findings.Where(f => f.RecordId is not null).Select(f => f.RecordId!).Distinct().ToList(), ct).ConfigureAwait(false)
+            : [];
+        var byId = links.ToDictionary(p => p.RecordId, p => p.PersonId, StringComparer.OrdinalIgnoreCase);
+        return (run, findings.Select(f => f with { PersonId = f.RecordId is not null && byId.TryGetValue(f.RecordId, out var id) ? id : null }).ToList());
     }
 
     /// <summary>Records that the file was sent; the run stays downloadable.</summary>
@@ -79,7 +83,7 @@ public sealed class ExtractService(IExtractData extracts, AuditService audit, IC
 }
 
 /// <summary>One validation finding as the builder stores it.</summary>
-public sealed record ExtractFinding(string? RecordId, string? FieldName, string? Message);
+public sealed record ExtractFinding(string? RecordId, string? FieldName, string? Message, Guid? PersonId = null);
 
 /// <summary>
 /// Builds a federal extract in the worker from the configured layout. Names, street addresses, phone numbers, SSNs and

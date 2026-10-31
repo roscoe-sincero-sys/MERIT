@@ -118,6 +118,17 @@ public sealed class IntakeService(IIntakeData intake, IWorkData work, Services.A
         await intake.SaveCorrectionAsync(stagingRowId, JsonSerializer.Serialize(corrections), ct).ConfigureAwait(false);
     }
 
+    public Task<int> CorrectGroupAsync(string reason, string? reportedValue, Guid? sender, Guid? batch, string field,
+        string? value, IReadOnlyList<Guid>? selectedIds, CancellationToken ct = default)
+    {
+        session.Require(Permissions.ResultReleaseHold);
+        new Validator().Required("reason", reason, "Cause")
+            .When(!Merit.Application.Reference.DisplayNames.StagingFields.Any(f => f.Key == field), "field", "Choose a reported field to correct.")
+            .When(selectedIds is { Count: 0 } or { Count: > 500 }, "selectedIds", "Select 1 to 500 rows, or choose the entire group.")
+            .MaxLength("value", value, 1000, "Correction").ThrowIfInvalid();
+        return intake.CorrectHeldGroupAsync(reason, reportedValue, sender, batch, field, value, selectedIds, ct);
+    }
+
     /// <summary>Releasing reruns validation and matching in the worker.</summary>
     public async Task<int> ReleaseAsync(IReadOnlyList<Guid> ids, CancellationToken ct = default)
     {

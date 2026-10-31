@@ -23,12 +23,12 @@
                 <caption class="usa-sr-only">Cases</caption>
                 <thead>
                     <tr>
-                        <th scope="col" aria-sort="@AriaSort("case")"><a class="merit-sort" href="@SortHref("case", false)">Case <span aria-hidden="true">@Arrow("case")</span></a></th>
-                        <th scope="col" aria-sort="@AriaSort("person")"><a class="merit-sort" href="@SortHref("person", false)">Person <span aria-hidden="true">@Arrow("person")</span></a></th>
+                        <th scope="col" aria-sort="@AriaSort("case")"><a class="merit-sort" href="@SortHref("case", false)" hx-get="@SortHref("case", false)" hx-target="#case-list" hx-swap="innerMorph" hx-push-url="true">Case <span aria-hidden="true">@Arrow("case")</span></a></th>
+                        <th scope="col" aria-sort="@AriaSort("person")"><a class="merit-sort" href="@SortHref("person", false)" hx-get="@SortHref("person", false)" hx-target="#case-list" hx-swap="innerMorph" hx-push-url="true">Person <span aria-hidden="true">@Arrow("person")</span></a></th>
                         <th scope="col">Analyte</th>
-                        <th scope="col" aria-sort="@AriaSort("classification")"><a class="merit-sort" href="@SortHref("classification", false)">Classification <span aria-hidden="true">@Arrow("classification")</span></a></th>
+                        <th scope="col" aria-sort="@AriaSort("classification")"><a class="merit-sort" href="@SortHref("classification", false)" hx-get="@SortHref("classification", false)" hx-target="#case-list" hx-swap="innerMorph" hx-push-url="true">Classification <span aria-hidden="true">@Arrow("classification")</span></a></th>
                         <th scope="col">Status</th>
-                        <th scope="col" aria-sort="@AriaSort("opened")"><a class="merit-sort" href="@SortHref("opened", true)">Opened <span aria-hidden="true">@Arrow("opened")</span></a></th>
+                        <th scope="col" aria-sort="@AriaSort("opened")"><a class="merit-sort" href="@SortHref("opened", true)" hx-get="@SortHref("opened", true)" hx-target="#case-list" hx-swap="innerMorph" hx-push-url="true">Opened <span aria-hidden="true">@Arrow("opened")</span></a></th>
                         <th scope="col">Assigned</th>
                         <th scope="col">Owner</th>
                     </tr>

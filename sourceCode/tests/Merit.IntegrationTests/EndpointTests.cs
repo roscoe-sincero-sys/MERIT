@@ -479,5 +479,7 @@ public sealed partial class EndpointTests(MeritFixture fixture, ITestOutputHelpe
         => pattern.EndsWith("/add", StringComparison.Ordinal) || pattern.Contains("/primary", StringComparison.Ordinal)
            || pattern.EndsWith("/investigations/new", StringComparison.Ordinal) || pattern == "/results/fields"
            || pattern.Contains("{episodeId", StringComparison.Ordinal)
+           || pattern.EndsWith("/edit", StringComparison.Ordinal) && (pattern.Contains("/places/", StringComparison.Ordinal)
+               || pattern.Contains("/samples/", StringComparison.Ordinal) || pattern.Contains("/employment/", StringComparison.Ordinal) || pattern.Contains("/sources/", StringComparison.Ordinal))
            || pattern.EndsWith(".csv", StringComparison.Ordinal);   // file downloads, not pages
 }

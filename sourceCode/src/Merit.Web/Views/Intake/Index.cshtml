@@ -6,17 +6,17 @@
 @if (Model.Message is not null && Model.DuplicateOf is Guid earlier)
 {
     <div class="usa-alert usa-alert--warning usa-alert--slim" role="alert"><div class="usa-alert__body"><p class="usa-alert__text">@Model.Message
-        <a class="usa-link" href="#batch-@earlier">Show that batch</a>. If the laboratory sent it again on purpose, choose the file again and tick
+        <a class="usa-link" href="@($"#batch-{earlier}")">Show that batch</a>. If the laboratory sent it again on purpose, choose the file again and tick
         <strong>This is a genuine re-send</strong>.</p></div></div>
 }
 else if (Model.Message is not null)
 {
-    <div class="usa-alert usa-alert--info usa-alert--slim" role="status"><div class="usa-alert__body"><p class="usa-alert__text">@Model.Message</p></div></div>
+    <div class="usa-alert usa-alert--@(Model.MessageKind) usa-alert--slim" role="@(Model.MessageKind is "error" or "warning" ? "alert" : "status")"><div class="usa-alert__body"><p class="usa-alert__text">@Model.Message</p></div></div>
 }
 <section class="merit-section" aria-labelledby="upload-heading">
     <h2 id="upload-heading">Upload a file</h2>
     <p class="merit-meta">The file is stored unchanged and processed in the background with the sender's intake profile: parsed, validated, normalized, matched, then loaded or held with named reasons. A sample file for the demo laboratory is in sourceCode/samples.</p>
-    <form class="usa-form" method="post" action="/intake/upload" enctype="multipart/form-data">
+    <form class="usa-form" method="post" action="/intake/upload" enctype="multipart/form-data" data-upload-busy>
         @Html.AntiForgeryToken()
         <div class="usa-form-group"><label class="usa-label" for="intakeProfileId">Sender and intake profile</label>
             <select class="usa-select" id="intakeProfileId" name="intakeProfileId">

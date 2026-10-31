@@ -6,6 +6,28 @@ INV_VISIBLE = not_found("@investigationId", "dbo.investigation", "investigationI
 
 PROCS = [
     {
+        "schema": "dbo", "name": "uspReopenCase", "kind": "write", "grants": WEB, "ticket": "T081",
+        "permission": "case.edit", "desc": "Reopens a closed case with a reason and a review task, retaining the closure activity history.",
+        "params": "@exposureCaseId UNIQUEIDENTIFIER, @reason NVARCHAR (2000), @rowVersion BINARY (8)",
+        "key": "CONCAT (N'exposureCaseId=', @exposureCaseId)", "validate": CASE_VISIBLE,
+        "body": f"""
+DECLARE @person UNIQUEIDENTIFIER, @analyte UNIQUEIDENTIFIER, @root UNIQUEIDENTIFIER, @owner UNIQUEIDENTIFIER;
+SELECT @person = personId, @analyte = analyteId, @root = rootTenantId, @owner = owningTenantId FROM dbo.exposureCase WITH (UPDLOCK, HOLDLOCK) WHERE exposureCaseId = @exposureCaseId;
+IF EXISTS (SELECT 1 FROM dbo.exposureCase WITH (UPDLOCK, HOLDLOCK) WHERE personId = @person AND analyteId = @analyte AND caseStatus <> 'closed' AND isDeleted = 0)
+BEGIN
+    ;THROW 51422, N'An open case already exists for this person and analyte.', 1;
+END;
+UPDATE dbo.exposureCase SET caseStatus = 'open', closedDate = NULL, closureReason = NULL
+ WHERE exposureCaseId = @exposureCaseId AND caseStatus = 'closed' AND rowVersion = @rowVersion AND isDeleted = 0;
+{CONCURRENCY}
+INSERT dbo.caseActivity (caseActivityId, rootTenantId, owningTenantId, exposureCaseId, activityType, activityDate, workerUserId, note)
+VALUES ({NEWID}, @root, @owner, @exposureCaseId, 'statusChange', auth.udfSessionToday (), auth.udfSessionUserId (), CONCAT (N'Reopened: ', @reason));
+INSERT dbo.workTask (workTaskId, rootTenantId, owningTenantId, queueCode, title, exposureCaseId, personId)
+VALUES ({NEWID}, @root, @owner, 'caseFollowUp', N'Review reopened case', @exposureCaseId, @person);
+SET @Comments = N'Case reopened with review task.';
+""",
+    },
+    {
         "schema": "dbo", "name": "uspOpenExposureCase", "kind": "write", "grants": BOTH, "ticket": "T045",
         "permission": "case.open",
         "desc": "Opens a case for a person and analyte from a qualifying result. The owning tenant comes from the case "
@@ -172,7 +194,8 @@ SELECT i.investigationId, i.investigationNumber, i.investigationType, i.investig
  WHERE ic.exposureCaseId = @exposureCaseId AND ic.isDeleted = 0
  ORDER BY i.requestedDate DESC;
 
-SELECT w.workTaskId, w.queueCode, w.title, w.detail, w.dueDate, w.isUrgent, w.taskStatus, u.displayName AS assignedToName
+SELECT w.workTaskId, w.queueCode, w.title, w.detail, w.dueDate, w.isUrgent, w.taskStatus, u.displayName AS assignedToName,
+       CAST (CASE WHEN auth.udfHasPermission (N'task.edit') = 1 AND EXISTS (SELECT 1 FROM auth.tvfTenantWritePredicate (w.rootTenantId, w.owningTenantId, w.isDeleted)) THEN 1 ELSE 0 END AS BIT) AS canEdit
   FROM dbo.workTask AS w
   LEFT JOIN auth.appUser AS u ON u.appUserId = w.assignedToUserId
  WHERE w.exposureCaseId = @exposureCaseId AND w.isDeleted = 0 AND w.taskStatus = 'open'
@@ -656,7 +679,7 @@ SELECT c.exposureCaseId, c.caseNumber, c.personId, p.lastName, p.firstName, a.co
  WHERE ic.investigationId = @investigationId AND ic.isDeleted = 0;
 
 SELECT es.environmentalSampleId, es.sampleType, es.roomOrComponent, es.surface, es.sampleValue, es.unit, es.sampleDate,
-       es.exceedsStandard, st.standardValue, st.unit AS standardUnit, st.authority, es.notes
+       es.exceedsStandard, st.standardValue, st.unit AS standardUnit, st.authority, es.notes, es.modifiedDateUtc
   FROM dbo.environmentalSample AS es
   LEFT JOIN config.environmentalStandard AS st ON st.environmentalStandardId = es.environmentalStandardId
  WHERE es.investigationId = @investigationId AND es.isDeleted = 0
@@ -705,7 +728,8 @@ SET @Comments = N'Investigation saved.';
 , @unit                  NVARCHAR (20)
 , @sampleDate            DATE
 , @notes                 NVARCHAR (1000) = NULL
-, @isDeleted             BIT = 0""",
+, @isDeleted             BIT = 0
+, @originalModifiedUtc DATETIME2 (3) = NULL""",
         "key": "CONCAT (N'environmentalSampleId=', @environmentalSampleId, N', investigationId=', @investigationId)",
         "validate": INV_VISIBLE,
         "notes": "Returns exceedsStandard (NULL when no standard applies).",
@@ -721,8 +745,13 @@ SELECT TOP (1) @standardId = environmentalStandardId, @standardValue = standardV
 
 IF EXISTS (SELECT 1 FROM dbo.environmentalSample WHERE environmentalSampleId = @environmentalSampleId)
 BEGIN
-    UPDATE dbo.environmentalSample SET isDeleted = @isDeleted
-     WHERE environmentalSampleId = @environmentalSampleId AND investigationId = @investigationId AND isDeleted = 0;
+    UPDATE dbo.environmentalSample SET isDeleted = @isDeleted, sampleType = @sampleType,
+        roomOrComponent = @roomOrComponent, surface = @surface, sampleValue = @sampleValue, unit = @unit,
+        sampleDate = @sampleDate, environmentalStandardId = @standardId, notes = @notes,
+        exceedsStandard = CASE WHEN @standardId IS NULL THEN NULL WHEN @sampleValue >= @standardValue THEN 1 ELSE 0 END
+     WHERE environmentalSampleId = @environmentalSampleId AND investigationId = @investigationId AND isDeleted = 0
+       AND modifiedDateUtc = @originalModifiedUtc;
+    IF @@ROWCOUNT <> 1 THROW 51409, N'This reading changed. Reload before editing.', 1;
 END
 ELSE
 BEGIN
@@ -742,13 +771,50 @@ SET @Comments = N'Sample saved.';
 """,
     },
     {
+        "schema": "dbo", "name": "uspImportEnvironmentalSamples", "kind": "write", "grants": WEB, "ticket": "T081",
+        "permission": "investigation.edit",
+        "desc": "Atomically imports validated CSV readings. Stable reading ids make repeated submissions idempotent.",
+        "params": "@investigationId UNIQUEIDENTIFIER, @samplesJson NVARCHAR (MAX)",
+        "key": "CONCAT (N'investigationId=', @investigationId)",
+        "validate": INV_VISIBLE,
+        "body": """
+IF ISJSON (@samplesJson, ARRAY) <> 1 OR (SELECT COUNT (*) FROM OPENJSON (@samplesJson)) NOT BETWEEN 1 AND 500
+    THROW 50000, N'Expected 1 to 500 readings.', 1;
+INSERT dbo.environmentalSample (environmentalSampleId, rootTenantId, owningTenantId, investigationId, sampleType,
+    roomOrComponent, surface, sampleValue, unit, sampleDate, environmentalStandardId, exceedsStandard, notes)
+SELECT r.id, i.rootTenantId, i.owningTenantId, i.investigationId, r.sampleType,
+    r.roomOrComponent, r.surface, r.sampleValue, r.unit, r.sampleDate, st.environmentalStandardId,
+    CASE WHEN st.environmentalStandardId IS NULL THEN NULL WHEN r.sampleValue >= st.standardValue THEN 1 ELSE 0 END, r.notes
+FROM dbo.investigation AS i
+CROSS APPLY OPENJSON (@samplesJson) WITH (
+    id UNIQUEIDENTIFIER '$.environmentalSampleId', sampleType VARCHAR (30), roomOrComponent NVARCHAR (120),
+    surface NVARCHAR (60), sampleValue DECIMAL (18, 6), unit NVARCHAR (20), sampleDate DATE, notes NVARCHAR (1000)) AS r
+OUTER APPLY (SELECT TOP (1) s.environmentalStandardId, s.standardValue FROM config.environmentalStandard AS s
+    WHERE s.isDeleted = 0 AND s.sampleType = r.sampleType AND s.unit = r.unit
+      AND (s.surface IS NULL OR s.surface = r.surface) AND s.effectiveFrom <= r.sampleDate
+      AND (s.effectiveTo IS NULL OR s.effectiveTo >= r.sampleDate)
+    ORDER BY CASE WHEN s.surface = r.surface THEN 0 ELSE 1 END, s.effectiveFrom DESC) AS st
+WHERE i.investigationId = @investigationId AND NOT EXISTS (
+    SELECT 1 FROM dbo.environmentalSample WITH (UPDLOCK, HOLDLOCK) WHERE environmentalSampleId = r.id);
+DECLARE @count INT = @@ROWCOUNT;
+SELECT @count AS importedCount;
+SET @Comments = CONCAT (@count, N' readings imported.');
+""",
+    },
+    {
         "schema": "dbo", "name": "uspListInvestigations", "kind": "read", "grants": WEB, "ticket": "T081",
         "permission": "case.view",
         "desc": "One page of investigations visible to the caller, optionally only open ones or only theirs.",
         "params": """@openOnly     BIT = 1
 , @assignedToMe BIT = 0
 , @pageNumber   INT = 1
-, @pageSize     INT = 25""",
+, @pageSize     INT = 25
+, @searchText NVARCHAR (200) = NULL
+, @assignedFilter VARCHAR (40) = NULL
+, @statusFilter VARCHAR (20) = NULL
+, @typeFilter VARCHAR (30) = NULL
+, @sortBy VARCHAR (20) = 'requested'
+, @sortDescending BIT = 1""",
         "key": "CONCAT (N'openOnly=', @openOnly, N', pageNumber=', @pageNumber)",
         "validate": """IF @pageNumber < 1 OR @pageSize NOT BETWEEN 1 AND 500
 BEGIN
@@ -768,7 +834,19 @@ SELECT i.investigationId, i.investigationNumber, i.investigationType, i.investig
  WHERE i.isDeleted = 0
    AND (@openOnly = 0 OR i.investigationStatus NOT IN ('cleared', 'closed'))
    AND (@assignedToMe = 0 OR i.assignedToUserId = @me)
- ORDER BY i.requestedDate DESC, i.investigationId
+   AND (NULLIF (@searchText, N'') IS NULL OR i.investigationNumber LIKE N'%' + @searchText + N'%'
+        OR l.addressLine1 LIKE N'%' + @searchText + N'%' OR o.organizationName LIKE N'%' + @searchText + N'%')
+   AND (NULLIF (@statusFilter, '') IS NULL OR i.investigationStatus = @statusFilter)
+   AND (NULLIF (@typeFilter, '') IS NULL OR i.investigationType = @typeFilter)
+   AND (NULLIF (@assignedFilter, '') IS NULL OR (@assignedFilter = 'me' AND i.assignedToUserId = @me)
+        OR (@assignedFilter = 'unassigned' AND i.assignedToUserId IS NULL)
+        OR i.assignedToUserId = TRY_CAST (@assignedFilter AS UNIQUEIDENTIFIER))
+ ORDER BY CASE WHEN @sortBy = 'number' AND @sortDescending = 0 THEN i.investigationNumber END ASC,
+          CASE WHEN @sortBy = 'number' AND @sortDescending = 1 THEN i.investigationNumber END DESC,
+          CASE WHEN @sortBy = 'status' AND @sortDescending = 0 THEN i.investigationStatus END ASC,
+          CASE WHEN @sortBy = 'status' AND @sortDescending = 1 THEN i.investigationStatus END DESC,
+          CASE WHEN @sortBy = 'requested' AND @sortDescending = 0 THEN i.requestedDate END ASC,
+          CASE WHEN @sortBy = 'requested' AND @sortDescending = 1 THEN i.requestedDate END DESC, i.investigationId
 OFFSET (@pageNumber - 1) * @pageSize ROWS
  FETCH NEXT @pageSize ROWS ONLY;
 """,

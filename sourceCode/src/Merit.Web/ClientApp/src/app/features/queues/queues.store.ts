@@ -11,6 +11,7 @@ export class QueuesStore {
   readonly status = signal('open');
   readonly mine = signal(false);
   readonly urgentOnly = signal(false);
+  readonly overdueOnly = signal(false);
   readonly sort = signal<GridSort>({ key: 'dueDate', descending: false });
   readonly page = signal(1);
   readonly pageSize = signal(50);
@@ -20,7 +21,7 @@ export class QueuesStore {
   readonly message = signal<string | null>(null);
   readonly error = signal<string | null>(null);
 
-  readonly visibleQueues = computed(() => this.queues().filter(q => q.queueCode !== 'heldRecords' && q.openCount > 0));
+  readonly visibleQueues = computed(() => this.queues().filter(q => q.queueCode !== 'heldRecords' && (q.openCount > 0 || this.status() !== 'open' || q.queueCode === this.queue())));
   readonly currentQueueName = computed(() => this.queues().find(q => q.queueCode === this.queue())?.queueName ?? 'All queues');
 
   query(): Record<string, string | number | boolean | null> {
@@ -29,6 +30,7 @@ export class QueuesStore {
       status: this.status(),
       mine: this.mine(),
       urgent: this.urgentOnly(),
+      overdue: this.overdueOnly(),
       sort: this.sort().key,
       desc: this.sort().descending,
       page: this.page(),

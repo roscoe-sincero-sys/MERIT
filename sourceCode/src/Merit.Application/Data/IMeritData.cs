@@ -80,7 +80,7 @@ public interface IConfigData
 
 public interface IPersonData
 {
-    Task<SearchResults> SearchAsync(string searchText, string? nameKey1, string? nameKey2, DateOnly? dob, string? addressKey, int maxRows, CancellationToken ct = default);
+    Task<SearchResults> SearchAsync(string searchText, string? nameKey1, string? nameKey2, DateOnly? dob, string? addressKey, int maxRows, CancellationToken ct = default, string? namePairsJson = null);
 
     Task<PersonHeader> GetPersonAsync(Guid personId, CancellationToken ct = default);
 
@@ -117,6 +117,8 @@ public interface IPersonData
 
 public interface IPlaceData
 {
+    Task CorrectPersonPlaceAsync(Guid personId, string changesJson, string? unit, int? yearBuilt, string addressKey,
+        string? buildingAddressKey, bool correctLocation, CancellationToken ct = default);
     Task<IReadOnlyList<LookupSelectionRow>> GetLookupSelectionsAsync(IReadOnlyList<LookupSelectionRequest> requests, CancellationToken ct = default);
 
     Task<IReadOnlyList<LocationCandidateRow>> FindLocationsAsync(string addressKeyPrefix, string? zip5, int maxRows, CancellationToken ct = default);
@@ -175,6 +177,8 @@ public interface IResultData
 
 public interface ICaseData
 {
+    Task ReopenCaseAsync(Guid exposureCaseId, string reason, byte[] rowVersion, CancellationToken ct = default);
+
     Task<OpenCaseResult> OpenCaseAsync(Guid exposureCaseId, Guid personId, Guid analyteId, string population, string classification, Guid qualifyingLabResultId, string workflowTemplate, DateOnly openedDate, CancellationToken ct = default);
 
     Task<AttachResultOutcome> AttachResultAsync(Guid exposureCaseId, Guid labResultId, string computedClassification, bool isHighest, CancellationToken ct = default);
@@ -207,7 +211,9 @@ public interface ICaseData
 
     Task<bool?> SaveEnvironmentalSampleAsync(EnvironmentalSampleSave sample, CancellationToken ct = default);
 
-    Task<IReadOnlyList<InvestigationListRow>> ListInvestigationsAsync(bool openOnly, bool assignedToMe, int pageNumber, int pageSize, CancellationToken ct = default);
+    Task<int> ImportEnvironmentalSamplesAsync(Guid investigationId, IReadOnlyList<EnvironmentalSampleSave> samples, CancellationToken ct = default);
+
+    Task<IReadOnlyList<InvestigationListRow>> ListInvestigationsAsync(bool openOnly, bool assignedToMe, int pageNumber, int pageSize, CancellationToken ct = default, string? searchText = null, string? assignedFilter = null, string? statusFilter = null, string? typeFilter = null, string sortBy = "requested", bool sortDescending = true);
 }
 
 public interface IWorkData
@@ -245,6 +251,8 @@ public interface IWorkData
 
 public interface IIntakeData
 {
+    Task<int> CorrectHeldGroupAsync(string reason, string? reportedValue, Guid? sender, Guid? batch, string field,
+        string? value, IReadOnlyList<Guid>? selectedIds, CancellationToken ct = default);
     Task<IReadOnlyList<IntakeProfileListRow>> ListProfilesAsync(CancellationToken ct = default);
 
     Task<IntakeProfileRow?> GetProfileAsync(Guid intakeProfileId, CancellationToken ct = default);
@@ -288,8 +296,12 @@ public interface IIntakeData
     Task<int> RejectRowsAsync(IReadOnlyList<Guid> stagingRowIds, string reason, CancellationToken ct = default);
 }
 
+public sealed record ExtractFindingPerson(string RecordId, Guid PersonId);
+
 public interface IExtractData
 {
+    Task<IReadOnlyList<ExtractFindingPerson>> ResolveFindingPersonsAsync(Guid extractRunId, IReadOnlyList<string> recordIds, CancellationToken ct = default);
+
     Task CreateRunAsync(Guid extractRunId, string extractType, DateOnly periodStart, DateOnly periodEnd, Guid jobId, CancellationToken ct = default);
 
     Task<IReadOnlyList<ExtractRunRow>> ListRunsAsync(int maxRows, CancellationToken ct = default);

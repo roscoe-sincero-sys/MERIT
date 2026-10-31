@@ -58,6 +58,7 @@ CREATE OR ALTER PROCEDURE dbo.uspSaveExposureSource
       , @endDate           DATE = NULL
       , @isConfirmed       BIT = 0
       , @isDeleted         BIT = 0
+      , @originalModifiedUtc DATETIME2 (3) = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -115,7 +116,12 @@ BEGIN
                SET exposureCaseId = @exposureCaseId, sourceType = @sourceType, sourceDescription = @sourceDescription,
                    productId = @productId, locationId = @locationId, startDate = @startDate, endDate = @endDate,
                    isConfirmed = @isConfirmed, isDeleted = @isDeleted
-             WHERE exposureSourceId = @exposureSourceId AND personId = @personId AND isDeleted = 0;
+             WHERE exposureSourceId = @exposureSourceId AND personId = @personId AND isDeleted = 0
+               AND (@originalModifiedUtc IS NULL OR modifiedDateUtc = @originalModifiedUtc);
+            IF @@ROWCOUNT <> 1
+            BEGIN
+                ;THROW 51409, N'The exposure source changed. Reload it before saving.', 1;
+            END;
         END
         ELSE
         BEGIN

@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, ElementRef, inject, Injec
 import { ApiClient, problemMessage } from '../../api/api-client';
 import { Agreement, MatchCandidateDto, MatchDecision, MatchQueueItemDto, MatchReviewDto } from '../../api/contracts';
 import { LatestRequest } from '../../shared/latest-request';
+import { Display } from '../../shared/display.service';
 import { PagerComponent } from '../../shared/pager.component';
 
 /** Match review state: the queue, the record under review, the chosen candidate. Signals only; no HTTP, no DOM. */
@@ -143,14 +144,14 @@ export class MatchComparisonComponent {
       @if (candidate().places.length === 0) { <p class="merit-empty">No places recorded.</p> }
       <ul class="usa-list">
         @for (p of candidate().places; track $index) {
-          <li>{{ p.isPrimary ? 'Primary ' : '' }}{{ p.role }}: {{ p.label }} ({{ p.startDate }} to {{ p.endDate ?? 'now' }})</li>
+          <li>{{ p.isPrimary ? 'Primary ' : '' }}{{ display.of(p.role) }}: {{ p.label }} ({{ display.date(p.startDate) }} to {{ p.endDate ? display.date(p.endDate) : 'now' }})</li>
         }
       </ul>
       <h3>Recent results</h3>
       @if (candidate().results.length === 0) { <p class="merit-empty">No results.</p> }
       <ul class="usa-list">
         @for (r of candidate().results; track $index) {
-          <li>{{ r.collectedDate }}: {{ r.analyteCode }} {{ r.value }}@if (r.sampleType) { ({{ r.sampleType }})}@if (r.labName) {, {{ r.labName }}}</li>
+          <li>{{ display.date(r.collectedDate) }}: {{ display.of(r.analyteCode) }} {{ r.value }}@if (r.sampleType) { ({{ display.of(r.sampleType) }})}@if (r.labName) {, {{ r.labName }}}</li>
         }
       </ul>
       <p><a class="usa-link" [href]="'/people/' + candidate().personId" target="_blank" rel="noopener">Open the person page in a new tab</a></p>
@@ -159,6 +160,7 @@ export class MatchComparisonComponent {
   styles: `.history { border-left: 4px solid #005ea2; padding-left: 1rem; margin-top: 1rem; } h3 { font-size: 1rem; margin: .75rem 0 .25rem; }`,
 })
 export class CandidateHistoryComponent {
+  protected readonly display = inject(Display);
   readonly candidate = input.required<MatchCandidateDto>();
 }
 
@@ -209,6 +211,9 @@ export class CandidateHistoryComponent {
           <p>{{ r.reasonMessage }}</p>
           @if (r.isEscalated) { <p class="usa-alert usa-alert--info usa-alert--slim usa-alert__text">Sent to a supervisor: {{ r.escalationNote }}</p> }
 
+          <dl class="clinical-report" aria-label="Incoming clinical report">
+            @for (f of r.incoming; track f.key) { @if (['collectedDate', 'loinc', 'value', 'unit', 'sampleType', 'testMethod', 'guardianName', 'accessionNumber'].includes(f.key)) { <dt>{{ f.label }}</dt><dd>{{ ['sampleType', 'testMethod'].includes(f.key) ? display.of(f.value) : f.value }}</dd> } }
+          </dl>
           @if (r.candidates.length > 0) {
             <merit-match-comparison [review]="r" [selected]="store.selected()" [disabled]="store.busy()" (pick)="choose($event)" />
           } @else {
@@ -226,10 +231,9 @@ export class CandidateHistoryComponent {
                 Same person as {{ c.personName }} (S)</button>
               <button class="usa-button usa-button--secondary" type="button" aria-keyshortcuts="D" [disabled]="!store.canDecide()" (click)="decide('different', note.value)">
                 Different person (D)</button>
-            } @else {
-              <button class="usa-button" type="button" aria-keyshortcuts="C" [disabled]="!store.canDecide()" (click)="decide('newPerson', note.value)">
-                Create as a new person (C)</button>
             }
+              <button class="usa-button usa-button--outline" type="button" aria-keyshortcuts="C" [disabled]="!store.canDecide()" (click)="decide('newPerson', note.value)">
+                Create as a new person (C)</button>
             <button class="usa-button usa-button--outline" type="button" aria-keyshortcuts="N" [disabled]="!store.canDecide()" (click)="decide('notSure', note.value)">
               Not sure (N)</button>
             @if (store.candidate()) {
@@ -254,13 +258,14 @@ export class CandidateHistoryComponent {
     .badge { margin-left: .35rem; padding: 0 .35rem; border-radius: 1rem; background: #dfe1e2; font-size: .75rem; }
     .badge.urgent { background: #b50909; color: #fff; }
     .actions { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; margin-top: 1rem; }
-    .incoming { display: grid; grid-template-columns: max-content 1fr; gap: .25rem 1rem; }
+    .incoming, .clinical-report { display: grid; grid-template-columns: max-content 1fr; gap: .25rem 1rem; }
     .incoming dt { font-weight: 700; }
     @media (max-width: 64em) { .layout { grid-template-columns: minmax(0, 1fr); } }
   `,
 })
 export class MatchReviewPage implements OnInit {
   protected readonly store = inject(MatchReviewStore);
+  protected readonly display = inject(Display);
   private readonly api = inject(ApiClient);
   private readonly heading = viewChild<ElementRef<HTMLElement>>('heading');
   private readonly queueLoad = new LatestRequest();
@@ -307,7 +312,7 @@ export class MatchReviewPage implements OnInit {
     this.store.reviewLoading.set(false);
     this.store.busy.set(true);
     this.store.error.set(null);
-    this.api.matchDecision(rowId, { decision, personId: candidate?.personId ?? null, note: note.trim() || null }).subscribe({
+    this.api.matchDecision(rowId, { decision, personId: decision === 'same' || decision === 'different' ? candidate?.personId ?? null : null, note: note.trim() || null }).subscribe({
       next: res => {
         this.store.busy.set(false);
         this.heading()?.nativeElement.focus();
@@ -340,7 +345,7 @@ export class MatchReviewPage implements OnInit {
         case 's': this.decide('same', note); return true;
         case 'd': this.decide('different', note); return true;
         case 'n': this.decide('notSure', note); return true;
-        case 'c': if (!this.store.candidate()) { this.decide('newPerson', note); } return true;
+        case 'c': this.decide('newPerson', note); return true;
         case 'h': if (!this.store.busy()) { this.store.showHistory.update(v => !v); } return true;
         case 'j': this.step(1); return true;
         case 'k': this.step(-1); return true;

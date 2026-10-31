@@ -77,8 +77,8 @@ BEGIN
         -- =========================================================================================
 
         SELECT sj.subJurisdictionId, sj.countyFips, sj.subJurisdictionName, sj.jurisdictionType,
-               STRING_AGG (t.tenantName, N', ') AS servedBy,
-               STRING_AGG (CAST (t.tenantId AS NVARCHAR (36)), N',') AS servedByTenantIds
+               STRING_AGG (CAST (t.tenantName AS NVARCHAR (MAX)), N', ') AS servedBy,
+               STRING_AGG (CAST (t.tenantId AS NVARCHAR (MAX)), N',') AS servedByTenantIds
           FROM config.subJurisdiction AS sj
           LEFT JOIN auth.tenantJurisdiction AS tj ON tj.subJurisdictionId = sj.subJurisdictionId AND tj.isDeleted = 0
           LEFT JOIN auth.tenant AS t ON t.tenantId = tj.tenantId

@@ -42,6 +42,9 @@
         &middot; County: <strong>@(p.CurrentCountyName ?? "no current primary residence")</strong>
         @if (p.IsContactOnly) { <span class="merit-badge">Contact only</span> }
     </p>
+    <p>Preferred language: <strong>@Options.Language(p.PreferredLanguage)</strong>
+        @foreach (var contact in h.ContactMethods.Where(c => c.IsPreferred)) { <span> &middot; Preferred @Options.Humanize(contact.ContactType): <strong>@contact.ContactValue</strong></span> }
+    </p>
     @if (h.OpenCases.Count > 0)
     {
         <p>
@@ -52,7 +55,7 @@
             }
         </p>
     }
-    <details>
+    <details id="person-contact-details" data-preserve-open>
         <summary>Aliases, race and ethnicity, contact methods@(Model.CanViewIdentifiers ? " and identifiers" : "")</summary>
         <div class="merit-grid-2">
             <div>

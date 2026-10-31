@@ -113,7 +113,7 @@ BEGIN
          WHERE ic.investigationId = @investigationId AND ic.isDeleted = 0;
 
         SELECT es.environmentalSampleId, es.sampleType, es.roomOrComponent, es.surface, es.sampleValue, es.unit, es.sampleDate,
-               es.exceedsStandard, st.standardValue, st.unit AS standardUnit, st.authority, es.notes
+               es.exceedsStandard, st.standardValue, st.unit AS standardUnit, st.authority, es.notes, es.modifiedDateUtc
           FROM dbo.environmentalSample AS es
           LEFT JOIN config.environmentalStandard AS st ON st.environmentalStandardId = es.environmentalStandardId
          WHERE es.investigationId = @investigationId AND es.isDeleted = 0
