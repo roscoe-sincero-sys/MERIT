@@ -96,7 +96,7 @@ public sealed class RecordCorrectionTests(MeritFixture fixture)
                 ["SourceType"] = "consumerProduct", ["Description"] = "Corrected note", ["ProductName"] = "Correction test", ["ProductBrand"] = "Example", ["ProductCountry"] = "US",
                 ["StartDate"] = "2026-01-01", ["EndDate"] = "2025-12-01", ["IsConfirmed"] = "true" };
             using var invalid = await client.NoRedirect.PostAsync($"/people/{person}/sources", new FormUrlEncodedContent(fields)); Assert.Equal(HttpStatusCode.UnprocessableEntity, invalid.StatusCode);
-            var html = await invalid.Content.ReadAsStringAsync(); Assert.Contains("Corrected note", html); Assert.Matches("id=\"IsConfirmed\"[^>]*checked", html);
+            var html = await invalid.Content.ReadAsStringAsync(); Assert.Contains("Corrected note", html); Assert.Matches("id=\"source-IsConfirmed\"[^>]*checked", html);
             fields["EndDate"] = "2026-02-01";
             using var saved = await client.NoRedirect.PostAsync($"/people/{person}/sources", new FormUrlEncodedContent(fields)); Assert.Equal(HttpStatusCode.OK, saved.StatusCode);
             Assert.Equal(product, await Sql(c, "SELECT productId FROM dbo.exposureSource WHERE exposureSourceId = @id AND isConfirmed = 1 AND endDate = '2026-02-01'", ("@id", id)));

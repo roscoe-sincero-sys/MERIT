@@ -7,41 +7,41 @@
     }
     <form class="usa-form" hx-post="/people/@Model.PersonId/employment" hx-target="#section-employment" hx-swap="outerHTML"
           hx-status:422="target:#employment-form-body swap:outerHTML">
-        <partial name="_Combobox" model='("OrganizationId", "OrganizationId", "Employer", "/lookup/organizations?type=employer", Model.OrganizationId?.ToString(), Model.OrganizationLabel, (string?)"Pick an employer already on file, or enter a new one below. Self-employed workers get an organization of their own.")' />
+        <partial name="_Combobox" model='("employment-OrganizationId", "OrganizationId", "Employer", "/lookup/organizations?type=employer", Model.OrganizationId?.ToString(), Model.OrganizationLabel, (string?)"Pick an employer already on file, or enter a new one below. Self-employed workers get an organization of their own.")' />
         <input type="hidden" name="EmploymentId" value="@Model.EmploymentId" /><input type="hidden" name="RowVersion" value="@Model.RowVersion" />
         <input type="hidden" name="Source" value="@Model.Source" />
-        <div class="usa-form-group"><label class="usa-label" for="NewOrganizationName">New employer name</label><input class="usa-input" id="NewOrganizationName" name="NewOrganizationName" value="@Model.NewOrganizationName" /></div>
+        <div class="usa-form-group"><label class="usa-label" for="employment-NewOrganizationName">New employer name</label><input class="usa-input" id="employment-NewOrganizationName" name="NewOrganizationName" value="@Model.NewOrganizationName" /></div>
         <fieldset class="usa-fieldset">
             <legend class="usa-legend">Worksite address</legend>
             <div class="merit-form-row">
-                <div class="usa-form-group"><label class="usa-label" for="WorksiteAddressLine1">Street</label><input class="usa-input" id="WorksiteAddressLine1" name="WorksiteAddressLine1" value="@Model.WorksiteAddressLine1" /></div>
-                <div class="usa-form-group"><label class="usa-label" for="WorksiteCity">City</label><input class="usa-input" id="WorksiteCity" name="WorksiteCity" value="@Model.WorksiteCity" /></div>
-                <div class="usa-form-group"><label class="usa-label" for="WorksiteState">State</label><input class="usa-input usa-input--small" id="WorksiteState" name="WorksiteState" value="@Model.WorksiteState" maxlength="2" /></div>
-                <div class="usa-form-group"><label class="usa-label" for="WorksiteZip5">ZIP</label><input class="usa-input usa-input--small" id="WorksiteZip5" name="WorksiteZip5" value="@Model.WorksiteZip5" maxlength="5" /></div>
+                <div class="usa-form-group"><label class="usa-label" for="employment-WorksiteAddressLine1">Street</label><input class="usa-input" id="employment-WorksiteAddressLine1" name="WorksiteAddressLine1" value="@Model.WorksiteAddressLine1" /></div>
+                <div class="usa-form-group"><label class="usa-label" for="employment-WorksiteCity">City</label><input class="usa-input" id="employment-WorksiteCity" name="WorksiteCity" value="@Model.WorksiteCity" /></div>
+                <div class="usa-form-group"><label class="usa-label" for="employment-WorksiteState">State</label><input class="usa-input usa-input--small" id="employment-WorksiteState" name="WorksiteState" value="@Model.WorksiteState" maxlength="2" /></div>
+                <div class="usa-form-group"><label class="usa-label" for="employment-WorksiteZip5">ZIP</label><input class="usa-input usa-input--small" id="employment-WorksiteZip5" name="WorksiteZip5" value="@Model.WorksiteZip5" maxlength="5" /></div>
             </div>
         </fieldset>
         <div class="merit-form-row">
-            <div class="usa-form-group"><label class="usa-label" for="JobTitle">Job title</label><input class="usa-input" id="JobTitle" name="JobTitle" value="@Model.JobTitle" /></div>
-            <div class="usa-form-group"><label class="usa-label" for="IndustryText">Industry as stated</label><input class="usa-input" id="IndustryText" name="IndustryText" value="@Model.IndustryText" /></div>
-            <div class="usa-form-group"><label class="usa-label" for="OccupationCode">Census occupation code</label><input class="usa-input usa-input--small" id="OccupationCode" name="OccupationCode" value="@Model.OccupationCode" maxlength="4" /></div>
-            <div class="usa-form-group"><label class="usa-label" for="NaicsOverride">NAICS (if different from employer)</label><input class="usa-input usa-input--small" id="NaicsOverride" name="NaicsOverride" value="@Model.NaicsOverride" maxlength="6" /></div>
+            <div class="usa-form-group"><label class="usa-label" for="employment-JobTitle">Job title</label><input class="usa-input" id="employment-JobTitle" name="JobTitle" value="@Model.JobTitle" /></div>
+            <div class="usa-form-group"><label class="usa-label" for="employment-IndustryText">Industry as stated</label><input class="usa-input" id="employment-IndustryText" name="IndustryText" value="@Model.IndustryText" /></div>
+            <div class="usa-form-group"><label class="usa-label" for="employment-OccupationCode">Census occupation code</label><input class="usa-input usa-input--small" id="employment-OccupationCode" name="OccupationCode" value="@Model.OccupationCode" maxlength="4" /></div>
+            <div class="usa-form-group"><label class="usa-label" for="employment-NaicsOverride">NAICS (if different from employer)</label><input class="usa-input usa-input--small" id="employment-NaicsOverride" name="NaicsOverride" value="@Model.NaicsOverride" maxlength="6" /></div>
         </div>
-        <div class="usa-form-group"><label class="usa-label" for="MetalTasks">Tasks involving metals</label><textarea class="usa-textarea" id="MetalTasks" name="MetalTasks" rows="2">@Model.MetalTasks</textarea></div>
-        <div class="usa-form-group"><label class="usa-label" for="PpeNotes">PPE, change rooms, laundering</label><textarea class="usa-textarea" id="PpeNotes" name="PpeNotes" rows="2">@Model.PpeNotes</textarea></div>
+        <div class="usa-form-group"><label class="usa-label" for="employment-MetalTasks">Tasks involving metals</label><textarea class="usa-textarea" id="employment-MetalTasks" name="MetalTasks" rows="2">@Model.MetalTasks</textarea></div>
+        <div class="usa-form-group"><label class="usa-label" for="employment-PpeNotes">PPE, change rooms, laundering</label><textarea class="usa-textarea" id="employment-PpeNotes" name="PpeNotes" rows="2">@Model.PpeNotes</textarea></div>
         <fieldset class="usa-fieldset"><legend class="usa-legend">Exposed to</legend>
             <div class="merit-form-row">
                 @foreach (var a in Model.Analytes)
                 {
-                    <div class="usa-checkbox"><input class="usa-checkbox__input" id="an-@a.Value" type="checkbox" name="AnalyteIds" value="@a.Value" @(a.Selected ? "checked" : "") /><label class="usa-checkbox__label" for="an-@a.Value">@a.Label</label></div>
+                    <div class="usa-checkbox"><input class="usa-checkbox__input" id="employment-an-@a.Value" type="checkbox" name="AnalyteIds" value="@a.Value" @(a.Selected ? "checked" : "") /><label class="usa-checkbox__label" for="employment-an-@a.Value">@a.Label</label></div>
                 }
             </div>
         </fieldset>
         <div class="merit-form-row">
-            <div class="usa-form-group"><label class="usa-label" for="HoursPerWeek">Hours per week</label><input class="usa-input usa-input--small" id="HoursPerWeek" name="HoursPerWeek" value="@Model.HoursPerWeek" /></div>
-            <div class="usa-form-group"><label class="usa-label" for="StartDate">Start date</label><input class="usa-input" id="StartDate" name="StartDate" type="date" value="@Options.Iso(Model.StartDate)" /></div>
-            <div class="usa-form-group"><label class="usa-label" for="EndDate">End date</label><input class="usa-input" id="EndDate" name="EndDate" type="date" value="@Options.Iso(Model.EndDate)" /></div>
+            <div class="usa-form-group"><label class="usa-label" for="employment-HoursPerWeek">Hours per week</label><input class="usa-input usa-input--small" id="employment-HoursPerWeek" name="HoursPerWeek" value="@Model.HoursPerWeek" /></div>
+            <div class="usa-form-group"><label class="usa-label" for="employment-StartDate">Start date</label><input class="usa-input" id="employment-StartDate" name="StartDate" type="date" value="@Options.Iso(Model.StartDate)" /></div>
+            <div class="usa-form-group"><label class="usa-label" for="employment-EndDate">End date</label><input class="usa-input" id="employment-EndDate" name="EndDate" type="date" value="@Options.Iso(Model.EndDate)" /></div>
         </div>
-        <div class="usa-checkbox"><input class="usa-checkbox__input" id="job-verify" name="Verify" type="checkbox" value="true" /><label class="usa-checkbox__label" for="job-verify">Verified today</label></div>
+        <div class="usa-checkbox"><input class="usa-checkbox__input" id="employment-job-verify" name="Verify" type="checkbox" value="true" /><label class="usa-checkbox__label" for="employment-job-verify">Verified today</label></div>
         <button class="usa-button" type="submit">Save job</button>
         <button class="usa-button usa-button--unstyled" type="button" data-clear-target="#employment-form">Cancel</button>
     </form>
