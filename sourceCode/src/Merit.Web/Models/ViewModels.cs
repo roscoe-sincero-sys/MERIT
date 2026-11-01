@@ -725,6 +725,7 @@ public sealed class UserFormModel
     public string? NewPassword { get; set; }
 
     public bool MfaEnabled { get; set; }
+    public DateTime? LockoutEndUtc { get; set; }
 
     /// <summary>Tenant the person works for; its administrators manage the account.</summary>
     public Guid? HomeTenantId { get; set; }

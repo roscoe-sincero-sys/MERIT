@@ -85,6 +85,9 @@ public sealed class AccountData(Db db) : IAccountData
             })),
         }, ct);
 
+    public Task UnlockUserAsync(Guid appUserId, CancellationToken ct = default)
+        => db.ExecuteAsync("auth.uspUnlockUser", new { appUserId }, ct);
+
     public Task ResetUserMfaAsync(Guid appUserId, CancellationToken ct = default)
         => db.ExecuteAsync("auth.uspResetUserMfa", new { appUserId }, ct);
 

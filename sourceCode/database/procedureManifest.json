@@ -426,6 +426,22 @@
   ]
  },
  {
+  "name": "auth.uspUnlockUser",
+  "kind": "write",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": "tenant.administer",
+  "params": [
+   {
+    "name": "appUserId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   }
+  ]
+ },
+ {
   "name": "auth.uspUseRecoveryCode",
   "kind": "write",
   "grants": [

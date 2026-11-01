@@ -577,3 +577,9 @@ function resetUploadForm(form) {
 }
 window.addEventListener('pageshow', () => document.querySelectorAll('form[data-upload-busy]').forEach(resetUploadForm));
 document.addEventListener('htmx:after:request', event => resetUploadForm(event.detail?.ctx?.sourceElement?.closest('form[data-upload-busy]')));
+
+// Plain POST forms use the same explicit confirmation pattern as htmx actions.
+document.addEventListener('submit', event => {
+    const message = event.target.dataset.confirm;
+    if (message && !window.confirm(message)) event.preventDefault();
+});

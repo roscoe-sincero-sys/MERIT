@@ -40,6 +40,7 @@ public interface IAccountData
 
     Task SaveMyProfileAsync(Guid userProfileId, string profileName, string? profileDescription, bool isActive, IReadOnlyList<ProfileGrantInput> grants, CancellationToken ct = default);
 
+    Task UnlockUserAsync(Guid appUserId, CancellationToken ct = default);
     Task ResetUserMfaAsync(Guid appUserId, CancellationToken ct = default);
 
     Task<IReadOnlyList<RoleRow>> ListRolesAsync(CancellationToken ct = default);
