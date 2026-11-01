@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject, Injectable, input, OnInit, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, DestroyRef, inject, Injectable, input, OnInit, signal } from '@angular/core';
 import { ApiClient, problemMessage } from '../../api/api-client';
 import { ClusterDto, ClusterListItemDto, ClusterStatus } from '../../api/contracts';
 import { MapPoint, PointMapComponent } from '../../shared/map/point-map.component';
@@ -176,10 +176,19 @@ export class ClusterStore {
       </div>
       @if (c.canEdit && c.status !== 'closed') {
         <form class="add" (submit)="add($event)">
-          <label class="usa-label" for="cl-case">Add a case by number</label>
-          <input class="usa-input" id="cl-case" name="caseNumber" placeholder="PB-2026-000123" maxlength="20" required />
+          <label class="usa-label" for="cl-case">Add a case by last name or number</label>
+          <input class="usa-input" id="cl-case" name="caseNumber" placeholder="PB-2026-000123 or last name" maxlength="60" required [value]="caseQuery()" [disabled]="store.busy()" (input)="findCases($any($event.target).value)" aria-describedby="cl-case-hint" />
           <button class="usa-button usa-button--outline" type="submit" [disabled]="store.busy()">Add case</button>
         </form>
+        <p class="usa-hint" id="cl-case-hint">Choose a search result, or enter an exact case number.</p>
+        @if (caseOptions().length) {
+          <ul class="usa-list" aria-label="Matching cases">
+            @for (option of caseOptions(); track option.caseNumber) {
+              <li><button class="usa-button usa-button--unstyled" type="button" [disabled]="store.busy()" (click)="chooseCase(option.caseNumber)">{{ option.caseNumber }}: {{ option.personName }}</button></li>
+            }
+          </ul>
+        }
+        <p role="status">{{ searchMessage() }}</p>
       }
 
       @if (c.tasks.length > 0) {
@@ -207,6 +216,35 @@ export class ClusterPage implements OnInit {
   private readonly api = inject(ApiClient);
   protected readonly display = inject(Display);
   private readonly clusterLoad = new LatestRequest();
+  protected readonly caseQuery = signal('');
+  protected readonly caseOptions = signal<{ caseNumber: string; personName: string }[]>([]);
+  protected readonly searchMessage = signal('');
+  private readonly caseSearch = new LatestRequest();
+  private searchTimer: ReturnType<typeof setTimeout> | undefined;
+  constructor() { inject(DestroyRef).onDestroy(() => { clearTimeout(this.searchTimer); this.caseSearch.cancel(); }); }
+
+  protected findCases(value: string): void {
+    this.caseQuery.set(value);
+    clearTimeout(this.searchTimer);
+    this.caseSearch.cancel();
+    this.caseOptions.set([]);
+    this.searchMessage.set('');
+    if (value.trim().length < 2 || !this.store.cluster()?.canEdit) return;
+    this.searchTimer = setTimeout(() => this.caseSearch.run(this.api.caseOptions(value.trim()), {
+      next: options => { this.caseOptions.set(options); this.searchMessage.set(options.length ? `${options.length} matching cases. Choose a result below.` : 'No matching cases. Check the last name or case number.'); },
+      error: e => this.searchMessage.set(problemMessage(e)),
+    }), 300);
+  }
+
+  protected chooseCase(caseNumber: string): void {
+    clearTimeout(this.searchTimer);
+    this.caseSearch.cancel();
+    this.caseQuery.set(caseNumber);
+    this.caseOptions.set([]);
+    this.searchMessage.set(`Selected ${caseNumber}. Choose Add case to confirm.`);
+    document.getElementById('cl-case')?.focus();
+  }
+
   readonly clusterId = input.required<string>();
   readonly returnTo = input<string>('');
   protected returnPath(): string { return '/clusters'; }
@@ -259,18 +297,20 @@ export class ClusterPage implements OnInit {
     const caseNumber = String(new FormData(form).get('caseNumber') ?? '').trim();
     const c = this.store.cluster();
     if (c?.canEdit && caseNumber && !this.store.busy()) {
-      this.run(this.api.setClusterMember(c.clusterId, { caseNumber, isMember: true }), `${caseNumber} added.`);
-      form.reset();
+      this.run(this.api.setClusterMember(c.clusterId, { caseNumber, isMember: true }), `${caseNumber} added.`, () => {
+        form.reset(); this.caseQuery.set(''); this.caseOptions.set([]); this.searchMessage.set('');
+        this.caseSearch.cancel(); clearTimeout(this.searchTimer);
+      });
     }
   }
 
-  private run(call: ReturnType<ApiClient['cluster']>, message: string): void {
+  private run(call: ReturnType<ApiClient['cluster']>, message: string, onSuccess?: () => void): void {
     if (this.store.busy()) return;
     this.clusterLoad.cancel();
     this.store.busy.set(true);
     this.store.error.set(null);
     call.subscribe({
-      next: c => { this.store.cluster.set(c); this.store.message.set(message); this.store.busy.set(false); },
+      next: c => { this.store.cluster.set(c); this.store.message.set(message); this.store.busy.set(false); onSuccess?.(); },
       error: e => { this.store.error.set(problemMessage(e)); this.store.busy.set(false); },
     });
   }
