@@ -14,9 +14,9 @@ test('create a new person remains explicit and available with candidates and cli
   });
   await page.goto('/app/match-review'); await angularReady(page);
   await expect(page.getByLabel('Incoming clinical report')).toContainText('19.5');
-  await expect(page.getByRole('button', { name: 'Create as a new person (C)', exact: true })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'Create as a new person (Alt+Shift+C)', exact: true })).toBeEnabled();
   expect(decision).toBeUndefined();
-  await page.locator('app-root h1').focus(); await page.keyboard.press('c');
+  await page.locator('app-root h1').focus(); await page.keyboard.press('Alt+Shift+c');
   await expect.poll(() => decision).toMatchObject({ decision: 'newPerson', personId: null });
 });
 

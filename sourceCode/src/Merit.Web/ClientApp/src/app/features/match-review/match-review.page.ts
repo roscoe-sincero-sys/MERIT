@@ -54,7 +54,7 @@ const AGREEMENT_TEXT: Record<Agreement, string> = { agree: 'Agrees', close: 'Clo
             @for (c of review().candidates; track c.personId; let i = $index) {
               <th scope="col" [class.chosen]="i === selected()">
                 <button type="button" class="usa-button usa-button--unstyled pick" [attr.aria-pressed]="i === selected()"
-                        [attr.aria-keyshortcuts]="'' + (i + 1)" [disabled]="disabled()" (click)="pick.emit(i)">
+                        [attr.aria-keyshortcuts]="'Alt+Shift+' + (i + 1)" [disabled]="disabled()" (click)="pick.emit(i)">
                   {{ i + 1 }}. {{ c.personName }}
                 </button>
               </th>
@@ -165,7 +165,7 @@ export class CandidateHistoryComponent {
 }
 
 /**
- * Person matching review: moves through the queue of records whose identity needs a person. Keyboard first: 1-5 pick a
+ * Person matching review: moves through the queue of records whose identity needs a person. Keyboard first: Alt+Shift+1-5 pick a
  * candidate, S same person, D different person, N not sure, C create as a new person, H history, J and K next and
  * previous. Every decision is made on the server; the screen only moves on.
  */
@@ -177,7 +177,7 @@ export class CandidateHistoryComponent {
   host: { '(keydown)': 'onKey($event)' },
   template: `
     <h1 tabindex="-1" #heading>Person matching review</h1>
-    <p class="merit-meta">{{ store.total() }} record(s) waiting. Keys: 1&ndash;5 choose a candidate, S same person, D different person,
+    <p class="merit-meta">{{ store.total() }} record(s) waiting. Hold Alt+Shift for shortcuts: 1&ndash;5 choose a candidate, S same person, D different person,
       N not sure, C new person, H history, J next, K previous.</p>
     <div class="usa-sr-only" role="status" aria-live="polite">{{ store.message() }} {{ store.announcement() }}</div>
     @if (store.error(); as e) { <div class="usa-alert usa-alert--error usa-alert--slim" role="alert"><div class="usa-alert__body"><p class="usa-alert__text">{{ e }}</p></div></div> }
@@ -227,18 +227,18 @@ export class CandidateHistoryComponent {
           <input class="usa-input" id="note" #note maxlength="500" [disabled]="store.busy()" />
           <div class="actions" role="group" aria-label="Decision">
             @if (store.candidate(); as c) {
-              <button class="usa-button" type="button" aria-keyshortcuts="S" [disabled]="!store.canDecide()" (click)="decide('same', note.value)">
-                Same person as {{ c.personName }} (S)</button>
-              <button class="usa-button usa-button--secondary" type="button" aria-keyshortcuts="D" [disabled]="!store.canDecide()" (click)="decide('different', note.value)">
-                Different person (D)</button>
+              <button class="usa-button" type="button" aria-keyshortcuts="Alt+Shift+S" [disabled]="!store.canDecide()" (click)="decide('same', note.value)">
+                Same person as {{ c.personName }} (Alt+Shift+S)</button>
+              <button class="usa-button usa-button--secondary" type="button" aria-keyshortcuts="Alt+Shift+D" [disabled]="!store.canDecide()" (click)="decide('different', note.value)">
+                Different person (Alt+Shift+D)</button>
             }
-              <button class="usa-button usa-button--outline" type="button" aria-keyshortcuts="C" [disabled]="!store.canDecide()" (click)="decide('newPerson', note.value)">
-                Create as a new person (C)</button>
-            <button class="usa-button usa-button--outline" type="button" aria-keyshortcuts="N" [disabled]="!store.canDecide()" (click)="decide('notSure', note.value)">
-              Not sure (N)</button>
+              <button class="usa-button usa-button--outline" type="button" aria-keyshortcuts="Alt+Shift+C" [disabled]="!store.canDecide()" (click)="decide('newPerson', note.value)">
+                Create as a new person (Alt+Shift+C)</button>
+            <button class="usa-button usa-button--outline" type="button" aria-keyshortcuts="Alt+Shift+N" [disabled]="!store.canDecide()" (click)="decide('notSure', note.value)">
+              Not sure (Alt+Shift+N)</button>
             @if (store.candidate()) {
-              <button class="usa-button usa-button--unstyled" type="button" aria-keyshortcuts="H" [disabled]="store.busy()" [attr.aria-expanded]="store.showHistory()" (click)="store.showHistory.update(v => !v)">
-                {{ store.showHistory() ? 'Hide' : 'Show' }} history (H)</button>
+              <button class="usa-button usa-button--unstyled" type="button" aria-keyshortcuts="Alt+Shift+H" [disabled]="store.busy()" [attr.aria-expanded]="store.showHistory()" (click)="store.showHistory.update(v => !v)">
+                {{ store.showHistory() ? 'Hide' : 'Show' }} history (Alt+Shift+H)</button>
             }
           </div>
           @if (store.showHistory() && store.candidate(); as c) { <merit-candidate-history [candidate]="c" /> }
@@ -305,6 +305,8 @@ export class MatchReviewPage implements OnInit {
     const rowId = r.stagingRowId;
     const candidate = this.store.candidate();
     if ((decision === 'same' || decision === 'different') && !candidate) return;
+    if (decision === 'same' && candidate?.warnings.length && !window.confirm(
+      `Link this result to ${candidate.personName}? Review the safeguards:\n${candidate.warnings.join('\n')}\nThis releases the result for processing.`)) return;
     const position = Math.max(this.store.position(), 0);
     this.queueLoad.cancel();
     this.reviewLoad.cancel();
@@ -336,8 +338,9 @@ export class MatchReviewPage implements OnInit {
 
   protected onKey(event: KeyboardEvent): void {
     const target = event.target as HTMLElement;
-    if (event.ctrlKey || event.altKey || event.metaKey || target.closest('input, textarea, select')) return;
-    const key = event.key.toLowerCase();
+    if (!event.altKey || !event.shiftKey || event.ctrlKey || event.metaKey || event.repeat || event.isComposing
+      || target.closest('input, textarea, select, [contenteditable]:not([contenteditable=false])')) return;
+    const key = /^Digit[1-5]$/.test(event.code) ? event.code.slice(-1) : event.key.toLowerCase();
     const note = (document.getElementById('note') as HTMLInputElement | null)?.value ?? '';
     const handled = (() => {
       if (key >= '1' && key <= '5') { this.choose(Number(key) - 1); return true; }
