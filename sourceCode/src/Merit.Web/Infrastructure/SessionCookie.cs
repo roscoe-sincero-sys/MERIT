@@ -41,8 +41,11 @@ public static class SessionCookie
 
         claims.AddRange(scope.Permissions.Select(p => new Claim(MeritClaims.Permission, p)));
 
+        var principal = new ClaimsPrincipal(new ClaimsIdentity(claims, AuthSchemes.Session, MeritClaims.UserName, null));
         await http.SignInAsync(AuthSchemes.Session,
-            new ClaimsPrincipal(new ClaimsIdentity(claims, AuthSchemes.Session, MeritClaims.UserName, null)),
+            principal,
             new AuthenticationProperties { IsPersistent = false, IssuedUtc = DateTimeOffset.UtcNow });
+        // A view rendered on this response must mint antiforgery tokens for the newly signed-in identity.
+        http.User = principal;
     }
 }

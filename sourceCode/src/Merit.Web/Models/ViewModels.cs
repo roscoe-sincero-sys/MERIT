@@ -72,7 +72,7 @@ public sealed class EnrollModel
     public string? Message { get; set; }
 }
 
-public sealed record RecoveryCodesModel(IReadOnlyList<string> Codes);
+public sealed record RecoveryCodesModel(IReadOnlyList<string> Codes, string ReturnUrl = "/");
 
 // ------------------------------------------------------------------------------------------------ home and search
 

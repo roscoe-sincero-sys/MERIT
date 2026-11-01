@@ -22,8 +22,13 @@
     <form class="usa-form" method="post" asp-action="Enroll">
         <div class="usa-form-group">
             <label class="usa-label" asp-for="Code">Code from the app</label>
-            <input class="usa-input usa-input--medium" asp-for="Code" autocomplete="one-time-code" inputmode="numeric" required />
+            <input class="usa-input usa-input--medium" asp-for="Code" autofocus="@(ViewData.ModelState.IsValid)" autocomplete="one-time-code" inputmode="numeric" required />
         </div>
         <button class="usa-button" type="submit">Turn on and sign in</button>
     </form>
 </div>
+
+<form method="post" action="/account/restart-signin">
+    @Html.AntiForgeryToken()
+    <button class="usa-button usa-button--unstyled" type="submit">Sign in as a different user</button>
+</form>

@@ -204,3 +204,8 @@ th .merit-sort:hover, th .merit-sort:focus { color: var(--merit-primary); }
 .merit-inline-form .usa-hint { color: #454b54; }
 
 .merit-chart a:focus circle { stroke: #1b1b1b; stroke-width: 3; }
+
+@media print {
+    body:has([data-recovery-codes]) header, body:has([data-recovery-codes]) footer,
+    body:has([data-recovery-codes]) .usa-skipnav, [data-recovery-tools], [data-recovery-continue] { display: none !important; }
+}

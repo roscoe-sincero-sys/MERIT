@@ -4,7 +4,19 @@
 }
 <h1>Save your recovery codes</h1>
 <div class="usa-alert usa-alert--warning"><div class="usa-alert__body"><p class="usa-alert__text">Each code works once if you lose your authenticator. Store them somewhere safe; they will not be shown again.</p></div></div>
-<ul class="usa-list merit-mono">
-    @foreach (var c in Model.Codes) { <li>@c[..5]-@c[5..]</li> }
+<ul class="usa-list merit-mono" data-recovery-codes>
+    @foreach (var c in Model.Codes) { <li data-recovery-code>@c[..5]-@c[5..]</li> }
 </ul>
-<a class="usa-button" href="/">Continue to MERIT</a>
+<div data-recovery-tools>
+    <button class="usa-button usa-button--outline" type="button" data-copy-recovery>Copy codes</button>
+    <button class="usa-button usa-button--outline" type="button" data-print-recovery>Print codes</button>
+    <p role="status" data-recovery-status></p>
+</div>
+<form method="post" action="/account/recovery/continue" data-recovery-continue>
+    @Html.AntiForgeryToken()
+    <input type="hidden" name="returnUrl" value="@Model.ReturnUrl" />
+    <div class="usa-checkbox"><input class="usa-checkbox__input" type="checkbox" id="saved-codes" name="savedCodes" value="true" required />
+        <label class="usa-checkbox__label" for="saved-codes">I have saved these codes</label></div>
+    <button class="usa-button" type="submit" data-recovery-submit disabled>Continue to MERIT</button>
+    <noscript><button class="usa-button" type="submit">Continue to MERIT</button></noscript>
+</form>
