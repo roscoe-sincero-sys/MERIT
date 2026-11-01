@@ -583,3 +583,18 @@ document.addEventListener('submit', event => {
     const message = event.target.dataset.confirm;
     if (message && !window.confirm(message)) event.preventDefault();
 });
+
+// Recovery codes stay in this document; copying and printing require an explicit user action.
+document.addEventListener('click', async event => {
+    if (event.target.closest('[data-print-recovery]')) window.print();
+    if (!event.target.closest('[data-copy-recovery]')) return;
+    const status = document.querySelector('[data-recovery-status]');
+    try {
+        const codes = [...document.querySelectorAll('[data-recovery-code]')].map(el => el.textContent.trim()).join('\n');
+        await navigator.clipboard.writeText(codes);
+        status.textContent = 'Recovery codes copied. Store them somewhere safe.';
+    } catch { status.textContent = 'Copy is unavailable. Select and copy the codes manually, or print them.'; }
+});
+document.addEventListener('change', event => {
+    if (event.target.id === 'saved-codes') document.querySelector('[data-recovery-submit]').disabled = !event.target.checked;
+});

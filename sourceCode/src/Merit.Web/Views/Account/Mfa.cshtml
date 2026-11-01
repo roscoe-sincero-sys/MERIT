@@ -14,9 +14,14 @@
             <div class="usa-form-group">
                 <label class="usa-label" asp-for="Code">Six-digit code from your authenticator app</label>
                 <div class="usa-hint" id="code-hint">Or enter one of your ten-character recovery codes.</div>
-                <input class="usa-input usa-input--medium" asp-for="Code" autocomplete="one-time-code" inputmode="text" aria-describedby="code-hint" required />
+                <input class="usa-input usa-input--medium" asp-for="Code" autofocus="@(ViewData.ModelState.IsValid)" autocomplete="one-time-code" inputmode="text" aria-describedby="code-hint" required />
             </div>
             <button class="usa-button" type="submit">Verify and sign in</button>
         </form>
     </section>
 </div>
+
+<form method="post" action="/account/restart-signin">
+    @Html.AntiForgeryToken()
+    <button class="usa-button usa-button--unstyled" type="submit">Sign in as a different user</button>
+</form>

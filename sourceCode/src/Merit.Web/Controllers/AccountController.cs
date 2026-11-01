@@ -92,8 +92,10 @@ public sealed class AccountController(AccountService accounts, QrCodes qr, Sessi
         try
         {
             var codes = await accounts.CompleteEnrollmentAsync(userId, secret, model.Code ?? string.Empty, ClientAddress(), ct);
+            var destination = await PendingReturnAsync();
             await CompleteSignInAsync(userId, ct);
-            return View("RecoveryCodes", new RecoveryCodesModel(codes));
+            Response.Headers.CacheControl = "no-store";
+            return View("RecoveryCodes", new RecoveryCodesModel(codes, destination));
         }
         catch (ValidationException ex)
         {
@@ -126,8 +128,31 @@ public sealed class AccountController(AccountService accounts, QrCodes qr, Sessi
             return View(model);
         }
 
+        var destination = await PendingReturnAsync();
         await CompleteSignInAsync(userId, ct);
-        return LocalRedirect(TempData["returnUrl"] as string ?? "/");
+        return LocalRedirect(destination);
+    }
+
+    [HttpPost("restart-signin")]
+    [Authorize(AuthenticationSchemes = AuthSchemes.PendingMfa)]
+    public async Task<IActionResult> RestartSignIn()
+    {
+        await HttpContext.SignOutAsync(AuthSchemes.PendingMfa);
+        TempData.Remove("returnUrl");
+        return RedirectToAction(nameof(SignIn));
+    }
+
+    [HttpPost("recovery/continue")]
+    [Authorize(Policy = Permissions.SignedIn)]
+    public IActionResult ContinueAfterRecovery(bool savedCodes, string? returnUrl)
+        => savedCodes ? LocalRedirect(SafeReturn(returnUrl)) : BadRequest("Save your recovery codes and acknowledge that you have saved them before continuing.");
+
+    private async Task<string> PendingReturnAsync()
+    {
+        var pending = await HttpContext.AuthenticateAsync(AuthSchemes.PendingMfa);
+        var destination = SafeReturn(pending.Properties?.RedirectUri ?? TempData.Peek("returnUrl") as string);
+        TempData.Remove("returnUrl");
+        return destination;
     }
 
     [HttpPost("signout")]

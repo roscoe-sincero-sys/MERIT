@@ -14,7 +14,7 @@
             <input type="hidden" asp-for="ReturnUrl" />
             <div class="usa-form-group">
                 <label class="usa-label" asp-for="UserName">User name</label>
-                <input class="usa-input" asp-for="UserName" autocomplete="username" autocapitalize="off" spellcheck="false" required />
+                <input class="usa-input" asp-for="UserName" autofocus="@(ViewData.ModelState.IsValid)" autocomplete="username" autocapitalize="off" spellcheck="false" required />
             </div>
             <div class="usa-form-group">
                 <label class="usa-label" asp-for="Password">Password</label>
