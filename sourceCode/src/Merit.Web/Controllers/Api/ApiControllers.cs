@@ -211,18 +211,19 @@ public sealed class ResultsApiController(ResultService results, PersonService pe
     public async Task<PersonTimelineDto> Timeline(Guid id, CancellationToken ct)
     {
         var page = await people.GetPageAsync(id, ct);
+        var names = (await reference.GetAsync(ct)).Names;
         var events = new List<TimelineEventDto>();
         events.AddRange(page.Results.Where(r => r.ResultRowStatus == "valid").Select(r => new TimelineEventDto(r.CollectedDate, null, "result",
             $"{r.AnalyteCode} {(r.Operator == "=" ? string.Empty : r.Operator)}{r.ValueCanonical:0.##} {r.UnitCanonical}",
             r.LabName, r.ValueCanonical, r.UnitCanonical, r.SampleType, r.AnalyteCode)));
         events.AddRange(page.Places.Select(p => new TimelineEventDto(p.StartDate, p.EndDate, "place",
-            $"{(p.IsPrimary ? "Primary residence" : p.Role)}: {p.AddressLabel}", p.CountyName, null, null, null, null)));
+            $"{(p.IsPrimary ? "Primary residence" : names.Of(p.Role))}: {p.AddressLabel}", p.CountyName, null, null, null, null)));
         events.AddRange(page.Employment.Where(e => e.StartDate is not null).Select(e => new TimelineEventDto(e.StartDate!.Value, e.EndDate, "job",
             $"{e.JobTitle ?? "Job"} at {e.OrganizationName}", e.MetalTasks, null, null, null, null)));
         events.AddRange(page.Cases.Select(c => new TimelineEventDto(c.OpenedDate, c.ClosedDate, "case",
-            $"Case {c.CaseNumber} ({c.Classification})", c.CaseStatus, null, null, null, c.AnalyteCode)));
+            $"Case {c.CaseNumber} ({names.Of(c.Classification)})", names.Of(c.CaseStatus), null, null, null, c.AnalyteCode)));
         events.AddRange(page.Pregnancies.Select(p => new TimelineEventDto(p.StartDate, p.ActualEndDate ?? p.ExpectedEndDate, "pregnancy",
-            "Pregnancy", p.Outcome, null, null, null, null)));
+            "Pregnancy", names.Of(p.Outcome), null, null, null, null)));
         await audit.ViewedAsync("person", id, ct);
         var name = $"{page.Header.Person.FirstName} {page.Header.Person.LastName}".Trim();
         return new PersonTimelineDto(id, name, events.OrderBy(e => e.Date).ToList(), []);
