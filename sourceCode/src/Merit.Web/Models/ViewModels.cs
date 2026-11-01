@@ -58,6 +58,8 @@ public sealed class MfaModel
 
 public sealed class EnrollModel
 {
+    public string AccountName { get; set; } = string.Empty;
+
     public string SecretBase32 { get; set; } = string.Empty;
 
     public string ProvisioningUri { get; set; } = string.Empty;

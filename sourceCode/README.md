@@ -97,6 +97,11 @@ Debug builds skip that step until the output is deleted; Release builds always r
 Every demo user has the password `MeritDemo!2026`. The first sign-in enrolls an authenticator app: scan the QR code
 or type the key, then keep the recovery codes.
 
+In Microsoft Authenticator, choose **Add account > Other account (Google, Facebook, etc.)** and scan the QR code.
+For manual setup, choose **Enter code manually** and enter the account name and setup key shown by MERIT, without
+spaces in the key. After adding the account, enter the app's current six-digit verification code on the MERIT page.
+If the app only accepts numbers during setup, return to **Add account > Other account** to enter the setup key.
+
 | User | Works for | Access |
 | --- | --- | --- |
 | `platform` | MERIT platform | Platform administrator: accounts and roles only, no records, one profile |
