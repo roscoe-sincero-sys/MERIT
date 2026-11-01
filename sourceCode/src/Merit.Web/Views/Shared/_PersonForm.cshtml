@@ -41,7 +41,7 @@
             </div>
             <div class="usa-form-group">
                 <div class="usa-checkbox">
-                    <input class="usa-checkbox__input" id="DobVerified" type="checkbox" name="DobVerified" value="true" @(Model.DobVerified ? "checked" : "") />
+                    <input class="usa-checkbox__input" id="DobVerified" type="checkbox" name="DobVerified" value="true" checked="@(Model.DobVerified)" />
                     <label class="usa-checkbox__label" for="DobVerified">Verified against a second source</label>
                 </div>
             </div>
@@ -59,7 +59,7 @@
                 @foreach (var r in Model.Races)
                 {
                     <div class="usa-checkbox">
-                        <input class="usa-checkbox__input" id="race-@r.Value" type="checkbox" name="RaceCodes" value="@r.Value" @(r.Selected ? "checked" : "") />
+                        <input class="usa-checkbox__input" id="race-@r.Value" type="checkbox" name="RaceCodes" value="@r.Value" checked="@(r.Selected)" />
                         <label class="usa-checkbox__label" for="race-@r.Value">@r.Label</label>
                     </div>
                 }

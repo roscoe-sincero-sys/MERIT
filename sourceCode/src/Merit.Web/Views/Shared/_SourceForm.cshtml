@@ -1,7 +1,7 @@
 @model SourceFormModel
 <div class="merit-inline-form" id="source-form-body">
     <h3>@(Model.ExposureSourceId is null ? "Add an exposure source" : "Edit or end exposure source")</h3>
-    @if (!ViewData.ModelState.IsValid) { <partial name="_ErrorSummary" model='new ErrorSummaryModel(["SourceType", "Description", "StartDate", "EndDate"], new Dictionary<string, string> { ["EndDate"] = "source-end", ["SourceType"] = "source-SourceType", ["Description"] = "source-Description", ["StartDate"] = "source-StartDate" })' /> }
+    @if (!ViewData.ModelState.IsValid) { <partial name="_ErrorSummary" model='new ErrorSummaryModel(["SourceType", "Description", "StartDate", "EndDate"], new Dictionary<string, string> { ["EndDate"] = "source-end", ["SourceType"] = "source-SourceType", ["Description"] = "source-Description", ["StartDate"] = "source-StartDate" }, SummaryId: "shared-sourceform-errors")' /> }
     <form class="usa-form" hx-post="/people/@Model.PersonId/sources" hx-target="#section-sources" hx-swap="outerHTML"
           hx-status:422="target:#source-form-body swap:outerHTML">
         <input type="hidden" name="ExposureSourceId" value="@Model.ExposureSourceId" />
@@ -9,7 +9,7 @@
         <div class="usa-form-group"><label class="usa-label" for="source-end">End date</label><input class="usa-input" type="date" id="source-end" name="EndDate" value="@Options.Iso(Model.EndDate)" /></div>
         <div class="merit-form-row">
             <div class="usa-form-group"><label class="usa-label" for="source-SourceType">Source type</label>
-                <select class="usa-select" id="source-SourceType" name="SourceType">@foreach (var o in Model.SourceTypes) { <option value="@o.Value" selected="@o.Selected">@o.Label</option> }</select></div>
+                <select class="usa-select" id="source-SourceType" name="SourceType" required>@foreach (var o in Model.SourceTypes) { <option value="@o.Value" selected="@o.Selected">@o.Label</option> }</select></div>
             <div class="usa-form-group"><label class="usa-label" for="source-StartDate">Since</label><input class="usa-input" id="source-StartDate" name="StartDate" type="date" value="@Options.Iso(Model.StartDate)" /></div>
         </div>
         <div class="usa-form-group"><label class="usa-label" for="source-Description">Description (product, brand, country of origin; sent as the ABLES Process narrative)</label>

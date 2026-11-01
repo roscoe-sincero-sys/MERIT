@@ -15,7 +15,7 @@
 }
 @if (!ViewData.ModelState.IsValid)
 {
-    <div class="usa-alert usa-alert--error usa-alert--slim" role="alert"><div class="usa-alert__body"><p class="usa-alert__text">@string.Join(" ", ViewData.ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage))</p></div></div>
+    <partial name="_ErrorSummary" model='new ErrorSummaryModel(["q", "kind", "Kind", "Name", "Clia", "Npi", "LastName", "FirstName", "Credential", "Phone"], new Dictionary<string, string> { ["q"] = "q", ["kind"] = "kind", ["Kind"] = "Kind", ["Name"] = "Name", ["Clia"] = "Clia", ["Npi"] = "Npi", ["LastName"] = "LastName", ["FirstName"] = "FirstName", ["Credential"] = "Credential", ["Phone"] = "Phone" }, SummaryId: "reporters-index-errors")' />
 }
 <form class="usa-form merit-form-row" method="get" action="/reporters" hx-get="/reporters" hx-target="#reporter-list" hx-swap="outerHTML"
       hx-trigger="change, keyup changed delay:400ms from:#q" hx-push-url="true">

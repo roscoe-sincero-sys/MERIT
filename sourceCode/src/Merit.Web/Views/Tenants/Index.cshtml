@@ -24,7 +24,7 @@
 }
 @if (!ViewData.ModelState.IsValid)
 {
-    <div class="usa-alert usa-alert--error usa-alert--slim" role="alert"><div class="usa-alert__body"><p class="usa-alert__text">@string.Join(" ", ViewData.ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage))</p></div></div>
+    <partial name="_ErrorSummary" model='new ErrorSummaryModel(["ParentTenantId", "TenantCode", "TenantName"], new Dictionary<string, string> { ["ParentTenantId"] = "ParentTenantId", ["TenantCode"] = "TenantCode", ["TenantName"] = "TenantName" }, SummaryId: "tenants-index-errors")' />
 }
 <div class="merit-grid-2">
     <section aria-labelledby="tree-h">

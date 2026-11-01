@@ -54,7 +54,7 @@
         </select>
     </div>
     <div class="usa-form-group merit-case-filters__actions">
-        <div class="usa-checkbox"><input class="usa-checkbox__input" id="openOnly" type="checkbox" name="openOnly" value="true" @(f.OpenOnly ? "checked" : "") /><label class="usa-checkbox__label" for="openOnly">Open only</label></div>
+        <div class="usa-checkbox"><input class="usa-checkbox__input" id="openOnly" type="checkbox" name="openOnly" value="true" checked="@(f.OpenOnly)" /><label class="usa-checkbox__label" for="openOnly">Open only</label></div>
         <input type="hidden" name="openOnly" value="false" />
         <input type="hidden" name="sort" value="@f.Sort" />
         <input type="hidden" name="desc" value="@(f.Desc ? "true" : "false")" />

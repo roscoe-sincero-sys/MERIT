@@ -132,7 +132,7 @@
 
     // ------------------------------------------------------------------------------------------ error summary
     // A form posted without htmx comes back as a whole page; its error summary takes focus (issue #46).
-    const summary = document.getElementById("error-summary");
+    const summary = document.querySelector(".merit-error-summary");
     if (summary) summary.focus();
 
     // ------------------------------------------------------------------------------------------ antiforgery
@@ -295,7 +295,7 @@
         // detached, so the new content is looked up in the document.
         if (ctx && ctx.response && ctx.response.status >= 400) {
             const scope = document.querySelector('#dialog[open]') || (target && target.isConnected ? target : document);
-            const error = scope.querySelector("#error-summary, .usa-error-message:not(:empty), .usa-alert--error, .usa-alert--warning");
+            const error = scope.querySelector(".merit-error-summary, .usa-error-message:not(:empty), .usa-alert--error, .usa-alert--warning");
             if (error) {
                 error.setAttribute("tabindex", "-1");
                 error.focus();

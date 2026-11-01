@@ -7,7 +7,7 @@
 <h1>@ViewData["Title"]</h1>
 @if (!ViewData.ModelState.IsValid)
 {
-    <div class="usa-alert usa-alert--error usa-alert--slim" role="alert"><div class="usa-alert__body"><p class="usa-alert__text">@string.Join(" ", ViewData.ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage))</p></div></div>
+    <partial name="_ErrorSummary" model='new ErrorSummaryModel(["ProfileName", "ProfileDescription", "IsActive"], new Dictionary<string, string> { ["ProfileName"] = "ProfileName", ["ProfileDescription"] = "ProfileDescription", ["IsActive"] = "IsActive" }, SummaryId: "profiles-edit-errors")' />
 }
 <div class="merit-grid-2">
     <form class="usa-form usa-form--large" method="post" action="/account/profiles">
@@ -41,13 +41,13 @@
                             <option value="write" selected="@(g.AccessLevel == "write")">Read and write (no delete)</option>
                             <option value="full" selected="@(g.AccessLevel == "full")">Full (read, write and delete)</option>
                         </select></div>
-                    <div class="usa-checkbox"><input class="usa-checkbox__input" id="g@(i)d" type="checkbox" name="Grants[@i].IncludeDescendants" value="true" @(g.IncludeDescendants ? "checked" : "") />
+                    <div class="usa-checkbox"><input class="usa-checkbox__input" id="g@(i)d" type="checkbox" name="Grants[@i].IncludeDescendants" value="true" checked="@(g.IncludeDescendants)" />
                         <label class="usa-checkbox__label" for="g@(i)d">Include everything under this place</label></div>
                     <input type="hidden" name="Grants[@i].IncludeDescendants" value="false" />
                 </div>
             }
         </fieldset>
-        <div class="usa-checkbox"><input class="usa-checkbox__input" id="IsActive" type="checkbox" name="IsActive" value="true" @(Model.IsActive ? "checked" : "") />
+        <div class="usa-checkbox"><input class="usa-checkbox__input" id="IsActive" type="checkbox" name="IsActive" value="true" checked="@(Model.IsActive)" />
             <label class="usa-checkbox__label" for="IsActive">Active (shown when you switch profiles)</label></div>
         <input type="hidden" name="IsActive" value="false" />
         <button class="usa-button" type="submit">Save profile</button>

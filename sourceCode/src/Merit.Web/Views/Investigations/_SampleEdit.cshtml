@@ -1,7 +1,7 @@
 @model SampleEditModel
 <div id="sample-edit">
     <h2 id="dialog-title">Edit environmental sample</h2>
-    <partial name="_ErrorSummary" model='new ErrorSummaryModel(["sampleType", "sampleValue", "unit", "sampleDate", "surface"], new Dictionary<string, string> { ["sampleType"] = "se-type", ["sampleValue"] = "se-value", ["unit"] = "se-unit", ["sampleDate"] = "se-date", ["surface"] = "se-surface" })' />
+    <partial name="_ErrorSummary" model='new ErrorSummaryModel(["sampleType", "sampleValue", "unit", "sampleDate", "surface"], new Dictionary<string, string> { ["sampleType"] = "se-type", ["sampleValue"] = "se-value", ["unit"] = "se-unit", ["sampleDate"] = "se-date", ["surface"] = "se-surface" }, SummaryId: "investigations-sampleedit-errors")' />
     <form class="usa-form" hx-post="/investigations/@Model.InvestigationId/samples/@Model.SampleId" hx-target="#investigation-body" hx-swap="outerHTML" hx-status:422="target:#sample-edit swap:outerHTML"
           data-sample-units="@System.Text.Json.JsonSerializer.Serialize(Model.Units)">
         <input type="hidden" name="OriginalModifiedUtc" value="@Model.OriginalModifiedUtc.ToString("O")" />

@@ -4,7 +4,7 @@
 }
 <h1>Investigations</h1>
 <form class="usa-form merit-form-row" method="get" action="/investigations" hx-get="/investigations" hx-target="#investigation-list" hx-swap="innerMorph" hx-trigger="change, submit" hx-push-url="true">
-    <div class="usa-checkbox"><input class="usa-checkbox__input" id="openOnly" type="checkbox" name="openOnly" value="true" @(Model.OpenOnly ? "checked" : "") /><label class="usa-checkbox__label" for="openOnly">Open only</label></div>
+    <div class="usa-checkbox"><input class="usa-checkbox__input" id="openOnly" type="checkbox" name="openOnly" value="true" checked="@(Model.OpenOnly)" /><label class="usa-checkbox__label" for="openOnly">Open only</label></div>
     <input type="hidden" name="openOnly" value="false" />
     <div><label class="usa-label" for="inv-q">Number, address or employer</label><input class="usa-input" id="inv-q" name="q" value="@Model.Filter?.Q" /></div>
     <div><label class="usa-label" for="inv-assigned">Investigator</label><select class="usa-select" id="inv-assigned" name="assigned">

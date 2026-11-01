@@ -26,7 +26,7 @@
     }
     @if (!ViewData.ModelState.IsValid)
     {
-        <div class="usa-alert usa-alert--error usa-alert--slim" role="alert"><p class="usa-alert__text">@string.Join(" ", ViewData.ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage))</p></div>
+        <partial name="_ErrorSummary" model='new ErrorSummaryModel(["reason", "assignedToUserId", "exposureCategory", "caseStatus", "activityType", "activityDate", "outcome", "contactPersonId", "note", "classification", "population", "closureReason", "closedDate"], new Dictionary<string, string> { ["reason"] = "reason", ["assignedToUserId"] = "assignedToUserId", ["exposureCategory"] = "exposureCategory", ["caseStatus"] = "caseStatus", ["activityType"] = "activityType", ["activityDate"] = "activityDate", ["outcome"] = "outcome", ["contactPersonId"] = "contactPersonId", ["note"] = "closeNote", ["classification"] = "classification", ["population"] = "population", ["closureReason"] = "closureReason", ["closedDate"] = "closedDate" }, SummaryId: "cases-casebody-errors")' />
     }
     <div class="merit-grid-2">
         <section class="merit-section" aria-labelledby="case-summary">

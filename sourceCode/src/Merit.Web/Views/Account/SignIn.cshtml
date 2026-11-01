@@ -9,17 +9,16 @@
         {
             <div class="usa-alert usa-alert--error usa-alert--slim" role="alert"><div class="usa-alert__body"><p class="usa-alert__text">@Model.Message</p></div></div>
         }
-        <form class="usa-form" method="post" asp-action="SignIn">
+        <partial name="_ErrorSummary" model='new ErrorSummaryModel(["ReturnUrl", "UserName", "Password"], new Dictionary<string, string> { ["ReturnUrl"] = "ReturnUrl", ["UserName"] = "UserName", ["Password"] = "Password" }, SummaryId: "account-signin-errors")' />
+    <form class="usa-form" method="post" asp-action="SignIn">
             <input type="hidden" asp-for="ReturnUrl" />
             <div class="usa-form-group">
                 <label class="usa-label" asp-for="UserName">User name</label>
-                <span class="usa-error-message" asp-validation-for="UserName"></span>
-                <input class="usa-input" asp-for="UserName" autocomplete="username" autocapitalize="off" spellcheck="false" />
+                <input class="usa-input" asp-for="UserName" autocomplete="username" autocapitalize="off" spellcheck="false" required />
             </div>
             <div class="usa-form-group">
                 <label class="usa-label" asp-for="Password">Password</label>
-                <span class="usa-error-message" asp-validation-for="Password"></span>
-                <input class="usa-input" asp-for="Password" autocomplete="current-password" />
+                <input class="usa-input" asp-for="Password" autocomplete="current-password" required />
             </div>
             <button class="usa-button merit-signin__submit" type="submit">Continue</button>
         </form>

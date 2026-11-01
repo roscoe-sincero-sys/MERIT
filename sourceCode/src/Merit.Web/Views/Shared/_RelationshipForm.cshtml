@@ -3,7 +3,7 @@
     <h3>Add a relationship</h3>
     @if (!ViewData.ModelState.IsValid)
     {
-        <div class="usa-alert usa-alert--error usa-alert--slim" role="alert"><div class="usa-alert__body"><p class="usa-alert__text">@string.Join(" ", ViewData.ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage))</p></div></div>
+        <partial name="_ErrorSummary" model='new ErrorSummaryModel(["NewLastName", "NewFirstName", "NewDob", "Role", "Source", "IsPrimaryContact", "HasLegalCustody"], new Dictionary<string, string> { ["NewLastName"] = "relationship-NewLastName", ["NewFirstName"] = "relationship-NewFirstName", ["NewDob"] = "relationship-NewDob", ["Role"] = "relationship-Role", ["Source"] = "relationship-Source", ["IsPrimaryContact"] = "relationship-IsPrimaryContact", ["HasLegalCustody"] = "relationship-HasLegalCustody" }, SummaryId: "shared-relationshipform-errors")' />
     }
     <form class="usa-form" hx-post="/people/@Model.PersonId/relationships" hx-target="#section-relationships" hx-swap="outerHTML"
           hx-status:422="target:#relationship-form-body swap:outerHTML">
@@ -19,7 +19,7 @@
         <div class="merit-form-row">
             <div class="usa-form-group">
                 <label class="usa-label" for="relationship-Role">The other person is this person's</label>
-                <select class="usa-select" id="relationship-Role" name="Role">@foreach (var o in Model.Roles) { <option value="@o.Value" selected="@o.Selected">@o.Label</option> }</select>
+                <select class="usa-select" id="relationship-Role" name="Role" required>@foreach (var o in Model.Roles) { <option value="@o.Value" selected="@o.Selected">@o.Label</option> }</select>
             </div>
             <div class="usa-form-group">
                 <label class="usa-label" for="relationship-Source">Source</label>
@@ -28,8 +28,8 @@
                 </select>
             </div>
         </div>
-        <div class="usa-checkbox"><input class="usa-checkbox__input" id="relationship-IsPrimaryContact" type="checkbox" name="IsPrimaryContact" value="true" @(Model.IsPrimaryContact ? "checked" : "") /><label class="usa-checkbox__label" for="relationship-IsPrimaryContact">Primary contact</label></div>
-        <div class="usa-checkbox"><input class="usa-checkbox__input" id="relationship-HasLegalCustody" type="checkbox" name="HasLegalCustody" value="true" @(Model.HasLegalCustody ? "checked" : "") /><label class="usa-checkbox__label" for="relationship-HasLegalCustody">Has legal custody</label></div>
+        <div class="usa-checkbox"><input class="usa-checkbox__input" id="relationship-IsPrimaryContact" type="checkbox" name="IsPrimaryContact" value="true" checked="@(Model.IsPrimaryContact)" /><label class="usa-checkbox__label" for="relationship-IsPrimaryContact">Primary contact</label></div>
+        <div class="usa-checkbox"><input class="usa-checkbox__input" id="relationship-HasLegalCustody" type="checkbox" name="HasLegalCustody" value="true" checked="@(Model.HasLegalCustody)" /><label class="usa-checkbox__label" for="relationship-HasLegalCustody">Has legal custody</label></div>
         <button class="usa-button" type="submit">Add relationship</button>
         <button class="usa-button usa-button--unstyled" type="button" data-clear-target="#relationships-form">Cancel</button>
     </form>

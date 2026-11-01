@@ -2,7 +2,7 @@
 <div id="place-edit">
     <h2 id="dialog-title">Edit place details</h2><p>@Model.AddressLabel</p>
     <p class="usa-hint">Year built is shared by records at the same address and unit. Changing the apartment corrects this person's place.</p>
-    <partial name="_ErrorSummary" model='new ErrorSummaryModel(["Unit", "YearBuilt", "HoursPerWeek", "ScheduleNote"], new Dictionary<string, string> { ["Unit"] = "place-edit-unit", ["YearBuilt"] = "place-edit-year", ["HoursPerWeek"] = "place-edit-hours", ["ScheduleNote"] = "place-edit-note" })' />
+    <partial name="_ErrorSummary" model='new ErrorSummaryModel(["Unit", "YearBuilt", "HoursPerWeek", "ScheduleNote"], new Dictionary<string, string> { ["Unit"] = "place-edit-unit", ["YearBuilt"] = "place-edit-year", ["HoursPerWeek"] = "place-edit-hours", ["ScheduleNote"] = "place-edit-note" }, SummaryId: "shared-placeedit-errors")' />
     <form class="usa-form" hx-post="/people/@Model.PersonId/places/@Model.PersonLocationId/edit" hx-target="#section-places" hx-swap="outerHTML" hx-status:422="target:#place-edit swap:outerHTML">
         <input type="hidden" name="RowVersion" value="@Model.RowVersion" />
         <label class="usa-label" for="place-edit-unit">Apartment / unit</label><input class="usa-input" id="place-edit-unit" name="Unit" value="@Model.Unit" />

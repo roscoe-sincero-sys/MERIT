@@ -5,7 +5,7 @@
     <p class="merit-meta">The current primary row ends the day before the start date. If the person still lives there, a non-primary row continues from that date with the same schedule, so history stays exact.</p>
     @if (!ViewData.ModelState.IsValid)
     {
-        <div class="usa-alert usa-alert--error usa-alert--slim" role="alert"><div class="usa-alert__body"><p class="usa-alert__text">@string.Join(" ", ViewData.ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage))</p></div></div>
+        <partial name="_ErrorSummary" model='new ErrorSummaryModel(["StartDate", "PrimaryReason"], new Dictionary<string, string> { ["StartDate"] = "sp-start", ["PrimaryReason"] = "sp-reason" }, SummaryId: "shared-setprimary-errors")' />
     }
     <form class="usa-form" data-primary-preview hx-post="/people/@Model.PersonId/places/@Model.PersonLocationId/primary/preview" hx-target="#set-primary" hx-swap="outerHTML">
         <div class="usa-form-group">
