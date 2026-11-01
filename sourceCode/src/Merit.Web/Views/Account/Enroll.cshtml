@@ -3,7 +3,7 @@
     ViewData["Title"] = "Set up multi-factor authentication";
 }
 <h1>Set up your authenticator app</h1>
-<p>Every MERIT account uses a second factor. Scan this code with an authenticator app (for example Microsoft Authenticator, Google Authenticator or a password manager), then enter the six-digit code it shows.</p>
+<p>Every MERIT account uses a second factor. Add MERIT to an authenticator app, then enter the six-digit verification code it shows.</p>
 @if (Model.IsAdministrator)
 {
     <div class="usa-alert usa-alert--info usa-alert--slim"><div class="usa-alert__body"><p class="usa-alert__text">Administrator accounts should move to a security key or passkey (FIDO2) when the agency enables them.</p></div></div>
@@ -14,19 +14,30 @@
 }
 <div class="merit-grid-2">
     <div>
+        <h2>1. Add MERIT to your authenticator app</h2>
+        <p>In Microsoft Authenticator, tap <strong>+</strong> (Add account), choose <strong>Other account (Google, Facebook, etc.)</strong>, then scan this QR code. Other authenticator apps can also scan it.</p>
         @* Server-generated QR markup for a server-generated URI; no user, file or lab value reaches Html.Raw. *@
         <div class="merit-qr" role="img" aria-label="QR code for your authenticator app">@Html.Raw(Model.QrSvg)</div>
-        <p class="merit-meta">Can't scan? Enter this key in the app: <code>@Model.SecretBase32</code></p>
+        <h3>Can't scan? Set up manually</h3>
+        <p>In Microsoft Authenticator, choose <strong>Other account</strong>, then <strong>Enter code manually</strong>. Enter this account name and setup key, and save the account. If an app offers a type of code, choose <strong>Time based</strong>.</p>
+        <dl>
+            <dt>Account name</dt><dd>@Model.AccountName</dd>
+            <dt>Setup key (letters and numbers)</dt><dd class="merit-setup-key"><code>@Model.SecretBase32</code></dd>
+        </dl>
+        <p>Enter the setup key without spaces. If the app only allows numbers, return to <strong>Add account</strong> and choose <strong>Other account</strong> to enter the setup key.</p>
     </div>
-    <partial name="_ErrorSummary" model='new ErrorSummaryModel(["Code"], new Dictionary<string, string> { ["Code"] = "Code" }, SummaryId: "account-enroll-errors")' />
     <form class="usa-form" method="post" asp-action="Enroll">
+        <h2>2. Verify your MERIT account</h2>
+        <p id="enroll-code-hint">Enter the current six-digit verification code shown for MERIT in your authenticator app. The setup key above is used only to add the account to your app.</p>
+        <partial name="_ErrorSummary" model='new ErrorSummaryModel(["Code"], new Dictionary<string, string> { ["Code"] = "Code" }, SummaryId: "account-enroll-errors")' />
         <div class="usa-form-group">
             <label class="usa-label" asp-for="Code">Code from the app</label>
-            <input class="usa-input usa-input--medium" asp-for="Code" autofocus="@(ViewData.ModelState.IsValid)" autocomplete="one-time-code" inputmode="numeric" required />
+            <input class="usa-input usa-input--medium" asp-for="Code" autofocus="@(ViewData.ModelState.IsValid)" autocomplete="one-time-code" inputmode="numeric" aria-describedby="enroll-code-hint" required />
         </div>
         <button class="usa-button" type="submit">Turn on and sign in</button>
     </form>
 </div>
+<p>Code not working? Wait for a new code, check that your phone's date and time are set automatically, and use the MERIT account you just added. Keep this page open while setting up your app; signing in again creates a new setup key.</p>
 
 <form method="post" action="/account/restart-signin">
     @Html.AntiForgeryToken()

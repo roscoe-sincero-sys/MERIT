@@ -190,6 +190,7 @@ public sealed class AccountController(AccountService accounts, QrCodes qr, Sessi
         var uri = Totp.ProvisioningUri(AccountService.Issuer, userName, Totp.FromBase32(secret));
         return new EnrollModel
         {
+            AccountName = $"{AccountService.Issuer}: {userName}",
             SecretBase32 = string.Join(' ', Enumerable.Range(0, (secret.Length + 3) / 4).Select(i => secret.Substring(i * 4, Math.Min(4, secret.Length - (i * 4))))),
             ProvisioningUri = uri,
             QrSvg = qr.Svg(uri),

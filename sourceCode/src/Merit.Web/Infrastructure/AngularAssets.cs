@@ -65,7 +65,10 @@ public sealed class QrCodes
     {
         using var generator = new QRCodeGenerator();
         using var data = generator.CreateQrCode(text, QRCodeGenerator.ECCLevel.M);
-        var svg = new SvgQRCode(data);
-        return svg.GetGraphic(5);
+        using var svg = new SvgQRCode(data);
+        // CSS resizes the enrollment image. Without a viewBox the browser clips the modules
+        // to that size instead of scaling them, leaving an unreadable QR code (issue #141).
+        return svg.GetGraphic(5, "#000000", "#ffffff", drawQuietZones: true,
+            sizingMode: SvgQRCode.SizingMode.ViewBoxAttribute);
     }
 }

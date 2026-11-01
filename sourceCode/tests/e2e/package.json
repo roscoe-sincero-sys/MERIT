@@ -11,6 +11,9 @@
     "@axe-core/playwright": "4.13.0",
     "@playwright/test": "1.64.0",
     "@types/node": "^24.10.1",
+    "@types/pngjs": "6.0.5",
+    "jsqr": "1.4.0",
+    "pngjs": "7.0.0",
     "typescript": "6.0.3"
   },
   "overrides": {
