@@ -70,11 +70,11 @@ interface DrawnEvent {
       @for (d of drawn(); track $index) {
         @if (d.point) {
           <circle class="point" [class.venous]="d.e.sampleType === 'venous'" [attr.cx]="d.x" [attr.cy]="d.y" r="6"
-                  tabindex="0" role="button" [attr.aria-label]="d.e.date + ': ' + d.e.label" (click)="pick.emit(d.e)" (keydown.enter)="pick.emit(d.e)" />
+                  tabindex="0" role="button" [attr.aria-label]="d.e.date + ': ' + d.e.label" (click)="pick.emit(d.e)" (keydown.enter)="activate($event, d.e)" (keydown.space)="activate($event, d.e)" />
         } @else {
           <rect class="bar" [class]="'bar bar--' + d.e.kind" [attr.x]="d.x" [attr.y]="d.y - 8" [attr.width]="d.w" height="16" rx="3"
                 tabindex="0" role="button" [attr.aria-label]="d.e.date + (d.e.endDate ? ' to ' + d.e.endDate : ' onward') + ': ' + d.e.label"
-                (click)="pick.emit(d.e)" (keydown.enter)="pick.emit(d.e)" />
+                (click)="pick.emit(d.e)" (keydown.enter)="activate($event, d.e)" (keydown.space)="activate($event, d.e)" />
         }
       }
     </svg>
@@ -108,6 +108,11 @@ export class TimelineChartComponent {
 
   protected laneY(i: number): number {
     return i * 48 + 4;
+  }
+
+  protected activate(event: Event, item: TimelineEventDto): void {
+    event.preventDefault();
+    if (!(event instanceof KeyboardEvent) || !event.repeat) this.pick.emit(item);
   }
 
   private x(ms: number): number {

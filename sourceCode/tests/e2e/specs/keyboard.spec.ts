@@ -151,7 +151,7 @@ test('case map: zoom, pan and read a point with the keyboard', async ({ asUser }
   await page.keyboard.press('ArrowLeft');
   await page.getByRole('button', { name: 'Fit all points' }).focus();
   await page.keyboard.press('Enter');
-  await page.locator('circle.point').first().focus();
+  await page.locator('.point').first().focus();
   await expect(page.locator('merit-point-map .tooltip')).toBeVisible();
 });
 

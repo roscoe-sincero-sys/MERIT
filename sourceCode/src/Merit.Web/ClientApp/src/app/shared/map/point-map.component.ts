@@ -1,4 +1,4 @@
-import { afterNextRender, ChangeDetectionStrategy, Component, computed, DestroyRef, ElementRef, inject, input, output, signal, viewChild } from '@angular/core';
+import { afterRenderEffect, afterNextRender, ChangeDetectionStrategy, Component, computed, DestroyRef, ElementRef, inject, input, output, signal, viewChild } from '@angular/core';
 import { SERIES_COLORS } from '../chart/series-chart.component';
 import { MapAreas } from './map-areas.service';
 
@@ -39,7 +39,7 @@ const MIN_SPAN = 0.12;
       <button class="usa-button usa-button--outline usa-button--small" type="button" (click)="zoomBy(1 / 1.6)" aria-keyshortcuts="-">Zoom out</button>
       <button class="usa-button usa-button--unstyled" type="button" (click)="reset()">Fit all points</button>
       <ul class="legend" aria-label="Legend">
-        @for (c of categories(); track c.key; let i = $index) { <li><span class="dot" [style.background]="colors[i]"></span>{{ c.label }}</li> }
+        @for (c of categories(); track c.key; let i = $index) { <li><svg class="legend-marker" viewBox="-9 -9 18 18" aria-hidden="true"><path [attr.d]="marker(c.key)" [attr.fill]="color(c.key)" /></svg>{{ c.label }}</li> }
         <li><span class="dot ring"></span>{{ ringLabel() }}</li>
         @if (areaPaths().length > 0) { <li><span class="swatch"></span>County</li> }
       </ul>
@@ -63,14 +63,14 @@ const MIN_SPAN = 0.12;
         </g>
         @for (p of projected(); track p.point.id) {
           @if (p.point.ringed) { <circle class="ring" [attr.cx]="p.x" [attr.cy]="p.y" r="9" /> }
-          <circle class="point" [attr.cx]="p.x" [attr.cy]="p.y" r="6" [attr.fill]="color(p.point.category)" tabindex="0" role="button"
+          <path class="point" [attr.d]="marker(p.point.category)" [attr.transform]="'translate(' + p.x + ',' + p.y + ')'" [attr.fill]="color(p.point.category)" tabindex="0" role="button"
                   [attr.aria-label]="p.point.label + '. ' + p.point.detail" (focus)="focused.set(p.point.id)" (blur)="focused.set(null)"
                   (mouseenter)="focused.set(p.point.id)" (mouseleave)="focused.set(null)" (click)="pick.emit(p.point.id)"
-                  (keydown.enter)="pick.emit(p.point.id)" />
+                  (keydown.enter)="activate($event, p.point.id)" (keydown.space)="activate($event, p.point.id)" />
         }
       </svg>
       @if (tooltip(); as t) {
-        <div class="tooltip" role="status" [style.left.px]="t.x" [style.top.px]="t.y">
+        <div class="tooltip" #tooltipBox role="status" [style.left.px]="t.x" [style.top.px]="t.y">
           <strong>{{ t.point.label }}</strong><div>{{ t.point.detail }}</div>
         </div>
       }
@@ -79,6 +79,8 @@ const MIN_SPAN = 0.12;
   styles: `
     .controls { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1rem; margin-bottom: .5rem; }
     .legend { display: flex; flex-wrap: wrap; gap: .25rem 1rem; list-style: none; padding: 0; margin: 0 0 0 auto; font-size: .9rem; }
+    .legend-marker { display: inline-block; width: 1rem; height: 1rem; margin-right: .35rem; vertical-align: -2px; }
+    .legend-marker path { stroke: #1b1b1b; stroke-width: 1; }
     .dot { display: inline-block; width: .8rem; height: .8rem; border-radius: 50%; margin-right: .35rem; vertical-align: -1px; }
     .dot.ring { border: 2px solid #1b1b1b; background: transparent; }
     .swatch { display: inline-block; width: 1rem; height: .7rem; margin-right: .35rem; vertical-align: -1px; background: #f1f3f6; border: 1px solid #8d9297; }
@@ -89,11 +91,11 @@ const MIN_SPAN = 0.12;
     .area-label { font-size: 11px; fill: #565c65; paint-order: stroke; stroke: #f1f3f6; stroke-width: 3px; }
     .grid { stroke: #ececec; }
     .tick { font-size: 10px; fill: #71767a; }
-    .point { stroke: #fcfcfb; stroke-width: 2; cursor: pointer; }
+    .point { stroke: #1b1b1b; stroke-width: 1.5; cursor: pointer; }
     .point:focus { outline: none; stroke: #1b1b1b; stroke-width: 3; }
     .ring { fill: none; stroke: #1b1b1b; stroke-width: 2; }
-    .tooltip { position: absolute; transform: translate(-50%, calc(-100% - 14px)); pointer-events: none; background: #fff; color: #1b1b1b;
-               border: 1px solid #a9aeb1; border-radius: 4px; padding: .35rem .5rem; font-size: .85rem; max-width: 20rem; z-index: 1;
+    .tooltip { position: absolute; box-sizing: border-box; width: max-content; pointer-events: none; background: #fff; color: #1b1b1b;
+               border: 1px solid #a9aeb1; border-radius: 4px; padding: .35rem .5rem; font-size: .85rem; max-width: min(20rem, calc(100% - 16px)); max-height: calc(100% - 16px); overflow: auto; z-index: 1;
                box-shadow: 0 2px 6px rgba(0,0,0,.15); }
   `,
 })
@@ -106,6 +108,7 @@ export class PointMapComponent {
   readonly pick = output<string>();
 
   private readonly areas = inject(MapAreas).areas;
+  private readonly tooltipBox = viewChild<ElementRef<HTMLElement>>('tooltipBox');
   private readonly plot = viewChild.required<ElementRef<HTMLElement>>('plot');
 
   /** Drawing size in pixels: the plot's own width, and a height from the 720 by 440 shape, capped at maxHeight. */
@@ -120,6 +123,17 @@ export class PointMapComponent {
 
   constructor() {
     inject(MapAreas).load();
+    afterRenderEffect(() => {
+      const t = this.tooltip();
+      const box = this.tooltipBox()?.nativeElement;
+      if (!t || !box) return;
+      const width = box.offsetWidth, height = box.offsetHeight;
+      const x = Math.max(8, Math.min(t.x - width / 2, this.W() - width - 8));
+      const above = t.y - height - 14;
+      const y = above >= 8 ? Math.min(above, this.H() - height - 8) : Math.max(8, Math.min(t.y + 14, this.H() - height - 8));
+      box.style.left = `${x}px`;
+      box.style.top = `${y}px`;
+    });
     const destroyRef = inject(DestroyRef);
     afterNextRender(() => {
       const el = this.plot().nativeElement;
@@ -238,6 +252,17 @@ export class PointMapComponent {
     }
     return lines;
   });
+
+  protected marker(category: string): string {
+    if (category === 'suspect') return 'M0,-7 L7,6 L-7,6 Z';
+    if (category === 'notACase') return 'M-6,-6 H6 V6 H-6 Z';
+    return 'M-6,0 A6,6 0 1,0 6,0 A6,6 0 1,0 -6,0';
+  }
+
+  protected activate(event: Event, id: string): void {
+    event.preventDefault();
+    if (!(event instanceof KeyboardEvent) || !event.repeat) this.pick.emit(id);
+  }
 
   protected color(category: string): string {
     const i = this.categories().findIndex(c => c.key === category);

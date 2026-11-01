@@ -148,7 +148,7 @@ export class ClusterStore {
       <h2>Cases</h2>
       @if (points().length > 0) {
         <!-- A locator, not the page's subject: kept short so the case list stays in view (issue #48). -->
-        <merit-point-map [points]="points()" [categories]="classifications" ringLabel="Left the cluster" [maxHeight]="320" />
+        <merit-point-map [points]="points()" [categories]="classifications" ringLabel="Left the cluster" [maxHeight]="320" (pick)="openCase($event)" />
       }
       <div class="merit-table-wrap" tabindex="0" role="region" aria-label="Cases in the cluster; scroll sideways for more columns">
       <table class="usa-table usa-table--borderless">
@@ -276,6 +276,8 @@ export class ClusterPage implements OnInit {
   protected statusLabel(s: ClusterStatus): string {
     return STATUS_LABELS[s];
   }
+
+  protected openCase(id: string): void { window.location.assign('/cases/' + encodeURIComponent(id)); }
 
   protected save(event: Event): void {
     event.preventDefault();
