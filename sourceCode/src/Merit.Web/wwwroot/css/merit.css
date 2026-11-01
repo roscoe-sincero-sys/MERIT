@@ -202,3 +202,5 @@ th .merit-sort:hover, th .merit-sort:focus { color: var(--merit-primary); }
 
 /* Required instructions remain readable on the tinted inline editor background. */
 .merit-inline-form .usa-hint { color: #454b54; }
+
+.merit-chart a:focus circle { stroke: #1b1b1b; stroke-width: 3; }

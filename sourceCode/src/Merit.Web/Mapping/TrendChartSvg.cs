@@ -32,7 +32,7 @@ public static class TrendChartSvg
             pts.Select(p => $"{p.Date:yyyy-MM-dd} {(p.Operator == "=" ? string.Empty : p.Operator)}{p.Value.ToString("0.##", CultureInfo.InvariantCulture)}"));
 
         var sb = new StringBuilder();
-        sb.Append(CultureInfo.InvariantCulture, $"<svg class=\"merit-chart\" viewBox=\"0 0 {N(W)} {N(H)}\" role=\"img\" aria-labelledby=\"{E(id)}\">");
+        sb.Append(CultureInfo.InvariantCulture, $"<svg class=\"merit-chart\" viewBox=\"0 0 {N(W)} {N(H)}\" role=\"group\" aria-labelledby=\"{E(id)}\">");
         sb.Append(CultureInfo.InvariantCulture, $"<title id=\"{E(id)}\">{E(title)}</title>");
         for (int i = 0; i <= 4; i++)
         {
@@ -46,8 +46,9 @@ public static class TrendChartSvg
         foreach (var (label, value) in chart.Levels)
         {
             double y = Y((double)value);
-            sb.Append(CultureInfo.InvariantCulture, $"<line class=\"level\" x1=\"{N(L)}\" x2=\"{N(W - R)}\" y1=\"{N(y)}\" y2=\"{N(y)}\" />");
-            sb.Append(CultureInfo.InvariantCulture, $"<text x=\"{N(W - R - 4)}\" y=\"{N(y - 4)}\" text-anchor=\"end\">{E(label)}</text>");
+            sb.Append(CultureInfo.InvariantCulture, $"<line class=\"level\" x1=\"{N(L)}\" x2=\"{N(W - R)}\" y1=\"{N(y)}\" y2=\"{N(y)}\"><title>{E(label)} {E(chart.Unit)}</title></line>");
+            // Full labels live in the wrapping HTML legend, keeping dense low levels legible.
+
         }
 
         if (pts.Count > 1)
@@ -59,12 +60,15 @@ public static class TrendChartSvg
 
         foreach (var p in pts)
         {
+            var pointLabel = $"{p.Date:yyyy-MM-dd}: {(p.Operator == "=" ? string.Empty : p.Operator)}{p.Value.ToString("0.##", CultureInfo.InvariantCulture)} {chart.Unit}; {p.SampleType ?? "unknown sample type"}";
+            if (p.ResultId is Guid resultId) sb.Append($"<a href=\"/results/{resultId:D}\" aria-label=\"{E(pointLabel)}\">");
             sb.Append(CultureInfo.InvariantCulture,
-                $"<circle class=\"{(p.SampleType == "venous" ? "venous" : "capillary")}\" cx=\"{N(X(p.Date))}\" cy=\"{N(Y((double)p.Value))}\" r=\"5\" />");
+                $"<circle class=\"{(p.SampleType == "venous" ? "venous" : "capillary")}\" cx=\"{N(X(p.Date))}\" cy=\"{N(Y((double)p.Value))}\" r=\"5\"><title>{E(pointLabel)}</title></circle>");
+            if (p.ResultId is not null) sb.Append("</a>");
         }
 
-        sb.Append(CultureInfo.InvariantCulture, $"<text x=\"{N(L)}\" y=\"{N(H - 8)}\">{minDate.ToString("MMM yyyy", CultureInfo.InvariantCulture)}</text>");
-        sb.Append(CultureInfo.InvariantCulture, $"<text x=\"{N(W - R)}\" y=\"{N(H - 8)}\" text-anchor=\"end\">{maxDate.ToString("MMM yyyy", CultureInfo.InvariantCulture)}</text>");
+        sb.Append(CultureInfo.InvariantCulture, $"<text x=\"{N(L)}\" y=\"{N(H - 8)}\">{minDate.ToString("MMM d, yyyy", CultureInfo.InvariantCulture)}</text>");
+        sb.Append(CultureInfo.InvariantCulture, $"<text x=\"{N(W - R)}\" y=\"{N(H - 8)}\" text-anchor=\"end\">{maxDate.ToString("MMM d, yyyy", CultureInfo.InvariantCulture)}</text>");
         sb.Append("</svg>");
         return new HtmlString(sb.ToString());
     }

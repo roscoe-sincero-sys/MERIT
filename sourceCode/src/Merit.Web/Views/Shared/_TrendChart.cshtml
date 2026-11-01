@@ -1,6 +1,6 @@
 @model TrendChart
 @{
-    string id = "chart-" + Model.AnalyteCode + "-" + ViewContext.HttpContext.TraceIdentifier.GetHashCode(StringComparison.Ordinal).ToString("x", System.Globalization.CultureInfo.InvariantCulture) + Model.Points.Count;
+    string id = "chart-" + Guid.NewGuid().ToString("N");
 }
 <figure>
     @* Rendered by Merit.Web.Mapping.TrendChartSvg, which HTML-encodes every text value it writes. *@
@@ -9,4 +9,11 @@
         <span>@Model.AnalyteName, @Model.Unit</span>
         <span>&#9679; venous</span><span>&#9675; capillary or unknown</span><span>- - - levels in force today</span>
     </figcaption>
+    @if (Model.Levels.Count > 0)
+    {
+        <ul class="usa-list" aria-label="Current reference levels">
+            @foreach (var level in Model.Levels) { <li>@level.Label @Model.Unit</li> }
+        </ul>
+    }
+    @if (Model.ReferenceNote is not null) { <p class="usa-hint">@Model.ReferenceNote</p> }
 </figure>

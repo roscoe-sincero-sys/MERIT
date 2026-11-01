@@ -113,10 +113,10 @@ public sealed record RelationshipsModel(Guid PersonId, IReadOnlyList<Relationshi
 public sealed record PlacesModel(Guid PersonId, IReadOnlyList<PlaceListRow> Rows, bool CanEdit, IReadOnlyDictionary<string, string> RoleLabels,
                                  IReadOnlyDictionary<string, string> ReasonLabels);
 
-public sealed record ChartPoint(DateOnly Date, decimal Value, string? SampleType, string Operator);
+public sealed record ChartPoint(DateOnly Date, decimal Value, string? SampleType, string Operator, Guid? ResultId = null);
 
 public sealed record TrendChart(string AnalyteCode, string AnalyteName, string Unit, IReadOnlyList<ChartPoint> Points,
-                                IReadOnlyList<(string Label, decimal Value)> Levels);
+                                IReadOnlyList<(string Label, decimal Value)> Levels, string? ReferenceNote = null);
 
 public sealed record ResultsSectionModel(Guid PersonId, IReadOnlyList<PersonResultRow> Rows, Guid? AnalyteFilter,
                                          IReadOnlyList<SelectOption> AnalyteOptions, IReadOnlyList<TrendChart> Charts, bool CanEnter);
