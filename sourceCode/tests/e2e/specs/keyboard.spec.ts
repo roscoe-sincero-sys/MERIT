@@ -122,9 +122,9 @@ test('match review moves through the queue with J and K', async ({ asUser }) => 
   const position = () => items.evaluateAll(lis => lis.findIndex(li => li.querySelector('[aria-current="true"]') !== null));
   const first = await position();
   await page.locator('h1').focus();
-  await page.keyboard.press('j');
+  await page.keyboard.press('Alt+Shift+j');
   await expect.poll(position).toBe(first + 1);
-  await page.keyboard.press('k');
+  await page.keyboard.press('Alt+Shift+k');
   await expect.poll(position).toBe(first);
 });
 
@@ -284,36 +284,36 @@ test('match review: delayed response for an earlier record never overwrites the 
 
   // Step onto row A (held pending): decisions must not fire while the selected record is still loading.
   await page.locator('h1').focus();
-  await page.keyboard.press('j');
+  await page.keyboard.press('Alt+Shift+j');
   await reachedA;
   await expect(page.locator('nav ol li [aria-current="true"]')).toContainText('Alvarez, Elena');
   await expect(page.locator('#record-heading')).toHaveCount(0);
   await expect(page.locator('.merit-indicator')).toContainText('Loading the record');
-  await page.keyboard.press('s');
+  await page.keyboard.press('Alt+Shift+s');
   expect(decisions).toEqual([]);
 
   // Step onto row B before row A responds; fulfill B first, then fulfill delayed A.
-  await page.keyboard.press('j');
+  await page.keyboard.press('Alt+Shift+j');
   await reachedB;
   await expect(page.locator('nav ol li [aria-current="true"]')).toContainText('Brooks, Marcus');
   await releaseB();
   await expect(page.locator('#record-heading')).toContainText('Row 3 of batch.csv');
-  await expect(page.getByRole('button', { name: 'Same person as Marcus Brooks (S)' })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'Same person as Marcus Brooks (Alt+Shift+S)' })).toBeEnabled();
 
   await releaseA();
   await page.waitForTimeout(100);
   await expect(page.locator('nav ol li [aria-current="true"]')).toContainText('Brooks, Marcus');
   await expect(page.locator('#record-heading')).toContainText('Row 3 of batch.csv');
-  await expect(page.getByRole('button', { name: 'Same person as Marcus Brooks (S)' })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'Same person as Marcus Brooks (Alt+Shift+S)' })).toBeEnabled();
 
   // Decide row B: while the decision POST is in flight, navigation and duplicate decisions are locked.
-  await page.keyboard.press('s');
+  await page.keyboard.press('Alt+Shift+s');
   await reachedDecision;
   expect(decisions).toEqual([`/api/v1/match-review/${rowB}/decision`]);
-  await expect(page.getByRole('button', { name: 'Same person as Marcus Brooks (S)' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Same person as Marcus Brooks (Alt+Shift+S)' })).toBeDisabled();
   await expect(page.locator('nav ol li button').first()).toBeDisabled();
-  await page.keyboard.press('k');
-  await page.keyboard.press('s');
+  await page.keyboard.press('Alt+Shift+k');
+  await page.keyboard.press('Alt+Shift+s');
   await expect(page.locator('nav ol li [aria-current="true"]')).toContainText('Brooks, Marcus');
   expect(decisions).toEqual([`/api/v1/match-review/${rowB}/decision`]);
 
@@ -667,16 +667,16 @@ test('match review: marking the last candidate a different person keeps the reco
 
   await page.goto('/app/match-review');
   await angularReady(page);
-  await expect(page.getByRole('button', { name: 'Different person (D)' })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'Different person (Alt+Shift+D)' })).toBeEnabled();
 
   await page.locator('h1').focus();
-  await page.keyboard.press('d');
+  await page.keyboard.press('Alt+Shift+d');
   await expect(page.locator('dl.incoming')).toContainText('Lucia');
-  await expect(page.getByRole('button', { name: 'Create as a new person (C)' })).toBeEnabled();
-  await expect(page.getByRole('button', { name: 'Not sure (N)' })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'Create as a new person (Alt+Shift+C)' })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'Not sure (Alt+Shift+N)' })).toBeEnabled();
   expect(postedDecisions).toEqual([{ decision: 'different', personId: candId }]);
 
-  await page.keyboard.press('c');
+  await page.keyboard.press('Alt+Shift+c');
   await expect(page.locator('.merit-empty')).toContainText('Nothing to review.');
   expect(postedDecisions).toEqual([
     { decision: 'different', personId: candId },
