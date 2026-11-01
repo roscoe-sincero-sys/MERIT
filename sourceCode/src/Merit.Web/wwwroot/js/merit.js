@@ -598,3 +598,32 @@ document.addEventListener('click', async event => {
 document.addEventListener('change', event => {
     if (event.target.id === 'saved-codes') document.querySelector('[data-recovery-submit]').disabled = !event.target.checked;
 });
+
+document.addEventListener('click', event => {
+    const button = event.target.closest('[data-add-grant]');
+    if (!button) return;
+    const group = button.closest('[data-profile-grants]');
+    const rows = group.querySelectorAll('.merit-grant-row');
+    if (!rows.length || rows.length >= 100) return;
+    const row = rows[rows.length - 1].cloneNode(true);
+    row.querySelectorAll('[id], [for], [name]').forEach(el => {
+        for (const attr of ['id', 'for', 'name']) {
+            const value = el.getAttribute(attr);
+            if (value) el.setAttribute(attr, value.replace(/Grants\[\d+\]/g, `Grants[${rows.length}]`).replace(/g\d+([trad])/g, `g${rows.length}$1`));
+        }
+        if (el.matches('select')) el.value = el.name.endsWith('TenantId') ? '' : el.name.endsWith('AccessLevel') ? 'read' : el.options[0]?.value || '';
+        if (el.type === 'checkbox') el.checked = true;
+    });
+    button.before(row);
+    group.querySelector('[data-grant-status]').textContent = `Grant row ${rows.length + 1} added.`;
+    row.querySelector('select')?.focus();
+    if (rows.length + 1 >= 100) button.disabled = true;
+});
+document.addEventListener('input', event => {
+    if (!event.target.matches('[data-user-filter]')) return;
+    const query = event.target.value.trim().toLocaleLowerCase();
+    const rows = [...document.querySelectorAll('[data-user-row]')];
+    rows.forEach(row => { row.hidden = !row.textContent.toLocaleLowerCase().includes(query); });
+    const count = rows.filter(row => !row.hidden).length;
+    document.querySelector('[data-user-count]').textContent = `${count} of ${rows.length} users shown.${count === 0 ? ' No users match.' : ''}`;
+});

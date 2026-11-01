@@ -6,6 +6,7 @@
     var others = Model.Mine.Profiles.Where(p => !p.IsMaster).ToList();
 }
 <h1>My profiles</h1>
+@if (Model.ReturnUrl is string previous) { <p><a class="usa-link" href="@previous">Return to previous page</a></p> }
 @if (Model.Message is string m) { <div class="usa-alert usa-alert--success usa-alert--slim" role="status"><div class="usa-alert__body"><p class="usa-alert__text">@m</p></div></div> }
 @if (Model.Error is string e) { <div class="usa-alert usa-alert--error usa-alert--slim" role="alert"><div class="usa-alert__body"><p class="usa-alert__text">@e</p></div></div> }
 
@@ -52,6 +53,8 @@ else
                             {
                                 <form method="post" action="/account/profiles/switch">@Html.AntiForgeryToken()
                                     <input type="hidden" name="userProfileId" value="@(p.IsMaster ? "" : p.UserProfileId.ToString())" />
+                                    <input type="hidden" name="actingTenantId" value="@Model.ActingTenantId" />
+                                    <input type="hidden" name="returnUrl" value="@Model.ReturnUrl" />
                                     <button class="usa-button usa-button--outline usa-button--small" type="submit">Use<span class="usa-sr-only"> @p.ProfileName</span></button></form>
                             }
                             @if (!p.IsMaster) { <a class="usa-link" href="/account/profiles/@p.UserProfileId/edit">Change<span class="usa-sr-only"> @p.ProfileName</span></a> }
@@ -68,6 +71,7 @@ else
     <form class="merit-inline-form" method="post" action="/account/profiles/switch">
         @Html.AntiForgeryToken()
         <input type="hidden" name="userProfileId" value="@ProfilesPageModel.Id(Model.CurrentProfileId)" />
+        <input type="hidden" name="returnUrl" value="@Model.ReturnUrl" />
         <label class="usa-label" for="actingTenantId">Tenant</label>
         <select class="usa-select" id="actingTenantId" name="actingTenantId">
             @foreach (var t in Model.Tenants.Where(t => t.TenantType != "platform"))

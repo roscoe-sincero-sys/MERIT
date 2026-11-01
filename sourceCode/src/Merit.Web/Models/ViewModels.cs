@@ -829,6 +829,8 @@ public sealed class TenantFormModel
     public string? TimeZone { get; set; } = Merit.Application.Security.JurisdictionTimeZones.Default;
 
     public string? CountyFipsList { get; set; }
+    public bool CountySelection { get; set; }
+    public string[] SelectedCountyFips { get; set; } = [];
 
     public string? NewCounties { get; set; }
 

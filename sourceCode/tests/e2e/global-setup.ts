@@ -1,4 +1,4 @@
-import { chromium, FullConfig } from '@playwright/test';
+import { chromium, expect, FullConfig } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
 import { totp } from './totp';
@@ -36,9 +36,12 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
     await page.keyboard.press('Enter');
     // Enrollment answers with the one-time recovery codes; continue past them as a person would.
     await page.getByText('Save your recovery codes').waitFor();
+    await page.waitForLoadState('networkidle');
     await page.locator('#saved-codes').focus();
     await page.keyboard.press('Space');
-    await page.getByRole('link', { name: 'Continue to MERIT' }).or(page.getByRole('button', { name: 'Continue to MERIT' })).focus();
+    const proceed = page.getByRole('link', { name: 'Continue to MERIT' }).or(page.getByRole('button', { name: 'Continue to MERIT' }));
+    await expect(proceed).toBeEnabled();
+    await proceed.focus();
     const continuation = page.waitForResponse(r => r.request().method() === 'POST' && r.url().includes('/account/recovery/continue'));
     await page.keyboard.press('Enter');
     const continued = await continuation;

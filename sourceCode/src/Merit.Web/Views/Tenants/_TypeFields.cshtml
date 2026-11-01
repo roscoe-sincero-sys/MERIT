@@ -32,15 +32,26 @@
     }
     else
     {
-        <div class="usa-form-group"><label class="usa-label" for="CountyFipsList">Counties it serves</label>
-            <div class="usa-hint" id="county-hint">Three-digit county FIPS codes separated by commas, for example 037, 003.
-                @(Model.MayChooseAnyCounty ? "Leave blank for a program that covers the whole state." : $"Only counties {Model.ParentName} serves; leave blank for none.")</div>
-            <input class="usa-input" id="CountyFipsList" name="CountyFipsList" value="@Model.CountyFipsList" aria-describedby="county-hint" /></div>
         @if (Model.ExistingCounties.Count > 0)
         {
-            <details class="merit-details"><summary>@(Model.MayChooseAnyCounty ? "Counties already set up" : $"Counties {Model.ParentName} serves") (@Model.ExistingCounties.Count)</summary>
-                <ul class="usa-list">@foreach (var c in Model.ExistingCounties) { <li>@c.CountyFips @c.SubJurisdictionName</li> }</ul>
-            </details>
+            var selected = (Model.CountyFipsList ?? "").Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).ToHashSet();
+            <fieldset class="usa-fieldset" id="CountyFipsList" aria-invalid="@ViewData.ModelState.AriaInvalid("CountyFipsList")" aria-describedby="@ViewData.ModelState.DescribedBy("CountyFipsList", "county-hint")">
+                <legend class="usa-legend">Counties it serves</legend>
+                <p class="usa-hint" id="county-hint">@(Model.MayChooseAnyCounty ? "Leave all unchecked for a program that covers the whole state." : $"Choose only counties {Model.ParentName} serves; leave all unchecked for none.")</p>
+                @ViewData.ModelState.ErrorMessage("CountyFipsList")
+                <input type="hidden" name="CountySelection" value="true" />
+                @foreach (var county in Model.ExistingCounties)
+                {
+                    <div class="usa-checkbox"><input class="usa-checkbox__input" type="checkbox" id="county-@county.CountyFips" name="SelectedCountyFips" value="@county.CountyFips" checked="@selected.Contains(county.CountyFips)" />
+                        <label class="usa-checkbox__label" for="county-@county.CountyFips">@county.SubJurisdictionName (@county.CountyFips)</label></div>
+                }
+            </fieldset>
+        }
+        else
+        {
+            <label class="usa-label" for="CountyFipsList">County FIPS codes</label>
+            <div class="usa-hint" id="county-hint">No counties are configured. Enter three-digit county FIPS codes separated by commas, or leave blank.</div>
+            <input class="usa-input" id="CountyFipsList" name="CountyFipsList" value="@Model.CountyFipsList" aria-describedby="county-hint" />
         }
     }
     @if (Model.MayChooseAnyCounty)
