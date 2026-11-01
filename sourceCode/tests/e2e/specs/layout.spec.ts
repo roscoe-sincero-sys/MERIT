@@ -156,7 +156,7 @@ test('maps: county outlines give context, and the cluster map stays small', asyn
   expect(await page.locator('merit-point-map path.area').count()).toBeGreaterThan(1);
   expect(await page.locator('merit-point-map text.area-label').count()).toBeGreaterThan(0);
   // A point still names its case on focus.
-  await page.locator('circle.point').first().focus();
+  await page.locator('.point').first().focus();
   await expect(page.locator('merit-point-map .tooltip')).toContainText(/PB-\d{4}-\d+/);
 
   await page.goto('/app/clusters');
