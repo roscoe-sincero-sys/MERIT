@@ -102,6 +102,14 @@ For manual setup, choose **Enter code manually** and enter the account name and 
 spaces in the key. After adding the account, enter the app's current six-digit verification code on the MERIT page.
 If the app only accepts numbers during setup, return to **Add account > Other account** to enter the setup key.
 
+If the MERIT entry is missing after registration, choose **Can't access your authenticator?** on the verification-code
+page and sign in with an unused saved recovery code. If no code is available, contact your agency's MERIT administrator
+or help desk through your usual agency support channel. After verifying your identity, an administrator who manages
+your account can open **Administration > Users**, select your account, and choose **Reset MFA after verifying the person**.
+Administrators must ask another administrator to reset their own MFA. A reset ends active sessions and invalidates the old
+authenticator and recovery codes. Choose **Sign in again after an MFA reset**, enter your password, add the new MERIT entry
+to your authenticator, and save the new recovery codes. Returning to sign-in alone does not reset an enrolled authenticator.
+
 | User | Works for | Access |
 | --- | --- | --- |
 | `platform` | MERIT platform | Platform administrator: accounts and roles only, no records, one profile |

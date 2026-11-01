@@ -1,23 +1,50 @@
 @model MfaModel
 @{
-    ViewData["Title"] = "Verify your sign-in";
+    ViewData["Title"] = Model.UseRecoveryCode ? "Sign in with a recovery code" : "Verify your sign-in";
 }
 <div class="merit-signin merit-signin--single">
     <section class="merit-signin__card">
-        <h1>Enter your verification code</h1>
+        <h1>@(Model.UseRecoveryCode ? "Sign in with a recovery code" : "Enter your verification code")</h1>
+        @if (Model.UseRecoveryCode)
+        {
+            <p>If the MERIT entry is missing from your authenticator app, use one of the recovery codes you saved when you registered. Each code works once.</p>
+        }
         @if (Model.Message is not null)
         {
             <div class="usa-alert usa-alert--error usa-alert--slim" role="alert"><div class="usa-alert__body"><p class="usa-alert__text">@Model.Message</p></div></div>
         }
         <partial name="_ErrorSummary" model='new ErrorSummaryModel(["Code"], new Dictionary<string, string> { ["Code"] = "Code" }, SummaryId: "account-mfa-errors")' />
     <form class="usa-form" method="post" asp-action="Mfa">
+            <input type="hidden" asp-for="UseRecoveryCode" />
             <div class="usa-form-group">
-                <label class="usa-label" asp-for="Code">Six-digit code from your authenticator app</label>
-                <div class="usa-hint" id="code-hint">Or enter one of your ten-character recovery codes.</div>
+                <label class="usa-label" asp-for="Code">@(Model.UseRecoveryCode ? "Recovery code" : "Six-digit code from your authenticator app")</label>
+                <div class="usa-hint" id="code-hint">@(Model.UseRecoveryCode ? "Enter an unused ten-character recovery code. You can include or omit its hyphen." : "Or enter one of your ten-character recovery codes.")</div>
                 <input class="usa-input usa-input--medium" asp-for="Code" autofocus="@(ViewData.ModelState.IsValid)" autocomplete="one-time-code" inputmode="text" aria-describedby="code-hint" required />
             </div>
-            <button class="usa-button" type="submit">Verify and sign in</button>
+            <button class="usa-button" type="submit">@(Model.UseRecoveryCode ? "Use recovery code and sign in" : "Verify and sign in")</button>
         </form>
+        @if (Model.UseRecoveryCode)
+        {
+            <p>After signing in, ask your MERIT administrator to verify your identity and reset MFA so you can add MERIT to your authenticator app again.</p>
+            <p><a class="usa-link" href="/account/mfa">Use an authenticator code instead</a></p>
+            <section aria-labelledby="mfa-reset-heading">
+                <h2 id="mfa-reset-heading">No recovery codes available?</h2>
+                <ol class="usa-list">
+                    <li>Contact your agency's MERIT administrator or help desk through your usual agency support channel. Give them your MERIT user name and explain that the authenticator entry is missing.</li>
+                    <li>Ask them to verify your identity and reset MFA for your account. If you are an administrator, ask another administrator to help. Platform administrators should contact another platform administrator.</li>
+                    <li>After they confirm the reset, sign in again with your password. On <strong>Set up your authenticator app</strong>, add the new MERIT entry to your app, enter its verification code, and save your new recovery codes.</li>
+                </ol>
+                <p>A reset ends your active sessions and invalidates your previous authenticator entry and recovery codes.</p>
+                <form method="post" action="/account/restart-signin">
+                    @Html.AntiForgeryToken()
+                    <button class="usa-button usa-button--outline" type="submit">Sign in again after an MFA reset</button>
+                </form>
+            </section>
+        }
+        else
+        {
+            <p><a class="usa-link" href="/account/mfa?useRecoveryCode=true">Can't access your authenticator?</a></p>
+        }
     </section>
 </div>
 
