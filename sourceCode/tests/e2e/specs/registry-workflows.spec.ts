@@ -73,14 +73,18 @@ test('map filters survive reload and browser history, with one product title suf
 
 test('client navigation updates current location, title, focus and return filters', async ({ asUser }) => {
   const page = await asUser('supervisor');
-  await page.goto('/app/clusters?status=open'); await angularReady(page);
+  // Other workflows can move the demo clusters out of "open". Exercise a populated filter.
+  const available = await (await page.request.get('/api/v1/clusters')).json() as { items: { status: string }[] };
+  expect(available.items.length).toBeGreaterThan(0);
+  const status = available.items[0].status;
+  await page.goto(`/app/clusters?status=${status}`); await angularReady(page);
   await page.locator('main table a').first().click(); await angularReady(page);
   await expect(page).toHaveTitle('Cluster - MERIT');
   await expect(page.locator('app-root h1')).toBeFocused();
   await expect(page.locator('.merit-nav a[href="/app/clusters"]')).toHaveAttribute('aria-current', 'page');
   await expect(page.locator('#live-region')).toContainText('MERIT');
   await page.getByRole('link', { name: 'Return to clusters', exact: true }).click();
-  await expect(page).toHaveURL(/\/app\/clusters\?status=open/);
+  await expect(page).toHaveURL(new RegExp(`/app/clusters\\?status=${status}`));
   await expect(page.locator('app-root h1')).toBeFocused();
   await expect(page).toHaveTitle('Clusters - MERIT');
 });
@@ -111,5 +115,6 @@ test('sample types constrain units and allow visible sample correction', async (
 
 test('clinical reference navigation is labelled for a case manager', async ({ asUser }) => {
   const page = await asUser('cmbalt'); await page.goto('/'); await page.getByRole('button', { name: 'Menu', exact: true }).click();
+  await page.locator('summary').filter({ hasText: /^Administration/ }).click();
   await expect(page.getByRole('navigation', { name: 'Primary' }).getByRole('link', { name: 'Reference levels', exact: true })).toBeVisible();
 });

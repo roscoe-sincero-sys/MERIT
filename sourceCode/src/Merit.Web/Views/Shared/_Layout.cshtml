@@ -5,6 +5,7 @@
     string path = Context.Request.Path.Value ?? "/";
     string Current(string prefix) => (prefix == "/" ? path == "/" : path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) ? "page" : "false";
     bool signedIn = CurrentSession.IsAuthenticated;
+    bool enhancedNavigation = Configuration.GetValue<bool>("Navigation:Enhanced");
     long? sessionExpires = (await Context.AuthenticateAsync(AuthSchemes.Session)).Properties?.ExpiresUtc?.ToUnixTimeMilliseconds();
 }
 <!DOCTYPE html>
@@ -22,7 +23,7 @@
 </head>
 <body data-session-minutes="@(signedIn ? Configuration.GetValue("Session:IdleTimeoutMinutes", 20) : 0)" data-session-user="@CurrentSession.UserName" data-session-expires="@sessionExpires">
     <a class="merit-skip" href="#main-content">Skip to main content</a>
-    <header class="merit-header" role="banner">
+    <header class="merit-header @(enhancedNavigation ? "merit-header--enhanced" : "")" role="banner" data-enhanced-navigation="@(enhancedNavigation ? "true" : "false")">
         <div class="merit-header__inner">
             <a class="merit-brand" href="/">MERIT<small>Metals Exposure Registry and Investigation Tracking</small></a>
             @if (signedIn)
@@ -30,6 +31,12 @@
                 @* On a phone the menu and the user block fold behind this button; merit.js shows it (issue #47). *@
                 <button class="usa-button usa-button--outline usa-button--inverse merit-menu-button" type="button" aria-expanded="false" aria-controls="merit-nav merit-user">Menu</button>
                 <nav id="merit-nav" class="merit-header__nav" aria-label="Primary">
+                    @if (enhancedNavigation)
+                    {
+                        @await Html.PartialAsync("_PrimaryNavigation")
+                    }
+                    else
+                    {
                     <ul class="merit-nav">
                         @if (CurrentSession.Has(Permissions.PersonView)) { <li><a href="/search" aria-current="@(path.StartsWith("/people", StringComparison.OrdinalIgnoreCase) ? "page" : Current("/search"))">People</a></li> }
                         @if (CurrentSession.Has(Permissions.TaskView)) { <li><a href="/" aria-current="@Current("/")">Home</a></li> }
@@ -49,6 +56,7 @@
                         @if (CurrentSession.Has(Permissions.TenantAdminister)) { <li><a href="/admin/users" aria-current="@Current("/admin/users")">Users</a></li> }
                         @if (CurrentSession.Has(Permissions.TenantCreate)) { <li><a href="/admin/tenants" aria-current="@Current("/admin/tenants")">Tenants</a></li> }
                     </ul>
+                    }
                 </nav>
                 @if (CurrentSession.Has(Permissions.PersonView))
                 {

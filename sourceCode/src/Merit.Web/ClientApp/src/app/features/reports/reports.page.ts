@@ -6,6 +6,7 @@ import { AnalyteOptionDto, ReportCell, ReportDto, ReportSummaryDto } from '../..
 import { ChartSeries, SeriesChartComponent } from '../../shared/chart/series-chart.component';
 import { Display } from '../../shared/display.service';
 import { LatestRequest } from '../../shared/latest-request';
+import { ContextPanelComponent } from '../../shared/context-panel.component';
 
 @Injectable()
 export class ReportsStore {
@@ -26,18 +27,18 @@ export class ReportsStore {
  */
 @Component({
   selector: 'merit-reports-page',
-  imports: [SeriesChartComponent],
+  imports: [ContextPanelComponent, SeriesChartComponent],
   providers: [ReportsStore, ViewQuery],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <h1 tabindex="-1">Reports</h1>
     @if (store.error(); as e) { <div class="usa-alert usa-alert--error usa-alert--slim" role="alert"><div class="usa-alert__body"><p class="usa-alert__text">{{ e }}</p></div></div> }
-    <div class="layout">
-      <nav aria-label="Report library">
+    <merit-context-panel panelId="report-navigation" label="report library">
+      <nav panelNavigation aria-label="Report library">
         <ul class="usa-sidenav">
           @for (r of store.library(); track r.code) {
             <li class="usa-sidenav__item">
-              <a [href]="'/app/reports?code=' + r.code" [class.usa-current]="r.code === store.code()" (click)="choose($event, r.code)">{{ r.title }}</a>
+              <a [href]="'/app/reports?code=' + r.code" [class.usa-current]="r.code === store.code()" [attr.aria-current]="r.code === store.code() ? 'true' : null" (click)="choose($event, r.code)">{{ r.title }}</a>
             </li>
           }
         </ul>
@@ -96,17 +97,15 @@ export class ReportsStore {
           <p class="merit-empty">No reports are available to you.</p>
         }
       </section>
-    </div>
+    </merit-context-panel>
   `,
   styles: `
-    .layout { display: grid; grid-template-columns: minmax(12rem, 18rem) minmax(0, 1fr); gap: 1.5rem; }
     .filters { display: flex; flex-wrap: wrap; gap: .5rem 1rem; align-items: end; margin-bottom: 1rem; }
     .filters .usa-input, .filters .usa-select, .measure .usa-select { max-width: 14rem; }
     .exports { display: flex; gap: .5rem; margin-left: auto; }
     .measure { margin-bottom: .5rem; }
     .scroll { overflow-x: auto; }
     .num { text-align: right; font-variant-numeric: tabular-nums; }
-    @media (max-width: 64em) { .layout { grid-template-columns: minmax(0, 1fr); } }
   `,
 })
 export class ReportsPage implements OnInit {

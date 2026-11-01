@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import { BrowserContext, expect, Page, test as base } from '@playwright/test';
 
-type User = 'supervisor' | 'cmbalt';
+type User = 'supervisor' | 'cmbalt' | 'admin';
 
 /** asUser opens a page in a fresh context carrying that user's saved session (see global-setup.ts). */
 export const test = base.extend<{ asUser: (user: User) => Promise<Page> }>({

@@ -1,0 +1,55 @@
+@inject ICurrentSession CurrentSession
+@{
+    string path = Context.Request.Path.Value ?? "/";
+    string Current(string target) => (target == "/" ? path == "/" :
+        path.Equals(target, StringComparison.OrdinalIgnoreCase) || path.StartsWith(target + "/", StringComparison.OrdinalIgnoreCase) ||
+        (target == "/search" && path.StartsWith("/people/", StringComparison.OrdinalIgnoreCase))) ? "page" : "false";
+    var groups = new[]
+    {
+        (Label: "Intake", Links: new[] {
+            (Text: "Intake", Url: "/intake", Visible: CurrentSession.Has(Permissions.IntakeUpload)),
+            (Text: "Held records", Url: "/app/held", Visible: CurrentSession.Has(Permissions.ResultReleaseHold)),
+            (Text: "Match review", Url: "/app/match-review", Visible: CurrentSession.Has(Permissions.ResultReleaseHold)) }),
+        (Label: "Surveillance", Links: new[] {
+            (Text: "Cases", Url: "/cases", Visible: CurrentSession.Has(Permissions.CaseView)),
+            (Text: "Clusters", Url: "/app/clusters", Visible: CurrentSession.Has(Permissions.CaseView)),
+            (Text: "Map", Url: "/app/map", Visible: CurrentSession.Has(Permissions.CaseView)),
+            (Text: "Investigations", Url: "/investigations", Visible: CurrentSession.Has(Permissions.CaseView)) }),
+        (Label: "Registry & reports", Links: new[] {
+            (Text: "Results", Url: "/app/results", Visible: CurrentSession.Has(Permissions.ResultView)),
+            (Text: "Reports", Url: "/app/reports", Visible: CurrentSession.Has(Permissions.ResultView) || CurrentSession.Has(Permissions.CaseView)),
+            (Text: "Reporters", Url: "/reporters", Visible: CurrentSession.Has(Permissions.PersonView)),
+            (Text: "Extracts", Url: "/extracts", Visible: CurrentSession.Has(Permissions.ExtractRun)) }),
+        (Label: "Administration", Links: new[] {
+            (Text: CurrentSession.Has(Permissions.ConfigEdit) ? "Configuration" : "Reference levels", Url: "/config/thresholds", Visible: !CurrentSession.IsPlatformAdmin),
+            (Text: "Users", Url: "/admin/users", Visible: CurrentSession.Has(Permissions.TenantAdminister)),
+            (Text: "Tenants", Url: "/admin/tenants", Visible: CurrentSession.Has(Permissions.TenantCreate)) })
+    };
+}
+<ul class="merit-nav">
+    @if (CurrentSession.Has(Permissions.TaskView))
+    {
+        <li><a href="/" aria-current="@Current("/")">Home</a></li>
+        <li><a href="/app/queues" aria-current="@Current("/app/queues")">Work queues</a></li>
+    }
+    @if (CurrentSession.Has(Permissions.PersonView))
+    {
+        <li><a href="/search" aria-current="@Current("/search")">People</a></li>
+    }
+    @foreach (var group in groups)
+    {
+        var links = group.Links.Where(link => link.Visible).ToArray();
+        if (links.Length == 0) { continue; }
+        <li>
+            <details class="merit-nav-group">
+                <summary>@group.Label<span class="usa-sr-only merit-nav-current"> (current section)</span></summary>
+                <ul>
+                    @foreach (var link in links)
+                    {
+                        <li><a href="@link.Url" aria-current="@Current(link.Url)">@link.Text</a></li>
+                    }
+                </ul>
+            </details>
+        </li>
+    }
+</ul>
