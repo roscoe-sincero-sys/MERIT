@@ -80,7 +80,9 @@ public static class TabularExport
     private static string Text(object v) => Safe(v switch
     {
         DateOnly d => d.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
-        DateTime d => d.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture),
+        // SQL datetime2 report instants have Unspecified kind but are stored in UTC.
+        DateTime d => (d.Kind == DateTimeKind.Local ? d.ToUniversalTime() : d).ToString("yyyy-MM-dd HH:mm:ss 'UTC'", CultureInfo.InvariantCulture),
+        DateTimeOffset d => d.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'", CultureInfo.InvariantCulture),
         bool b => b ? "yes" : "no",
         IFormattable f => f.ToString(null, CultureInfo.InvariantCulture),
         _ => v.ToString() ?? string.Empty,

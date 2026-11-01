@@ -100,6 +100,19 @@ public sealed class MatchComparerTests
 public sealed class TabularExportTests
 {
     [Fact]
+    public void InstantsAreExplicitUtcInBothExportFormatsAndDatesStayDates()
+    {
+        IReadOnlyList<IReadOnlyList<object?>> rows = [[new DateTime(2026, 7, 1, 12, 30, 0),
+            new DateTimeOffset(2026, 7, 1, 8, 30, 0, TimeSpan.FromHours(-4)), new DateOnly(2026, 7, 1)]];
+        var csv = Encoding.UTF8.GetString(TabularExport.Csv(["SQL instant", "Offset instant", "Date"], rows));
+        Assert.Equal(2, csv.Split("2026-07-01 12:30:00 UTC").Length - 1);
+        Assert.Contains("\"2026-07-01\"", csv);
+        using var zip = new ZipArchive(new MemoryStream(TabularExport.Xlsx("Times", ["SQL instant", "Offset instant", "Date"], rows)));
+        using var reader = new StreamReader(zip.GetEntry("xl/worksheets/sheet1.xml")!.Open());
+        Assert.Equal(2, reader.ReadToEnd().Split("2026-07-01 12:30:00 UTC").Length - 1);
+    }
+
+    [Fact]
     public void CsvQuotesValuesAndDefusesFormulas()
     {
         string csv = Encoding.UTF8.GetString(TabularExport.Csv(["Name", "Value"], [["=HYPERLINK(\"x\")", -5m], ["Lab \"A\"", null]]));

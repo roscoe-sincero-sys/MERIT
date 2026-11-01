@@ -46,24 +46,26 @@ export class ReportsStore {
         @if (store.report(); as r) {
           <h2 id="report-title">{{ r.title }}</h2>
           <p class="merit-meta">{{ r.description }}</p>
-          <form class="filters" (submit)="apply($event)">
-            <div><label class="usa-label" for="r-from">From</label><input class="usa-input" id="r-from" name="from" type="date" [value]="r.fromDate" /></div>
-            <div><label class="usa-label" for="r-to">To</label><input class="usa-input" id="r-to" name="to" type="date" [value]="r.toDate" /></div>
+          <form class="filters" (submit)="apply($event)" (input)="editFilters($event)" (change)="editFilters($event)">
+            <div><label class="usa-label" for="r-from">From</label><input class="usa-input" id="r-from" name="from" [disabled]="store.loading()" type="date" [value]="r.fromDate" /></div>
+            <div><label class="usa-label" for="r-to">To</label><input class="usa-input" id="r-to" name="to" [disabled]="store.loading()" type="date" [value]="r.toDate" /></div>
             @if (r.usesAnalyte) {
               <div><label class="usa-label" for="r-analyte">Analyte</label>
-                <select class="usa-select" id="r-analyte" name="analyteId">
+                <select class="usa-select" id="r-analyte" name="analyteId" [disabled]="store.loading()">
                   <option value="">All</option>
                   @for (a of store.analytes(); track a.analyteId) { <option [value]="a.analyteId" [selected]="a.analyteId === r.analyteId">{{ a.displayName }}</option> }
                 </select></div>
             }
-            <div><button class="usa-button" type="submit">Apply</button></div>
+            <div><button class="usa-button" type="submit" [disabled]="store.loading()">Apply</button></div>
             @if (r.canExport) {
               <div class="exports">
-                <a class="usa-button usa-button--outline" [href]="exportUrl('csv')" download>Export CSV</a>
-                <a class="usa-button usa-button--outline" [href]="exportUrl('xlsx')" download>Export Excel</a>
+                <a class="usa-button usa-button--outline" [attr.href]="exportReady() ? exportUrl('csv') : null" [attr.aria-disabled]="!exportReady()" download>Export CSV</a>
+                <a class="usa-button usa-button--outline" [attr.href]="exportReady() ? exportUrl('xlsx') : null" [attr.aria-disabled]="!exportReady()" download>Export Excel</a>
               </div>
             }
           </form>
+          @if (!exportReady() && r.canExport) { <p role="status">Apply filter changes and wait for the report before exporting.</p> }
+          @if (chart().ambiguous) { <p role="status">Some chart values are omitted because multiple rows share a category. See the table for individual values; percentages, medians and averages cannot be summed.</p> }
 
           @if (r.rows.length === 0) {
             <p class="merit-empty">No data in this period.</p>
@@ -115,6 +117,17 @@ export class ReportsPage implements OnInit {
   private readonly libraryLoad = new LatestRequest();
   private readonly reportLoad = new LatestRequest();
   private reportQuery: string | null = null;
+  private readonly draft = signal({ from: '', to: '', analyteId: '' });
+  protected readonly exportReady = computed(() => {
+    const r = this.store.report(); const f = this.draft();
+    return !!r && !this.store.loading() && !this.store.error() && f.from === r.fromDate && f.to === r.toDate && f.analyteId === (r.analyteId ?? '');
+  });
+  protected editFilters(event: Event): void {
+    const form = (event.target as HTMLElement).closest('form');
+    if (!form) return;
+    const data = new FormData(form);
+    this.draft.set({ from: String(data.get('from') ?? ''), to: String(data.get('to') ?? ''), analyteId: String(data.get('analyteId') ?? '') });
+  }
 
   protected readonly measureKey = computed(() => {
     const r = this.store.report();
@@ -125,13 +138,14 @@ export class ReportsPage implements OnInit {
   /** Categories along x, one series per group value (or one series), summed per cell; colours keyed to every group value. */
   protected readonly chart = computed(() => {
     const r = this.store.report();
-    if (!r) return { categories: [] as string[], series: [] as ChartSeries[], colorKeys: [] as string[] };
+    if (!r) return { categories: [] as string[], series: [] as ChartSeries[], colorKeys: [] as string[], ambiguous: false };
     const xi = r.columns.findIndex(c => c.key === r.chart.x);
     const gi = r.chart.group ? r.columns.findIndex(c => c.key === r.chart.group) : -1;
     const mi = r.columns.findIndex(c => c.key === this.measureKey());
     const categories = [...new Set(r.rows.map(row => String(row[xi] ?? '')))];
     if (r.columns[xi]?.kind === 'month') categories.sort();
     const groups = gi < 0 ? [this.measureKey()] : [...new Set(r.rows.map(row => String(row[gi] ?? '')))].sort();
+    let ambiguous = false;
     const series = groups.map(g => ({
       key: g,
       label: gi < 0 ? this.label(r, g) : this.display.ifCode(g),
@@ -139,10 +153,11 @@ export class ReportsPage implements OnInit {
         const cells = r.rows.filter(row => String(row[xi] ?? '') === cat && (gi < 0 || String(row[gi] ?? '') === g))
           .map(row => row[mi]).filter((v): v is number => typeof v === 'number');
         // A category with rows but none for this group is a zero count (no tests that month), not missing data.
+        if (cells.length > 1 && !this.isCount(r, this.measureKey())) { ambiguous = true; return null; }
         return cells.length ? cells.reduce((a, b) => a + b, 0) : (gi >= 0 && this.isCount(r, this.measureKey()) ? 0 : null);
       }),
     }));
-    return { categories, series, colorKeys: groups };
+    return { categories: categories.map(c => this.cell(c, r.columns[xi]?.kind ?? 'text')), series, colorKeys: groups, ambiguous };
   });
 
   ngOnInit(): void {
@@ -177,6 +192,7 @@ export class ReportsPage implements OnInit {
 
   protected apply(event: Event): void {
     event.preventDefault();
+    if (this.store.loading()) return;
     const f = new FormData(event.target as HTMLFormElement);
     this.store.filters.set({ from: String(f.get('from') ?? ''), to: String(f.get('to') ?? ''), analyteId: String(f.get('analyteId') ?? '') });
     const code = this.store.code();
@@ -225,6 +241,7 @@ export class ReportsPage implements OnInit {
       next: r => {
         if (this.store.code() !== code || r.code !== code) return;
         this.store.report.set(r);
+        this.draft.set({ from: r.fromDate, to: r.toDate, analyteId: r.analyteId ?? '' });
         this.store.loading.set(false);
       },
       error: e => {

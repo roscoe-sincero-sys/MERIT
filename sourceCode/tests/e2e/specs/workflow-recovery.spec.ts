@@ -352,4 +352,5 @@ test('timeline point heights do not compare unlike analytes or units', async ({ 
   expect(await points.nth(0).getAttribute('cy')).toBe(await points.nth(1).getAttribute('cy'));
   await points.nth(1).click();
   await expect(page.getByRole('status')).toContainText('Arsenic, urine: 900 ug/L');
+  await expect(page.getByRole('status')).toContainText('Result');
 });

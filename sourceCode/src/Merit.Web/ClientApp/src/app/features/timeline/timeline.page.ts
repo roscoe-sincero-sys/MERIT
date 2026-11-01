@@ -172,7 +172,7 @@ export class TimelineStore {
         <div class="usa-summary-box" role="status">
           <div class="usa-summary-box__body">
             <h2 class="usa-summary-box__heading">{{ s.label }}</h2>
-            <p>{{ display.date(s.date) }}@if (s.endDate) { to {{ display.date(s.endDate) }} } &middot; {{ s.kind }}@if (s.detail) { &middot; {{ s.detail }} }</p>
+            <p>{{ display.date(s.date) }}@if (s.endDate) { to {{ display.date(s.endDate) }} } &middot; {{ display.of(s.kind) }}@if (s.detail) { &middot; {{ s.detail }} }</p>
           </div>
         </div>
       }
