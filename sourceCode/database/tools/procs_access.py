@@ -504,6 +504,26 @@ SET @Comments = N'Grant saved; user sessions revoked.';
 """,
     },
     {
+        "schema": "auth", "name": "uspUnlockUser", "kind": "write", "grants": WEB, "ticket": "T160",
+        "permission": "tenant.administer",
+        "desc": "Clears sign-in lockout for an account in an administered home tenant; retains credentials and MFA.",
+        "params": "@appUserId UNIQUEIDENTIFIER",
+        "key": "CONCAT (N'appUserId=', @appUserId)",
+        "body": f"""
+{ADMIN_TENANTS}
+
+IF NOT EXISTS (SELECT 1 FROM auth.appUser AS u JOIN @admin AS a ON a.tenantId = u.homeTenantId
+                WHERE u.appUserId = @appUserId AND u.isDeleted = 0)
+BEGIN
+    ;THROW 51403, N'Only an administrator of the tenant this person works for can unlock their account.', 1;
+END;
+
+UPDATE auth.appUser SET failedSignInCount = 0, lockoutEndUtc = NULL
+ WHERE appUserId = @appUserId AND isDeleted = 0;
+SET @Comments = N'Account unlocked.';
+""",
+    },
+    {
         "schema": "auth", "name": "uspResetUserMfa", "kind": "write", "grants": WEB, "ticket": "T160",
         "permission": "tenant.administer",
         "desc": "Clears a user's second factor after the administrator has verified the person, so they enroll again at "

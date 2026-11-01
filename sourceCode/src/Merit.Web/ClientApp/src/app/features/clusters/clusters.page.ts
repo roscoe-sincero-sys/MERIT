@@ -288,6 +288,7 @@ export class ClusterPage implements OnInit {
 
   protected member(caseNumber: string, isMember: boolean): void {
     const c = this.store.cluster();
+    if (!isMember && c?.canEdit && !this.store.busy() && !window.confirm(`Remove case ${caseNumber} from cluster ${c.title}?`)) return;
     if (c?.canEdit) this.run(this.api.setClusterMember(c.clusterId, { caseNumber, isMember }), isMember ? `${caseNumber} rejoined.` : `${caseNumber} left the cluster.`);
   }
 

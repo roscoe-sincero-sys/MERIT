@@ -179,6 +179,12 @@ public sealed class AdminService(IClock clock, IAccountData accounts, AccountSer
         return session.IsPlatformAdmin ? [] : await accounts.ListViewAsUsersAsync(ct).ConfigureAwait(false);
     }
 
+    public async Task UnlockUserAsync(Guid appUserId, CancellationToken ct = default)
+    {
+        session.Require(Permissions.TenantAdminister);
+        await accounts.UnlockUserAsync(appUserId, ct).ConfigureAwait(false);
+    }
+
     public async Task ResetMfaAsync(Guid appUserId, CancellationToken ct = default)
     {
         session.Require(Permissions.TenantAdminister);

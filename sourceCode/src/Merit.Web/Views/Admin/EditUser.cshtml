@@ -13,6 +13,10 @@
 {
     <div class="usa-alert usa-alert--error usa-alert--slim" role="alert"><div class="usa-alert__body"><p class="usa-alert__text">@err</p></div></div>
 }
+@if (TempData["userMessage"] is string message)
+{
+    <div class="usa-alert usa-alert--success usa-alert--slim" role="status"><div class="usa-alert__body"><p class="usa-alert__text">@message</p></div></div>
+}
 <div class="merit-grid-2">
     @if (Model.CanManageAccount)
     {
@@ -57,7 +61,7 @@
                         <span class="merit-meta">@Options.Date(a.StartDate) &ndash; @(a.EndDate is null ? "current" : Options.Date(a.EndDate))</span>
                         @if (a.EndDate is null && a.CanManage)
                         {
-                            <form class="display-inline" method="post" action="/admin/users/@id/assignments/@a.UserAssignmentId/end">@Html.AntiForgeryToken()<button class="usa-button usa-button--unstyled" type="submit">End<span class="usa-sr-only"> @a.RoleName at @a.TenantName</span></button></form>
+                            <form class="display-inline" method="post" action="/admin/users/@id/assignments/@a.UserAssignmentId/end" data-confirm="End @a.RoleName at @a.TenantName for @Model.DisplayName? All their active sessions will be signed out.">@Html.AntiForgeryToken()<button class="usa-button usa-button--unstyled" type="submit">End<span class="usa-sr-only"> @a.RoleName at @a.TenantName</span></button></form>
                         }
                         else if (!a.CanManage) { <span class="merit-meta">(managed by another administrator)</span> }
                     </li>
@@ -93,10 +97,19 @@
             {
                 <h2>Multi-factor authentication</h2>
                 <p>@(Model.MfaEnabled ? "Enrolled." : "Not yet enrolled; the person enrolls at next sign-in.")</p>
-                <form method="post" action="/admin/users/@id/reset-mfa">
+                @if (Model.LockoutEndUtc > DateTime.UtcNow)
+                {
+                    <p>Account locked until @Model.LockoutEndUtc.Value.ToString("u").</p>
+                    <form method="post" action="/admin/users/@id/unlock">@Html.AntiForgeryToken()
+                        <button class="usa-button usa-button--outline" type="submit">Unlock account</button></form>
+                }
+                @if (Model.MfaEnabled)
+                {
+                <form method="post" action="/admin/users/@id/reset-mfa" data-confirm="Reset MFA for @Model.DisplayName? Their authenticator and recovery codes will stop working, and active sessions will be signed out. Verify the person before continuing.">
                     @Html.AntiForgeryToken()
                     <button class="usa-button usa-button--secondary" type="submit">Reset MFA after verifying the person</button>
                 </form>
+                }
             }
         </div>
     }

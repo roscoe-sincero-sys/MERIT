@@ -92,7 +92,7 @@ export function needsMatchReview(r: HeldRowDto): boolean {
               [attr.aria-describedby]="store.selectedForMatch().length > 0 ? 'release-match-note' : null">Release selected</button>
       <label class="usa-label" for="reject-reason">Reject reason</label>
       <input class="usa-input" id="reject-reason" #reason [disabled]="store.busy()" />
-      <button class="usa-button usa-button--secondary" type="button" [disabled]="store.loading() || store.busy() || store.selected().size === 0" (click)="reject(reason.value)">Reject selected</button>
+      <button class="usa-button usa-button--secondary" type="button" [disabled]="store.loading() || store.busy() || store.selected().size === 0" (click)="reject(reason)">Reject selected</button>
     </div>
     @if (store.selectedForMatch().length > 0) {
       <p class="merit-meta" id="release-match-note">
@@ -302,15 +302,17 @@ export class HeldPage implements OnInit {
     });
   }
 
-  protected reject(reason: string): void {
+  protected reject(input: HTMLInputElement): void {
+    const reason = input.value;
     if (this.store.loading() || this.store.busy() || this.store.selected().size === 0) return;
     if (!reason.trim()) {
       this.store.error.set('A reason is required to reject held records.');
       return;
     }
+    if (!window.confirm(`Reject ${this.store.selected().size} selected held record(s)? Reason: ${reason.trim()}`)) return;
     this.beginWrite();
     this.api.rejectHeld({ stagingRowIds: [...this.store.selected()], reason }).subscribe({
-      next: r => this.done(`${r.updated} row(s) rejected.`),
+      next: r => { input.value = ''; this.done(`${r.updated} row(s) rejected.`); },
       error: e => { this.store.busy.set(false); this.store.error.set(problemMessage(e)); this.loadGroups(true); },
     });
   }

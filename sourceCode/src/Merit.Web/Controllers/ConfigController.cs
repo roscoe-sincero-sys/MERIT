@@ -162,7 +162,7 @@ public sealed class AdminController(IClock clock, AdminService admin, AuditServi
             form = new UserFormModel
             {
                 AppUserId = uid, UserName = u.User.UserName, DisplayName = u.User.DisplayName, Email = u.User.Email,
-                IsActive = u.User.IsActive, MfaEnabled = u.User.MfaEnabled, Assignments = u.Assignments, HomeTenantId = u.User.HomeTenantId,
+                IsActive = u.User.IsActive, MfaEnabled = u.User.MfaEnabled, LockoutEndUtc = u.User.LockoutEndUtc, Assignments = u.Assignments, HomeTenantId = u.User.HomeTenantId,
                 HomeTenantName = u.User.HomeTenantName, CanManageAccount = u.User.CanManageAccount,
                 CanViewAs = !session.IsPlatformAdmin && u.User.HomeTenantType != "platform" && u.User.AppUserId != session.UserId,
             };
@@ -179,6 +179,7 @@ public sealed class AdminController(IClock clock, AdminService admin, AuditServi
         {
             var id = await admin.SaveUserAsync(new UserInput(form.AppUserId, form.UserName, form.DisplayName, form.Email, form.IsActive,
                 form.NewPassword, form.HomeTenantId), ct);
+            TempData["userMessage"] = "User saved.";
             return RedirectToAction(nameof(EditUser), new { id });
         }
         catch (ValidationException ex)
@@ -199,6 +200,7 @@ public sealed class AdminController(IClock clock, AdminService admin, AuditServi
         try
         {
             await admin.AssignAsync(id, roleId, tenantId, includeDescendants, accessLevel ?? "full", clock.Today, null, ct);
+            TempData["userMessage"] = "Grant added. The person's active sessions have been signed out.";
         }
         catch (MeritException ex) when (ex is ValidationException or PermissionDeniedException)
         {
@@ -215,6 +217,7 @@ public sealed class AdminController(IClock clock, AdminService admin, AuditServi
         var u = await admin.UserAsync(id, ct);
         var a = u.Assignments.FirstOrDefault(x => x.UserAssignmentId == assignmentId) ?? throw new NotFoundException();
         await admin.EndAssignmentAsync(id, a, ct);
+        TempData["userMessage"] = "Grant ended. The person's active sessions have been signed out.";
         return RedirectToAction(nameof(EditUser), new { id });
     }
 
@@ -223,6 +226,16 @@ public sealed class AdminController(IClock clock, AdminService admin, AuditServi
     public async Task<IActionResult> ResetMfa(Guid id, CancellationToken ct)
     {
         await admin.ResetMfaAsync(id, ct);
+        TempData["userMessage"] = "MFA reset. The person must enroll again at next sign-in.";
+        return RedirectToAction(nameof(EditUser), new { id });
+    }
+
+    [HttpPost("users/{id:guid}/unlock")]
+    [Authorize(Policy = Permissions.TenantAdminister)]
+    public async Task<IActionResult> Unlock(Guid id, CancellationToken ct)
+    {
+        await admin.UnlockUserAsync(id, ct);
+        TempData["userMessage"] = "Account unlocked. The person can try signing in again.";
         return RedirectToAction(nameof(EditUser), new { id });
     }
 

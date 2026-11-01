@@ -171,6 +171,7 @@ for (const action of ['release', 'reject', 'correction']) {
     await page.getByLabel('Reject reason', { exact: true }).fill('Duplicate');
     await page.getByLabel('Correct Value', { exact: true }).fill('3');
     const button = page.getByRole('button', { name: action === 'release' ? 'Release selected' : action === 'reject' ? 'Reject selected' : 'Save correction', exact: true });
+    if (action === 'reject') page.once('dialog', dialog => dialog.accept());
     await button.click();
     await expect.poll(() => writes).toBe(1);
     await expect(page.getByRole('button', { name: 'Release selected', exact: true })).toBeDisabled();
