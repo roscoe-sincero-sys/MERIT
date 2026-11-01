@@ -43,6 +43,7 @@ export interface GridSort {
         }
       </details>
     </div>
+    <a class="grid-skip" (click)="skipToPager($event)" [href]="'#' + gridId() + '-pagination'">Skip table to pagination</a>
     <div class="grid-wrap">
       <table cdk-table [dataSource]="rows()" [trackBy]="trackRow" class="usa-table usa-table--borderless usa-table--compact" [attr.aria-label]="caption()" [attr.aria-busy]="loading()">
         @if (selectable()) {
@@ -85,16 +86,21 @@ export interface GridSort {
           </ng-container>
         }
         <tr cdk-header-row *cdkHeaderRowDef="displayed()"></tr>
-        <tr cdk-row *cdkRowDef="let row; columns: displayed(); let i = index" tabindex="0" [attr.data-index]="i"
+        <tr cdk-row *cdkRowDef="let row; columns: displayed(); let i = index" [attr.tabindex]="activeRowKey() === rowKey()(row) ? 0 : -1" [attr.data-index]="i"
+            (focusin)="focusedKey.set(rowKey()(row))"
             [class.grid-row--selected]="selectable() && selected().has(rowKey()(row))" (keydown)="onRowKey($event, row, i)"></tr>
       </table>
       @if (rows().length === 0 && !loading()) {
         <p class="grid-empty">{{ emptyText() }}</p>
       }
     </div>
+    <div data-grid-pagination [id]="gridId() + '-pagination'" tabindex="-1">
     <merit-pager [label]="caption()" [page]="page()" [size]="pageSize()" [total]="total()" [busy]="loading()" (change)="pageChange.emit($event)" />
+    </div>
   `,
   styles: `
+    .grid-skip { display: block; position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+    .grid-skip:focus { position: static; width: auto; height: auto; clip-path: none; padding: .5rem; }
     .nowrap { white-space: nowrap; }
     .grid-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; }
     .grid-columns summary { cursor: pointer; }
@@ -133,6 +139,12 @@ export class DataGridComponent<T> {
   readonly pageChange = output<number>();
   readonly selectionChange = output<ReadonlySet<string>>();
 
+  protected readonly focusedKey = signal<string | null>(null);
+  protected readonly activeRowKey = computed(() => {
+    const key = this.focusedKey();
+    return this.rows().some(row => this.rowKey()(row) === key) ? key : this.rows()[0] ? this.rowKey()(this.rows()[0]) : null;
+  });
+
   private readonly hiddenKeys = signal<ReadonlySet<string>>(new Set<string>());
 
   readonly visibleColumns = computed(() => this.columns().filter(c => !this.isHidden(c)));
@@ -140,6 +152,11 @@ export class DataGridComponent<T> {
   readonly allSelected = computed(() => this.rows().some(r => this.rowSelectable()(r)) && this.rows().filter(r => this.rowSelectable()(r)).every(r => this.selected().has(this.rowKey()(r))));
 
   readonly trackRow = (_: number, row: T): string => this.rowKey()(row);
+
+  skipToPager(event: Event): void {
+    event.preventDefault();
+    (event.currentTarget as HTMLElement).closest('merit-data-grid')?.querySelector<HTMLElement>('[data-grid-pagination]')?.focus();
+  }
 
   isHidden(c: GridColumn<T>): boolean {
     return this.hiddenKeys().has(c.key) || (c.hidden === true && !this.hiddenKeys().has('!' + c.key));
@@ -163,12 +180,12 @@ export class DataGridComponent<T> {
 
   sortMark(c: GridColumn<T>): string {
     const s = this.sort();
-    return s?.key === c.key ? (s.descending ? '▼' : '▲') : '';
+    return s?.key === c.key ? (s.descending ? '▼' : '▲') : '\u21c5';
   }
 
   ariaSort(c: GridColumn<T>): string | null {
     const s = this.sort();
-    return c.sortable ? (s?.key === c.key ? (s.descending ? 'descending' : 'ascending') : 'none') : null;
+    return c.sortable ? (s?.key === c.key ? (s.descending ? 'descending' : 'ascending') : null) : null;
   }
 
   toggle(row: T): void {
@@ -194,6 +211,7 @@ export class DataGridComponent<T> {
   /** Grid keyboard navigation: arrows move between rows, Home/End jump, Space toggles selection. */
   onRowKey(event: KeyboardEvent, row: T, index: number): void {
     const tr = event.currentTarget as HTMLElement;
+    if (event.target !== tr || this.loading() || event.ctrlKey || event.altKey || event.metaKey) return;
     const body = tr.parentElement;
     const move = (i: number): void => (body?.querySelector<HTMLElement>(`tr[data-index="${i}"]`))?.focus();
     switch (event.key) {
