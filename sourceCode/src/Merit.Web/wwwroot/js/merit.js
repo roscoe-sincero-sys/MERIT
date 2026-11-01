@@ -366,6 +366,11 @@
         if (target.id === "dialog-body") {
             document.getElementById('dialog-alert-region')?.replaceChildren();
             const dialog = document.getElementById("dialog");
+            // The content heading exists only while the dialog is populated (issue #139).
+            if (dialog) {
+                if (target.querySelector('#dialog-title')) dialog.setAttribute('aria-labelledby', 'dialog-title');
+                else dialog.removeAttribute('aria-labelledby');
+            }
             if (dialog && target.childElementCount > 0 && !dialog.open) dialog.showModal();
             const first = target.querySelector("input:not([type=hidden]), select, textarea, button");
             if (first) first.focus();
@@ -421,6 +426,7 @@
 
     document.addEventListener("close", evt => {
         if (evt.target && evt.target.id === "dialog") {
+            evt.target.removeAttribute('aria-labelledby');
             const body = document.getElementById("dialog-body");
             if (body) body.innerHTML = "";
             document.getElementById('dialog-alert-region')?.replaceChildren();
