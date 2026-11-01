@@ -16,6 +16,10 @@ export class ApiClient {
   private readonly http = inject(HttpClient);
   private readonly base = '/api/v1';
 
+  caseOptions(q: string): Observable<{ caseNumber: string; personName: string }[]> {
+    return this.http.get<{ caseNumber: string; personName: string }[]>(`${this.base}/cases/picker`, { params: params({ q }) });
+  }
+
   labels(): Observable<LabelsDto> {
     return this.http.get<LabelsDto>(`${this.base}/reference/labels`);
   }

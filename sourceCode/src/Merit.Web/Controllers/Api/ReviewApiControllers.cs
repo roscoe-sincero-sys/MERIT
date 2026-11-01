@@ -83,8 +83,17 @@ public sealed class MatchReviewController(MatchReviewService review) : Controlle
 /// <summary>Cluster review and the case map.</summary>
 [ApiController]
 [Route("api/v1")]
-public sealed class ClustersController(ClusterService clusters, ICurrentSession session) : ControllerBase
+public sealed class ClustersController(ClusterService clusters, ICurrentSession session, CaseService cases) : ControllerBase
 {
+    [HttpGet("cases/picker")]
+    [Authorize(Policy = Permissions.CaseView)]
+    public async Task<IActionResult> Picker(string? q, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(q) || q.Trim().Length < 2) return Ok(Array.Empty<object>());
+        var rows = await cases.ListAsync(new CaseListQuery(OpenOnly: false, Search: q.Trim()[..Math.Min(q.Trim().Length, 60)], PageSize: 10), ct);
+        return Ok(rows.Select(r => new { r.CaseNumber, PersonName = $"{r.FirstName} {r.LastName}".Trim() }));
+    }
+
     [HttpGet("clusters")]
     [Authorize(Policy = Permissions.CaseView)]
     public async Task<PagedResult<ClusterListItemDto>> List(string? status, int page = 1, int pageSize = 50, CancellationToken ct = default)

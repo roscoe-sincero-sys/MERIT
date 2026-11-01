@@ -239,7 +239,7 @@ test('idle expiration warns before the deadline and leaves typed work in place',
   await expect(page.locator('#findings')).toHaveValue('Work typed during an idle period');
 });
 
-for (const status of [403, 422]) {
+for (const status of [403, 409, 422, 500]) {
   test(`dialog ${status} errors stay inside the modal and preserve its inputs`, async ({ asUser }) => {
     const page = await asUser('supervisor');
     await page.goto('/search?q=Rivera');
