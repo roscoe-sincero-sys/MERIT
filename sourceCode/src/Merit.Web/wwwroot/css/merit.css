@@ -32,7 +32,7 @@ body:not(.merit-keyboard-mode) [tabindex="-1"]:focus { outline: none; }
 .merit-brand { font-weight: 700; font-size: 1.35rem; text-decoration: none; letter-spacing: .02em; }
 .merit-brand small { display: block; font-weight: 400; font-size: .8rem; opacity: .85; }
 .merit-nav { display: flex; flex-wrap: wrap; gap: .25rem 1rem; list-style: none; margin: 0; padding: 0; }
-.merit-nav a { text-decoration: none; padding: .25rem 0; border-bottom: 2px solid transparent; }
+.merit-nav a { display: block; min-height: 32px; text-decoration: none; padding: .35rem 0; border-bottom: 2px solid transparent; }
 .merit-nav a:hover, .merit-nav a:focus, .merit-nav a[aria-current="page"] { border-bottom-color: #fff; }
 .merit-header__search { margin-left: auto; display: flex; gap: .25rem; }
 .merit-header__search input { min-width: 16rem; margin: 0; }
@@ -141,6 +141,25 @@ dialog.merit-dialog::backdrop { background: rgba(0,0,0,.5); }
 
 @media print {
     .merit-header, .merit-footer, .merit-section__actions, form button { display: none; }
+}
+/* Grouped horizontal navigation (#137). Native details remains usable without script. */
+.merit-header--enhanced .merit-header__nav { flex-basis: 100%; order: 3; }
+.merit-header--enhanced .merit-nav { gap: .25rem .75rem; align-items: start; }
+.merit-header--enhanced .merit-nav a,
+.merit-nav-group > summary { display: block; box-sizing: border-box; min-height: 44px; padding: .65rem .5rem; line-height: 1.3; }
+.merit-nav-group { position: relative; }
+.merit-nav-group > summary { display: list-item; margin-left: 1rem; cursor: pointer; border-bottom: 2px solid transparent; }
+.merit-nav-group > ul { position: absolute; z-index: 30; min-width: 14rem; max-width: calc(100vw - 2rem); list-style: none; padding: .5rem; margin: 0; background: var(--merit-primary); box-shadow: 0 4px 12px #0005; border: 1px solid #ffffff80; }
+.merit-nav > li:last-child .merit-nav-group > ul { right: 0; }
+.merit-nav-group .merit-nav-current { display: none; }
+.merit-nav-group:has(a[aria-current="page"]) > summary { border-bottom-color: #fff; font-weight: 700; }
+.merit-nav-group:has(a[aria-current="page"]) .merit-nav-current { display: inline; }
+.merit-nav-group > summary:hover { border-bottom-color: #fff; }
+.merit-header--enhanced .merit-header__search input { min-width: 10rem; }
+@media (max-width: 64em) {
+    .merit-header--enhanced .merit-header__nav { order: 2; }
+    .merit-header--enhanced .merit-nav { gap: 0; align-items: stretch; }
+    .merit-nav-group > ul { position: static; min-width: 0; max-width: none; box-shadow: none; border: 0; border-left: 2px solid #ffffff80; margin-left: .5rem; padding: 0 .5rem; }
 }
 .merit-mono { font-family: "Roboto Mono", monospace; }
 .merit-qr svg { width: 12rem; height: 12rem; }

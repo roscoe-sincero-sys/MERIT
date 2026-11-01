@@ -117,16 +117,65 @@
     const menuButton = header && header.querySelector(".merit-menu-button");
     if (menuButton) {
         header.classList.add("merit-header--js");
+        const groups = [...header.querySelectorAll(".merit-nav-group")];
+        const closeGroup = (group, restoreFocus = false) => {
+            if (restoreFocus && group.contains(document.activeElement)) group.querySelector("summary").focus();
+            group.open = false;
+        };
         const setOpen = open => {
+            if (!open) groups.forEach(group => closeGroup(group));
             header.classList.toggle("merit-header--open", open);
             menuButton.setAttribute("aria-expanded", String(open));
         };
         menuButton.addEventListener("click", () => setOpen(!header.classList.contains("merit-header--open")));
         header.addEventListener("keydown", evt => {
-            if (evt.key === "Escape" && header.classList.contains("merit-header--open")) {
+            if (evt.key !== "Escape") return;
+            const group = evt.target.closest(".merit-nav-group[open]");
+            if (group) {
+                evt.preventDefault();
+                closeGroup(group, true);
+            } else if (header.classList.contains("merit-header--open")) {
+                evt.preventDefault();
                 setOpen(false);
                 menuButton.focus();
             }
+        });
+        groups.forEach(group => {
+            group.addEventListener("toggle", () => {
+                if (group.open) groups.filter(other => other !== group).forEach(other => closeGroup(other));
+            });
+            group.addEventListener("focusout", evt => {
+                if (evt.relatedTarget && !group.contains(evt.relatedTarget)) closeGroup(group);
+            });
+        });
+        document.addEventListener("click", evt => {
+            groups.filter(group => !group.contains(evt.target)).forEach(group => closeGroup(group, true));
+        });
+        // A hidden link can lose focus to BODY before matchMedia's change event fires.
+        let lastHeaderFocus = null;
+        document.addEventListener("focusin", evt => {
+            lastHeaderFocus = header.contains(evt.target) ? evt.target : null;
+        });
+        document.addEventListener("pointerdown", evt => {
+            if (!header.contains(evt.target)) lastHeaderFocus = null;
+        });
+        const narrow = window.matchMedia("(max-width: 64em)");
+        narrow.addEventListener("change", () => {
+            const focused = document.activeElement;
+            const previous = focused === document.body ? lastHeaderFocus : focused;
+            if (narrow.matches) {
+                setOpen(false);
+                if (previous && (previous.closest("#merit-nav") || previous.closest("#merit-user"))) menuButton.focus();
+            } else {
+                groups.forEach(group => closeGroup(group, true));
+                if (focused === menuButton) header.querySelector(".merit-brand").focus();
+                setOpen(false);
+            }
+        });
+        document.addEventListener("merit:navigation", () => {
+            groups.forEach(group => closeGroup(group, true));
+            if (narrow.matches && header.contains(document.activeElement)) menuButton.focus();
+            setOpen(false);
         });
     }
 

@@ -68,7 +68,9 @@ test('case numbers and dates stay on one line in lists', async ({ asUser }) => {
     // The text's own lines: distinct line tops of the rectangles its characters occupy.
     const broken = await page.locator(selector).evaluateAll(els => els.filter(e => {
       const range = document.createRange();
-      range.selectNodeContents(e);
+      // Badges have a smaller font and a different top on the SAME line. Check the date/case text alone.
+      const text = [...e.childNodes].find(n => n.nodeType === Node.TEXT_NODE && n.textContent?.trim());
+      range.selectNodeContents(text ?? e.querySelector('a') ?? e);
       return new Set([...range.getClientRects()].map(r => Math.round(r.top))).size > 1;
     }).map(e => e.textContent!.trim()));
     expect(broken, url).toEqual([]);
@@ -76,7 +78,8 @@ test('case numbers and dates stay on one line in lists', async ({ asUser }) => {
   // One date format: "Oct 27, 2026", not 2026-10-27.
   await page.goto('/app/queues');
   await page.locator('td.nowrap').first().waitFor();
-  expect(await page.locator('main table').innerText()).not.toMatch(/\b20\d\d-\d\d-\d\d\b/);
+  // Free-text task details may legitimately quote an ISO date from the source report.
+  expect((await page.locator('main table td.nowrap').allTextContents()).join(' ')).not.toMatch(/\b20\d\d-\d\d-\d\d\b/);
 });
 
 test('phone: the menu folds behind a button and search has its own row', async ({ asUser }) => {

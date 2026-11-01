@@ -26,6 +26,7 @@ export class AppComponent {
         link.setAttribute('aria-current', path === target || (target !== '/' && path.startsWith(target + '/')) ? 'page' : 'false');
       });
       if (path === this.path) return;
+      document.dispatchEvent(new Event('merit:navigation'));
       this.path = path;
       this.observer?.disconnect();
       const focus = () => {

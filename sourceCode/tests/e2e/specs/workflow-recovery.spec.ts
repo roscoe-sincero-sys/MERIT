@@ -302,6 +302,7 @@ test('queue links retain mine and reports retain applied period and measure thro
   const page = await asUser('supervisor');
   await page.goto('/app/queues?mine=true&keep=yes');
   await angularReady(page);
+  await page.getByRole('button', { name: 'Show queues', exact: true }).click();
   await page.getByRole('navigation', { name: 'Queues', exact: true }).getByRole('link').last().click();
   await expect(page).toHaveURL(/mine=true/);
   await expect(page).toHaveURL(/keep=yes/);
@@ -332,6 +333,7 @@ test('reapplying the current queue refreshes without locking selection', async (
   });
   await page.goto('/app/queues?status=open&mine=false&urgent=false&sort=dueDate&desc=false&page=1&pageSize=50');
   await angularReady(page);
+  await page.getByRole('button', { name: 'Show queues', exact: true }).click();
   await page.getByRole('link', { name: 'All queues', exact: true }).click();
   await expect.poll(() => reads).toBe(2);
   await page.getByLabel('Select row 1', { exact: true }).focus();

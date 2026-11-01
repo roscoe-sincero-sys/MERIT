@@ -137,6 +137,7 @@ test('reports: change the charted measure and open another report from the keybo
   await page.getByLabel('Chart', { exact: true }).focus();
   await page.keyboard.press('ArrowDown');
   await expect(chart).not.toHaveAttribute('aria-label', before ?? '');
+  await page.getByRole('button', { name: 'Show report library', exact: true }).click();
   await page.getByRole('link', { name: 'Case timeliness' }).focus();
   await page.keyboard.press('Enter');
   await expect(page.locator('#report-title')).toHaveText('Case timeliness');
@@ -171,10 +172,10 @@ test('adding a tenant: choosing the parent with the keyboard changes the kinds o
   await page.goto('/admin/tenants');
   const kind = page.getByLabel('Kind of tenant');
   await expect(kind.locator('option')).toHaveText([/Program/, /Local jurisdiction/]);
-  await expect(page.getByLabel('Counties it serves')).toBeVisible();
+  await expect(page.getByRole('group', { name: 'Counties it serves', exact: true })).toBeVisible();
   await page.getByLabel('Goes under').focus();
   await page.keyboard.press('ArrowDown');
-  await expect(page.getByLabel('Counties it serves')).toBeVisible();
+  await expect(page.getByRole('group', { name: 'Counties it serves', exact: true })).toBeVisible();
   await expect(page.getByLabel('Postal code')).toHaveCount(0);
 });
 
@@ -332,6 +333,7 @@ test('reports: a slower earlier report selection cannot overwrite a newer report
   const firstTitle = (await firstLink.innerText()).trim();
   const secondTitle = (await secondLink.innerText()).trim();
   const secondCode = new URL(await secondLink.getAttribute('href') ?? '', 'https://x').searchParams.get('code')!;
+  await page.getByRole('button', { name: 'Show report library', exact: true }).click();
 
   let sawSecond!: () => void;
   const reachedSecond = new Promise<void>(resolve => { sawSecond = resolve; });
@@ -358,6 +360,7 @@ test('reports: a slower earlier report selection cannot overwrite a newer report
   await expect(page.locator('#report-title')).toHaveCount(0);
   await expect(page.locator('.merit-indicator')).toContainText('Running the report');
 
+  await page.getByRole('button', { name: 'Show report library', exact: true }).click();
   await firstLink.click();
   await expect(firstLink).toHaveClass(/usa-current/);
   await expect(page.locator('#report-title')).toHaveText(firstTitle);

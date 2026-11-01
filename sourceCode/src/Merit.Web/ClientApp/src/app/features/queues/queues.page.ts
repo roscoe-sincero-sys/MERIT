@@ -6,11 +6,12 @@ import { DataGridComponent, GridColumn, GridSort } from '../../shared/grid/data-
 import { QueuesStore } from './queues.store';
 import { Display } from '../../shared/display.service';
 import { LatestRequest } from '../../shared/latest-request';
+import { ContextPanelComponent } from '../../shared/context-panel.component';
 
 /** Work queues: the shared grid over tasks of every queue, with bulk assign, complete and dismiss. Route component. */
 @Component({
   selector: 'merit-queues-page',
-  imports: [DataGridComponent],
+  imports: [DataGridComponent, ContextPanelComponent],
   providers: [QueuesStore, ViewQuery],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
@@ -21,13 +22,13 @@ import { LatestRequest } from '../../shared/latest-request';
     @if (store.message(); as m) {
       <div class="usa-alert usa-alert--success usa-alert--slim" role="status"><div class="usa-alert__body"><p class="usa-alert__text">{{ m }}</p></div></div>
     }
-    <div class="layout">
-      <nav aria-label="Queues">
+    <merit-context-panel panelId="queue-navigation" label="queues">
+      <nav panelNavigation aria-label="Queues">
         <ul class="usa-sidenav">
-          <li class="usa-sidenav__item"><a href="" [class.usa-current]="store.queue() === null" (click)="chooseQueue($event, null)">All queues</a></li>
+          <li class="usa-sidenav__item"><a href="" [class.usa-current]="store.queue() === null" [attr.aria-current]="store.queue() === null ? 'true' : null" (click)="chooseQueue($event, null)">All queues</a></li>
           @for (q of store.visibleQueues(); track q.queueCode) {
             <li class="usa-sidenav__item">
-              <a href="" [class.usa-current]="store.queue() === q.queueCode" (click)="chooseQueue($event, q.queueCode)">
+              <a href="" [class.usa-current]="store.queue() === q.queueCode" [attr.aria-current]="store.queue() === q.queueCode ? 'true' : null" (click)="chooseQueue($event, q.queueCode)">
                 {{ q.queueName }} ({{ q.openCount }})@if (q.urgentCount > 0) { <strong> · {{ q.urgentCount }} urgent</strong> }
               </a>
             </li>
@@ -72,14 +73,12 @@ import { LatestRequest } from '../../shared/latest-request';
                          [selectable]="display.can('task.edit')" [rowSelectable]="canSelect" [selectionDisabled]="store.loading() || busy()" [selected]="store.selected()" [rowKey]="key" emptyText="No tasks in this view."
                          (sortChange)="onSort($event)" (pageChange)="onPage($event)" (selectionChange)="onSelect($event)" />
       </section>
-    </div>
+    </merit-context-panel>
   `,
   styles: `
-    .layout { display: grid; grid-template-columns: minmax(12rem, 18rem) minmax(0, 1fr); gap: 1.5rem; }
     .filters, .bulk { display: flex; flex-wrap: wrap; align-items: end; gap: .5rem 1rem; margin-bottom: .75rem; }
     .filters .usa-select, .bulk .usa-select { max-width: 14rem; margin-top: 0; }
     .bulk .usa-select.assignee { max-width: 22rem; }
-    @media (max-width: 64em) { .layout { grid-template-columns: minmax(0, 1fr); } }
   `,
 })
 export class QueuesPage implements OnInit {
