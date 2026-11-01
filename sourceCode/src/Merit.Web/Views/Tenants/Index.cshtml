@@ -24,7 +24,7 @@
 }
 @if (!ViewData.ModelState.IsValid)
 {
-    <partial name="_ErrorSummary" model='new ErrorSummaryModel(["ParentTenantId", "TenantCode", "TenantName"], new Dictionary<string, string> { ["ParentTenantId"] = "ParentTenantId", ["TenantCode"] = "TenantCode", ["TenantName"] = "TenantName" }, SummaryId: "tenants-index-errors")' />
+    <partial name="_ErrorSummary" model='new ErrorSummaryModel(["ParentTenantId", "TenantCode", "TenantName", "CountyFipsList"], new Dictionary<string, string> { ["ParentTenantId"] = "ParentTenantId", ["TenantCode"] = "TenantCode", ["TenantName"] = "TenantName" }, SummaryId: "tenants-index-errors")' />
 }
 <div class="merit-grid-2">
     <section aria-labelledby="tree-h">

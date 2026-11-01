@@ -60,7 +60,7 @@
                 }
                 <div id="merit-user" class="merit-header__user">
                     <span>@CurrentSession.DisplayName<br /><small>@CurrentSession.ActingTenantName</small><br />
-                        <a class="merit-header__profile" href="/account/profiles">Profile: @(CurrentSession.ProfileName ?? "Master profile")<span class="usa-sr-only"> (switch profile)</span></a></span>
+                        <a class="merit-header__profile" href="@("/account/profiles?returnUrl=" + Uri.EscapeDataString($"{Context.Request.PathBase}{Context.Request.Path}{Context.Request.QueryString}"))">Profile: @(CurrentSession.ProfileName ?? "Master profile")<span class="usa-sr-only"> (switch profile)</span></a></span>
                     <form method="post" action="/account/signout">
                         @Html.AntiForgeryToken()
                         <button class="usa-button usa-button--unstyled" type="submit">Sign out</button>

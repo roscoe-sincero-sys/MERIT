@@ -34,6 +34,7 @@ public sealed class TenantsController(AdminService admin, ConfigService config, 
     [Authorize(Policy = Permissions.TenantCreate)]
     public async Task<IActionResult> Create(TenantFormModel form, CancellationToken ct)
     {
+        if (form.CountySelection) form.CountyFipsList = string.Join(',', form.SelectedCountyFips.Distinct());
         try
         {
             await admin.CreateTenantAsync(new TenantInput(form.ParentTenantId, form.TenantCode, form.TenantName, form.TenantType,

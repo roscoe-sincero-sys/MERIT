@@ -21,14 +21,14 @@ public sealed class ProfilesController(ProfileService profiles, AdminService adm
 {
     [HttpGet("profiles")]
     [Authorize(Policy = Permissions.SignedIn)]
-    public async Task<IActionResult> Index(CancellationToken ct)
+    public async Task<IActionResult> Index(CancellationToken ct, string? returnUrl = null)
     {
         var mine = await profiles.MineAsync(ct);
         var viewAs = session.Has(Permissions.TenantAdminister) ? await admin.ViewAsCandidatesAsync(ct) : [];
         var tenants = await admin.TenantsAsync(ct);
         return View(new ProfilesPageModel(mine, session.ProfileName ?? "Master profile", session.ProfileId,
             session.ViewAsDisplayName, session.IsPlatformAdmin, session.ActingTenantId, tenants, viewAs, TempData["profileMessage"] as string,
-            TempData["profileError"] as string));
+            TempData["profileError"] as string, Url.IsLocalUrl(returnUrl) ? returnUrl : null));
     }
 
     [HttpGet("profiles/new")]
@@ -84,8 +84,8 @@ public sealed class ProfilesController(ProfileService profiles, AdminService adm
     /// <summary>Switches to one of the person's profiles (empty = master) and, optionally, a working tenant.</summary>
     [HttpPost("profiles/switch")]
     [Authorize(Policy = Permissions.SignedIn)]
-    public Task<IActionResult> Switch(Guid? userProfileId, Guid? actingTenantId, CancellationToken ct)
-        => NewScopeAsync(userProfileId, null, actingTenantId, "/", ct);
+    public Task<IActionResult> Switch(Guid? userProfileId, Guid? actingTenantId, CancellationToken ct, string? returnUrl = null)
+        => NewScopeAsync(userProfileId, null, actingTenantId ?? session.ActingTenantId, Url.IsLocalUrl(returnUrl) ? returnUrl! : "/account/profiles", ct);
 
     /// <summary>An administrator sees MERIT with another person's access, limited to what the administrator manages.</summary>
     [HttpPost("view-as/{userId:guid}")]
@@ -140,7 +140,8 @@ public sealed record ProfilesPageModel(
     IReadOnlyList<TenantListRow> Tenants,
     IReadOnlyList<PersonSummaryRow> ViewAsCandidates,
     string? Message,
-    string? Error)
+    string? Error,
+    string? ReturnUrl = null)
 {
     public static string AccessText(string level) => level switch
     {
