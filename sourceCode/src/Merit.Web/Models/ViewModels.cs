@@ -50,6 +50,8 @@ public sealed class SignInModel
 
 public sealed class MfaModel
 {
+    public bool UseRecoveryCode { get; set; }
+
     [Required(ErrorMessage = "Enter the six-digit code from your authenticator app, or a recovery code.")]
     public string? Code { get; set; }
 

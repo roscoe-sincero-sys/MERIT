@@ -107,7 +107,7 @@ public sealed class AccountController(AccountService accounts, QrCodes qr, Sessi
 
     [HttpGet("mfa")]
     [Authorize(AuthenticationSchemes = AuthSchemes.PendingMfa)]
-    public IActionResult Mfa() => View(new MfaModel());
+    public IActionResult Mfa(bool useRecoveryCode = false) => View(new MfaModel { UseRecoveryCode = useRecoveryCode });
 
     [HttpPost("mfa")]
     [Authorize(AuthenticationSchemes = AuthSchemes.PendingMfa)]
@@ -123,8 +123,11 @@ public sealed class AccountController(AccountService accounts, QrCodes qr, Sessi
         var userId = Guid.Parse(User.FindFirstValue(MeritClaims.UserId)!, CultureInfo.InvariantCulture);
         if (!await accounts.VerifyMfaAsync(userName, model.Code!, ClientAddress(), ct))
         {
-            model.Message = "That code did not work. Enter the current code from your authenticator app, or one of your recovery codes.";
+            model.Message = model.UseRecoveryCode
+                ? "That recovery code did not work. Try an unused recovery code, or ask your MERIT administrator for an MFA reset after verifying your identity."
+                : "That code did not work. Enter the current code from your authenticator app, or choose Can't access your authenticator? for help.";
             model.Code = null;
+            ModelState.Remove(nameof(MfaModel.Code));
             return View(model);
         }
 
