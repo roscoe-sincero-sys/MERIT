@@ -1,0 +1,2 @@
+# Preserve HL7's CR segment terminators instead of applying text newline conversion.
+*.hl7 -text whitespace=cr-at-eol

@@ -163,7 +163,7 @@ public interface IResultData
 {
     Task<ClassificationContext> GetClassificationContextAsync(Guid personId, Guid analyteId, CancellationToken ct = default);
 
-    Task<DuplicateResultRow?> FindDuplicateAsync(Guid personId, Guid analyteSpecimenId, DateOnly collectedDate, Guid labOrganizationId, string? accessionNumber, decimal? valueReported, CancellationToken ct = default);
+    Task<DuplicateResultRow?> FindDuplicateAsync(Guid personId, Guid analyteSpecimenId, DateOnly collectedDate, Guid labOrganizationId, string? accessionNumber, decimal? valueReported, CancellationToken ct = default, string? sourceObservationKey = null);
 
     Task<SaveLabResultResult> SaveLabResultAsync(LabResultSave result, CancellationToken ct = default);
 

@@ -17,8 +17,9 @@ rls says which row-level security predicate the table gets in 200_security:
 UUID = "UNIQUEIDENTIFIER"
 
 
-def c(name, sqltype, desc, null=True, default=None, check=None):
-    return {"name": name, "type": sqltype, "desc": desc, "null": null, "default": default, "check": check}
+def c(name, sqltype, desc, null=True, default=None, check=None, check_addition=None):
+    return {"name": name, "type": sqltype, "desc": desc, "null": null, "default": default, "check": check,
+            "check_addition": check_addition}
 
 
 def tenant_cols(owner_desc="Tenant that owns the row; drives row-level security."):
@@ -905,8 +906,8 @@ TABLES = [
             c("senderOrganizationId", UUID, "The reporting organization.", null=False),
             c("profileName", "NVARCHAR (120)", "Name of the profile.", null=False),
             c("profileVersion", "INT", "Version number; a corrected mapping is a new version.", null=False, default="1"),
-            c("fileType", "VARCHAR (20)", "csv, tsv, pipe, fixedWidth or xlsx.", null=False,
-              check="fileType IN ('csv', 'tsv', 'pipe', 'fixedWidth', 'xlsx')"),
+            c("fileType", "VARCHAR (20)", "csv, tsv, pipe, hl7 (ORU R01 v2.3.1/v2.5.1), fixedWidth or xlsx.", null=False,
+              check="fileType IN ('csv', 'tsv', 'pipe', 'hl7', 'fixedWidth', 'xlsx')", check_addition="hl7"),
             c("headerRow", "INT", "1-based row holding the column headers.", null=False, default="1"),
             c("dateFormats", "NVARCHAR (200)", "Comma list of date formats to try, e.g. MM/dd/yyyy,yyyy-MM-dd."),
             c("columnMapJson", "NVARCHAR (MAX)", "JSON object mapping file columns to staging fields.", null=False,

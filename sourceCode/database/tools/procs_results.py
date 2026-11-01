@@ -39,13 +39,15 @@ SELECT r.labResultId, r.analyteSpecimenId, s.specimen, r.collectedDate, r.sample
         "schema": "dbo", "name": "uspFindDuplicateResult", "kind": "read", "grants": BOTH, "ticket": "T044",
         "permission": "result.view",
         "desc": "Looks for an existing result that a new one duplicates or corrects: same person, analyte specimen, "
-                "collected date and lab, matched on accession number, or on value when the accession is missing.",
+                "collected date and lab, matched on accession number, or on value when the accession is missing. Native "
+                "HL7 results additionally match the observation identity in the reported snapshot; legacy rows use NULL.",
         "params": """@personId          UNIQUEIDENTIFIER
 , @analyteSpecimenId UNIQUEIDENTIFIER
 , @collectedDate     DATE
 , @labOrganizationId UNIQUEIDENTIFIER
 , @accessionNumber   NVARCHAR (60) = NULL
-, @valueReported     DECIMAL (18, 6) = NULL""",
+, @valueReported     DECIMAL (18, 6) = NULL
+, @sourceObservationKey VARCHAR (64) = NULL""",
         "key": "CONCAT (N'personId=', @personId, N', analyteSpecimenId=', @analyteSpecimenId)",
         "body": """
 SELECT TOP (1) r.labResultId, r.resultStatus, r.resultRowStatus, r.valueReported, r.accessionNumber
@@ -53,6 +55,8 @@ SELECT TOP (1) r.labResultId, r.resultStatus, r.resultRowStatus, r.valueReported
  WHERE r.personId = @personId AND r.analyteSpecimenId = @analyteSpecimenId AND r.collectedDate = @collectedDate
    AND r.labOrganizationId = @labOrganizationId AND r.isDeleted = 0
    AND r.resultRowStatus IN ('valid', 'superseded')
+   -- Native HL7 distinguishes observations under one accession. Legacy delimited/manual rows keep a NULL key.
+   AND JSON_VALUE (r.reportedSnapshotJson, '$.hl7ObservationKey') IS NOT DISTINCT FROM @sourceObservationKey
    AND ((@accessionNumber IS NOT NULL AND r.accessionNumber = @accessionNumber)
      OR (@accessionNumber IS NULL AND r.accessionNumber IS NULL AND r.valueReported = @valueReported))
  ORDER BY CASE r.resultRowStatus WHEN 'valid' THEN 0 ELSE 1 END, r.receivedUtc DESC;
