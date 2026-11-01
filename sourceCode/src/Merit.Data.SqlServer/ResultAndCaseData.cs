@@ -14,9 +14,9 @@ public sealed class ResultData(Db db) : IResultData
             (await g.ReadAsync<ContextPriorResultRow>().ConfigureAwait(false)).AsList()), ct);
 
     public Task<DuplicateResultRow?> FindDuplicateAsync(Guid personId, Guid analyteSpecimenId, DateOnly collectedDate, Guid labOrganizationId,
-                                                        string? accessionNumber, decimal? valueReported, CancellationToken ct = default)
+                                                        string? accessionNumber, decimal? valueReported, CancellationToken ct = default, string? sourceObservationKey = null)
         => db.QuerySingleAsync<DuplicateResultRow>("dbo.uspFindDuplicateResult",
-            new { personId, analyteSpecimenId, collectedDate, labOrganizationId, accessionNumber, valueReported }, ct);
+            new { personId, analyteSpecimenId, collectedDate, labOrganizationId, accessionNumber, valueReported, sourceObservationKey }, ct);
 
     public async Task<SaveLabResultResult> SaveLabResultAsync(LabResultSave r, CancellationToken ct = default)
         => await db.QuerySingleAsync<SaveLabResultResult>("dbo.uspSaveLabResult", new

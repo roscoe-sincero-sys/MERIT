@@ -1,5 +1,11 @@
 # Sample intake file
 
+Native HL7 examples are `chesapeake_hl7_231.hl7` and `chesapeake_hl7_251.hl7`.
+Choose **Chesapeake Reference Laboratory HL7** on Intake. They contain a synthetic patient shared
+between the two versions, with separate accessions. The 2.5.1 example has two distinct observations.
+The original messages are processed directly; [HL7 intake documentation](../../docs/hl7-intake.md)
+describes mapping, review and interface limits.
+
 `chesapeake_lab_sample.csv` is synthetic. Upload it on the Intake screen with the profile
 "Chesapeake Reference Laboratory CSV" (created by the demo data). It exercises the pipeline:
 

@@ -52,72 +52,99 @@ public sealed partial class IntakeProcessor(
 
         if (!releasedOnly)
         {
-            var parsed = CsvReader.Read(batch.RawContent ?? string.Empty, CsvReader.DelimiterFor(profile.FileType));
-            int headerIndex = Math.Max(profile.HeaderRow - 1, 0);
-            if (parsed.Count <= headerIndex)
+            if (profile.FileType == "hl7")
             {
-                await intake.SetBatchStatusAsync(batchId, "loaded", "The file has no rows.", ct).ConfigureAwait(false);
-                return new IntakeRunSummary(0, 0, 0, 0, false, null);
-            }
-
-            var header = parsed[headerIndex].Select(h => h.Trim()).ToList();
-            string signature = string.Join(',', header);
-            if (!string.IsNullOrWhiteSpace(profile.HeaderSignature)
-                && !string.Equals(Normalize(profile.HeaderSignature), Normalize(signature), StringComparison.OrdinalIgnoreCase))
-            {
-                // Layout drift: pause the whole batch before loading, rather than put values in the wrong fields.
-                string reason = "The sender's columns differ from its intake profile. Update the mapping, then resume the batch.";
-                await intake.SetBatchStatusAsync(batchId, "paused", reason, ct).ConfigureAwait(false);
-                await work.CreateTaskAsync(new WorkTaskCreate(TimeOrderedId.New(), "pausedBatch",
-                    $"Intake batch paused: {batch.FileName}", reason, null, null, null, null, null, false,
-                    clock.Today.AddDays(2)), ct).ConfigureAwait(false);
-                return new IntakeRunSummary(parsed.Count - headerIndex - 1, 0, 0, 0, true, reason);
-            }
-
-            var map = JsonSerializer.Deserialize<Dictionary<string, string>>(profile.ColumnMapJson) ?? [];
-            var translations = string.IsNullOrWhiteSpace(profile.ValueTranslationsJson)
-                ? new Dictionary<string, Dictionary<string, string>>()
-                : JsonSerializer.Deserialize<Dictionary<string, Dictionary<string, string>>>(profile.ValueTranslationsJson) ?? [];
-            var constants = string.IsNullOrWhiteSpace(profile.ConstantsJson)
-                ? new Dictionary<string, string>()
-                : JsonSerializer.Deserialize<Dictionary<string, string>>(profile.ConstantsJson) ?? [];
-
-            var staged = new List<StagingRowNew>();
-            for (int r = headerIndex + 1; r < parsed.Count; r++)
-            {
-                var fields = new Dictionary<string, string?>(StringComparer.Ordinal);
-                for (int c = 0; c < header.Count && c < parsed[r].Count; c++)
+                IReadOnlyList<Dictionary<string, string?>> observations;
+                try { observations = Hl7Reader.Read(batch.RawContent ?? string.Empty, profile.SenderClia); }
+                catch (Hl7ParseException ex)
                 {
-                    if (map.TryGetValue(header[c], out var target))
+                    await intake.SetBatchStatusAsync(batchId, "paused", ex.Message, ct).ConfigureAwait(false);
+                    await work.CreateTaskAsync(new WorkTaskCreate(TimeOrderedId.New(), "pausedBatch",
+                        "HL7 intake batch needs review", ex.Message, null, null, null, null, null, false, clock.Today.AddDays(2)), ct).ConfigureAwait(false);
+                    return new IntakeRunSummary(0, 0, 0, 0, true, ex.Message);
+                }
+
+                var nativeConstants = JsonSerializer.Deserialize<Dictionary<string, string>>(profile.ConstantsJson ?? "{}") ?? [];
+                var nativeTranslations = JsonSerializer.Deserialize<Dictionary<string, Dictionary<string, string>>>(profile.ValueTranslationsJson ?? "{}") ?? [];
+                var nativeRows = observations.Select((fields, index) =>
+                {
+                    foreach (var (key, value) in fields.ToArray())
+                        if (value is not null && nativeTranslations.TryGetValue(key, out var translations) && translations.TryGetValue(value, out var translated)) fields[key] = translated;
+                    foreach (var (key, value) in nativeConstants)
+                        if (!fields.TryGetValue(key, out var existing) || string.IsNullOrEmpty(existing)) fields[key] = value;
+                    return new StagingRowNew(TimeOrderedId.New(), index + 1, JsonSerializer.Serialize(fields));
+                }).ToArray();
+                foreach (var chunk in nativeRows.Chunk(200)) await intake.SaveStagingRowsAsync(batchId, chunk, ct).ConfigureAwait(false);
+            }
+            else
+            {
+                var parsed = CsvReader.Read(batch.RawContent ?? string.Empty, CsvReader.DelimiterFor(profile.FileType));
+                int headerIndex = Math.Max(profile.HeaderRow - 1, 0);
+                if (parsed.Count <= headerIndex)
+                {
+                    await intake.SetBatchStatusAsync(batchId, "loaded", "The file has no rows.", ct).ConfigureAwait(false);
+                    return new IntakeRunSummary(0, 0, 0, 0, false, null);
+                }
+
+                var header = parsed[headerIndex].Select(h => h.Trim()).ToList();
+                string signature = string.Join(',', header);
+                if (!string.IsNullOrWhiteSpace(profile.HeaderSignature)
+                    && !string.Equals(Normalize(profile.HeaderSignature), Normalize(signature), StringComparison.OrdinalIgnoreCase))
+                {
+                    // Layout drift: pause the whole batch before loading, rather than put values in the wrong fields.
+                    string reason = "The sender's columns differ from its intake profile. Update the mapping, then resume the batch.";
+                    await intake.SetBatchStatusAsync(batchId, "paused", reason, ct).ConfigureAwait(false);
+                    await work.CreateTaskAsync(new WorkTaskCreate(TimeOrderedId.New(), "pausedBatch",
+                        $"Intake batch paused: {batch.FileName}", reason, null, null, null, null, null, false,
+                        clock.Today.AddDays(2)), ct).ConfigureAwait(false);
+                    return new IntakeRunSummary(parsed.Count - headerIndex - 1, 0, 0, 0, true, reason);
+                }
+
+                var map = JsonSerializer.Deserialize<Dictionary<string, string>>(profile.ColumnMapJson) ?? [];
+                var translations = string.IsNullOrWhiteSpace(profile.ValueTranslationsJson)
+                    ? new Dictionary<string, Dictionary<string, string>>()
+                    : JsonSerializer.Deserialize<Dictionary<string, Dictionary<string, string>>>(profile.ValueTranslationsJson) ?? [];
+                var constants = string.IsNullOrWhiteSpace(profile.ConstantsJson)
+                    ? new Dictionary<string, string>()
+                    : JsonSerializer.Deserialize<Dictionary<string, string>>(profile.ConstantsJson) ?? [];
+
+                var staged = new List<StagingRowNew>();
+                for (int r = headerIndex + 1; r < parsed.Count; r++)
+                {
+                    var fields = new Dictionary<string, string?>(StringComparer.Ordinal);
+                    for (int c = 0; c < header.Count && c < parsed[r].Count; c++)
                     {
-                        string value = parsed[r][c].Trim();
-                        if (translations.TryGetValue(target, out var t) && t.TryGetValue(value, out var translated))
+                        if (map.TryGetValue(header[c], out var target))
                         {
-                            value = translated;
+                            string value = parsed[r][c].Trim();
+                            if (translations.TryGetValue(target, out var t) && t.TryGetValue(value, out var translated))
+                            {
+                                value = translated;
+                            }
+
+                            fields[target] = value.Length == 0 ? null : value;
                         }
-
-                        fields[target] = value.Length == 0 ? null : value;
                     }
+
+                    foreach (var (k, v) in constants)
+                    {
+                        fields.TryAdd(k, v);
+                    }
+
+                    staged.Add(new StagingRowNew(TimeOrderedId.New(), r - headerIndex, JsonSerializer.Serialize(fields)));
                 }
 
-                foreach (var (k, v) in constants)
+                foreach (var chunk in staged.Chunk(200))
                 {
-                    fields.TryAdd(k, v);
+                    await intake.SaveStagingRowsAsync(batchId, chunk, ct).ConfigureAwait(false);
                 }
-
-                staged.Add(new StagingRowNew(TimeOrderedId.New(), r - headerIndex, JsonSerializer.Serialize(fields)));
-            }
-
-            foreach (var chunk in staged.Chunk(200))
-            {
-                await intake.SaveStagingRowsAsync(batchId, chunk, ct).ConfigureAwait(false);
             }
         }
 
         var rows = await intake.GetRowsForProcessingAsync(batchId, releasedOnly, ct).ConfigureAwait(false);
         var registry = new RegistryLookups(places);
         int loaded = 0, held = 0;
-        var formats = (profile.DateFormats ?? "yyyy-MM-dd,MM/dd/yyyy,M/d/yyyy")
+        var formats = ((profile.FileType == "hl7" ? "yyyy-MM-dd," : "") + (profile.DateFormats ?? "yyyy-MM-dd,MM/dd/yyyy,M/d/yyyy"))
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
         foreach (var row in rows)
@@ -304,6 +331,11 @@ public sealed partial class IntakeProcessor(
             MatchKeys.NameKey(lastName)!, MatchKeys.NameKey(firstName),
             MatchKeys.IsPlaceholderName(firstName) ? "placeholder" : "asReported", "labReport", null, collected!.Value), ct).ConfigureAwait(false);
 
+        if (profile.FileType == "hl7" && Get("hl7PatientIdentifiersJson") is { } identifiersJson)
+            foreach (var identifier in JsonSerializer.Deserialize<Hl7PatientIdentifier[]>(identifiersJson) ?? [])
+                await persons.SaveIdentifierAsync(TimeOrderedId.New(), personId.Value, identifier.Type, identifier.Value,
+                    identifier.Authority, "labReport", reported ?? collected.Value, false, ct).ConfigureAwait(false);
+
         Guid? reportedLocationId = await HandleAddressAsync(personId.Value, f, collected.Value, config, ct).ConfigureAwait(false);
         await HandleGuardianAsync(personId.Value, Get("guardianName"), dob, ct).ConfigureAwait(false);
 
@@ -318,10 +350,20 @@ public sealed partial class IntakeProcessor(
         // ---- duplicates and corrections
         string status = Get("resultStatus") ?? "final";
         var duplicate = await results.FindDuplicateAsync(personId.Value, specimen!.AnalyteSpecimenId, collected.Value, labId!.Value,
-            Get("accessionNumber"), normalized!.ValueReported, ct).ConfigureAwait(false);
+            Get("accessionNumber"), normalized!.ValueReported, ct,
+            sourceObservationKey: profile.FileType == "hl7" ? Get("hl7ObservationKey") : null).ConfigureAwait(false);
         bool supersedes = duplicate is not null && status is "corrected" or "cancelled";
         bool isDuplicate = duplicate is not null && !supersedes && duplicate.ResultRowStatus == "valid";
 
+        string reportedSnapshot = row.ParsedJson;
+        if (profile.FileType == "hl7")
+        {
+            // External identifiers belong in the permission-filtered person identifier collection.
+            // Keep the complete source in intake, without exposing PID-3 through ordinary result.view.
+            var reportedFields = JsonSerializer.Deserialize<Dictionary<string, string?>>(row.ParsedJson) ?? [];
+            reportedFields.Remove("hl7PatientIdentifiersJson");
+            reportedSnapshot = JsonSerializer.Serialize(reportedFields);
+        }
         Guid resultId = TimeOrderedId.New();
         await results.SaveLabResultAsync(new LabResultSave
         {
@@ -346,7 +388,7 @@ public sealed partial class IntakeProcessor(
             OrderingProviderId = providerId,
             AccessionNumber = Get("accessionNumber"),
             LoincReported = loinc,
-            ReportedSnapshotJson = row.ParsedJson,
+            ReportedSnapshotJson = reportedSnapshot,
             ReportedLocationId = reportedLocationId,
             ResultRowStatus = isDuplicate ? "duplicate" : "valid",
             IntakeBatchId = batch.IntakeBatchId,

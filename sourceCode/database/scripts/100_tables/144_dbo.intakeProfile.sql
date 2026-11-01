@@ -72,9 +72,18 @@ GO
 -- -------------------------------------------------------------------------------------------
 -- 3. Check constraints. System-defined values and cross-column rules.
 -- -------------------------------------------------------------------------------------------
+IF EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_dbo_intakeProfile_fileType'
+               AND definition NOT LIKE N'%''hl7''%')
+BEGIN
+    BEGIN TRANSACTION;
+    ALTER TABLE dbo.intakeProfile DROP CONSTRAINT CK_dbo_intakeProfile_fileType;
+    ALTER TABLE dbo.intakeProfile WITH CHECK ADD CONSTRAINT CK_dbo_intakeProfile_fileType CHECK (fileType IN ('csv', 'tsv', 'pipe', 'hl7', 'fixedWidth', 'xlsx'));
+    COMMIT TRANSACTION;
+END;
+GO
 IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_dbo_intakeProfile_fileType')
 BEGIN
-    ALTER TABLE dbo.intakeProfile ADD CONSTRAINT CK_dbo_intakeProfile_fileType CHECK (fileType IN ('csv', 'tsv', 'pipe', 'fixedWidth', 'xlsx'));
+    ALTER TABLE dbo.intakeProfile ADD CONSTRAINT CK_dbo_intakeProfile_fileType CHECK (fileType IN ('csv', 'tsv', 'pipe', 'hl7', 'fixedWidth', 'xlsx'));
 END;
 GO
 IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_dbo_intakeProfile_columnMapJson')
@@ -197,7 +206,7 @@ EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', 
 EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'intakeProfile', @ColumnName = N'senderOrganizationId', @Description = N'The reporting organization.';
 EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'intakeProfile', @ColumnName = N'profileName', @Description = N'Name of the profile.';
 EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'intakeProfile', @ColumnName = N'profileVersion', @Description = N'Version number; a corrected mapping is a new version.';
-EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'intakeProfile', @ColumnName = N'fileType', @Description = N'csv, tsv, pipe, fixedWidth or xlsx.';
+EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'intakeProfile', @ColumnName = N'fileType', @Description = N'csv, tsv, pipe, hl7 (ORU R01 v2.3.1/v2.5.1), fixedWidth or xlsx.';
 EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'intakeProfile', @ColumnName = N'headerRow', @Description = N'1-based row holding the column headers.';
 EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'intakeProfile', @ColumnName = N'dateFormats', @Description = N'Comma list of date formats to try, e.g. MM/dd/yyyy,yyyy-MM-dd.';
 EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'intakeProfile', @ColumnName = N'columnMapJson', @Description = N'JSON object mapping file columns to staging fields.';

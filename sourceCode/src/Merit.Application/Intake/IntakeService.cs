@@ -36,8 +36,8 @@ public sealed class IntakeService(IIntakeData intake, IWorkData work, Services.A
         var v = new Validator();
         v.When(string.IsNullOrWhiteSpace(content), "File", "The file is empty.");
         v.When(Encoding.UTF8.GetByteCount(content) > MaxFileBytes, "File", "The file is larger than 20 MB; split it or send it through the secure file drop.");
-        v.When(profile.FileType is not ("csv" or "tsv" or "pipe"), "IntakeProfileId",
-            $"This release parses delimited files; the profile is for {profile.FileType}.");
+        v.When(profile.FileType is not ("csv" or "tsv" or "pipe" or "hl7"), "IntakeProfileId",
+            $"Choose a CSV, TSV, pipe-delimited, or HL7 intake profile; this profile is for {profile.FileType}.");
         v.ThrowIfInvalid();
 
         string hash = ContentHash(content);

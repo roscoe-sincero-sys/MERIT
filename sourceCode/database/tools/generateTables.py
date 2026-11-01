@@ -138,6 +138,18 @@ BEGIN
 -- 3. Check constraints. System-defined values and cross-column rules.
 -- -------------------------------------------------------------------------------------------""")
         for name, expr in checks:
+            addition = next((col.get("check_addition") for col in t["cols"] if name == f"CK_{schema}_{table}_{col['name']}"), None)
+            if addition:
+                # Widen an existing enumeration atomically; retain every previously accepted value.
+                out.append(f"""IF EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'{name}'
+               AND definition NOT LIKE N'%''{q(addition)}''%')
+BEGIN
+    BEGIN TRANSACTION;
+    ALTER TABLE {full} DROP CONSTRAINT {name};
+    ALTER TABLE {full} WITH CHECK ADD CONSTRAINT {name} CHECK ({expr});
+    COMMIT TRANSACTION;
+END;
+GO""")
             out.append(f"""IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'{name}')
 BEGIN
     ALTER TABLE {full} ADD CONSTRAINT {name} CHECK ({expr});

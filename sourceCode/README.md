@@ -129,6 +129,9 @@ administrators can view MERIT as the people they manage. `docs/MERIT User Guide 
 the model for users.
 
 To try intake, sign in as `intake` and upload `samples/chesapeake_lab_sample.csv` on the Intake screen.
+Native HL7 v2.3.1/v2.5.1 ORU^R01 files use the **Chesapeake Reference Laboratory HL7** profile.
+Try `samples/chesapeake_hl7_231.hl7` and `samples/chesapeake_hl7_251.hl7`; no CSV conversion is needed.
+See [HL7 intake](../docs/hl7-intake.md) for source profile provisioning, mappings, supported structures and limitations.
 
 The reporter registry (`/reporters`) lists laboratories (CLIA), facilities (NPI or CLIA) and providers (NPI). People
 with `registry.edit` (intake clerk, supervisor, administrator) add entries one at a time or import a CSV: the file is

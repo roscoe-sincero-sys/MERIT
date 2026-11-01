@@ -425,6 +425,13 @@ EXEC dbo.uspSaveIntakeProfile @intakeProfileId = '087e7d80-9b26-eca8-992a-06b033
      @headerSignature = N'PatientLast,PatientFirst,DOB,Sex,Street,Apt,City,State,Zip,LOINC,Result,Units,SampleType,Method,Collected,Reported,Accession,Status,OrderingNPI,Guardian';
 GO
 
+-- Native HL7 profiles use canonical field mappings and retain the source message in the batch.
+IF NOT EXISTS (SELECT 1 FROM dbo.intakeProfile WHERE intakeProfileId = '24b17544-062a-fd3f-4752-d18e85ed6157')
+EXEC dbo.uspSaveIntakeProfile @intakeProfileId = '24b17544-062a-fd3f-4752-d18e85ed6157',
+     @senderOrganizationId = '495fa824-297c-2386-a559-c80e3180376b', @profileName = N'Chesapeake Reference Laboratory HL7',
+     @fileType = 'hl7', @columnMapJson = N'{}', @dateFormats = N'yyyy-MM-dd';
+GO
+
 UPDATE auth.sessionScope SET revokedUtc = SYSUTCDATETIME ()
  WHERE sessionScopeId = TRY_CAST (SESSION_CONTEXT (N'scopeKey') AS UNIQUEIDENTIFIER) AND revokedUtc IS NULL;
 GO
