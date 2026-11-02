@@ -45,7 +45,7 @@ export class CaseMapStore {
       <div class="usa-checkbox"><input class="usa-checkbox__input" id="m-open" name="openOnly" type="checkbox" [checked]="store.filters().openOnly" /><label class="usa-checkbox__label" for="m-open">Open cases only</label></div>
       <div><button class="usa-button" type="submit">Apply</button></div>
     </form>
-    <p class="merit-meta">{{ store.located().length }} case(s) on the map; {{ store.unlocated().length }} without coordinates (listed below).
+    <p class="merit-meta">{{ display.count(store.located().length, 'case') }} on the map; {{ store.unlocated().length }} without coordinates (listed below).
       Addresses are geocoded by the jurisdiction's geocoder or placed by staff. County outlines give context; there is no street map.</p>
     <merit-point-map [points]="points()" [categories]="categories" ringLabel="In an open cluster" (pick)="store.selected.set($event)" />
 

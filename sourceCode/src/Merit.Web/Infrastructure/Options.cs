@@ -35,6 +35,10 @@ public static class Options
     public static string Date(DateTime? d) => d is null ? string.Empty
         : DisplayTime.ToLocal(d.Value).ToString("MMM d, yyyy h:mm tt", CultureInfo.InvariantCulture);
 
+    /// <summary>A count with its noun, singular or plural: "1 task", "3 tasks" (issue #166).</summary>
+    public static string Count(int? n, string singular, string? plural = null)
+        => $"{n ?? 0} {(n == 1 ? singular : plural ?? singular + "s")}";
+
     public static string Iso(DateOnly? d) => d?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? string.Empty;
 
     public static string Hex(byte[]? rowVersion) => rowVersion is null || rowVersion.Length == 0 ? string.Empty : Convert.ToHexString(rowVersion);

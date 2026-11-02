@@ -56,6 +56,11 @@ export class Display {
     return this.codes[code] ?? split(code);
   }
 
+  /** A count with its noun, singular or plural: "1 task", "3 tasks" (issue #166). */
+  count(n: number, singular: string, plural = singular + 's'): string {
+    return `${n} ${n === 1 ? singular : plural}`;
+  }
+
   /** The words for a value only when it is a known code; any other text (a name, a number) is shown as it is. */
   ifCode(value: string): string {
     return this.codes[value] ?? value;

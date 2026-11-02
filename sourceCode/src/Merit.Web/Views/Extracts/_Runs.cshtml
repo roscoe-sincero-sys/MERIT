@@ -1,6 +1,13 @@
 @model ExtractsModel
 @inject ICurrentSession CurrentSession
 @* Status cards poll this partial while a job runs. *@
+@{
+    // Of the runs that produced a file for the same extract and period, the newest is the one to send; each older one
+    // names the run that replaced it (issue #164).
+    var newest = Model.Runs.Where(r => r.RunStatus is "ready" or "submitted")
+        .GroupBy(r => (r.ExtractType, r.PeriodStart, r.PeriodEnd))
+        .ToDictionary(g => g.Key, g => g.MaxBy(r => r.CreatedDateUtc)!);
+}
 <div id="extract-runs" hx-get="/extracts" hx-trigger="@(Model.AnyRunning ? "every 3s" : "never")" hx-swap="outerHTML">
     @if (Model.Runs.Count == 0)
     {
@@ -11,14 +18,22 @@
         <div class="merit-grid-2 merit-cards">
             @foreach (var r in Model.Runs)
             {
+                var latest = newest.GetValueOrDefault((r.ExtractType, r.PeriodStart, r.PeriodEnd));
+                bool hasFile = r.RunStatus is "ready" or "submitted";
+                string runName = $"{r.ExtractType} {Options.Date(r.PeriodStart)} – {Options.Date(r.PeriodEnd)}, generated {Options.Date(r.CreatedDateUtc)}";
                 <div class="usa-card__container" id="run-@r.ExtractRunId">
                     <div class="usa-card__header"><h3 class="usa-card__heading">@r.ExtractType @Options.Date(r.PeriodStart) &ndash; @Options.Date(r.PeriodEnd)</h3></div>
                     <div class="usa-card__body">
                         <p><span class="merit-badge @(r.RunStatus is "ready" or "submitted" ? "merit-badge--ok" : r.RunStatus == "failed" ? "merit-badge--urgent" : "")">@Options.Humanize(r.RunStatus)</span>
+                            @if (hasFile && latest is not null)
+                            {
+                                if (latest.ExtractRunId == r.ExtractRunId) { <span class="merit-badge merit-badge--latest">Latest</span> }
+                                else { <span class="merit-badge merit-badge--superseded">Superseded by the run of @Options.Date(latest.CreatedDateUtc)</span> }
+                            }
                             <span class="merit-meta">layout @r.LayoutVersion &middot; @r.RequestedBy &middot; @Options.Date(r.CreatedDateUtc)</span></p>
                         @if (r.RecordCount is not null)
                         {
-                            <p>@r.RecordCount record(s) &middot; @r.ErrorCount validation finding(s)
+                            <p>@Options.Count(r.RecordCount, "record") &middot; @Options.Count(r.ErrorCount, "validation finding")
                                 @if (r.ErrorCount > 0) { <button class="usa-button usa-button--unstyled" type="button" hx-get="/extracts/@r.ExtractRunId/findings" hx-target="#dialog-body" hx-swap="innerHTML">View findings<span class="usa-sr-only"> for @r.ExtractType @Options.Date(r.PeriodStart)</span></button> }
                             </p>
                         }
@@ -27,12 +42,13 @@
                         {
                             @* The actions sit in their own row: as the body's last child, a button lost its bottom padding to USWDS (issue #17). *@
                             <div class="merit-card-actions">
-                                <a class="usa-button usa-button--outline" href="/extracts/@r.ExtractRunId/download">Download @FileNames.Breakable(r.FileName)</a>
+                                @* Downloading is the everyday action; marking a file submitted records an outside event (issue #164). *@
+                                <a class="usa-button" href="/extracts/@r.ExtractRunId/download">Download @FileNames.Breakable(r.FileName)</a>
                                 @if (r.RunStatus == "ready" && CurrentSession.Has(Permissions.ExtractSubmit))
                                 {
                                     <form hx-post="/extracts/@r.ExtractRunId/submitted" hx-target="#extract-runs" hx-swap="outerHTML"
-                                          hx-confirm="Mark this file as sent to @(r.ExtractType == "CBLS" ? "CDC" : "NIOSH")? Do this after the upload succeeds.">
-                                        <button class="usa-button" type="submit">Mark submitted<span class="usa-sr-only"> @r.ExtractType @Options.Date(r.PeriodStart)</span></button>
+                                          hx-confirm="Mark the @runName file as sent to @(r.ExtractType == "CBLS" ? "CDC" : "NIOSH")?@(latest is not null && latest.ExtractRunId != r.ExtractRunId ? " A newer run exists for this period." : "") Do this only after the upload succeeds; it cannot be undone.">
+                                        <button class="usa-button usa-button--outline" type="submit">Mark submitted<span class="usa-sr-only"> @r.ExtractType @Options.Date(r.PeriodStart)</span></button>
                                     </form>
                                 }
                             </div>

@@ -7,7 +7,7 @@ test('person trend points expose exact values, focusable links, and a wrapping r
   const chart = page.locator('svg.merit-chart').first();
   await expect(chart).toHaveAttribute('role', 'group');
   const point = chart.locator('a[href^="/results/"]').first();
-  await expect(point).toHaveAttribute('aria-label', /\d{4}-\d{2}-\d{2}: .*\d/);
+  await expect(point).toHaveAttribute('aria-label', /[A-Z][a-z]{2} \d{1,2}, \d{4}: .*\d/);
   expect(await point.locator('circle title').textContent()).toBe(await point.getAttribute('aria-label'));
   const figure = chart.locator('..');
   await expect(figure.locator('[aria-label="Current reference levels"]')).toBeVisible();

@@ -90,7 +90,7 @@ const AGREEMENT_TEXT: Record<Agreement, string> = { agree: 'Agrees', close: 'Clo
             <td></td>
             @for (c of review().candidates; track c.personId; let i = $index) {
               <td [class.chosen]="i === selected()">
-                {{ c.resultCount }} result(s)@if (c.lastCollectedDate) {, last {{ c.lastCollectedDate }}}
+                {{ display.count(c.resultCount, 'result') }}@if (c.lastCollectedDate) {, last {{ display.date(c.lastCollectedDate) }}}
                 @if (c.openCaseNumbers) { <br />Open case {{ c.openCaseNumbers }} }
                 @if (c.aliases) { <br />Also known as {{ c.aliases }} }
               </td>
@@ -122,6 +122,7 @@ export class MatchComparisonComponent {
   readonly selected = input(0);
   readonly disabled = input(false);
   readonly pick = output<number>();
+  protected readonly display = inject(Display);
 
   protected readonly fieldNames = computed(() => this.review().candidates[0]?.fields ?? []);
 
@@ -177,7 +178,7 @@ export class CandidateHistoryComponent {
   host: { '(keydown)': 'onKey($event)' },
   template: `
     <h1 tabindex="-1" #heading>Person matching review</h1>
-    <p class="merit-meta">{{ store.total() }} record(s) waiting. Hold Alt+Shift for shortcuts: 1&ndash;5 choose a candidate, S same person, D different person,
+    <p class="merit-meta">{{ display.count(store.total(), 'record') }} waiting. Hold Alt+Shift for shortcuts: 1&ndash;5 choose a candidate, S same person, D different person,
       N not sure, C new person, H history, J next, K previous.</p>
     <div class="usa-sr-only" role="status" aria-live="polite">{{ store.message() }} {{ store.announcement() }}</div>
     @if (store.error(); as e) { <div class="usa-alert usa-alert--error usa-alert--slim" role="alert"><div class="usa-alert__body"><p class="usa-alert__text">{{ e }}</p></div></div> }

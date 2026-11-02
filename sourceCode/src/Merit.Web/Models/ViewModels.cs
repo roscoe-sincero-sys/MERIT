@@ -741,6 +741,15 @@ public sealed class UserFormModel
 
     public bool CanViewAs { get; set; }
 
+    /// <summary>A new account's first grant, given in the same save (issue #163); no role means no access yet.</summary>
+    public Guid? FirstRoleId { get; set; }
+
+    public Guid? FirstTenantId { get; set; }
+
+    public string FirstAccessLevel { get; set; } = "full";
+
+    public bool FirstIncludeDescendants { get; set; } = true;
+
     public IReadOnlyList<UserAssignmentRow> Assignments { get; set; } = [];
 
     public IReadOnlyList<SelectOption> Roles { get; set; } = [];

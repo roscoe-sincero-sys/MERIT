@@ -26,14 +26,14 @@
         <h2 id="check-h">@(Model.Counts is null ? "Check results" : "Rows not loaded") for @Model.FileName</h2>
         @if (Model.Counts is null)
         {
-            <p><strong>@check.Ready.Count</strong> row(s) ready (@check.Ready.Count(r => r.Kind == "laboratory") laboratories, @check.Ready.Count(r => r.Kind == "facility") facilities, @check.Ready.Count(r => r.Kind == "provider") providers) &middot; <strong>@check.Rejected.Count</strong> row(s) need attention.</p>
+            <p><strong>@check.Ready.Count</strong> @(check.Ready.Count == 1 ? "row" : "rows") ready (@check.Ready.Count(r => r.Kind == "laboratory") laboratories, @check.Ready.Count(r => r.Kind == "facility") facilities, @check.Ready.Count(r => r.Kind == "provider") providers) &middot; <strong>@check.Rejected.Count</strong> @(check.Rejected.Count == 1 ? "row needs" : "rows need") attention.</p>
             @if (check.Ready.Count > 0)
             {
                 <form method="post" action="/reporters/import">
                     @Html.AntiForgeryToken()
                     <input type="hidden" name="token" value="@Model.Token" />
                     <input type="hidden" name="fileName" value="@Model.FileName" />
-                    <button class="usa-button" type="submit">Import @check.Ready.Count ready row(s)</button>
+                    <button class="usa-button" type="submit">Import @Options.Count(check.Ready.Count, "ready row")</button>
                 </form>
             }
         }

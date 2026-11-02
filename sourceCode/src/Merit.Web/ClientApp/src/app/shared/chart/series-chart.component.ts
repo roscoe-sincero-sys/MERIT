@@ -145,8 +145,14 @@ export class SeriesChartComponent {
   protected readonly yTicks = computed(() => {
     const max = this.max();
     const integers = this.shown().every(s => s.values.every(v => v === null || Number.isInteger(v)));
-    const fractions = integers && max <= 4 ? Array.from({ length: max + 1 }, (_, i) => i / max) : [0, 0.25, 0.5, 0.75, 1];
-    return fractions.map(f => ({ value: f * max, y: this.y(f * max), label: this.format(f * max) }));
+    if (integers) {
+      // Counts step in whole numbers (1, 2, 5, 10 ...), never 1.25 or 2.5 (issue #166).
+      const raw = max / 5;
+      const power = 10 ** Math.floor(Math.log10(raw));
+      const step = Math.max(1, [1, 2, 5, 10].map(m => m * power).find(s => s >= raw) ?? 10 * power);
+      return Array.from({ length: Math.floor(max / step) + 1 }, (_, i) => i * step).map(v => ({ value: v, y: this.y(v), label: this.format(v) }));
+    }
+    return [0, 0.25, 0.5, 0.75, 1].map(f => ({ value: f * max, y: this.y(f * max), label: this.format(f * max) }));
   });
 
   /** Series names at the end of each line, nudged apart so two lines ending together do not overprint. */

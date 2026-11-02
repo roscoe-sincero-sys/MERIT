@@ -32,7 +32,7 @@
                 <legend class="usa-legend">An open investigation of this target already exists</legend>
                 @foreach (var e in Model.Existing)
                 {
-                    <div class="usa-radio"><input class="usa-radio__input" id="join-@e.InvestigationId" type="radio" name="JoinInvestigationId" value="@e.InvestigationId" checked /><label class="usa-radio__label" for="join-@e.InvestigationId">Join @e.InvestigationNumber (@Options.Humanize(e.InvestigationStatus), requested @Options.Date(e.RequestedDate), @e.LinkedCases case(s))</label></div>
+                    <div class="usa-radio"><input class="usa-radio__input" id="join-@e.InvestigationId" type="radio" name="JoinInvestigationId" value="@e.InvestigationId" checked /><label class="usa-radio__label" for="join-@e.InvestigationId">Join @e.InvestigationNumber (@Options.Humanize(e.InvestigationStatus), requested @Options.Date(e.RequestedDate), @Options.Count(e.LinkedCases, "case"))</label></div>
                 }
                 <div class="usa-radio"><input class="usa-radio__input" id="join-none" type="radio" name="JoinInvestigationId" value="" /><label class="usa-radio__label" for="join-none">Create a separate investigation anyway</label></div>
             </fieldset>

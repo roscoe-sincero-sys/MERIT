@@ -175,12 +175,47 @@ public sealed class AdminController(IClock clock, AdminService admin, AuditServi
     [Authorize(Policy = Permissions.TenantAdminister)]
     public async Task<IActionResult> SaveUser(UserFormModel form, CancellationToken ct)
     {
+        // A new account can be given its first access in the same save (issue #163).
+        bool firstAccess = form.AppUserId is null && form.FirstRoleId is not null;
+        if (firstAccess && form.FirstAccessLevel is not ("read" or "write" or "full"))
+        {
+            ModelState.AddModelError(nameof(form.FirstAccessLevel), "Choose read only, read and write, or full.");
+        }
+
+        if (firstAccess && (form.FirstTenantId ?? form.HomeTenantId) is null)
+        {
+            ModelState.AddModelError(nameof(form.FirstTenantId), "Choose where the access applies.");
+        }
+
+        if (firstAccess && !ModelState.IsValid)
+        {
+            return View("EditUser", await UserFormAsync(form, ct));
+        }
+
         try
         {
+            bool created = form.AppUserId is null;
             var id = await admin.SaveUserAsync(new UserInput(form.AppUserId, form.UserName, form.DisplayName, form.Email, form.IsActive,
                 form.NewPassword, form.HomeTenantId), ct);
-            TempData["userMessage"] = "User saved.";
-            return RedirectToAction(nameof(EditUser), new { id });
+            if (firstAccess)
+            {
+                try
+                {
+                    await admin.AssignAsync(id, form.FirstRoleId!.Value, (form.FirstTenantId ?? form.HomeTenantId)!.Value,
+                        form.FirstIncludeDescendants, form.FirstAccessLevel, clock.Today, null, ct);
+                    TempData["userMessage"] = "User saved with their first access.";
+                    return RedirectToAction(nameof(EditUser), new { id });
+                }
+                catch (MeritException ex) when (ex is ValidationException or PermissionDeniedException)
+                {
+                    TempData["userError"] = $"The user was saved, but the access was not given: {ex.Message} Give access below.";
+                    return Redirect(Url.Action(nameof(EditUser), new { id }) + "#give-access");
+                }
+            }
+
+            // Without a grant the person can sign in but sees nothing, so a new account goes straight to giving access.
+            TempData["userMessage"] = created ? "User saved. Next, give them access: until then they can sign in but see nothing." : "User saved.";
+            return created ? Redirect(Url.Action(nameof(EditUser), new { id }) + "#give-access") : RedirectToAction(nameof(EditUser), new { id });
         }
         catch (ValidationException ex)
         {

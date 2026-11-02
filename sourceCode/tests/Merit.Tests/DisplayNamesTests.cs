@@ -24,6 +24,12 @@ public sealed class DisplayNamesTests
     [InlineData("someNewCode", "Some new code")]          // no name: split from camel case
     public void CodesReadAsWords(string code, string words) => Assert.Equal(words, Names.Of(code));
 
+    [Theory]
+    [InlineData("child", "Child")]
+    [InlineData("adult", "Adult")]
+    [InlineData("pregnant", "Pregnant")]
+    public void PopulationsAreNamedForTheClient(string code, string words) => Assert.Equal(words, Names.Codes[code]);   // issue #166
+
     [Fact]
     public void FileFieldsHaveLabelsInReadingOrder()
     {

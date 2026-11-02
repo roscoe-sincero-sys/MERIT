@@ -185,7 +185,7 @@ test('reporter import: check the sample file and see the rows to fix', async ({ 
   await page.getByLabel(/CSV file/).setInputFiles('../../samples/registry_npi_clia_sample.csv');
   await page.getByRole('button', { name: 'Check the file' }).focus();
   await page.keyboard.press('Enter');
-  await expect(page.getByText('row(s) need attention')).toBeVisible();
+  await expect(page.getByText(/rows? needs? attention/)).toBeVisible();
   await expect(page.locator('table tbody tr')).toHaveCount(4);
   await expect(page.getByRole('button', { name: /Import 4 ready row/ })).toBeVisible();
 });

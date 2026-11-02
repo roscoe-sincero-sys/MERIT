@@ -32,7 +32,7 @@ public sealed class TrendChartHistoryTests(MeritFixture fixture)
             Assert.Contains("Some plotted results predate a displayed level", html);
             Assert.Contains("they do not reconstruct historical classifications", html);
             Assert.Contains("aria-label=\"Current reference levels\"", html);
-            Assert.Contains($"href=\"/results/{id}\" aria-label=\"1900-01-01:", html);
+            Assert.Contains($"href=\"/results/{id}\" aria-label=\"Jan 1, 1900:", html);
             Assert.Contains("(effective ", html);
         }
         finally { await Sql("DELETE dbo.labResult WHERE labResultId = @id"); }

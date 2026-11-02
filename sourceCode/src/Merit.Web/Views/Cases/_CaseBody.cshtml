@@ -57,7 +57,7 @@
                         <div class="usa-form-group"><label class="usa-label" for="caseStatus">Status</label>
                             <select class="usa-select" id="caseStatus" name="caseStatus"><option value="open" selected="@(draft.Value("update", "caseStatus", c.CaseStatus) == "open")">Open</option><option value="monitoring" selected="@(draft.Value("update", "caseStatus", c.CaseStatus) == "monitoring")">Monitoring</option></select></div>
                     </div>
-                    <button class="usa-button usa-button--outline" type="submit">Save</button>
+                    <button class="usa-button" type="submit">Save</button>
                 </form>
             }
         </section>
@@ -124,9 +124,22 @@
 
     <section class="merit-section" aria-labelledby="case-activities">
         <h2 id="case-activities">Activity log</h2>
+        @if (Model.Detail.Activities.Count == 0) { <p class="merit-empty">No activity yet.</p> }
+        else
+        {
+            <ol class="usa-list usa-list--unstyled">
+                @foreach (var a in Model.Detail.Activities)
+                {
+                    <li class="margin-bottom-1"><strong>@Options.Date(a.ActivityDate)</strong> &middot; @Options.Humanize(a.ActivityType)@(a.Outcome is null ? "" : " · " + Options.Humanize(a.Outcome))
+                        @if (a.ContactLastName is not null) { <span>&middot; with @a.ContactFirstName @a.ContactLastName</span> }
+                        <span class="merit-meta">&middot; @a.WorkerName</span><div>@a.Note</div></li>
+                }
+            </ol>
+        }
         @if (Model.CanEdit)
         {
-            <form class="usa-form merit-inline-form" id="case-activity-form" hx-post="/cases/@c.ExposureCaseId/activities" hx-target="#case-body" hx-swap="outerHTML">
+            <h3 id="case-activity-new">Log an activity</h3>
+            <form class="usa-form merit-inline-form" id="case-activity-form" aria-labelledby="case-activity-new" hx-post="/cases/@c.ExposureCaseId/activities" hx-target="#case-body" hx-swap="outerHTML">
                 <div class="merit-form-row">
                     <div class="usa-form-group"><label class="usa-label" for="activityType">Activity</label>
                         <select class="usa-select" id="activityType" name="activityType">@foreach (var o in Model.ActivityTypes) { <option value="@o.Value" selected="@(draft.Selected("activity", "activityType", o))">@o.Label</option> }</select></div>
@@ -141,25 +154,18 @@
                 <button class="usa-button" type="submit">Log activity</button>
             </form>
         }
-        @if (Model.Detail.Activities.Count == 0) { <p class="merit-empty">No activity yet.</p> }
-        else
-        {
-            <ol class="usa-list usa-list--unstyled">
-                @foreach (var a in Model.Detail.Activities)
-                {
-                    <li class="margin-bottom-1"><strong>@Options.Date(a.ActivityDate)</strong> &middot; @Options.Humanize(a.ActivityType)@(a.Outcome is null ? "" : " · " + Options.Humanize(a.Outcome))
-                        @if (a.ContactLastName is not null) { <span>&middot; with @a.ContactFirstName @a.ContactLastName</span> }
-                        <span class="merit-meta">&middot; @a.WorkerName</span><div>@a.Note</div></li>
-                }
-            </ol>
-        }
     </section>
 
     @if (Model.CanEdit)
     {
+        @* Consequential changes wait behind their own disclosure, each saying what it does (issue #159). A form whose
+           submission failed re-renders open, so its errors and draft are in view. *@
         <div class="merit-grid-2">
             <section class="merit-section" aria-labelledby="override-heading">
-                <h2 id="override-heading">Override classification</h2>
+                <h2 id="override-heading">Classification override</h2>
+                <details class="merit-details" id="case-override-details" data-preserve-open open="@(draft.Form == "override")">
+                <summary>Change classification&hellip;</summary>
+                <p id="override-consequence">The classification and population you choose replace the computed ones on this case. The computed classification stays shown beside it, and your reason is kept with the change.</p>
                 <form class="usa-form" id="case-override-form" hx-post="/cases/@c.ExposureCaseId/override" hx-target="#case-body" hx-swap="outerHTML">
                     <input type="hidden" name="rowVersion" value="@draft.Value("override", "rowVersion", rv)" />
                     <div class="merit-form-row">
@@ -169,11 +175,15 @@
                             <select class="usa-select" id="population" name="population"><option value="child" selected="@(draft.Value("override", "population", c.Population) == "child")">Child</option><option value="adult" selected="@(draft.Value("override", "population", c.Population) == "adult")">Adult</option><option value="pregnant" selected="@(draft.Value("override", "population", c.Population) == "pregnant")">Pregnant</option></select></div>
                     </div>
                     <div class="usa-form-group"><label class="usa-label" for="reason">Reason (required)</label><input class="usa-input" id="reason" name="reason" value="@draft.Value("override", "reason")" required /></div>
-                    <button class="usa-button usa-button--outline" type="submit">Override</button>
+                    <button class="usa-button usa-button--outline" type="submit" aria-describedby="override-consequence">Override</button>
                 </form>
+                </details>
             </section>
             <section class="merit-section" aria-labelledby="close-heading">
                 <h2 id="close-heading">Close case</h2>
+                <details class="merit-details" id="case-close-details" data-preserve-open open="@(draft.Form == "close")">
+                <summary>Close case&hellip;</summary>
+                <p id="close-consequence">Closing ends follow-up: the case's open tasks are dismissed and the case cannot be edited until someone reopens it with a reason.</p>
                 <form class="usa-form" id="case-close-form" hx-post="/cases/@c.ExposureCaseId/close" hx-target="#case-body" hx-swap="outerHTML" hx-confirm="Close this case? Unsaved entries in other sections will be discarded when editing closes.">
                     <input type="hidden" name="rowVersion" value="@draft.Value("close", "rowVersion", rv)" />
                     <div class="merit-form-row">
@@ -182,8 +192,9 @@
                         <div class="usa-form-group"><label class="usa-label" for="closedDate">Closed date</label><input class="usa-input" id="closedDate" name="closedDate" type="date" value="@draft.Value("close", "closedDate", Options.Iso(Clock.Today))" /></div>
                     </div>
                     <div class="usa-form-group"><label class="usa-label" for="closeNote">Note</label><input class="usa-input" id="closeNote" name="note" value="@draft.Value("close", "note")" /></div>
-                    <button class="usa-button usa-button--secondary" type="submit">Close case</button>
+                    <button class="usa-button usa-button--secondary" type="submit" aria-describedby="close-consequence">Close case</button>
                 </form>
+                </details>
             </section>
         </div>
     }

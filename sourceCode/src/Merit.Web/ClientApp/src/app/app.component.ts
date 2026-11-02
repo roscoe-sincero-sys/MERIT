@@ -21,9 +21,11 @@ export class AppComponent {
     this.router.events.pipe(takeUntilDestroyed(this.destroy)).subscribe(event => {
       if (!(event instanceof NavigationEnd)) return;
       const path = '/app' + event.urlAfterRedirects.split('?')[0].split('#')[0];
+      // A link is current for its own path and for the prefixes the host view gives it (issue #160).
+      const under = (prefix: string) => path === prefix || (prefix !== '/' && path.startsWith(prefix + '/'));
       document.querySelectorAll<HTMLAnchorElement>('.merit-nav a').forEach(link => {
-        const target = new URL(link.href).pathname;
-        link.setAttribute('aria-current', path === target || (target !== '/' && path.startsWith(target + '/')) ? 'page' : 'false');
+        const prefixes = [new URL(link.href).pathname, ...(link.dataset['currentPrefixes']?.split(' ').filter(Boolean) ?? [])];
+        link.setAttribute('aria-current', prefixes.some(under) ? 'page' : 'false');
       });
       if (path === this.path) return;
       document.dispatchEvent(new Event('merit:navigation'));
