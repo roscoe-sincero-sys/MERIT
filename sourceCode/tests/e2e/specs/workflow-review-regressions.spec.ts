@@ -119,6 +119,9 @@ test('a failed queue write restarts the cancelled side-nav read and keeps select
   await page.keyboard.press('Space');
   await page.getByRole('button', { name: 'Assign to me', exact: true }).click();
   await expect(page.getByRole('alert')).toContainText('Task changed; retry.');
+  // At the suite's tablet width the queue list starts collapsed behind its toggle (#137); open it to read the counts (#174).
+  const toggle = page.getByRole('button', { name: 'Show queues', exact: true });
+  if (await toggle.isVisible()) await toggle.click();
   await expect(page.getByRole('navigation', { name: 'Queues', exact: true })).toContainText('Recovered queue (9)');
   expect(reads).toBe(2);
   await finishInitial();

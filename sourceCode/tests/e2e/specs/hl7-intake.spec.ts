@@ -2,9 +2,10 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { expect, expectAccessible, test } from './helpers';
+import { ISOLATED_DATA_ONLY } from '../database';
 
 test('native HL7 uploads for both versions are processed by the worker and unsupported messages pause visibly', async ({ asUser }) => {
-  test.skip(process.env.MERIT_E2E_DATABASE !== 'MERIT_IT', 'Uses isolated synthetic intake records only in MERIT_IT.');
+  test.skip(ISOLATED_DATA_ONLY !== null, ISOLATED_DATA_ONLY ?? '');
   test.setTimeout(90000);
   const page = await asUser('supervisor');
   const identity = randomUUID().replace(/-/g, '');

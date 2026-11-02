@@ -1,14 +1,12 @@
-import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { expect, expectAccessible, test } from './helpers';
 import { totp } from '../totp';
+import { ISOLATED_DATA_ONLY, sql } from '../database';
 
 test('lost authenticator offers recovery codes and verified administrator reset followed by re-enrollment', async ({ browser, asUser }) => {
-  const database = process.env.MERIT_E2E_DATABASE ?? 'MERIT';
-  test.skip(database !== 'MERIT_IT', 'Creates an isolated account only in MERIT_IT.');
+  test.skip(ISOLATED_DATA_ONLY !== null, ISOLATED_DATA_ONLY ?? '');
   const id = randomUUID();
   const user = `lost-${id}`;
-  const sql = (query: string) => execFileSync('sqlcmd', ['-S', process.env.MERIT_E2E_SERVER ?? 'localhost\\PORTAL', '-E', '-C', '-I', '-d', database, '-b', '-Q', query]);
   sql(`INSERT auth.appUser(appUserId,rootTenantId,homeTenantId,userName,displayName,passwordHash,securityStamp)
     SELECT '${id}',rootTenantId,homeTenantId,N'${user}',N'Lost authenticator browser test',passwordHash,NEWID()
     FROM auth.appUser WHERE userName='admin';`);

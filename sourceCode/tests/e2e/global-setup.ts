@@ -1,7 +1,7 @@
 import { chromium, expect, FullConfig } from '@playwright/test';
-import { execFileSync } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
 import { totp } from './totp';
+import { sql } from './database';
 
 export const USERS = ['supervisor', 'cmbalt', 'admin'] as const;
 export const PASSWORD = 'MeritDemo!2026';
@@ -11,11 +11,9 @@ export const PASSWORD = 'MeritDemo!2026';
  * with the keyboard only and enrolls an authenticator code, saving the session for the specs.
  */
 export default async function globalSetup(config: FullConfig): Promise<void> {
-  const server = process.env.MERIT_E2E_SERVER ?? 'localhost\\PORTAL';
-  const database = process.env.MERIT_E2E_DATABASE ?? 'MERIT';
-  execFileSync('sqlcmd', ['-S', server, '-E', '-C', '-I', '-d', database, '-b', '-Q',
+  sql(
     `UPDATE auth.appUser SET mfaEnabled = 0, mfaSecretProtected = NULL, failedSignInCount = 0, lockoutEndUtc = NULL WHERE userName IN (${USERS.map(u => `N'${u}'`).join(', ')});` +
-    `DELETE c FROM auth.mfaRecoveryCode AS c JOIN auth.appUser AS u ON u.appUserId = c.appUserId WHERE u.userName IN (${USERS.map(u => `N'${u}'`).join(', ')});`]);
+    `DELETE c FROM auth.mfaRecoveryCode AS c JOIN auth.appUser AS u ON u.appUserId = c.appUserId WHERE u.userName IN (${USERS.map(u => `N'${u}'`).join(', ')});`);
 
   const use = config.projects[0].use;
   mkdirSync('.auth', { recursive: true });

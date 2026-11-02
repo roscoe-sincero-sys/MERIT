@@ -1,16 +1,14 @@
-import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import jsQR from 'jsqr';
 import { PNG } from 'pngjs';
 import { expect, test } from '@playwright/test';
 import { totp } from '../totp';
+import { ISOLATED_DATA_ONLY, sql } from '../database';
 
 test('rendered QR provisions the same account as manual setup and supports enrollment and later sign-in', async ({ browser }) => {
-  const database = process.env.MERIT_E2E_DATABASE ?? 'MERIT';
-  test.skip(database !== 'MERIT_IT', 'Creates an isolated enrollment account only in MERIT_IT.');
+  test.skip(ISOLATED_DATA_ONLY !== null, ISOLATED_DATA_ONLY ?? '');
   const id = randomUUID();
   const user = `qr-${id}`;
-  const sql = (query: string) => execFileSync('sqlcmd', ['-S', process.env.MERIT_E2E_SERVER ?? 'localhost\\PORTAL', '-E', '-C', '-I', '-d', database, '-b', '-Q', query]);
   sql(`INSERT auth.appUser (appUserId, rootTenantId, homeTenantId, userName, displayName, passwordHash, securityStamp)
     SELECT '${id}', rootTenantId, homeTenantId, N'${user}', N'QR enrollment test', passwordHash, NEWID () FROM auth.appUser WHERE userName = N'admin';`);
   const context = await browser.newContext({ ignoreHTTPSErrors: true });
