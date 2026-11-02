@@ -26,6 +26,23 @@ public sealed class RegistryWorkflowTests
     public void SearchRetainsMultiPartNames(string text, string first, string second)
         => Assert.Contains((first, second), SearchService.Parse(text).NamePairs);
 
+    // Issue #147: "Add a person" after a search starts from the name and date of birth searched for.
+    [Theory]
+    [InlineData("Rivera Mia 2023-05-14", "Rivera", "Mia", "2023-05-14")]
+    [InlineData("Rivera, Mia 5/14/2023", "Rivera", "Mia", "2023-05-14")]
+    [InlineData("De La Cruz, Juan", "De La Cruz", "Juan", null)]
+    [InlineData("Rivera", "Rivera", null, null)]
+    [InlineData("1214 West Lombard Street", null, null, null)]
+    [InlineData("PB-2026-000004", null, null, null)]
+    [InlineData("", null, null, null)]
+    public void ANameSearchDescribesThePersonToAdd(string text, string? last, string? first, string? dob)
+    {
+        var person = SearchService.PersonFrom(text);
+        Assert.Equal(last, person.LastName);
+        Assert.Equal(first, person.FirstName);
+        Assert.Equal(dob is null ? null : DateOnly.Parse(dob, System.Globalization.CultureInfo.InvariantCulture), person.Dob);
+    }
+
     [Fact]
     public void StreetSearchStillUsesTheAddress()
     {

@@ -61,7 +61,7 @@ public sealed class ClassificationService(
                 ctx.OpenCase.HighestValue);
 
         var decision = CaseClassifier.Classify(new ClassificationInput(analyte.Code, specimen.Specimen, population.Population,
-            population.AgeMonths, result, priors, rules, openCase, config.Classification));
+            population.AgeMonths, result, priors, rules, openCase, config.Classification, specimen.CanonicalUnit));
 
         await results.UpdateDerivedAsync(labResultId, personId, population.AgeMonths, population.Population.ToCode(),
             decision.IsIndeterminate, ct).ConfigureAwait(false);

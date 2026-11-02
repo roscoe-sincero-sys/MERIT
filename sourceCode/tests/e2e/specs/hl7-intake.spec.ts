@@ -11,7 +11,7 @@ test('native HL7 uploads for both versions are processed by the worker and unsup
   for (const [version, count] of [['231', 1], ['251', 2]] as const) {
     await page.goto('/intake');
     await expect(page.locator('#file')).toHaveAttribute('accept', /\.hl7/);
-    const option = page.locator('#intakeProfileId option').filter({ hasText: 'Chesapeake Reference Laboratory HL7' }).first();
+    const option = page.locator('#intakeProfileId option').filter({ hasText: 'HL7 message from Chesapeake Reference Laboratory' }).first();
     await page.locator('#intakeProfileId').selectOption((await option.getAttribute('value'))!);
     const content = readFileSync(resolve(__dirname, `../../../samples/chesapeake_hl7_${version}.hl7`), 'utf8')
       .replace('SampleAster^Adaline', `E2ENative${identity}^Adaline${identity}`)
@@ -25,7 +25,7 @@ test('native HL7 uploads for both versions are processed by the worker and unsup
     await expect(card).toContainText('held 0');
   }
   await page.goto('/intake');
-  const option = page.locator('#intakeProfileId option').filter({ hasText: 'Chesapeake Reference Laboratory HL7' }).first();
+  const option = page.locator('#intakeProfileId option').filter({ hasText: 'HL7 message from Chesapeake Reference Laboratory' }).first();
   await page.locator('#intakeProfileId').selectOption((await option.getAttribute('value'))!);
   const badName = `unsupported-${identity}.hl7`;
   const content = readFileSync(resolve(__dirname, '../../../samples/chesapeake_hl7_251.hl7'), 'utf8')

@@ -238,9 +238,10 @@ public sealed class HeldRecordsTests(MeritFixture fixture)
     }
 
     [SqlFact]
-    public async Task HomeNamesEachUrgentHeldRecord()
+    public async Task HomeNamesEachUrgentHeldCause()
     {
         // Issue #40: every urgent held row on Home read "Elevated result held at intake", with nothing saying which it was.
+        // Issue #158: Home now gives one line per cause and sender, with its count, linking to that cause on Held records.
         string tag = Guid.NewGuid().ToString("N")[..6].ToUpperInvariant();
         var lab = Guid.NewGuid();
         var rows = new List<Guid>();
@@ -263,9 +264,10 @@ public sealed class HeldRecordsTests(MeritFixture fixture)
 
             var supervisor = await fixture.SignedInAsync("supervisor");
             string home = WebUtility.HtmlDecode(await supervisor.Http.GetStringAsync("/"));
-            Assert.Contains($"Held{tag}, Hannah: Lead 48.0 ug/dL", home, StringComparison.Ordinal);
+            Assert.Contains("1 elevated result held: Missing date of birth", home, StringComparison.Ordinal);
             Assert.Contains($"Held at intake from Lab {tag}", home, StringComparison.Ordinal);
-            Assert.Matches(@"href=""/app/held\?batch=[0-9a-f-]{36}""", home);
+            Assert.Contains($"href=\"/app/held?reason=missingDob&sender={lab}&batch=", home, StringComparison.Ordinal);
+            Assert.Single(System.Text.RegularExpressions.Regex.Matches(home, $"from Lab {tag}"));
         }
         finally
         {

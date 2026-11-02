@@ -55,6 +55,12 @@
   .idcard h3 { margin-top: 0; }
   .big { font-family: Consolas, monospace; font-size: 15pt; letter-spacing: .06em; color: var(--blue); }
   .foot { font-size: 8.5pt; color: var(--muted); }
+  /* On screen (MERIT's User guide link, issue #148): a readable column instead of the printed page's full-height cover.
+     Print and the PDFs are unchanged. */
+  @media screen {
+    body { max-width: 52rem; margin: 0 auto; padding: 1.5rem 1rem 3rem; }
+    .cover { height: auto; padding: 2rem 0 1rem; }
+  }
 </style>
 </head>
 <body>

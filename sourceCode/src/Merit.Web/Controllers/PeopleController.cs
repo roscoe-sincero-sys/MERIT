@@ -21,7 +21,12 @@ public sealed class PeopleController(IClock clock, PersonService people, PersonP
     // ------------------------------------------------------------------------------------------ person
     [HttpGet("new")]
     [Authorize(Policy = Permissions.PersonEdit)]
-    public async Task<IActionResult> New(CancellationToken ct) => View(await FormAsync(new PersonFormModel(), ct));
+    public async Task<IActionResult> New(string? q, CancellationToken ct)
+    {
+        // Started from a search: the name and date of birth searched for are the form's start (issue #147).
+        var (last, first, dob) = SearchService.PersonFrom(q);
+        return View(await FormAsync(new PersonFormModel { LastName = last, FirstName = first, Dob = dob }, ct));
+    }
 
     [HttpPost("new")]
     [Authorize(Policy = Permissions.PersonEdit)]

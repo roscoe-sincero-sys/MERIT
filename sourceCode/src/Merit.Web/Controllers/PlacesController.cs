@@ -32,10 +32,11 @@ public sealed class PlacesController(IClock clock, PlaceService places, PersonSe
 
     [HttpGet("add")]
     [Authorize(Policy = Permissions.PersonEdit)]
-    public async Task<IActionResult> Add(Guid personId, string? role, CancellationToken ct)
+    public async Task<IActionResult> Add(Guid personId, string? role, Guid? forCase, CancellationToken ct)
         => PartialView("_PlaceForm", await FormAsync(new PlaceFormModel
         {
             PersonId = personId,
+            ForCaseId = forCase,
             Role = role ?? "residence",
             StartDate = clock.Today,
         }, ct));
@@ -98,6 +99,13 @@ public sealed class PlacesController(IClock clock, PlaceService places, PersonSe
         catch (ValidationException ex)
         {
             return this.Invalid("_PlaceForm", await FormAsync(form, ct), ex);
+        }
+
+        if (form.ForCaseId is not null)
+        {
+            // From a case: close the dialog and refresh the case, whose investigation request can now go ahead (issue #150).
+            Response.Refresh("merit:closeDialog", "merit:caseBody");
+            return Content(string.Empty, "text/html");
         }
 
         return PartialView("_Places", await builder.PlacesAsync(personId, await places.GetPlacesAsync(personId, ct), true, ct));

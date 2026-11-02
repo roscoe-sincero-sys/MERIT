@@ -26,8 +26,9 @@ const MIN_SPAN = 0.12;
  * Presentational zoomable point map in SVG (no tiles, no third-party script, nothing leaves MERIT's origin): the
  * jurisdiction's county outlines and names for context (issue #48), then points projected from latitude and longitude,
  * coloured by category (at most three, the all-pairs-safe slots of the chart palette), a ring for flagged points.
- * Zoom with the buttons, the wheel or + and -; pan by dragging or with the arrow keys; every point takes keyboard focus
- * and shows its details. The map is drawn at its own pixel width, as tall as its shape needs up to maxHeight.
+ * Zoom with the buttons, the wheel or + and -; pan by dragging or with the arrow keys. The points are one stop in the Tab
+ * order (issue #151): Tab reaches the last point visited (at first the leftmost), the arrow keys move between points from
+ * left to right, Home and End go to the first and last, Escape returns to the map, and Tab leaves the map. The map is drawn at its own pixel width, as tall as its shape needs up to maxHeight.
  */
 @Component({
   selector: 'merit-point-map',
@@ -45,7 +46,7 @@ const MIN_SPAN = 0.12;
       </ul>
     </div>
     <div class="plot" #plot tabindex="0" role="application" aria-roledescription="map" [style.height.px]="H()"
-         [attr.aria-label]="'Map of ' + points().length + ' points' + (areaPaths().length > 0 ? ' over county outlines' : '') + '. Arrow keys pan, plus and minus zoom, Tab moves between points.'"
+         [attr.aria-label]="'Map of ' + points().length + ' points' + (areaPaths().length > 0 ? ' over county outlines' : '') + '. Arrow keys pan, plus and minus zoom. Tab goes to the points, where arrow keys move from point to point.'"
          (wheel)="onWheel($event)" (pointerdown)="dragStart($event)" (pointermove)="dragMove($event)" (pointerup)="dragEnd()" (pointerleave)="dragEnd()">
       <svg [attr.viewBox]="'0 0 ' + W() + ' ' + H()" [attr.width]="W()" [attr.height]="H()">
         <g aria-hidden="true">
@@ -63,8 +64,9 @@ const MIN_SPAN = 0.12;
         </g>
         @for (p of projected(); track p.point.id) {
           @if (p.point.ringed) { <circle class="ring" [attr.cx]="p.x" [attr.cy]="p.y" r="9" /> }
-          <path class="point" [attr.d]="marker(p.point.category)" [attr.transform]="'translate(' + p.x + ',' + p.y + ')'" [attr.fill]="color(p.point.category)" tabindex="0" role="button"
-                  [attr.aria-label]="p.point.label + '. ' + p.point.detail" (focus)="focused.set(p.point.id)" (blur)="focused.set(null)"
+          <path class="point" [attr.d]="marker(p.point.category)" [attr.transform]="'translate(' + p.x + ',' + p.y + ')'" [attr.fill]="color(p.point.category)" role="button"
+                  [attr.tabindex]="p.point.id === activeId() ? 0 : -1" [attr.data-point-id]="p.point.id"
+                  [attr.aria-label]="p.point.label + '. ' + p.point.detail" (focus)="focused.set(p.point.id); active.set(p.point.id)" (blur)="focused.set(null)"
                   (mouseenter)="focused.set(p.point.id)" (mouseleave)="focused.set(null)" (click)="pick.emit(p.point.id)"
                   (keydown.enter)="activate($event, p.point.id)" (keydown.space)="activate($event, p.point.id)" />
         }
@@ -234,6 +236,16 @@ export class PointMapComponent {
     })));
   });
 
+  /** The points from left to right (then top to bottom): the order the arrow keys move in. */
+  private readonly order = computed(() => [...this.projected()].sort((a, b) => a.x - b.x || a.y - b.y).map(p => p.point.id));
+  /** The point last visited, if still shown, else the first: the one point in the Tab order. */
+  protected readonly active = signal<string | null>(null);
+  protected readonly activeId = computed(() => {
+    const ids = this.order();
+    const a = this.active();
+    return a !== null && ids.includes(a) ? a : (ids[0] ?? null);
+  });
+
   protected readonly tooltip = computed(() => this.projected().find(p => p.point.id === this.focused()) ?? null);
 
   /** Degree lines at a step that keeps about five on screen. */
@@ -301,6 +313,7 @@ export class PointMapComponent {
   }
 
   protected onKey(event: KeyboardEvent): void {
+    if ((event.target as Element).classList?.contains('point') && this.onPointKey(event)) return;
     const v = this.view();
     const stepPx = 60 * v.scale;
     const move = (dx: number, dy: number) => this.center.set({ x: v.cx + dx, y: v.cy + dy });
@@ -314,6 +327,32 @@ export class PointMapComponent {
       default: return;
     }
     event.preventDefault();
+  }
+
+  /** Moves between points; true when the key was for that. */
+  private onPointKey(event: KeyboardEvent): boolean {
+    const ids = this.order();
+    const i = ids.indexOf(this.activeId() ?? '');
+    let next: number;
+    switch (event.key) {
+      case 'ArrowRight': case 'ArrowDown': next = Math.min(i + 1, ids.length - 1); break;
+      case 'ArrowLeft': case 'ArrowUp': next = Math.max(i - 1, 0); break;
+      case 'Home': next = 0; break;
+      case 'End': next = ids.length - 1; break;
+      case 'Escape': event.preventDefault(); this.plot().nativeElement.focus(); return true;
+      default: return false;
+    }
+    event.preventDefault();
+    const target = this.projected().find(p => p.point.id === ids[next]);
+    if (!target) return true;
+    // A point off the edge of the view comes into it before it takes focus.
+    if (target.x < 0 || target.x > this.W() || target.y < 0 || target.y > this.H()) {
+      const pr = this.project(target.point.latitude, target.point.longitude);
+      this.center.set({ x: pr.x, y: pr.y });
+    }
+    this.active.set(target.point.id);
+    queueMicrotask(() => this.plot().nativeElement.querySelector<SVGElement>(`[data-point-id="${target.point.id}"]`)?.focus());
+    return true;
   }
 
   private project(lat: number, lon: number): { x: number; y: number } {

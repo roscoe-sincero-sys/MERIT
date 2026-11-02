@@ -60,7 +60,16 @@
     }
 </div>
 
-@if (User.HasClaim(MeritClaims.Permission, Permissions.PersonEdit) && !string.IsNullOrWhiteSpace(Model.Query))
+@* Always offered to those who may add people, search first (issue #147); after a search the form starts from what was
+   searched for, so the new record is spelled as the duplicate check saw it. *@
+@if (User.HasClaim(MeritClaims.Permission, Permissions.PersonEdit))
 {
-    <p><a class="usa-button usa-button--outline" href="/people/new">Add a person</a></p>
+    <div class="usa-alert usa-alert--info usa-alert--slim merit-add-person">
+        <div class="usa-alert__body">
+            <p class="usa-alert__text">@(string.IsNullOrWhiteSpace(Model.Query)
+                ? "Search first to avoid creating a duplicate record. If you are certain the person is not in MERIT:"
+                : "Not the person you are looking for? Check the spelling and date of birth, then:")</p>
+            <a class="usa-button usa-button--outline" href="@(string.IsNullOrWhiteSpace(Model.Query) ? "/people/new" : "/people/new?q=" + Uri.EscapeDataString(Model.Query))">Add a person</a>
+        </div>
+    </div>
 }

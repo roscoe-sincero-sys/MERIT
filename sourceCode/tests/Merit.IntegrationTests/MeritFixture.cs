@@ -179,6 +179,12 @@ public sealed partial class MeritClient : IDisposable
         {
             var secret = SecretPattern().Match(html).Groups[1].Value.Replace(" ", string.Empty, StringComparison.Ordinal);
             response = await Http.PostAsync("/account/enroll", Form(html, ("Code", CurrentCode(secret))));
+            // Acknowledge the recovery codes, as a person must before using MERIT (issue #156).
+            if (response.IsSuccessStatusCode)
+            {
+                response = await Http.PostAsync("/account/recovery/continue",
+                    Form(await response.Content.ReadAsStringAsync(), ("savedCodes", "true"), ("returnUrl", "/")));
+            }
         }
         else if (!path.EndsWith("/mfa", StringComparison.OrdinalIgnoreCase))
         {

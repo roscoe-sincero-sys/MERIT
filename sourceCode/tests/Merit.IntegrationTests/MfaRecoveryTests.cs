@@ -44,6 +44,20 @@ public sealed class MfaRecoveryTests(MeritFixture fixture)
             enrolled.EnsureSuccessStatusCode();
             var recoveryHtml = await enrolled.Content.ReadAsStringAsync();
             Assert.Contains("/cases?sort=opened&desc=false", WebUtility.HtmlDecode(recoveryHtml));
+            // Issue #156: until acknowledged, the codes come first: pages lead back to them, other requests are refused,
+            // and the step shows the same codes again with nothing else to wander off to.
+            Assert.DoesNotContain("id=\"merit-nav\"", recoveryHtml, StringComparison.Ordinal);
+            Assert.DoesNotContain("header-search", recoveryHtml, StringComparison.Ordinal);
+            var firstCode = Regex.Match(recoveryHtml, "data-recovery-code>([^<]+)<").Groups[1].Value;
+            Assert.NotEmpty(firstCode);
+            using (var away = await client.NoRedirect.GetAsync("/cases"))
+            {
+                Assert.Equal(HttpStatusCode.Redirect, away.StatusCode);
+                Assert.Equal("/account/recovery", away.Headers.Location?.ToString());
+            }
+            using (var api = await client.NoRedirect.GetAsync("/api/v1/me")) { Assert.Equal(HttpStatusCode.Conflict, api.StatusCode); }
+            var again = await client.Http.GetStringAsync("/account/recovery");
+            Assert.Contains(firstCode, again, StringComparison.Ordinal);
             using var notSaved = await client.NoRedirect.PostAsync("/account/recovery/continue", MeritClient.Form(recoveryHtml));
             Assert.Equal(HttpStatusCode.BadRequest, notSaved.StatusCode);
             foreach (var (destination, expected) in new[] { ("/cases?sort=opened&desc=false", "/cases?sort=opened&desc=false"), ("https://example.com", "/") })
@@ -51,6 +65,9 @@ public sealed class MfaRecoveryTests(MeritFixture fixture)
                 using var continued = await client.NoRedirect.PostAsync("/account/recovery/continue", MeritClient.Form(recoveryHtml, ("savedCodes", "true"), ("returnUrl", destination)));
                 Assert.Equal(expected, continued.Headers.Location?.ToString());
             }
+
+            // Acknowledged: MERIT opens as usual.
+            using (var after = await client.NoRedirect.GetAsync("/api/v1/me")) { Assert.Equal(HttpStatusCode.OK, after.StatusCode); }
         }
         finally { await Sql("DELETE auth.sessionScopeTenant WHERE sessionScopeId IN (SELECT sessionScopeId FROM auth.sessionScope WHERE appUserId = @id); DELETE auth.sessionScope WHERE appUserId = @id; DELETE auth.mfaRecoveryCode WHERE appUserId = @id; DELETE auth.appUser WHERE appUserId = @id;"); }
     }

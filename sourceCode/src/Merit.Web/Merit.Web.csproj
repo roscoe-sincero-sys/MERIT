@@ -24,6 +24,12 @@
     <PackageReference Include="QRCoder" />
   </ItemGroup>
 
+  <!-- The user guides and their images, served under /help (issue #148); docs/guides is their single source. -->
+  <ItemGroup>
+    <None Include="..\..\..\docs\guides\*.html" LinkBase="Help\guides" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="..\..\..\docs\images\guide\*.jpg;..\..\..\docs\images\guide\*.png" LinkBase="Help\images\guide" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
   <ItemGroup>
     <Content Remove="$(SpaRoot)**" />
     <None Include="$(SpaRoot)**" Exclude="$(SpaRoot)node_modules\**;$(SpaRoot).angular\**" />

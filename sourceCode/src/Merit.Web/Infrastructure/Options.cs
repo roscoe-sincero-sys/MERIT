@@ -35,6 +35,46 @@ public static class Options
     public static string Date(DateTime? d) => d is null ? string.Empty
         : DisplayTime.ToLocal(d.Value).ToString("MMM d, yyyy h:mm tt", CultureInfo.InvariantCulture);
 
+    /// <summary>
+    /// An intake profile as a choice: its format first, so a narrow list still shows it, then the sender, then whatever
+    /// the profile's name adds beyond the sender and the format (issue #148): "HL7 message from Chesapeake Reference
+    /// Laboratory", not "Chesapeake Reference Laboratory — Chesapeake Reference Laboratory HL7 (v1, hl7)".
+    /// </summary>
+    public static string IntakeProfile(string sender, string profileName, string fileType)
+    {
+        string format = fileType switch
+        {
+            "hl7" => "HL7 message",
+            "tsv" => "Tab-separated file",
+            "pipe" => "Pipe-separated file",
+            _ => "CSV file",
+        };
+        string rest = profileName.StartsWith(sender, StringComparison.OrdinalIgnoreCase) ? profileName[sender.Length..] : profileName;
+        rest = string.Join(' ', rest.Split(' ', StringSplitOptions.RemoveEmptyEntries)
+            .Where(w => !w.Equals(fileType, StringComparison.OrdinalIgnoreCase) && !w.Equals("csv", StringComparison.OrdinalIgnoreCase)
+                        && !w.Equals("hl7", StringComparison.OrdinalIgnoreCase))).Trim(' ', '-', '—', ',');
+        return $"{format} from {sender}" + (rest.Length == 0 ? string.Empty : $" ({rest})");
+    }
+
+    /// <summary>
+    /// One choice per unit (issue #165): spellings of the same unit ("ug/dL", "mcg/dL", "µg/dL") with the same multiplier
+    /// are one choice, shown as the canonical spelling when it is one of them, else the first. A chosen synonym selects its
+    /// unit. Files may still use any accepted spelling.
+    /// </summary>
+    public static IReadOnlyList<SelectOption> UnitChoices(IEnumerable<(string Text, decimal Multiplier)> units, string canonical, string? selected)
+    {
+        static string Key(string unit) => unit.Trim().Replace("µ", "u", StringComparison.Ordinal).Replace("μ", "u", StringComparison.Ordinal)
+            .Replace("mcg", "ug", StringComparison.OrdinalIgnoreCase).Replace(" ", string.Empty, StringComparison.Ordinal).ToLowerInvariant();
+        string want = selected ?? canonical;
+        return units.GroupBy(u => (Key(u.Text), u.Multiplier))
+            .Select(g =>
+            {
+                string text = g.Any(u => u.Text == canonical) ? canonical : g.First().Text;
+                return new SelectOption(text, text, g.Any(u => u.Text == want) || Key(want) == g.Key.Item1);
+            })
+            .ToList();
+    }
+
     /// <summary>A count with its noun, singular or plural: "1 task", "3 tasks" (issue #166).</summary>
     public static string Count(int? n, string singular, string? plural = null)
         => $"{n ?? 0} {(n == 1 ? singular : plural ?? singular + "s")}";

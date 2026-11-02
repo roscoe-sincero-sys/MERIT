@@ -74,8 +74,16 @@ public sealed class RegistryWorkflowTests(MeritFixture fixture)
     public async Task DateFirstSearchFindsTheSamePersonAndPeopleFlowRequiresSearchFirst()
     {
         var client = await fixture.SignedInAsync("supervisor");
-        var blank = await client.Http.GetStringAsync("/search"); Assert.DoesNotContain("href=\"/people/new\"", blank);
+        // Issue #147: Add a person is offered from the start, beside the advice to search first; after a search it starts
+        // from what was searched for.
+        var blank = await client.Http.GetStringAsync("/search"); Assert.Contains("href=\"/people/new\"", blank);
+        Assert.Contains("Search first to avoid creating a duplicate record", blank);
+        Assert.DoesNotContain("id=\"header-search\"", blank);
         var found = await client.GetPartialAsync("/search?q=2023-05-14%20Mia%20Rivera"); found.EnsureSuccessStatusCode();
-        var html = await found.Content.ReadAsStringAsync(); Assert.Contains($"/people/{fixture.Ids.MiaPersonId}", html); Assert.Contains("href=\"/people/new\"", html);
+        var html = await found.Content.ReadAsStringAsync(); Assert.Contains($"/people/{fixture.Ids.MiaPersonId}", html);
+        Assert.Contains("href=\"/people/new?q=2023-05-14%20Mia%20Rivera\"", html);
+        var form = await client.Http.GetStringAsync("/people/new?q=Rivera%20Mia%202023-05-14");
+        Assert.Contains("value=\"Rivera\"", form); Assert.Contains("value=\"Mia\"", form); Assert.Contains("value=\"2023-05-14\"", form);
+        Assert.Single(System.Text.RegularExpressions.Regex.Matches(form, "<h1[ >]"));
     }
 }

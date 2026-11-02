@@ -157,5 +157,9 @@ export function problemMessage(error: unknown): string {
   if (e.status === 401) {
     return 'Your session ended. Your unsaved work is still here. Use Sign in in a new tab, then return to this tab.';
   }
+  if (e.status === 403 && !e.error?.detail) {
+    // The same words as the "Not permitted" page (issue #161).
+    return 'Your profile does not allow this. Switch to a profile that includes it, or ask your MERIT administrator.';
+  }
   return e.error?.detail ?? e.error?.title ?? 'The request could not be completed.';
 }

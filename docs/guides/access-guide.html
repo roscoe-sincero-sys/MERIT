@@ -53,6 +53,12 @@
   .callout { display: inline-block; background: var(--amber); color: var(--ink); font-weight: 700; border-radius: 50%; width: 1.4em; height: 1.4em; text-align: center; font-size: 8.5pt; line-height: 1.4em; }
   svg text { font-family: "Segoe UI", Arial, sans-serif; }
   .foot { font-size: 8.5pt; color: var(--muted); }
+  /* On screen (MERIT's User guide link, issue #148): a readable column instead of the printed page's full-height cover.
+     Print and the PDFs are unchanged. */
+  @media screen {
+    body { max-width: 52rem; margin: 0 auto; padding: 1.5rem 1rem 3rem; }
+    .cover { height: auto; padding: 2rem 0 1rem; }
+  }
 </style>
 </head>
 <body>

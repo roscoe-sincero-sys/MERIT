@@ -9,6 +9,8 @@ import { PagerComponent } from '../../shared/pager.component';
 @Injectable()
 export class MatchReviewStore {
   readonly queue = signal<MatchQueueItemDto[]>([]);
+  /** The queue has been read at least once; "Nothing to review" means nothing only then (issue #161). */
+  readonly queueLoaded = signal(false);
   readonly total = signal(0);
   readonly page = signal(1);
   readonly pageSize = signal(200);
@@ -165,10 +167,20 @@ export class CandidateHistoryComponent {
   readonly candidate = input.required<MatchCandidateDto>();
 }
 
+const SINGLE_KEYS = 'merit.match-review.single-keys';
+function readSingleKeys(): boolean {
+  try { return localStorage.getItem(SINGLE_KEYS) === 'true'; } catch { return false; }
+}
+
+/** Names laboratories give before a person is named or identified: "Baby Boy", "Infant", "Unknown", "Doe". */
+const PLACEHOLDER_NAME = /^(baby( (boy|girl))?|boy|girl|infant|newborn|unknown|unk|doe|twin [ab12])$/i;
+
 /**
  * Person matching review: moves through the queue of records whose identity needs a person. Keyboard first: Alt+Shift+1-5 pick a
  * candidate, S same person, D different person, N not sure, C create as a new person, H history, J and K next and
- * previous. Every decision is made on the server; the screen only moves on.
+ * previous. With single-key shortcuts turned on (issue #153) the same keys work alone: moving and choosing act at once,
+ * and a decision key must be pressed twice, so one stray key never decides. Every decision is made on the server; the
+ * screen only moves on.
  */
 @Component({
   selector: 'merit-match-review-page',
@@ -178,8 +190,13 @@ export class CandidateHistoryComponent {
   host: { '(keydown)': 'onKey($event)' },
   template: `
     <h1 tabindex="-1" #heading>Person matching review</h1>
-    <p class="merit-meta">{{ display.count(store.total(), 'record') }} waiting. Hold Alt+Shift for shortcuts: 1&ndash;5 choose a candidate, S same person, D different person,
-      N not sure, C new person, H history, J next, K previous.</p>
+    <p class="merit-meta" id="shortcut-help">{{ display.count(store.total(), 'record') }} waiting. Shortcuts: 1&ndash;5 choose a candidate, S same person, D different person,
+      N not sure, C new person, H history, J next, K previous.
+      @if (singleKeys()) { Press the key alone; press S, D, N or C twice to decide. Alt+Shift with the key also works. } @else { Hold Alt+Shift with the key. }</p>
+    <div class="usa-checkbox shortcut-mode">
+      <input class="usa-checkbox__input" id="single-keys" type="checkbox" [checked]="singleKeys()" (change)="toggleSingleKeys()" aria-describedby="shortcut-help" />
+      <label class="usa-checkbox__label" for="single-keys">Single-key shortcuts (a decision key is pressed twice)</label>
+    </div>
     <div class="usa-sr-only" role="status" aria-live="polite">{{ store.message() }} {{ store.announcement() }}</div>
     @if (store.error(); as e) { <div class="usa-alert usa-alert--error usa-alert--slim" role="alert"><div class="usa-alert__body"><p class="usa-alert__text">{{ e }}</p></div></div> }
     @if (store.message(); as m) { <div class="usa-alert usa-alert--success usa-alert--slim"><div class="usa-alert__body"><p class="usa-alert__text">{{ m }}</p></div></div> }
@@ -188,9 +205,9 @@ export class CandidateHistoryComponent {
       <nav aria-label="Records to review">
         <div class="usa-checkbox">
           <input class="usa-checkbox__input" id="escalated" type="checkbox" [checked]="store.escalatedOnly()" [disabled]="store.busy()" (change)="toggleEscalated()" />
-          <label class="usa-checkbox__label" for="escalated">Sent to a supervisor only</label>
+          <label class="usa-checkbox__label" for="escalated">Show only records sent to a supervisor</label>
         </div>
-        @if (store.queue().length === 0) { <p class="merit-empty">Nothing to review.</p> }
+        @if (store.queueLoaded() && store.queue().length === 0) { <p class="merit-empty">Nothing to review.</p> }
         <merit-pager label="Match records" [page]="store.page()" [size]="store.pageSize()" [total]="store.total()" [busy]="store.busy() || store.loading()" (change)="goPage($event)" />
         <ol class="queue">
           @for (q of store.queue(); track q.stagingRowId) {
@@ -212,15 +229,18 @@ export class CandidateHistoryComponent {
           <p>{{ r.reasonMessage }}</p>
           @if (r.isEscalated) { <p class="usa-alert usa-alert--info usa-alert--slim usa-alert__text">Sent to a supervisor: {{ r.escalationNote }}</p> }
 
-          <dl class="clinical-report" aria-label="Incoming clinical report">
-            @for (f of r.incoming; track f.key) { @if (['collectedDate', 'loinc', 'value', 'unit', 'sampleType', 'testMethod', 'guardianName', 'accessionNumber'].includes(f.key)) { <dt>{{ f.label }}</dt><dd>{{ ['sampleType', 'testMethod'].includes(f.key) ? display.of(f.value) : f.value }}</dd> } }
-          </dl>
+          <!-- What to weigh, for this record's situation (issue #168). -->
+          <div class="usa-alert usa-alert--info usa-alert--slim guidance"><div class="usa-alert__body"><p class="usa-alert__text">{{ guidance(r) }}</p></div></div>
           @if (r.candidates.length > 0) {
+            <dl class="clinical-report" aria-label="Incoming clinical report">
+              @for (f of r.incoming; track f.key) { @if (['collectedDate', 'loinc', 'value', 'unit', 'sampleType', 'testMethod', 'guardianName', 'accessionNumber'].includes(f.key)) { <dt>{{ f.label }}</dt><dd>{{ ['sampleType', 'testMethod'].includes(f.key) ? display.of(f.value) : f.value }}</dd> } }
+            </dl>
             <merit-match-comparison [review]="r" [selected]="store.selected()" [disabled]="store.busy()" (pick)="choose($event)" />
           } @else {
+            <!-- With nobody to compare, the incoming record is shown once, in full. -->
             <p class="merit-empty">No candidate persons were found for this record (or every candidate was marked a different person).</p>
-            <dl class="incoming">
-              @for (f of r.incoming; track f.key) { <dt>{{ f.label }}</dt><dd>{{ f.value }}</dd> }
+            <dl class="incoming" aria-label="Incoming record">
+              @for (f of r.incoming; track f.key) { <dt>{{ f.label }}</dt><dd>{{ ['sampleType', 'testMethod'].includes(f.key) ? display.of(f.value) : f.value }}</dd> }
             </dl>
           }
 
@@ -228,18 +248,19 @@ export class CandidateHistoryComponent {
           <input class="usa-input" id="note" #note maxlength="500" [disabled]="store.busy()" />
           <div class="actions" role="group" aria-label="Decision">
             @if (store.candidate(); as c) {
-              <button class="usa-button" type="button" aria-keyshortcuts="Alt+Shift+S" [disabled]="!store.canDecide()" (click)="decide('same', note.value)">
-                Same person as {{ c.personName }} (Alt+Shift+S)</button>
-              <button class="usa-button usa-button--secondary" type="button" aria-keyshortcuts="Alt+Shift+D" [disabled]="!store.canDecide()" (click)="decide('different', note.value)">
-                Different person (Alt+Shift+D)</button>
+              <button class="usa-button" type="button" [class.armed]="armed() === 's'" [attr.aria-keyshortcuts]="keys('S')" [disabled]="!store.canDecide()" (click)="decide('same', note.value)">
+                Same person as {{ c.personName }} ({{ hint('S') }})</button>
+              <button class="usa-button usa-button--secondary" type="button" [class.armed]="armed() === 'd'" [attr.aria-keyshortcuts]="keys('D')" [disabled]="!store.canDecide()" (click)="decide('different', note.value)">
+                Different person ({{ hint('D') }})</button>
             }
-              <button class="usa-button usa-button--outline" type="button" aria-keyshortcuts="Alt+Shift+C" [disabled]="!store.canDecide()" (click)="decide('newPerson', note.value)">
-                Create as a new person (Alt+Shift+C)</button>
-            <button class="usa-button usa-button--outline" type="button" aria-keyshortcuts="Alt+Shift+N" [disabled]="!store.canDecide()" (click)="decide('notSure', note.value)">
-              Not sure (Alt+Shift+N)</button>
+              <!-- With no one to compare, creating the person is the expected decision (issue #168). -->
+              <button class="usa-button" type="button" [class.usa-button--outline]="r.candidates.length > 0" [class.armed]="armed() === 'c'" [attr.aria-keyshortcuts]="keys('C')" [disabled]="!store.canDecide()" (click)="decide('newPerson', note.value)">
+                Create as a new person ({{ hint('C') }})</button>
+            <button class="usa-button usa-button--outline" type="button" [class.armed]="armed() === 'n'" [attr.aria-keyshortcuts]="keys('N')" [disabled]="!store.canDecide()" (click)="decide('notSure', note.value)">
+              Not sure ({{ hint('N') }})</button>
             @if (store.candidate()) {
-              <button class="usa-button usa-button--unstyled" type="button" aria-keyshortcuts="Alt+Shift+H" [disabled]="store.busy()" [attr.aria-expanded]="store.showHistory()" (click)="store.showHistory.update(v => !v)">
-                {{ store.showHistory() ? 'Hide' : 'Show' }} history (Alt+Shift+H)</button>
+              <button class="usa-button usa-button--unstyled" type="button" [attr.aria-keyshortcuts]="keys('H')" [disabled]="store.busy()" [attr.aria-expanded]="store.showHistory()" (click)="store.showHistory.update(v => !v)">
+                {{ store.showHistory() ? 'Hide' : 'Show' }} history ({{ hint('H', false) }})</button>
             }
           </div>
           @if (store.showHistory() && store.candidate(); as c) { <merit-candidate-history [candidate]="c" /> }
@@ -261,6 +282,9 @@ export class CandidateHistoryComponent {
     .actions { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; margin-top: 1rem; }
     .incoming, .clinical-report { display: grid; grid-template-columns: max-content 1fr; gap: .25rem 1rem; }
     .incoming dt { font-weight: 700; }
+    .shortcut-mode { margin-bottom: .75rem; }
+    .guidance { margin: .5rem 0 1rem; }
+    .actions .usa-button.armed { outline: 3px solid #e5a000; outline-offset: 2px; }
     @media (max-width: 64em) { .layout { grid-template-columns: minmax(0, 1fr); } }
   `,
 })
@@ -275,9 +299,46 @@ export class MatchReviewPage implements OnInit {
   /** A row to open first, from Held records' "Review the match" (issue #42). */
   readonly rowParam = input<string | undefined>(undefined, { alias: 'row' });
 
+  /** Single-key shortcuts, remembered on this browser (issue #153). */
+  protected readonly singleKeys = signal(readSingleKeys());
+  /** A decision key pressed once in single-key mode; the same key again decides. */
+  protected readonly armed = signal<string | null>(null);
+  private armTimer: ReturnType<typeof setTimeout> | undefined;
+
   ngOnInit(): void {
     this.store.escalatedOnly.set(this.escalatedParam() === 'true');
     this.loadQueue(true, 0, this.rowParam());
+  }
+
+  protected toggleSingleKeys(): void {
+    this.singleKeys.update(v => !v);
+    this.disarm();
+    try { localStorage.setItem(SINGLE_KEYS, String(this.singleKeys())); } catch { /* The choice still holds for this visit. */ }
+  }
+
+  /** aria-keyshortcuts for a key: alone too when single-key mode is on. */
+  protected keys(key: string): string {
+    return this.singleKeys() ? `${key} Alt+Shift+${key}` : `Alt+Shift+${key}`;
+  }
+
+  /** The shortcut as a button shows it. */
+  protected hint(key: string, decision = true): string {
+    return this.singleKeys() ? (decision ? `${key} twice` : key) : `Alt+Shift+${key}`;
+  }
+
+  /** What to weigh for this record (issue #168): a placeholder name, no one to compare, or safeguards to read. */
+  protected guidance(r: MatchReviewDto): string {
+    const value = (key: string) => r.incoming.find(f => f.key === key)?.value ?? '';
+    if (PLACEHOLDER_NAME.test(value('firstName').trim()) || PLACEHOLDER_NAME.test(value('lastName').trim())) {
+      return 'This record uses a placeholder name, as newborn and unidentified records often do. Names will not agree, so decide on the date of birth, address and guardian; if they do not settle it, choose Not sure.';
+    }
+    if (r.candidates.length === 0) {
+      return 'No existing person matches. If the name and date of birth are complete and look right, create a new person; if they look wrong or incomplete, choose Not sure to send the record to a supervisor.';
+    }
+    if (r.candidates.some(c => c.warnings.length > 0)) {
+      return "Read each candidate's safeguards before choosing Same person: they flag differences that often mean two different people.";
+    }
+    return 'Compare the fields marked Different or Close. Choose Same person only when the differences are explained, such as a typo or a new address.';
   }
 
   protected toggleEscalated(): void {
@@ -339,24 +400,51 @@ export class MatchReviewPage implements OnInit {
 
   protected onKey(event: KeyboardEvent): void {
     const target = event.target as HTMLElement;
-    if (!event.altKey || !event.shiftKey || event.ctrlKey || event.metaKey || event.repeat || event.isComposing
+    const chord = event.altKey && event.shiftKey && !event.ctrlKey && !event.metaKey;
+    // Single keys only when turned on, and never while typing (issue #153).
+    const single = this.singleKeys() && !event.altKey && !event.shiftKey && !event.ctrlKey && !event.metaKey;
+    if ((!chord && !single) || event.repeat || event.isComposing
       || target.closest('input, textarea, select, [contenteditable]:not([contenteditable=false])')) return;
     const key = /^Digit[1-5]$/.test(event.code) ? event.code.slice(-1) : event.key.toLowerCase();
     const note = (document.getElementById('note') as HTMLInputElement | null)?.value ?? '';
+    // Alone, a decision key arms its decision; the same key again within a few seconds makes it.
+    const decideKey = (k: string, decision: MatchDecision): boolean => {
+      if (single && this.armed() !== k) {
+        if (this.store.canDecide()) this.arm(k, decision);
+        return true;
+      }
+      this.disarm();
+      this.decide(decision, note);
+      return true;
+    };
     const handled = (() => {
-      if (key >= '1' && key <= '5') { this.choose(Number(key) - 1); return true; }
+      if (key >= '1' && key <= '5') { this.disarm(); this.choose(Number(key) - 1); return true; }
       switch (key) {
-        case 's': this.decide('same', note); return true;
-        case 'd': this.decide('different', note); return true;
-        case 'n': this.decide('notSure', note); return true;
-        case 'c': this.decide('newPerson', note); return true;
+        case 's': return decideKey('s', 'same');
+        case 'd': return decideKey('d', 'different');
+        case 'n': return decideKey('n', 'notSure');
+        case 'c': return decideKey('c', 'newPerson');
+        case 'escape': if (single && this.armed()) { this.disarm(); this.store.announcement.set('Decision cancelled.'); return true; } return false;
         case 'h': if (!this.store.busy()) { this.store.showHistory.update(v => !v); } return true;
-        case 'j': this.step(1); return true;
-        case 'k': this.step(-1); return true;
+        case 'j': this.disarm(); this.step(1); return true;
+        case 'k': this.disarm(); this.step(-1); return true;
         default: return false;
       }
     })();
     if (handled) event.preventDefault();
+  }
+
+  private arm(key: string, decision: MatchDecision): void {
+    const words: Record<MatchDecision, string> = { same: 'Same person', different: 'Different person', notSure: 'Not sure', newPerson: 'Create as a new person' };
+    this.armed.set(key);
+    this.store.announcement.set(`${words[decision]}: press ${key.toUpperCase()} again to confirm, or Escape to cancel.`);
+    clearTimeout(this.armTimer);
+    this.armTimer = setTimeout(() => this.armed.set(null), 4000);
+  }
+
+  private disarm(): void {
+    clearTimeout(this.armTimer);
+    this.armed.set(null);
   }
 
   protected goPage(page: number): void {
@@ -416,6 +504,7 @@ export class MatchReviewPage implements OnInit {
         this.store.page.set(p.pageNumber);
         this.store.pageSize.set(p.pageSize);
         this.store.queue.set(p.items);
+        this.store.queueLoaded.set(true);
         this.store.total.set(p.totalCount);
         if (index >= p.items.length && p.pageNumber * p.pageSize < p.totalCount) {
           this.store.page.update(v => v + 1); this.loadQueue(true); return;

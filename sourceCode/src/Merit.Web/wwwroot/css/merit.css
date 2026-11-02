@@ -169,7 +169,17 @@ dialog.merit-dialog::backdrop { background: rgba(0,0,0,.5); }
 .merit-setup-key { overflow-wrap: anywhere; }
 
 /* Profiles */
-.merit-header__profile { color: #fff; font-size: .85rem; text-decoration: underline; }
+/* The profile switcher reads as a control: outlined, with its action named (issue #152). */
+.merit-header__profile.merit-profile-switch { display: inline-flex; flex-direction: column; align-items: flex-start; min-height: 44px; justify-content: center;
+    padding: .2rem .6rem; border: 1px solid #ffffffb3; border-radius: .25rem; color: #fff; font-size: .85rem; line-height: 1.2; text-decoration: none; }
+.merit-profile-switch:hover, .merit-profile-switch:focus { background: #ffffff26; border-color: #fff; }
+.merit-profile-switch__label { font-size: .75rem; opacity: .85; }
+.merit-profile-switch__name { font-weight: 700; }
+.merit-profile-switch__action { font-size: .75rem; text-decoration: underline; }
+.merit-header__links { display: flex; flex-direction: column; align-items: flex-start; gap: .35rem; }
+.merit-header__links > a, .merit-header__links .usa-button--unstyled { display: inline-flex; align-items: center; min-height: 24px; }   /* WCAG 2.2 target size */
+.merit-header__help { font-size: .85rem; }
+.merit-header__user--minimal { margin-left: auto; }
 .merit-viewas .usa-alert__body { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1rem; }
 .merit-grant-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: .25rem 1rem; align-items: end;
                    border-bottom: 1px solid #dfe1e2; padding-bottom: .75rem; margin-bottom: .75rem; }
@@ -232,3 +242,13 @@ th .merit-sort:hover, th .merit-sort:focus { color: var(--merit-primary); }
     body:has([data-recovery-codes]) header, body:has([data-recovery-codes]) footer,
     body:has([data-recovery-codes]) .usa-skipnav, [data-recovery-tools], [data-recovery-continue] { display: none !important; }
 }
+/* A choice whose options are long sentences, such as the intake profile (issue #148). */
+.usa-select.merit-select--wide { max-width: 46rem; }
+/* Actions inside an alert: one row with room between them (issue #170). */
+.merit-alert-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem 1.5rem; margin-top: .75rem; }
+.merit-alert-actions .usa-button { margin: 0; }
+/* A list filter: its own field, the count below it after a gap (issue #171). */
+.merit-filter { margin-top: 1.5rem; max-width: 30rem; }
+.merit-filter .usa-input { max-width: 30rem; float: none; height: 2.5rem; }   /* USWDS floats search boxes left */
+.merit-filter__count { margin: .75rem 0 1rem; }
+.usa-form.merit-form--wide { max-width: 46rem; }

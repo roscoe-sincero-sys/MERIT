@@ -1,0 +1,18 @@
+@model IReadOnlyList<HelpGuide>
+@{
+    ViewData["Title"] = "User guides";
+}
+<h1>User guides</h1>
+<p>Step-by-step guides to MERIT, with pictures of each screen. The User guide link at the top of every page opens this list in a new tab, so your work stays as it is.</p>
+<ul class="usa-card-group">
+    @foreach (var g in Model)
+    {
+        <li class="usa-card tablet:grid-col-4">
+            <div class="usa-card__container">
+                <div class="usa-card__header"><h2 class="usa-card__heading">@g.Title</h2></div>
+                <div class="usa-card__body"><p>@g.Summary</p></div>
+                <div class="usa-card__footer"><a class="usa-button" href="/help/guides/@g.File">Open the guide<span class="usa-sr-only">: @g.Title</span></a></div>
+            </div>
+        </li>
+    }
+</ul>

@@ -30,6 +30,7 @@ services.AddSingleton<IPasswordHasher, IdentityPasswordHasher>();
 services.AddSingleton<ISecretProtector, DataProtectionSecretProtector>();
 services.AddSingleton<IBreachedPasswordList, CommonBreachedPasswordList>();
 services.AddSingleton<AngularAssets>();
+services.AddSingleton<RecoveryCodesPending>();
 services.AddSingleton<QrCodes>();
 services.AddScoped<Merit.Web.Mapping.PersonPageBuilder>();
 
@@ -223,6 +224,7 @@ app.Use(async (http, next) =>
     await next(http);
 });
 app.UseMiddleware<SecurityHeadersMiddleware>();
+app.UseMiddleware<RecoveryCodesGateMiddleware>();   // unacknowledged recovery codes come first (issue #156)
 app.UseRateLimiter();    // after the security headers, so the "too many attempts" page carries its CSP nonce
 app.UseAuthorization();
 
