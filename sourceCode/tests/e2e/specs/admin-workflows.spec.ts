@@ -23,7 +23,7 @@ test('users filter accepts partial names and county checkboxes survive validatio
   const context = await browser.newContext({ storageState: '.auth/admin.json', ignoreHTTPSErrors: true });
   const page = await context.newPage();
   await page.goto('/admin/users');
-  const filter = page.getByRole('searchbox', { name: 'Filter listed users by name, user name, or tenant' });
+  const filter = page.getByRole('searchbox', { name: 'Filter listed users' });
   await filter.fill('Avery');
   await expect(page.locator('[data-user-row]:visible')).toHaveCount(1);
   await filter.fill('no-such-person-xyz');

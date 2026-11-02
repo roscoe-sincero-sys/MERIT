@@ -50,11 +50,19 @@ public sealed class DashboardItemRow
 
     public Guid? ExposureCaseId { get; init; }
 
-    /// <summary>For a held record: its batch, to narrow Held records to it.</summary>
+    /// <summary>For held records: their batch when they are all from one, to narrow Held records to it.</summary>
     public Guid? IntakeBatchId { get; init; }
 
-    /// <summary>For a held record: the laboratory that sent it.</summary>
+    /// <summary>For held records: the laboratory that sent them.</summary>
     public string? SenderName { get; init; }
+
+    public Guid? SenderOrganizationId { get; init; }
+
+    /// <summary>For held records: the cause that holds them (issue #158).</summary>
+    public string? ReasonCode { get; init; }
+
+    /// <summary>For held records: how many urgent rows the cause holds.</summary>
+    public int ItemCount { get; init; } = 1;
 }
 
 public sealed class DashboardCaseRow

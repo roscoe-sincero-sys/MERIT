@@ -4,7 +4,7 @@
     var c = Model.Detail.Case;
     string rv = Options.Hex(c.RowVersion);
 }
-<div id="case-body" data-preserve-drafts>
+<div id="case-body" data-preserve-drafts hx-get="/cases/@c.ExposureCaseId" hx-trigger="merit:caseBody from:body" hx-swap="outerHTML">
     @if (c.CaseStatus == "closed" && User.HasClaim(MeritClaims.Permission, Permissions.CaseEdit)) {
         <form id="case-reopen-form" class="usa-form" hx-post="/cases/@c.ExposureCaseId/reopen" hx-target="#case-body" hx-swap="outerHTML">
             <input type="hidden" name="rowVersion" value="@draft.Value("reopen", "rowVersion", rv)" />
@@ -94,8 +94,18 @@
             }
             @if (Model.CanInvestigate && c.CaseStatus != "closed")
             {
-                <button class="usa-button usa-button--outline" type="button" disabled="@(!Model.HasInvestigationTargets)" hx-get="/cases/@c.ExposureCaseId/investigations/new" hx-target="#dialog-body" hx-swap="innerHTML">Request an investigation</button>
-                @if (!Model.HasInvestigationTargets) { <p>Add an eligible place or employer to the person record before requesting an investigation.</p> }
+                <button class="usa-button usa-button--outline" type="button" id="case-request-investigation" disabled="@(!Model.HasInvestigationTargets)" hx-get="/cases/@c.ExposureCaseId/investigations/new" hx-target="#dialog-body" hx-swap="innerHTML">Request an investigation</button>
+                @if (!Model.HasInvestigationTargets)
+                {
+                    @* Add the place here rather than detour through the person page (issue #150). *@
+                    <p id="investigation-needs-place">An investigation needs a place or employer on the person's record.
+                        @if (User.HasClaim(MeritClaims.Permission, Permissions.PersonEdit))
+                        {
+                            <button class="usa-button usa-button--unstyled" type="button" id="case-add-place" hx-get="/people/@c.PersonId/places/add?forCase=@c.ExposureCaseId" hx-target="#dialog-body" hx-swap="innerHTML">Add a place now</button>
+                        }
+                        else { <a class="usa-link" href="/people/@c.PersonId">Open the person record</a> }
+                    </p>
+                }
             }
         </section>
     </div>

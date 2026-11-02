@@ -131,8 +131,8 @@ public sealed class ResultsController(IClock clock, ResultService results, Perso
         }
 
         model.CanonicalUnit = chosen.CanonicalUnit;
-        model.Units = refData.UnitsFor(chosen.AnalyteSpecimenId)
-            .Select(u => new SelectOption(u.UnitText, u.UnitText, u.UnitText == (unit ?? chosen.CanonicalUnit))).ToList();
+        model.Units = Options.UnitChoices(refData.UnitsFor(chosen.AnalyteSpecimenId).Select(u => (u.UnitText, u.MultiplierToCanonical)),
+            chosen.CanonicalUnit, unit);
         model.UsesSampleType = chosen.UsesSampleType;
         model.SampleTypes = refData.Choices("sampleType", sampleType ?? "unknown");
         model.Speciations = chosen.SpeciationList.Select(s => new SelectOption(s, Options.Humanize(s), s == speciation)).ToList();

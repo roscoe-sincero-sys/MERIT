@@ -137,4 +137,20 @@ public sealed class ClassificationTests
         Assert.Equal(Crossing.AtOrAbove, At(10.1m));
         Assert.Equal(Crossing.Below, At(20m));
     }
+
+    // Issues #158 and #176: a task states the levels as people read them, with the unit, not stored precision.
+    [Fact]
+    public void ActionTaskTextUsesUnitsAndPlainNumbers()
+    {
+        var tier = Rule("child", ThresholdType.Action, 10.000000m) with
+        {
+            UpperValue = 20.000000m, ActionName = "Confirmatory venous test due", QueueCode = "confirmatory", DueIntervalDays = 30,
+            Authority = "CDC: confirmatory venous test within 1 month at 10-19 ug/dL",
+        };
+        var d = CaseClassifier.Classify(new ClassificationInput("PB", "wholeBlood", PopulationKind.Child, 36, Result(12.0000m), [],
+            [ChildCase, tier], null, ClassificationSettings.Default, "ug/dL"));
+        var task = Assert.Single(d.Tasks, t => t.QueueCode == "confirmatory");
+        Assert.Equal("12 ug/dL is at or above 10 ug/dL, below the next level of 20 ug/dL: CDC: confirmatory venous test within 1 month at 10-19 ug/dL",
+            task.Detail);
+    }
 }

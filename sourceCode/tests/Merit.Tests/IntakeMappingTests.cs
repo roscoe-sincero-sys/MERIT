@@ -1,4 +1,5 @@
 using Merit.Application.Intake;
+using Merit.Web.Infrastructure;
 
 namespace Merit.Tests;
 
@@ -60,5 +61,26 @@ public sealed class IntakeMappingTests
         Assert.Null(fields["addressUnit"]);
         Assert.Equal("21D0000000", fields["labCliaNumber"]);
         Assert.Equal("MD", fields["state"]);
+    }
+
+    // Issue #148: the format comes first and the sender's name is not repeated.
+    [Theory]
+    [InlineData("Chesapeake Reference Laboratory", "Chesapeake Reference Laboratory CSV", "csv", "CSV file from Chesapeake Reference Laboratory")]
+    [InlineData("Chesapeake Reference Laboratory", "Chesapeake Reference Laboratory HL7", "hl7", "HL7 message from Chesapeake Reference Laboratory")]
+    [InlineData("County Lab", "Weekly export", "tsv", "Tab-separated file from County Lab (Weekly export)")]
+    [InlineData("County Lab", "County Lab pipe", "pipe", "Pipe-separated file from County Lab")]
+    public void IntakeProfilesReadAsFormatThenSender(string sender, string profile, string fileType, string label)
+        => Assert.Equal(label, Options.IntakeProfile(sender, profile, fileType));
+
+    // Issue #165: one choice per unit, however many spellings files use.
+    [Fact]
+    public void UnitSpellingsAreOneChoice()
+    {
+        (string, decimal)[] units = [("ug/dL", 1m), ("mcg/dL", 1m), ("µg/dL", 1m), ("umol/L", 20.72m)];
+        var choices = Options.UnitChoices(units, "ug/dL", null);
+        Assert.Equal(["ug/dL", "umol/L"], choices.Select(c => c.Value));
+        Assert.True(choices[0].Selected);
+        Assert.True(Options.UnitChoices(units, "ug/dL", "mcg/dL")[0].Selected);
+        Assert.True(Options.UnitChoices(units, "ug/dL", "umol/L")[1].Selected);
     }
 }

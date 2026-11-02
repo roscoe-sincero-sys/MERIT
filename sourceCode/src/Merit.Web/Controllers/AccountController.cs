@@ -17,7 +17,7 @@ namespace Merit.Web.Controllers;
 /// with no authenticator enrolls at first sign-in. Only after both factors is the session scope created.
 /// </summary>
 [Route("account")]
-public sealed class AccountController(AccountService accounts, QrCodes qr, SessionRenewal sessions) : Controller
+public sealed class AccountController(AccountService accounts, QrCodes qr, SessionRenewal sessions, RecoveryCodesPending recoveryPending) : Controller
 {
     [HttpGet("signin")]
     [AllowAnonymous]
@@ -94,6 +94,8 @@ public sealed class AccountController(AccountService accounts, QrCodes qr, Sessi
             var codes = await accounts.CompleteEnrollmentAsync(userId, secret, model.Code ?? string.Empty, ClientAddress(), ct);
             var destination = await PendingReturnAsync();
             await CompleteSignInAsync(userId, ct);
+            // Until acknowledged, every other page leads back to these codes (issue #156).
+            recoveryPending.Hold(Response, userId, codes, destination);
             Response.Headers.CacheControl = "no-store";
             return View("RecoveryCodes", new RecoveryCodesModel(codes, destination));
         }
@@ -145,10 +147,32 @@ public sealed class AccountController(AccountService accounts, QrCodes qr, Sessi
         return RedirectToAction(nameof(SignIn));
     }
 
+    /// <summary>The recovery codes again, when the person left the step without acknowledging them (issue #156).</summary>
+    [HttpGet("recovery")]
+    [Authorize(Policy = Permissions.SignedIn)]
+    public IActionResult RecoveryCodes()
+    {
+        if (recoveryPending.Waiting(HttpContext) is not { } waiting)
+        {
+            return LocalRedirect("/");
+        }
+
+        Response.Headers.CacheControl = "no-store";
+        return View("RecoveryCodes", new RecoveryCodesModel(waiting.Codes, waiting.ReturnUrl));
+    }
+
     [HttpPost("recovery/continue")]
     [Authorize(Policy = Permissions.SignedIn)]
     public IActionResult ContinueAfterRecovery(bool savedCodes, string? returnUrl)
-        => savedCodes ? LocalRedirect(SafeReturn(returnUrl)) : BadRequest("Save your recovery codes and acknowledge that you have saved them before continuing.");
+    {
+        if (!savedCodes)
+        {
+            return BadRequest("Save your recovery codes and acknowledge that you have saved them before continuing.");
+        }
+
+        RecoveryCodesPending.Release(Response);
+        return LocalRedirect(SafeReturn(returnUrl));
+    }
 
     private async Task<string> PendingReturnAsync()
     {
@@ -169,6 +193,7 @@ public sealed class AccountController(AccountService accounts, QrCodes qr, Sessi
 
         await HttpContext.SignOutAsync(AuthSchemes.Session);
         Response.Cookies.Delete("XSRF-TOKEN");
+        RecoveryCodesPending.Release(Response);
         return RedirectToAction(nameof(SignIn));
     }
 

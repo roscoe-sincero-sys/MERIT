@@ -1,6 +1,8 @@
 @model RecoveryCodesModel
 @{
     ViewData["Title"] = "Recovery codes";
+    // Nothing to wander off to before the codes are saved: the header offers only Sign out (issue #156).
+    ViewData["MinimalHeader"] = true;
 }
 <h1>Save your recovery codes</h1>
 <div class="usa-alert usa-alert--warning"><div class="usa-alert__body"><p class="usa-alert__text">Each code works once if you lose your authenticator. Store them somewhere safe; they will not be shown again.</p></div></div>

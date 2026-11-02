@@ -9,10 +9,11 @@
 </div>
 
 <ul class="merit-tiles" aria-label="Your work">
-    <li><a class="merit-tile" href="/cases?mine=true"><span class="merit-tile__count">@c.MyOpenCases</span><span class="merit-tile__label">My open cases</span></a></li>
-    <li><a class="merit-tile" href="/app/queues?mine=true"><span class="merit-tile__count">@c.MyOpenTasks</span><span class="merit-tile__label">My open tasks</span></a></li>
-    <li><a class="merit-tile @(c.OverdueTasks > 0 ? "merit-tile--urgent" : "")" href="/app/queues?overdue=true"><span class="merit-tile__count">@c.OverdueTasks</span><span class="merit-tile__label">Overdue tasks</span></a></li>
-    <li><a class="merit-tile @(c.UrgentHeld > 0 ? "merit-tile--urgent" : "")" href="/app/held"><span class="merit-tile__count">@c.UrgentHeld</span><span class="merit-tile__label">Elevated results held at intake</span></a></li>
+    @* Each label says what it counts, so the held tile and the Held records queue below read as different numbers (issue #158). *@
+    <li><a class="merit-tile" href="/cases?mine=true"><span class="merit-tile__count">@c.MyOpenCases</span><span class="merit-tile__label">Open cases assigned to me</span></a></li>
+    <li><a class="merit-tile" href="/app/queues?mine=true"><span class="merit-tile__count">@c.MyOpenTasks</span><span class="merit-tile__label">Open tasks assigned to me</span></a></li>
+    <li><a class="merit-tile @(c.OverdueTasks > 0 ? "merit-tile--urgent" : "")" href="/app/queues?overdue=true"><span class="merit-tile__count">@c.OverdueTasks</span><span class="merit-tile__label">Overdue tasks, all queues</span></a></li>
+    <li><a class="merit-tile @(c.UrgentHeld > 0 ? "merit-tile--urgent" : "")" href="/app/held"><span class="merit-tile__count">@c.UrgentHeld</span><span class="merit-tile__label">Held results with an elevated value</span></a></li>
     <li><a class="merit-tile" href="/cases"><span class="merit-tile__count">@c.OpenCasesInScope</span><span class="merit-tile__label">Open cases in your scope</span></a></li>
 </ul>
 
@@ -40,10 +41,13 @@
                                 {
                                     <a class="usa-link" href="/people/@pid">@i.Title</a>
                                 }
-                                else if (i.ItemType == "heldRecord")
+                                else if (i.ItemType == "heldGroup")
                                 {
-                                    @* Named by the patient and result as reported, so each row says which record it is (issue #40). *@
-                                    <a class="usa-link" href="/app/held@(i.IntakeBatchId is Guid bid ? $"?batch={bid}" : "")">@i.Title</a>
+                                    @* One line per cause and sender, linking to that cause on Held records (issue #158). *@
+                                    var query = new List<string> { "reason=" + Uri.EscapeDataString(i.ReasonCode ?? "") };
+                                    if (i.SenderOrganizationId is Guid sid) { query.Add("sender=" + sid); }
+                                    if (i.IntakeBatchId is Guid bid) { query.Add("batch=" + bid); }
+                                    <a class="usa-link" href="/app/held?@string.Join("&", query)">@Options.Count(i.ItemCount, "elevated result") held: @Options.Humanize(i.ReasonCode)</a>
                                     <span class="merit-badge merit-badge--urgent">Urgent</span>
                                     <br /><span class="merit-meta">Held at intake@(i.SenderName is null ? "" : $" from {i.SenderName}")</span>
                                 }

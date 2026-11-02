@@ -57,13 +57,17 @@
                 : 'Your session may have ended. Your unsaved work is still here. Check your session before saving, or sign in in a new tab.')
             : 'Your session may expire soon. Your unsaved work is still here. Check your session or sign in in a new tab to continue.');
         if (!alert) return;
+        // The actions sit in their own row inside the alert's padding, apart from each other (issue #170).
+        const actions = document.createElement('div');
+        actions.className = 'merit-alert-actions';
+        alert.querySelector('.usa-alert__body').appendChild(actions);
         const link = document.createElement('a');
         link.className = 'usa-link';
         link.textContent = 'Sign in in a new tab';
         link.href = '/account/signin?ReturnUrl=' + encodeURIComponent(location.pathname + location.search);
         link.target = '_blank';
         link.rel = 'noopener';
-        alert.appendChild(link);
+        actions.appendChild(link);
         const check = document.createElement('button');
         check.type = 'button';
         check.className = 'usa-button usa-button--outline';
@@ -89,7 +93,7 @@
             } catch { showError('Could not check your session. Check your connection and try again.'); }
             finally { check.disabled = false; }
         });
-        alert.appendChild(check);
+        actions.appendChild(check);
         if (confirmed) alert.focus();
     }
 
@@ -441,6 +445,20 @@
     document.addEventListener("merit:closeDialog", () => {
         const dialog = document.getElementById("dialog");
         if (dialog && dialog.open) dialog.close();
+    });
+
+    // A place added from a case refreshes the case (issue #150); the dialog's opener went with the old body, so focus
+    // moves to the investigation request the place made possible.
+    let caseRefreshFocus = false;
+    document.addEventListener("merit:caseBody", () => { caseRefreshFocus = true; });
+    document.addEventListener("htmx:after:swap", evt => {
+        if (!caseRefreshFocus || evt.detail?.ctx?.target?.id !== "case-body") return;
+        caseRefreshFocus = false;
+        requestAnimationFrame(() => {
+            const request = document.getElementById("case-request-investigation");
+            if (request && !request.disabled) request.focus();
+            else document.querySelector("#case-body h1")?.focus();
+        });
     });
 
     // ------------------------------------------------------------------------------------------ combobox type-ahead

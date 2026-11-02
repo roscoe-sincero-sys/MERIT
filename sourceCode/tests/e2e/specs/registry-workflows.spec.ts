@@ -51,9 +51,12 @@ test('tablet menu stays compact and People starts with duplicate search', async 
   await expect(menu).toBeVisible(); await menu.click();
   await page.getByRole('navigation', { name: 'Primary' }).getByRole('link', { name: 'People', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Find or add a person', exact: true })).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Add a person', exact: true })).toHaveCount(0);
+  // Issue #147: Add a person is there from the start, beside the advice to search first, and the page has one search box.
+  await expect(page.getByRole('link', { name: 'Add a person', exact: true })).toHaveAttribute('href', '/people/new');
+  await expect(page.locator('#header-search')).toHaveCount(0);
+  await expect(page.getByRole('search')).toHaveCount(1);
   await page.locator('#search-q').fill('Rivera');
-  await expect(page.getByRole('link', { name: 'Add a person', exact: true })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Add a person', exact: true })).toHaveAttribute('href', '/people/new?q=Rivera');
   await expect(page.locator('#search-results')).toContainText('Mia');
 });
 

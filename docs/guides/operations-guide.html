@@ -47,6 +47,12 @@
   .cadence th:first-child { width: 17%; }
   .foot { font-size: 8.5pt; color: var(--muted); }
   a { color: var(--blue2); }
+  /* On screen (MERIT's User guide link, issue #148): a readable column instead of the printed page's full-height cover.
+     Print and the PDFs are unchanged. */
+  @media screen {
+    body { max-width: 52rem; margin: 0 auto; padding: 1.5rem 1rem 3rem; }
+    .cover { height: auto; padding: 2rem 0 1rem; }
+  }
 </style>
 </head>
 <body>

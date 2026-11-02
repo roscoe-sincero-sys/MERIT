@@ -66,6 +66,34 @@ public sealed class SearchService(IPersonData data, ICurrentSession session)
         public bool IsEmpty => string.IsNullOrWhiteSpace(Raw);
     }
 
+    /// <summary>
+    /// The person a name search describes, as typed, to start "Add a person" from (issue #147): "Rivera, Mia 2023-05-14" or
+    /// "Rivera Mia 2023-05-14" is last name Rivera, first name Mia. A search for an address, case or accession number
+    /// describes nobody.
+    /// </summary>
+    public static (string? LastName, string? FirstName, DateOnly? Dob) PersonFrom(string? text)
+    {
+        var query = Parse(text);
+        if (query.IsEmpty || query.AddressKey is not null)
+        {
+            return (null, null, null);
+        }
+
+        var tokens = query.Raw.Split(' ', StringSplitOptions.RemoveEmptyEntries)
+            .Where(t => !DateOnly.TryParseExact(t.TrimEnd(','), DateFormats, CultureInfo.InvariantCulture, DateTimeStyles.None, out _))
+            .ToList();
+        if (tokens.Count == 0 || tokens.Any(t => t.Any(char.IsDigit)))
+        {
+            return (null, null, query.Dob);
+        }
+
+        string names = string.Join(' ', tokens);
+        int comma = names.IndexOf(',', StringComparison.Ordinal);
+        string last = (comma >= 0 ? names[..comma] : tokens[0]).Trim();
+        string first = (comma >= 0 ? names[(comma + 1)..] : string.Join(' ', tokens.Skip(1))).Replace(",", " ", StringComparison.Ordinal).Trim();
+        return (last.Length == 0 ? null : last, first.Length == 0 ? null : first, query.Dob);
+    }
+
     /// <summary>"Rivera, Mia 2023-05-14" gives name keys RIVERA and MIA and a date of birth.</summary>
     public static ParsedQuery Parse(string? text)
     {

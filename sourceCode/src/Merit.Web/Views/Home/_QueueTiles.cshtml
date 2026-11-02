@@ -7,7 +7,7 @@
         <li id="tile-@q.QueueCode">
             <a class="merit-tile @(urgent ? "merit-tile--urgent" : "")" href="@href">
                 <span class="merit-tile__count">@q.OpenCount</span>
-                <span class="merit-tile__label">@q.QueueName</span>
+                <span class="merit-tile__label">@(q.QueueCode == "heldRecords" ? "Held records, every cause" : q.QueueName)</span>
                 <span class="merit-tile__detail">
                     @if (q.UrgentCount > 0) { <text>@q.UrgentCount urgent </text> }
                     @if (q.OverdueCount > 0) { <text>@q.OverdueCount overdue</text> }

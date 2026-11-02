@@ -52,6 +52,75 @@ public sealed class RecordCorrectionTests(MeritFixture fixture)
     }
 
     [SqlFact]
+    public async Task ACaseWithoutAPlaceAddsOneInPlaceAndCanThenRequestAnInvestigation()
+    {
+        // Issue #150: the case offers to add the place an investigation needs, in a dialog, then refreshes itself.
+        var person = Guid.NewGuid(); var result = Guid.NewGuid(); var id = Guid.NewGuid();
+        string street = $"{Random.Shared.Next(100, 999)} Case Place {id.ToString("N")[..6]} St";
+        await using var c = new SqlConnection(TestEnvironment.AdminConnectionString()); await c.OpenAsync();
+        try
+        {
+            await Sql(c, """
+                INSERT dbo.person (personId, rootTenantId, owningTenantId, lastName, firstName, lastNameKey, dob)
+                SELECT @person, rootTenantId, owningTenantId, N'Placeless test', N'Ada', N'PLACELESSTEST', '2022-02-02' FROM dbo.person WHERE personId = @originalPerson;
+                INSERT dbo.labResult (labResultId, rootTenantId, owningTenantId, personId, analyteSpecimenId, collectedDate, receivedUtc, resultStatus,
+                    valueReported, unitReported, valueCanonical, unitCanonical, labOrganizationId, reportedSnapshotJson, intakeBatchId, population)
+                SELECT @result, rootTenantId, owningTenantId, @person, analyteSpecimenId, collectedDate, receivedUtc, resultStatus,
+                    valueReported, unitReported, valueCanonical, unitCanonical, labOrganizationId, N'{}', intakeBatchId, population
+                FROM dbo.labResult WHERE labResultId = @originalResult;
+                INSERT dbo.exposureCase (exposureCaseId, rootTenantId, owningTenantId, caseNumber, personId, analyteId, population, classification,
+                    computedClassification, caseStatus, qualifyingLabResultId, workflowTemplate, openedDate)
+                SELECT @id, rootTenantId, owningTenantId, CONCAT ('TEST-', LEFT (CONVERT (VARCHAR (36), @id), 8)), @person, analyteId, population, classification,
+                    computedClassification, 'open', @result, workflowTemplate, openedDate
+                FROM dbo.exposureCase WHERE exposureCaseId = @originalCase;
+                """, ("@person", person), ("@result", result), ("@id", id), ("@originalPerson", fixture.Ids.MiaPersonId), ("@originalResult", fixture.Ids.MiaLabResultId), ("@originalCase", fixture.Ids.MiaCaseId));
+            var client = await fixture.SignedInAsync("supervisor");
+            string page = await client.Http.GetStringAsync($"/cases/{id}");
+            Assert.Contains("id=\"case-add-place\"", page, StringComparison.Ordinal);
+            Assert.Contains($"/people/{person}/places/add?forCase={id}", page, StringComparison.Ordinal);
+            Assert.Matches("id=\"case-request-investigation\"[^>]*disabled", page);
+
+            using (var form = await client.GetPartialAsync($"/people/{person}/places/add?forCase={id}"))
+            {
+                string html = await form.Content.ReadAsStringAsync();
+                Assert.Contains("id=\"dialog-title\"", html, StringComparison.Ordinal);
+                Assert.Contains($"name=\"ForCaseId\" value=\"{id}\"", html, StringComparison.Ordinal);
+                Assert.Contains("data-close-dialog", html, StringComparison.Ordinal);
+            }
+
+            using (var req = new HttpRequestMessage(HttpMethod.Post, $"/people/{person}/places/add"))
+            {
+                req.Headers.Add("HX-Request", "true");
+                req.Headers.Add("HX-Request-Type", "partial");
+                req.Content = new FormUrlEncodedContent(new Dictionary<string, string>
+                {
+                    ["ForCaseId"] = id.ToString(), ["Role"] = "residence", ["StartDate"] = "2026-01-15", ["AddressLine1"] = street,
+                    ["City"] = "Baltimore", ["State"] = "MD", ["Zip5"] = "21201", ["Source"] = "interview",
+                });
+                using var saved = await client.NoRedirect.SendAsync(req);
+                Assert.True(saved.StatusCode == HttpStatusCode.OK, $"{(int)saved.StatusCode}: {await saved.Content.ReadAsStringAsync()}");
+                string trigger = saved.Headers.GetValues("HX-Trigger").Single();
+                Assert.Contains("merit:closeDialog", trigger, StringComparison.Ordinal);
+                Assert.Contains("merit:caseBody", trigger, StringComparison.Ordinal);
+            }
+
+            using var refreshed = await client.GetPartialAsync($"/cases/{id}");
+            string body = await refreshed.Content.ReadAsStringAsync();
+            Assert.DoesNotContain("id=\"case-add-place\"", body, StringComparison.Ordinal);
+            Assert.DoesNotMatch("id=\"case-request-investigation\"[^>]*disabled", body);
+            Assert.Contains("hx-trigger=\"merit:caseBody from:body\"", body, StringComparison.Ordinal);
+        }
+        finally
+        {
+            await Sql(c, """
+                DELETE dbo.workTask WHERE exposureCaseId = @id OR personId = @person; DELETE dbo.caseActivity WHERE exposureCaseId = @id;
+                DELETE dbo.personLocation WHERE personId = @person; DELETE dbo.exposureCase WHERE exposureCaseId = @id;
+                DELETE dbo.labResult WHERE labResultId = @result; DELETE dbo.personAccess WHERE personId = @person; DELETE dbo.person WHERE personId = @person;
+                """, ("@id", id), ("@person", person), ("@result", result));
+        }
+    }
+
+    [SqlFact]
     public async Task ExtractFindingsLinkVisibleLegacySurrogatesAndIgnoreUntrustedPersonMetadata()
     {
         var id = Guid.NewGuid(); var forged = Guid.NewGuid();

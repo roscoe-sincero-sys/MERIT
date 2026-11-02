@@ -11,6 +11,8 @@ import { LatestRequest } from '../../shared/latest-request';
 @Injectable()
 export class HeldStore {
   readonly groups = signal<HeldGroupDto[]>([]);
+  /** The causes have been read at least once; "Nothing is held" means nothing only then (issue #161). */
+  readonly groupsLoaded = signal(false);
   readonly group = signal<HeldGroupDto | null>(null);
   readonly batch = signal<string | null>(null);
   readonly page = signal(1);
@@ -60,7 +62,7 @@ export function needsMatchReview(r: HeldRowDto): boolean {
         <button type="button" class="usa-button usa-button--unstyled" [disabled]="store.busy()" (click)="clearBatch()">Show all batches</button></p>
     }
     <h2>By cause</h2>
-    @if (store.groups().length === 0) { <p class="merit-empty">Nothing is held.</p> }
+    @if (store.groupsLoaded() && store.groups().length === 0) { <p class="merit-empty">Nothing is held.</p> }
     <ul class="groups">
       <li><button type="button" class="usa-button usa-button--unstyled" [attr.aria-pressed]="store.group() === null" [disabled]="store.busy()" (click)="choose(null)">{{ store.batch() ? 'All held rows in this batch' : 'All held rows' }}</button></li>
       @for (g of store.groups(); track groupKey(g)) {
@@ -155,6 +157,10 @@ export class HeldPage implements OnInit {
   private readonly groupsLoad = new LatestRequest();
   private readonly rowsLoad = new LatestRequest();
   readonly batchParam = input<string | undefined>(undefined, { alias: 'batch' });
+  /** A cause to open first, from Home's Needs attention (issue #158): its reason and sender. */
+  readonly reasonParam = input<string | undefined>(undefined, { alias: 'reason' });
+  readonly senderParam = input<string | undefined>(undefined, { alias: 'sender' });
+  private causeOpened = false;
   private fixes: Record<string, string | null> = {};
   /** The field a group correction writes; empty until chosen when the cause has no single field. */
   protected readonly groupField = signal('');
@@ -354,11 +360,23 @@ export class HeldPage implements OnInit {
     this.groupsLoad.run(this.api.heldOverview(this.store.batch()), {
       next: s => {
         this.store.groups.set(s.groups);
+        this.store.groupsLoaded.set(true);
         this.store.totalHeld.set(s.totalCount);
         this.store.batchFileName.set(s.batchFileName);
+        this.openLinkedCause(s.groups);
       },
       error: e => { if (!preserveError) this.store.error.set(problemMessage(e)); },
     });
+  }
+
+  /** Opens the cause a link names, once, when exactly one group is that reason from that sender. */
+  private openLinkedCause(groups: HeldGroupDto[]): void {
+    const reason = this.reasonParam();
+    if (this.causeOpened || !reason) return;
+    this.causeOpened = true;
+    const sender = this.senderParam() ?? null;
+    const matches = groups.filter(g => g.reasonCode === reason && (g.senderOrganizationId ?? null) === sender);
+    if (matches.length === 1) this.choose(matches[0]);
   }
 
   private loadRows(): void {

@@ -5,6 +5,8 @@
     string path = Context.Request.Path.Value ?? "/";
     string Current(string prefix) => (prefix == "/" ? path == "/" : path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) ? "page" : "false";
     bool signedIn = CurrentSession.IsAuthenticated;
+    bool minimalHeader = ViewData["MinimalHeader"] is true;
+    string profileHref = "/account/profiles?returnUrl=" + Uri.EscapeDataString($"{Context.Request.PathBase}{Context.Request.Path}{Context.Request.QueryString}");
     bool enhancedNavigation = Configuration.GetValue<bool>("Navigation:Enhanced");
     long? sessionExpires = (await Context.AuthenticateAsync(AuthSchemes.Session)).Properties?.ExpiresUtc?.ToUnixTimeMilliseconds();
 }
@@ -26,7 +28,17 @@
     <header class="merit-header @(enhancedNavigation ? "merit-header--enhanced" : "")" role="banner" data-enhanced-navigation="@(enhancedNavigation ? "true" : "false")">
         <div class="merit-header__inner">
             <a class="merit-brand" href="/">MERIT<small>Metals Exposure Registry and Investigation Tracking</small></a>
-            @if (signedIn)
+            @if (signedIn && minimalHeader)
+            {
+                <div class="merit-header__user merit-header__user--minimal">
+                    <span>@CurrentSession.DisplayName</span>
+                    <form method="post" action="/account/signout">
+                        @Html.AntiForgeryToken()
+                        <button class="usa-button usa-button--unstyled" type="submit">Sign out</button>
+                    </form>
+                </div>
+            }
+            else if (signedIn)
             {
                 @* On a phone the menu and the user block fold behind this button; merit.js shows it (issue #47). *@
                 <button class="usa-button usa-button--outline usa-button--inverse merit-menu-button" type="button" aria-expanded="false" aria-controls="merit-nav merit-user">Menu</button>
@@ -58,7 +70,8 @@
                     </ul>
                     }
                 </nav>
-                @if (CurrentSession.Has(Permissions.PersonView))
+                @* People search has its own, larger box; one search per page (issue #147). *@
+                @if (CurrentSession.Has(Permissions.PersonView) && !path.Equals("/search", StringComparison.OrdinalIgnoreCase))
                 {
                     <form class="merit-header__search" role="search" method="get" action="/search">
                         <label class="usa-sr-only" for="header-search">Search people, cases and accession numbers</label>
@@ -67,12 +80,21 @@
                     </form>
                 }
                 <div id="merit-user" class="merit-header__user">
-                    <span>@CurrentSession.DisplayName<br /><small>@CurrentSession.ActingTenantName</small><br />
-                        <a class="merit-header__profile" href="@("/account/profiles?returnUrl=" + Uri.EscapeDataString($"{Context.Request.PathBase}{Context.Request.Path}{Context.Request.QueryString}"))">Profile: @(CurrentSession.ProfileName ?? "Master profile")<span class="usa-sr-only"> (switch profile)</span></a></span>
-                    <form method="post" action="/account/signout">
-                        @Html.AntiForgeryToken()
-                        <button class="usa-button usa-button--unstyled" type="submit">Sign out</button>
-                    </form>
+                    <span class="merit-header__who">@CurrentSession.DisplayName<br /><small>@CurrentSession.ActingTenantName</small></span>
+                    @* A control, not a caption: profiles and jurisdictions are switched here (issue #152). *@
+                    <a class="merit-header__profile merit-profile-switch" href="@profileHref">
+                        <span class="merit-profile-switch__label">Profile</span>
+                        <span class="merit-profile-switch__name">@(CurrentSession.ProfileName ?? "Master profile")</span>
+                        <span class="merit-profile-switch__action" aria-hidden="true">Switch &#x25BE;</span><span class="usa-sr-only">: switch profile or jurisdiction</span>
+                    </a>
+                    <div class="merit-header__links">
+                        @* The guides open beside the work, never over it (issue #148). *@
+                        <a class="merit-header__help" href="/help" target="_blank" rel="noopener">User guide<span class="usa-sr-only"> (opens in a new tab)</span></a>
+                        <form method="post" action="/account/signout">
+                            @Html.AntiForgeryToken()
+                            <button class="usa-button usa-button--unstyled" type="submit">Sign out</button>
+                        </form>
+                    </div>
                 </div>
             }
         </div>

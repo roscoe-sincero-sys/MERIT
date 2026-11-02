@@ -15,9 +15,13 @@
     <button class="usa-button usa-button--outline" type="submit">Find</button>
 </form>
 </details>
-<label class="usa-label" for="user-filter">Filter listed users by name, user name, or tenant</label>
-<input class="usa-input" id="user-filter" type="search" data-user-filter aria-controls="users-table" />
-<p role="status" data-user-count>@Model.Users.Count users shown.</p>
+@* A filter field like the others in MERIT: its own group, then the count after a gap (issue #171). *@
+<div class="usa-form-group merit-filter">
+    <label class="usa-label" for="user-filter">Filter listed users</label>
+    <span class="usa-hint" id="user-filter-hint">By name, user name or tenant</span>
+    <input class="usa-input" id="user-filter" type="search" data-user-filter aria-controls="users-table" aria-describedby="user-filter-hint" />
+</div>
+<p class="merit-meta merit-filter__count" role="status" data-user-count>@Options.Count(Model.Users.Count, "user") shown.</p>
 <div class="merit-table-wrap" tabindex="0" role="region" aria-label="Table; scroll sideways for more columns">
     <table class="usa-table usa-table--borderless" id="users-table">
         <thead><tr><th scope="col">Name</th><th scope="col">User name</th><th scope="col">Works for</th><th scope="col">Master profile</th><th scope="col">MFA</th><th scope="col">Last sign-in</th><th scope="col">Status</th></tr></thead>

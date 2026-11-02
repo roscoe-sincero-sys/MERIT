@@ -5,7 +5,9 @@
     var state = ViewData.ModelState;
 }
 <div id="person-form">
-    <h2 id="dialog-title">@(isNew ? "Add a person" : "Edit identity")</h2>
+    @* The page's own heading on /people/new; the dialog's title when editing in place (issue #147). *@
+    @if (ViewData["PageHeading"] is true) { <h1>@(isNew ? "Add a person" : "Edit identity")</h1> }
+    else { <h2 id="dialog-title">@(isNew ? "Add a person" : "Edit identity")</h2> }
     <partial name="_ErrorSummary" model='new ErrorSummaryModel(["LastName", "FirstName", "MiddleName", "Dob", "Sex", "Ethnicity", "DeceasedDate"])' />
     @* A new person is a plain form post; editing posts with htmx and returns 422 with this form on a validation error. *@
     <form class="usa-form usa-form--large" method="post" action="@action" novalidate

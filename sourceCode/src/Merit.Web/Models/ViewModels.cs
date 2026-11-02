@@ -18,6 +18,9 @@ public sealed record FormDraft(string Form, IReadOnlyDictionary<string, string> 
         => Form == form && Values.TryGetValue(key, out var value) ? value : fallback;
 }
 
+/// <summary>A user guide offered under Help (issue #148).</summary>
+public sealed record HelpGuide(string File, string Title, string Summary);
+
 public sealed record AlertModel(string Kind, string Title, string Message);
 
 public sealed record SelectOption(string Value, string Label, bool Selected = false);
@@ -210,6 +213,9 @@ public sealed class ContactFormModel
 public sealed class PlaceFormModel
 {
     public Guid PersonId { get; set; }
+
+    /// <summary>Set when the form opened from a case to make an investigation possible (issue #150): it runs in the dialog.</summary>
+    public Guid? ForCaseId { get; set; }
 
     public string Role { get; set; } = "residence";
 

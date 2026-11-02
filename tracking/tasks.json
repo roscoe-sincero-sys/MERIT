@@ -1407,6 +1407,17 @@
       "started": "2026-11-02",
       "finished": "2026-11-02",
       "notes": "Detail under each task (clamped, Show more), cards below 40em, no empty links; cause field preselected and named in the confirmation; intake pauses on shared column targets, demo repair; Override and Close on demand; current menu item everywhere and Audit log; first access on Add a user; Download primary, Latest/Superseded; words, display dates, plurals, whole-number ticks"
+    },
+    {
+      "id": "T205",
+      "phase": "12 Quality",
+      "task": "Usability audit fixes, batch 2: search and Add a person, user guides, place from case, map keyboard, profile switcher, match review shortcuts and guidance, recovery codes first, Home grouping, Not permitted, units, alert and filter layout",
+      "ref": "Issues #147, #148, #150, #151, #152, #153, #156, #158, #161, #165, #168, #170, #171 (and #176)",
+      "where": "Views/Search, People/New, Shared/_Layout, _PlaceForm, Cases/_CaseBody, Home, Intake, Admin/Users; HelpController; RecoveryCodesPending; dbo.uspGetDashboard; CaseClassifier; ClientApp map, match-review, held, routes",
+      "status": "Done",
+      "started": "2026-11-02",
+      "finished": "2026-11-02",
+      "notes": "Add a person always offered and prefilled from the search; one search on /search; /help serves docs/guides; place added from the case dialog; roving map points; profile switch control; opt-in single-key review with double-press decisions; recovery codes gate; held causes grouped on Home with plain-language thresholds; Not permitted route guards; one choice per unit; spaced session actions; standard users filter"
     }
   ]
 }

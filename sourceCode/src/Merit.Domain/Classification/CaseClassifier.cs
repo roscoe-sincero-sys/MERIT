@@ -1,3 +1,4 @@
+using System.Globalization;
 using Merit.Domain.Population;
 using Merit.Domain.Results;
 using Merit.Domain.Thresholds;
@@ -42,7 +43,8 @@ public sealed record ClassificationInput(
     IReadOnlyList<ClassifiableResult> PriorResults,
     IReadOnlyList<ThresholdRule> Thresholds,
     OpenCaseInfo? OpenCase,
-    ClassificationSettings Settings);
+    ClassificationSettings Settings,
+    string? Unit = null);
 
 public enum CaseAction
 {
@@ -74,6 +76,10 @@ public static class CaseClassifier
 {
     private const int ConfirmWindowDays = 12 * 7;
 
+    /// <summary>A value as people read it: "12 ug/dL", not "12.0000".</summary>
+    private static string Amount(decimal? value, string? unit)
+        => value is null ? string.Empty : value.Value.ToString("0.##", CultureInfo.InvariantCulture) + (string.IsNullOrEmpty(unit) ? string.Empty : " " + unit);
+
     public static ClassificationDecision Classify(ClassificationInput input)
     {
         var explain = new List<string>();
@@ -103,7 +109,7 @@ public static class CaseClassifier
             decimal? lowest = ThresholdEvaluator.LowestCaseLevel(input.Thresholds);
             bool urgent = lowest is not null && r.ValueCanonical >= lowest;
             tasks.Add(new ProposedTask("populationReview", "Date of birth missing: review result",
-                $"No date of birth, so the population is unknown and no case opens automatically. Value {r.ValueCanonical} "
+                $"No date of birth, so the population is unknown and no case opens automatically. Value {Amount(r.ValueCanonical, input.Unit)} "
                 + (urgent ? "is at or above the lowest case level for any population." : "is below every case level."),
                 urgent ? 2 : 30, urgent));
             explain.Add("Population unknown (no date of birth): sent to review.");
@@ -115,8 +121,9 @@ public static class CaseClassifier
         foreach (var o in outcomes.Where(o => o.Rule.Type == ThresholdType.Action && o.Crossing == Crossing.AtOrAbove))
         {
             tasks.Add(new ProposedTask(o.Rule.QueueCode ?? "actionLevel", o.Rule.ActionName ?? "Action level reached",
-                $"{r.ValueCanonical} is at or above {o.Rule.LowerValue}"
-                + (o.Rule.UpperValue is null ? string.Empty : $" (tier below {o.Rule.UpperValue})")
+                // In words and units, without stored precision: "12 ug/dL is at or above 10 ug/dL" (issue #158).
+                $"{Amount(r.ValueCanonical, input.Unit)} is at or above {Amount(o.Rule.LowerValue, input.Unit)}"
+                + (o.Rule.UpperValue is null ? string.Empty : $", below the next level of {Amount(o.Rule.UpperValue, input.Unit)}")
                 + (o.Rule.Authority is null ? "." : $": {o.Rule.Authority}"),
                 o.Rule.DueIntervalDays, o.Rule.DueIntervalDays is <= 7));
             explain.Add($"Action level {o.Rule.LowerValue} reached: {o.Rule.ActionName}.");
