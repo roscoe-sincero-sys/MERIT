@@ -19,7 +19,7 @@
             <ul class="usa-list">
                 @foreach (var c in r.Cases)
                 {
-                    <li><a class="usa-link" href="/cases/@c.ExposureCaseId">@c.CaseNumber</a> &mdash; @c.LastName, @c.FirstName (@c.AnalyteCode &middot; @Options.Humanize(c.Classification) &middot; @Options.Humanize(c.CaseStatus))</li>
+                    <li><a class="usa-link" href="/cases/@c.ExposureCaseId">@c.CaseNumber</a> &mdash; @c.LastName, @c.FirstName (@Options.Humanize(c.AnalyteCode) &middot; @Options.Humanize(c.Classification) &middot; @Options.Humanize(c.CaseStatus))</li>
                 }
             </ul>
         }

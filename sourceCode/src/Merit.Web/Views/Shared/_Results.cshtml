@@ -33,7 +33,7 @@
                     {
                         <tr>
                             <td><a class="usa-link" href="/results/@r.LabResultId">@Options.Date(r.CollectedDate)</a></td>
-                            <td>@r.AnalyteCode <span class="merit-meta">@Options.Humanize(r.Specimen)</span></td>
+                            <td>@Options.Humanize(r.AnalyteCode) <span class="merit-meta">@Options.Humanize(r.Specimen)</span></td>
                             <td><strong>@Options.Value(r.Operator, r.ValueCanonical, r.UnitCanonical)</strong>
                                 @if (r.UnitReported != r.UnitCanonical) { <div class="merit-meta">reported @r.ValueText @r.UnitReported</div> }
                                 @if (r.IsIndeterminate) { <span class="merit-badge merit-badge--suspect">Indeterminate</span> }</td>

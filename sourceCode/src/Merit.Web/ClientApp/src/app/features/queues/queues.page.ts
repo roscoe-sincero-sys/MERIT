@@ -45,11 +45,12 @@ import { ContextPanelComponent } from '../../shared/context-panel.component';
           </select>
           <div class="usa-checkbox"><input class="usa-checkbox__input" id="mine" type="checkbox" [checked]="store.mine()" [disabled]="busy()" (change)="toggleMine()" /><label class="usa-checkbox__label" for="mine">Assigned to me</label></div>
           <div class="usa-checkbox"><input class="usa-checkbox__input" id="urgent" type="checkbox" [checked]="store.urgentOnly()" [disabled]="busy()" (change)="toggleUrgent()" /><label class="usa-checkbox__label" for="urgent">Urgent only</label></div>
+          <div class="usa-checkbox"><input class="usa-checkbox__input" id="overdue" type="checkbox" [checked]="store.overdueOnly()" [disabled]="busy()" (change)="toggleOverdue()" /><label class="usa-checkbox__label" for="overdue">Overdue only</label></div>
         </div>
-        <div class="usa-checkbox"><input class="usa-checkbox__input" id="overdue" type="checkbox" [checked]="store.overdueOnly()" [disabled]="busy()" (change)="toggleOverdue()" /><label class="usa-checkbox__label" for="overdue">Overdue only</label></div>
         @if (store.selected().size > 0) { <p role="status">{{ store.selected().size }} selected across pages. <button class="usa-button usa-button--unstyled" type="button" [disabled]="busy()" (click)="clearSelection()">Clear selection</button></p> }
         @if (display.can('task.edit')) {
-        <div class="bulk" role="group" aria-label="Bulk actions on selected tasks">
+        <!-- On phones the actions wait for a selection, then stay in reach at the foot of the screen (issue #154). -->
+        <div class="bulk" [class.bulk--idle]="store.selected().size === 0" role="group" aria-label="Bulk actions on selected tasks">
           @if (store.status() === 'open') {
           <button class="usa-button usa-button--outline" type="button" [disabled]="store.selected().size === 0 || store.loading() || busy()" (click)="bulk('assignToMe')">Assign to me</button>
           <label class="usa-sr-only" for="assignee">Assign to</label>
@@ -60,7 +61,7 @@ import { ContextPanelComponent } from '../../shared/context-panel.component';
           </select>
           <button class="usa-button usa-button--outline" type="button" [disabled]="store.selected().size === 0 || !assignee() || store.loading() || busy()" (click)="bulk('assign', assignee())">Assign</button>
           <button class="usa-button" type="button" [disabled]="store.selected().size === 0 || store.loading() || busy()" (click)="bulk('complete')">Complete</button>
-          <label class="usa-label" for="dismiss-reason">Reason for dismissal</label><input class="usa-input" id="dismiss-reason" maxlength="1000" [value]="dismissReason()" [disabled]="busy()" (input)="dismissReason.set($any($event.target).value)" />
+          <div class="stacked"><label class="usa-label" for="dismiss-reason">Reason for dismissal</label><input class="usa-input" id="dismiss-reason" maxlength="1000" [value]="dismissReason()" [disabled]="busy()" (input)="dismissReason.set($any($event.target).value)" /></div>
           <button class="usa-button usa-button--secondary" type="button" [disabled]="store.selected().size === 0 || store.loading() || busy()" (click)="bulk('dismiss')">Dismiss</button>
           } @else {
             <button class="usa-button" type="button" [disabled]="store.selected().size === 0 || store.loading() || busy()" (click)="bulk('reopen')">Reopen selected</button>
@@ -70,7 +71,7 @@ import { ContextPanelComponent } from '../../shared/context-panel.component';
         }
         <merit-data-grid gridId="tasks" caption="Tasks" [columns]="columns" [rows]="store.result().items" [total]="store.result().totalCount"
                          [page]="store.page()" [pageSize]="store.pageSize()" [sort]="store.sort()" [loading]="store.loading() || busy()"
-                         [selectable]="display.can('task.edit')" [rowSelectable]="canSelect" [selectionDisabled]="store.loading() || busy()" [selected]="store.selected()" [rowKey]="key" emptyText="No tasks in this view."
+                         [selectable]="display.can('task.edit')" [rowSelectable]="canSelect" [selectionDisabled]="store.loading() || busy()" [selected]="store.selected()" [rowKey]="key" [cards]="true" emptyText="No tasks in this view."
                          (sortChange)="onSort($event)" (pageChange)="onPage($event)" (selectionChange)="onSelect($event)" />
       </section>
     </merit-context-panel>
@@ -78,7 +79,15 @@ import { ContextPanelComponent } from '../../shared/context-panel.component';
   styles: `
     .filters, .bulk { display: flex; flex-wrap: wrap; align-items: end; gap: .5rem 1rem; margin-bottom: .75rem; }
     .filters .usa-select, .bulk .usa-select { max-width: 14rem; margin-top: 0; }
-    .bulk .usa-select.assignee { max-width: 22rem; }
+    .bulk .usa-select.assignee { max-width: 12rem; }
+    .bulk .usa-input { max-width: 10rem; margin-top: 0; }
+    .bulk .usa-label { margin-top: 0; }
+    .bulk .stacked .usa-label { font-size: .87rem; }
+    @media (max-width: 39.99em) {
+      .bulk--idle { display: none; }
+      .bulk { position: sticky; bottom: 0; z-index: 2; margin: 0 -1rem .75rem; padding: .5rem 1rem; background: #fff; border-top: 1px solid #a9aeb1; box-shadow: 0 -2px 4px rgb(0 0 0 / 10%); }
+      .bulk .usa-button { margin-top: 0; }
+    }
   `,
 })
 export class QueuesPage implements OnInit {
@@ -96,14 +105,15 @@ export class QueuesPage implements OnInit {
   protected readonly key = (t: WorkTaskDto): string => t.workTaskId;
 
   protected readonly columns: GridColumn<WorkTaskDto>[] = [
-    { key: 'title', label: 'Task', sortable: true, cell: t => t.title, badge: t => (t.isUrgent ? 'Urgent' : null) },
-    { key: 'queueCode', label: 'Queue', sortable: true, cell: t => this.queueName(t.queueCode) },
-    { key: 'person', label: 'Person', cell: t => t.personName ?? '', link: t => (t.personId ? this.view.detail(`/people/${t.personId}`) : null) },
+    // The detail reads under its task rather than in a squeezed column of its own (issue #154).
+    { key: 'title', label: 'Task', sortable: true, cell: t => t.title, badge: t => (t.isUrgent ? 'Urgent' : null), subtext: t => t.detail },
+    { key: 'queueCode', label: 'Queue', sortable: true, phoneHidden: true, cell: t => this.queueName(t.queueCode) },
+    { key: 'person', label: 'Person', nowrap: true, cell: t => t.personName ?? '', link: t => (t.personId && t.personName ? this.view.detail(`/people/${t.personId}`) : null) },
     { key: 'case', label: 'Case', nowrap: true, cell: t => t.caseNumber ?? '', link: t => (t.exposureCaseId ? this.view.detail(`/cases/${t.exposureCaseId}`) : null) },
     { key: 'dueDate', label: 'Due', sortable: true, nowrap: true, cell: t => this.display.date(t.dueDate), badge: t => t.isOverdue ? 'Overdue' : null },
-    { key: 'assigned', label: 'Assigned', cell: t => t.assignedToName ?? '' },
-    { key: 'createdDateUtc', label: 'Created', sortable: true, nowrap: true, cell: t => this.display.dateOf(t.createdUtc) },
-    { key: 'detail', label: 'Detail', cell: t => t.detail ?? '' },
+    { key: 'assigned', label: 'Assigned', phoneHidden: true, cell: t => t.assignedToName ?? '' },
+    // Shown from Columns: the due date is what orders the work, and the width goes to the task (issue #154).
+    { key: 'createdDateUtc', label: 'Created', sortable: true, nowrap: true, phoneHidden: true, hidden: true, cell: t => this.display.dateOf(t.createdUtc) },
   ];
 
   ngOnInit(): void {
@@ -189,7 +199,7 @@ export class QueuesPage implements OnInit {
     if (action === 'dismiss' && !this.dismissReason().trim()) { this.store.error.set('Enter a reason for dismissal.'); return; }
     const ids = [...this.store.selected()];
     if ((action === 'complete' || action === 'dismiss') && !window.confirm(
-      `${action === 'complete' ? 'Complete' : 'Dismiss'} ${ids.length} selected task(s), including selections on other pages? You can reopen them from Done or Dismissed.`)) return;
+      `${action === 'complete' ? 'Complete' : 'Dismiss'} ${this.display.count(ids.length, 'selected task')}, including selections on other pages? You can reopen them from Done or Dismissed.`)) return;
     this.tasksLoad.cancel();
     this.queuesLoad.cancel();
     this.busy.set(true);

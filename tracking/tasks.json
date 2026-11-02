@@ -1396,6 +1396,17 @@
       "started": "2026-10-27",
       "finished": "2026-10-27",
       "notes": "Assigned (me, nobody, a person), classification, population, analyte, owner, case number or last name; sort by case, person, classification, opened"
+    },
+    {
+      "id": "T204",
+      "phase": "12 Quality",
+      "task": "Usability audit fixes: queue detail and phone cards, held correction field, unit-in-address repair, case disclosures, navigation, first access, extracts, formats",
+      "ref": "Issues #154, #155, #157, #159, #160, #163, #164, #166, #169",
+      "where": "shared/grid; features/queues, held; IntakeProcessor; generateDemo.py; Views/Cases/_CaseBody, _PrimaryNavigation, Admin/EditUser, Extracts/_Runs; Options; DisplayNames",
+      "status": "Done",
+      "started": "2026-11-02",
+      "finished": "2026-11-02",
+      "notes": "Detail under each task (clamped, Show more), cards below 40em, no empty links; cause field preselected and named in the confirmation; intake pauses on shared column targets, demo repair; Override and Close on demand; current menu item everywhere and Audit log; first access on Add a user; Download primary, Latest/Superseded; words, display dates, plurals, whole-number ticks"
     }
   ]
 }

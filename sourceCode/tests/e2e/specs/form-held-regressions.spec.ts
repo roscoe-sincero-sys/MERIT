@@ -117,6 +117,8 @@ test('case validation retains the submitted activity and saving a sibling keeps 
   await expect(page.locator('#case-body [role=alert]')).toBeVisible();
   await expect(page.locator('#note')).toHaveValue('Activity draft to keep');
   await expect(page.locator('#activityDate')).toHaveValue('2099-01-01');
+  // Close case waits behind its disclosure (issue #159); a draft typed there survives a sibling's save, still open.
+  await page.locator('#case-close-details summary').click();
   await page.locator('#closeNote').fill('Independent closure draft');
   const response = await page.request.get(page.url(), { headers: { 'HX-Request': 'true', 'HX-Request-Type': 'partial' } });
   const body = await response.text();
@@ -126,6 +128,7 @@ test('case validation retains the submitted activity and saving a sibling keeps 
   await expect(page.locator('#case-body [role=alert]')).toHaveCount(0);
   await expect(page.locator('#note')).toHaveValue('Activity draft to keep');
   await expect(page.locator('#closeNote')).toHaveValue('Independent closure draft');
+  await expect(page.locator('#case-close-details')).toHaveAttribute('open', '');
 });
 
 test('investigation validation retains findings and sample saves preserve sibling drafts', async ({ asUser }) => {
@@ -172,7 +175,7 @@ test('held batch scope uses a distinct total, scopes causes and edits a missing 
   });
   await page.goto(`/app/held?batch=${batch}`);
   await angularReady(page);
-  await expect(page.getByText('1 held row(s).', { exact: false })).toBeVisible();
+  await expect(page.getByText('1 held row.', { exact: false })).toBeVisible();
   await expect(page.getByText('Showing batch:', { exact: false })).toContainText('short-row.csv');
   expect(groupBatches).toEqual([batch]);
   await page.locator('merit-data-grid tbody input[type=checkbox]').focus();

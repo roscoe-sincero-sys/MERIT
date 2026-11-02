@@ -101,6 +101,20 @@ public sealed partial class IntakeProcessor(
                 }
 
                 var map = JsonSerializer.Deserialize<Dictionary<string, string>>(profile.ColumnMapJson) ?? [];
+                var shared = SharedTargets(header, map);
+                if (shared.Count > 0)
+                {
+                    // Two columns into one field: the later would silently overwrite the earlier, so pause instead.
+                    string reason = "The intake profile maps more than one column to the same field ("
+                        + string.Join("; ", shared.Select(s => $"{string.Join(" and ", s.Columns)} to {DisplayNames.Field(s.Field)}"))
+                        + "). Correct the mapping, then resume the batch.";
+                    await intake.SetBatchStatusAsync(batchId, "paused", reason, ct).ConfigureAwait(false);
+                    await work.CreateTaskAsync(new WorkTaskCreate(TimeOrderedId.New(), "pausedBatch",
+                        $"Intake batch paused: {batch.FileName}", reason, null, null, null, null, null, false,
+                        clock.Today.AddDays(2)), ct).ConfigureAwait(false);
+                    return new IntakeRunSummary(parsed.Count - headerIndex - 1, 0, 0, 0, true, reason);
+                }
+
                 var translations = string.IsNullOrWhiteSpace(profile.ValueTranslationsJson)
                     ? new Dictionary<string, Dictionary<string, string>>()
                     : JsonSerializer.Deserialize<Dictionary<string, Dictionary<string, string>>>(profile.ValueTranslationsJson) ?? [];
@@ -111,26 +125,7 @@ public sealed partial class IntakeProcessor(
                 var staged = new List<StagingRowNew>();
                 for (int r = headerIndex + 1; r < parsed.Count; r++)
                 {
-                    var fields = new Dictionary<string, string?>(StringComparer.Ordinal);
-                    for (int c = 0; c < header.Count && c < parsed[r].Count; c++)
-                    {
-                        if (map.TryGetValue(header[c], out var target))
-                        {
-                            string value = parsed[r][c].Trim();
-                            if (translations.TryGetValue(target, out var t) && t.TryGetValue(value, out var translated))
-                            {
-                                value = translated;
-                            }
-
-                            fields[target] = value.Length == 0 ? null : value;
-                        }
-                    }
-
-                    foreach (var (k, v) in constants)
-                    {
-                        fields.TryAdd(k, v);
-                    }
-
+                    var fields = StageFields(header, parsed[r], map, translations, constants);
                     staged.Add(new StagingRowNew(TimeOrderedId.New(), r - headerIndex, JsonSerializer.Serialize(fields)));
                 }
 
@@ -450,7 +445,7 @@ public sealed partial class IntakeProcessor(
             else
             {
                 await work.CreateTaskAsync(new WorkTaskCreate(TimeOrderedId.New(), "addressReview", "New address on a lab report",
-                    $"A result collected {collected:yyyy-MM-dd} reports {PlaceService.FormatAddress(address)}, which differs from the primary residence"
+                    $"A result collected {collected.ToString("MMM d, yyyy", CultureInfo.InvariantCulture)} reports {PlaceService.FormatAddress(address)}, which differs from the primary residence"
                     + (primary is null ? "." : $" ({primary.AddressLabel})."), personId, null, null, null, null, false,
                     clock.Today.AddDays(14)), ct).ConfigureAwait(false);
             }
@@ -509,6 +504,48 @@ public sealed partial class IntakeProcessor(
 
     private static string Normalize(string header)
         => string.Join(',', header.Split(',').Select(h => h.Trim()));
+
+    /// <summary>One file row as staged fields: each mapped column's trimmed, translated value (blank is null), then the profile's constants.</summary>
+    public static Dictionary<string, string?> StageFields(IReadOnlyList<string> header, IReadOnlyList<string> row,
+                                                          IReadOnlyDictionary<string, string> map,
+                                                          IReadOnlyDictionary<string, Dictionary<string, string>> translations,
+                                                          IReadOnlyDictionary<string, string> constants)
+    {
+        var fields = new Dictionary<string, string?>(StringComparer.Ordinal);
+        for (int c = 0; c < header.Count && c < row.Count; c++)
+        {
+            if (map.TryGetValue(header[c], out var target))
+            {
+                string value = row[c].Trim();
+                if (translations.TryGetValue(target, out var t) && t.TryGetValue(value, out var translated))
+                {
+                    value = translated;
+                }
+
+                fields[target] = value.Length == 0 ? null : value;
+            }
+        }
+
+        foreach (var (k, v) in constants)
+        {
+            fields.TryAdd(k, v);
+        }
+
+        return fields;
+    }
+
+    /// <summary>
+    /// The fields that more than one of the file's columns map to, each with its columns. Loading such a file would let
+    /// the later column overwrite the earlier one, as an Apt column mapped to the result unit once put "ug/dL" into
+    /// addresses (issue #157).
+    /// </summary>
+    public static IReadOnlyList<(string Field, IReadOnlyList<string> Columns)> SharedTargets(IReadOnlyList<string> header,
+                                                                                            IReadOnlyDictionary<string, string> map)
+        => header.Distinct(StringComparer.Ordinal).Where(map.ContainsKey)
+            .GroupBy(h => map[h], StringComparer.Ordinal)
+            .Where(g => g.Count() > 1)
+            .Select(g => (g.Key, (IReadOnlyList<string>)g.ToList()))
+            .ToList();
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Staging row {StagingRowId} held: {Reason}")]
     private static partial void LogRowHeld(ILogger logger, Guid stagingRowId, string reason);

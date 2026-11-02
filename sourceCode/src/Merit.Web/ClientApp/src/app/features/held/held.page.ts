@@ -28,6 +28,12 @@ export class HeldStore {
   readonly releasable = computed(() => this.rows().items.filter(r => this.selected().has(r.stagingRowId) && !needsMatchReview(r)).map(r => r.stagingRowId));
 }
 
+/** The one field each hold reason is about, as intake records it; a reason not listed has no single field. */
+export const REASON_FIELDS: Readonly<Record<string, string>> = {
+  unknownSender: 'labCliaNumber', unknownTestCode: 'loinc', inactiveAnalyte: 'loinc', missingResultValue: 'value',
+  invalidValue: 'value', unknownUnit: 'unit', impossibleDates: 'collectedDate', missingDob: 'dob',
+};
+
 /** A row held for an uncertain person match is decided on Match review, not released. */
 export function needsMatchReview(r: HeldRowDto): boolean {
   return r.reasonCodes.includes('uncertainMatch');
@@ -45,7 +51,7 @@ export function needsMatchReview(r: HeldRowDto): boolean {
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <h1 tabindex="-1">Held records</h1>
-    <p class="merit-meta">{{ store.totalHeld() }} held row(s). Fix the cause once, then release every row it held.</p>
+    <p class="merit-meta">{{ display.count(store.totalHeld(), 'held row') }}. Fix the cause once, then release every row it held.</p>
     @if (store.error(); as e) { <div class="usa-alert usa-alert--error usa-alert--slim" role="alert"><div class="usa-alert__body"><p class="usa-alert__text">{{ e }}</p></div></div> }
     @if (store.message(); as m) { <div class="usa-alert usa-alert--success usa-alert--slim" role="status"><div class="usa-alert__body"><p class="usa-alert__text">{{ m }}</p></div></div> }
 
@@ -60,7 +66,7 @@ export function needsMatchReview(r: HeldRowDto): boolean {
       @for (g of store.groups(); track groupKey(g)) {
         <li>
           <button type="button" class="usa-button usa-button--unstyled" [attr.aria-pressed]="isChosen(g)" [disabled]="store.busy()" (click)="choose(g)">
-            {{ label(g.reasonCode) }}@if (g.reportedValue) { : <code>{{ g.reportedValue }}</code> } &middot; {{ sender(g) }} &middot; {{ g.rowCount }} row(s)
+            {{ label(g.reasonCode) }}@if (g.reportedValue) { : <code>{{ g.reportedValue }}</code> } &middot; {{ sender(g) }} &middot; {{ display.count(g.rowCount, 'row') }}
           </button>
           @if (g.urgentCount > 0) { <span class="urgent">{{ g.urgentCount }} urgent</span> }
           <span class="merit-meta"> waiting since {{ display.dateOf(g.oldestHeldUtc) }}</span>
@@ -73,10 +79,15 @@ export function needsMatchReview(r: HeldRowDto): boolean {
       <section class="merit-section" aria-labelledby="group-correction">
         <h2 id="group-correction">Correct this cause</h2>
         <p>Set a correction beside the reported value for selected rows or every row in this cause, sender and batch. Release afterwards to rerun validation. This does not change the sender's permanent mapping.</p>
-        <label class="usa-label" for="group-field">Field</label><select class="usa-select" id="group-field" #groupField [disabled]="store.busy()">@for (field of display.stagingFields(); track field) { <option [value]="field">{{ display.field(field) }}</option> }</select>
-        <label class="usa-label" for="group-value">Correction (blank restores the reported value)</label><input class="usa-input" id="group-value" #groupValue [disabled]="store.busy()" />
-        <button class="usa-button" type="button" [disabled]="store.busy() || store.loading() || !store.selected().size" (click)="correctGroup(groupField.value, groupValue.value, false)">Correct selected in this group</button>
-        <button class="usa-button usa-button--outline" type="button" [disabled]="store.busy() || store.loading()" (click)="correctGroup(groupField.value, groupValue.value, true)">Correct entire group</button>
+        <!-- The field starts on the one this cause is about, never on whatever is first in the list (issue #155). -->
+        <label class="usa-label" for="group-field">Field</label>
+        <select class="usa-select" id="group-field" [disabled]="store.busy()" (change)="groupField.set($any($event.target).value)">
+          <option value="" [selected]="groupField() === ''">Choose a field&hellip;</option>
+          @for (field of display.stagingFields(); track field) { <option [value]="field" [selected]="field === groupField()">{{ display.field(field) }}</option> }
+        </select>
+        <label class="usa-label" for="group-value">Correction (blank restores the reported value)</label><input class="usa-input" id="group-value" #groupValue [type]="groupField() ? fieldType(groupField()) : 'text'" [disabled]="store.busy()" />
+        <button class="usa-button" type="button" [disabled]="store.busy() || store.loading() || !store.selected().size || !groupField()" (click)="correctGroup(groupField(), groupValue.value, false)">Correct selected in this group</button>
+        <button class="usa-button usa-button--outline" type="button" [disabled]="store.busy() || store.loading() || !groupField()" (click)="correctGroup(groupField(), groupValue.value, true)">Correct entire group</button>
       </section>
     }
     <h2>Rows</h2>
@@ -145,6 +156,8 @@ export class HeldPage implements OnInit {
   private readonly rowsLoad = new LatestRequest();
   readonly batchParam = input<string | undefined>(undefined, { alias: 'batch' });
   private fixes: Record<string, string | null> = {};
+  /** The field a group correction writes; empty until chosen when the cause has no single field. */
+  protected readonly groupField = signal('');
 
   protected readonly key = (r: HeldRowDto): string => r.stagingRowId;
 
@@ -194,6 +207,7 @@ export class HeldPage implements OnInit {
   protected choose(g: HeldGroupDto | null): void {
     if (this.store.busy()) return;
     this.store.group.set(g);
+    this.groupField.set(g ? (REASON_FIELDS[g.reasonCode] ?? '') : '');
     this.store.page.set(1);
     this.store.selected.set(new Set<string>());
     this.store.focusRow.set(null);
@@ -226,9 +240,7 @@ export class HeldPage implements OnInit {
 
   protected fieldType(key: string): string { return ['dob', 'collectedDate', 'analyzedDate', 'reportedDate'].includes(key) ? 'date' : 'text'; }
   protected needsAttention(row: HeldRowDto, key: string): boolean {
-    const fields: Record<string, string> = { unknownSender: 'labCliaNumber', unknownTestCode: 'loinc', inactiveAnalyte: 'loinc',
-      missingResultValue: 'value', invalidValue: 'value', unknownUnit: 'unit', impossibleDates: 'collectedDate', missingDob: 'dob' };
-    return row.reasonCodes.some(reason => fields[reason] === key);
+    return row.reasonCodes.some(reason => REASON_FIELDS[reason] === key);
   }
   protected fieldHint(key: string): string {
     if (this.fieldType(key) === 'date') return 'Use the calendar date.';
@@ -240,12 +252,15 @@ export class HeldPage implements OnInit {
   }
 
   protected correctGroup(field: string, value: string, entire: boolean): void {
-    const g = this.store.group(); if (!g || this.store.busy() || this.store.loading()) return;
-    if (entire && !window.confirm(`Apply this correction to all ${g.rowCount} rows in this cause, sender and batch?`)) return;
+    const g = this.store.group(); if (!g || !field || this.store.busy() || this.store.loading()) return;
+    // Say exactly what will be written where, and on how many rows (issue #155).
+    const where = `${g.rowCount === 1 ? 'the 1 row' : `all ${g.rowCount} rows`} in this cause, sender and batch`;
+    const what = value ? `Change ${this.display.field(field)} to "${value}" on ${where}?` : `Restore the reported ${this.display.field(field)} on ${where}?`;
+    if (entire && !window.confirm(`${what} Release the rows afterwards to rerun validation.`)) return;
     this.beginWrite();
     this.api.correctHeldGroup({ reason: g.reasonCode, reportedValue: g.reportedValue, sender: g.senderOrganizationId,
       batch: this.store.batch(), field, value: value || null, selectedIds: entire ? null : [...this.store.selected()] }).subscribe({
-      next: r => this.done(`${r.updated} row(s) corrected; release them to rerun validation.`),
+      next: r => this.done(`${this.display.count(r.updated, 'row')} corrected; release them to rerun validation.`),
       error: e => { this.store.busy.set(false); this.store.error.set(problemMessage(e)); },
     });
   }
@@ -296,7 +311,7 @@ export class HeldPage implements OnInit {
     const waiting = this.store.selectedForMatch().length;
     this.beginWrite();
     this.api.releaseHeld({ stagingRowIds: this.store.releasable(), reason: null }).subscribe({
-      next: r => this.done(`${r.updated} row(s) released; they rerun validation and matching in the background.`
+      next: r => this.done(`${this.display.count(r.updated, 'row')} released; they rerun validation and matching in the background.`
         + (waiting > 0 ? ` ${waiting} left for Match review.` : '')),
       error: e => { this.store.busy.set(false); this.store.error.set(problemMessage(e)); this.loadGroups(true); },
     });
@@ -309,10 +324,10 @@ export class HeldPage implements OnInit {
       this.store.error.set('A reason is required to reject held records.');
       return;
     }
-    if (!window.confirm(`Reject ${this.store.selected().size} selected held record(s)? Reason: ${reason.trim()}`)) return;
+    if (!window.confirm(`Reject ${this.display.count(this.store.selected().size, 'selected held record')}? Reason: ${reason.trim()}`)) return;
     this.beginWrite();
     this.api.rejectHeld({ stagingRowIds: [...this.store.selected()], reason }).subscribe({
-      next: r => { input.value = ''; this.done(`${r.updated} row(s) rejected.`); },
+      next: r => { input.value = ''; this.done(`${this.display.count(r.updated, 'row')} rejected.`); },
       error: e => { this.store.busy.set(false); this.store.error.set(problemMessage(e)); this.loadGroups(true); },
     });
   }

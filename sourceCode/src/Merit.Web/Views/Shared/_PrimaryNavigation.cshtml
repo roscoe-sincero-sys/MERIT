@@ -1,9 +1,19 @@
 @inject ICurrentSession CurrentSession
 @{
     string path = Context.Request.Path.Value ?? "/";
+    bool Under(string prefix) => path.Equals(prefix, StringComparison.OrdinalIgnoreCase) || path.StartsWith(prefix + "/", StringComparison.OrdinalIgnoreCase);
+    // Screens reached from a menu item rather than listed in the menu mark that item (issue #160): a person's pages and
+    // timeline mark People, a result marks Results, and every configuration page marks Configuration. The prefixes ride on
+    // the link too, so the Angular client marks the same item after its own navigation.
+    var alsoUnder = new Dictionary<string, string[]>
+    {
+        ["/search"] = ["/people", "/app/people"],
+        ["/app/results"] = ["/results"],
+        ["/config/thresholds"] = ["/config"],
+    };
     string Current(string target) => (target == "/" ? path == "/" :
-        path.Equals(target, StringComparison.OrdinalIgnoreCase) || path.StartsWith(target + "/", StringComparison.OrdinalIgnoreCase) ||
-        (target == "/search" && path.StartsWith("/people/", StringComparison.OrdinalIgnoreCase))) ? "page" : "false";
+        Under(target) || (alsoUnder.TryGetValue(target, out var prefixes) && prefixes.Any(Under))) ? "page" : "false";
+    string? Also(string target) => alsoUnder.TryGetValue(target, out var prefixes) ? string.Join(' ', prefixes) : null;
     var groups = new[]
     {
         (Label: "Intake", Links: new[] {
@@ -23,7 +33,8 @@
         (Label: "Administration", Links: new[] {
             (Text: CurrentSession.Has(Permissions.ConfigEdit) ? "Configuration" : "Reference levels", Url: "/config/thresholds", Visible: !CurrentSession.IsPlatformAdmin),
             (Text: "Users", Url: "/admin/users", Visible: CurrentSession.Has(Permissions.TenantAdminister)),
-            (Text: "Tenants", Url: "/admin/tenants", Visible: CurrentSession.Has(Permissions.TenantCreate)) })
+            (Text: "Tenants", Url: "/admin/tenants", Visible: CurrentSession.Has(Permissions.TenantCreate)),
+            (Text: "Audit log", Url: "/admin/audit", Visible: CurrentSession.Has(Permissions.AuditView)) })
     };
 }
 <ul class="merit-nav">
@@ -34,7 +45,7 @@
     }
     @if (CurrentSession.Has(Permissions.PersonView))
     {
-        <li><a href="/search" aria-current="@Current("/search")">People</a></li>
+        <li><a href="/search" aria-current="@Current("/search")" data-current-prefixes="@Also("/search")">People</a></li>
     }
     @foreach (var group in groups)
     {
@@ -46,7 +57,7 @@
                 <ul>
                     @foreach (var link in links)
                     {
-                        <li><a href="@link.Url" aria-current="@Current(link.Url)">@link.Text</a></li>
+                        <li><a href="@link.Url" aria-current="@Current(link.Url)" data-current-prefixes="@Also(link.Url)">@link.Text</a></li>
                     }
                 </ul>
             </details>

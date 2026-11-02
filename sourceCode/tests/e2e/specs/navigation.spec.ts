@@ -4,7 +4,8 @@ import { angularReady, expect, test } from './helpers';
 const widths = [1440, 1280, 1024, 768, 640, 390, 320];
 const tags = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
 
-for (const [user, count] of [['cmbalt', 11], ['supervisor', 15], ['admin', 17]] as const) {
+// Supervisor and admin hold audit.view, so Administration lists the Audit log for them (issue #160).
+for (const [user, count] of [['cmbalt', 11], ['supervisor', 16], ['admin', 18]] as const) {
   test(`${user}: destinations, target sizes and reflow across seven widths`, async ({ asUser }) => {
     test.setTimeout(120000);
     const page = await asUser(user);

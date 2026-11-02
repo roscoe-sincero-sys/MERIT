@@ -78,6 +78,9 @@ main.merit-main { max-width: 80rem; margin: 0 auto; padding: 1rem 1rem 3rem; }
 .merit-badge--suspect { background: #faf3d1; color: #5c4809; }
 .merit-badge--urgent { background: var(--merit-urgent); color: #fff; }
 .merit-badge--ok { background: #ecf3ec; color: #154c21; }
+/* Extract runs: the run to send, and the older runs it replaced (issue #164). */
+.merit-badge--latest { background: #e7f6f8; color: #0b4778; }
+.merit-badge--superseded { background: var(--merit-bg-soft); color: #565c65; font-weight: 400; }
 .merit-star { color: #c2850c; }
 
 /* ---------------------------------------------------------------------------------------------- dashboard tiles */

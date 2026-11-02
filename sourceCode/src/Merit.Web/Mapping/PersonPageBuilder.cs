@@ -95,12 +95,12 @@ public sealed class PersonPageBuilder(IClock clock, IReferenceDataProvider refer
                             && (t.Population == "all" || t.Population == pop) && t.SampleType is null)
                 .ToList();
             var levels = currentThresholds
-                .Select(t => ((t.ActionName ?? (t.ThresholdType == "case" ? "Case level" : "Action level")) + $" {t.LowerValue:0.##} (effective {t.EffectiveFrom:yyyy-MM-dd})", t.LowerValue))
+                .Select(t => ((t.ActionName ?? (t.ThresholdType == "case" ? "Case level" : "Action level")) + $" {t.LowerValue:0.##} (effective {Options.Date(t.EffectiveFrom)})", t.LowerValue))
                 .Distinct().ToList();
             var unit = refData.Specimen(group.Key.AnalyteSpecimenId)?.CanonicalUnit ?? first.UnitCanonical;
             charts.Add(new TrendChart(first.AnalyteCode, $"{first.AnalyteName} ({Options.Humanize(first.Specimen)}; {Options.Population(pop)})", unit,
                 group.OrderBy(r => r.CollectedDate).Select(r => new ChartPoint(r.CollectedDate, r.ValueCanonical!.Value, r.SampleType, r.Operator, r.LabResultId)).ToList(),
-                levels, $"Reference lines show levels in force on {today:yyyy-MM-dd} for {Options.Population(pop)}; they do not reconstruct historical classifications."
+                levels, $"Reference lines show levels in force on {Options.Date(today)} for {Options.Population(pop)}; they do not reconstruct historical classifications."
                     + (currentThresholds.Any(t => group.Any(r => r.CollectedDate < t.EffectiveFrom))
                         ? " Some plotted results predate a displayed level's effective date. Consult result details and Reference levels for historical rules." : string.Empty)));
         }

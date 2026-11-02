@@ -573,6 +573,33 @@ EXEC dbo.uspSaveIntakeProfile @intakeProfileId = {g('profile:chesapeake:hl7')},
      @fileType = 'hl7', @columnMapJson = N'{{}}', @dateFormats = N'yyyy-MM-dd';
 GO
 
+-- Issue #157: a file loaded under profile version 1 put the result unit into the address unit ("410 N Milton Ave ug/dL").
+-- No apartment is a result unit, so clear those units and take them out of the task text that quoted the address.
+-- The apartment such a file did send was overwritten at the time and cannot be recovered here.
+DECLARE @badUnit TABLE (addressLine1 NVARCHAR (200) NOT NULL, unit NVARCHAR (50) NOT NULL);
+INSERT @badUnit (addressLine1, unit)
+SELECT DISTINCT l.addressLine1, l.unit
+  FROM dbo.location AS l
+ WHERE l.isDeleted = 0 AND l.addressLine1 IS NOT NULL
+   AND l.unit IN (SELECT a.unitText FROM config.acceptedUnit AS a WHERE a.isDeleted = 0);
+UPDATE l SET l.unit = NULL,
+             l.addressKey = LEFT (l.addressKey, CHARINDEX (N'|', l.addressKey))
+                          + SUBSTRING (l.addressKey, CHARINDEX (N'|', l.addressKey, CHARINDEX (N'|', l.addressKey) + 1), 300)
+  FROM dbo.location AS l
+  JOIN @badUnit AS b ON b.addressLine1 = l.addressLine1 AND b.unit = l.unit
+ WHERE l.isDeleted = 0 AND CHARINDEX (N'|', l.addressKey) > 0;
+DECLARE @taskFixed INT = 1;
+WHILE @taskFixed > 0
+BEGIN
+    UPDATE w SET w.title = REPLACE (w.title, b.addressLine1 + N' ' + b.unit + N',', b.addressLine1 + N','),
+                 w.detail = REPLACE (w.detail, b.addressLine1 + N' ' + b.unit + N',', b.addressLine1 + N',')
+      FROM dbo.workTask AS w
+      JOIN @badUnit AS b ON w.title LIKE N'%' + b.addressLine1 + N' ' + b.unit + N',%'
+                         OR w.detail LIKE N'%' + b.addressLine1 + N' ' + b.unit + N',%';
+    SET @taskFixed = @@ROWCOUNT;
+END;
+GO
+
 UPDATE auth.sessionScope SET revokedUtc = SYSUTCDATETIME ()
  WHERE sessionScopeId = TRY_CAST (SESSION_CONTEXT (N'scopeKey') AS UNIQUEIDENTIFIER) AND revokedUtc IS NULL;
 GO

@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Net;
 using System.Text;
+using Merit.Web.Infrastructure;
 using Merit.Web.Models;
 using Microsoft.AspNetCore.Html;
 
@@ -29,7 +30,7 @@ public static class TrendChartSvg
         static string E(string s) => WebUtility.HtmlEncode(s);
 
         var title = $"{chart.AnalyteName} trend in {chart.Unit}: " + string.Join("; ",
-            pts.Select(p => $"{p.Date:yyyy-MM-dd} {(p.Operator == "=" ? string.Empty : p.Operator)}{p.Value.ToString("0.##", CultureInfo.InvariantCulture)}"));
+            pts.Select(p => $"{Options.Date(p.Date)} {(p.Operator == "=" ? string.Empty : p.Operator)}{p.Value.ToString("0.##", CultureInfo.InvariantCulture)}"));
 
         var sb = new StringBuilder();
         sb.Append(CultureInfo.InvariantCulture, $"<svg class=\"merit-chart\" viewBox=\"0 0 {N(W)} {N(H)}\" role=\"group\" aria-labelledby=\"{E(id)}\">");
@@ -60,7 +61,7 @@ public static class TrendChartSvg
 
         foreach (var p in pts)
         {
-            var pointLabel = $"{p.Date:yyyy-MM-dd}: {(p.Operator == "=" ? string.Empty : p.Operator)}{p.Value.ToString("0.##", CultureInfo.InvariantCulture)} {chart.Unit}; {p.SampleType ?? "unknown sample type"}";
+            var pointLabel = $"{Options.Date(p.Date)}: {(p.Operator == "=" ? string.Empty : p.Operator)}{p.Value.ToString("0.##", CultureInfo.InvariantCulture)} {chart.Unit}; {p.SampleType ?? "unknown sample type"}";
             if (p.ResultId is Guid resultId) sb.Append($"<a href=\"/results/{resultId:D}\" aria-label=\"{E(pointLabel)}\">");
             sb.Append(CultureInfo.InvariantCulture,
                 $"<circle class=\"{(p.SampleType == "venous" ? "venous" : "capillary")}\" cx=\"{N(X(p.Date))}\" cy=\"{N(Y((double)p.Value))}\" r=\"5\"><title>{E(pointLabel)}</title></circle>");
