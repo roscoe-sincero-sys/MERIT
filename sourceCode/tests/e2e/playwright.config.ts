@@ -4,7 +4,8 @@ import { defineConfig, devices } from '@playwright/test';
  * Runs against a MERIT instance that is already up (dotnet run, or the Web + Worker launch profile) with the demo data.
  *   MERIT_E2E_URL       base address (default https://localhost:7243)
  *   MERIT_E2E_SERVER    SQL Server instance for resetting demo MFA (default localhost\PORTAL)
- *   MERIT_E2E_DATABASE  database the instance uses (default MERIT)
+ *   MERIT_E2E_DATABASE  database the instance uses (default MERIT); both are read in database.ts. Specs that create
+ *                       their own accounts or records run only when it is MERIT_IT and skip otherwise.
  * The installed Microsoft Edge is used, so no browser download is needed; set MERIT_E2E_CHANNEL=chrome for Chrome.
  * Every test runs at tablet width (768 x 1024).
  */

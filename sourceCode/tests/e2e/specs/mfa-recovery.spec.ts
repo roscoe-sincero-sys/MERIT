@@ -1,7 +1,7 @@
-import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { expect, expectAccessible, test } from './helpers';
 import { totp } from '../totp';
+import { ISOLATED_DATA_ONLY, sql } from '../database';
 
 test('pending MFA offers a different-account escape', async ({ browser }) => {
   const context = await browser.newContext({ ignoreHTTPSErrors: true }); const page = await context.newPage();
@@ -17,9 +17,8 @@ test('pending MFA offers a different-account escape', async ({ browser }) => {
 
 test('recovery codes copy and print explicitly, require acknowledgement, and retain the destination', async ({ browser }) => {
   const id = randomUUID();
-  const database = process.env.MERIT_E2E_DATABASE ?? 'MERIT_IT';
-  if (database !== 'MERIT_IT') test.skip(true, 'Creates an isolated account only in MERIT_IT.');
-  const sql = (query: string) => execFileSync('sqlcmd', ['-S', process.env.MERIT_E2E_SERVER ?? 'localhost\\PORTAL', '-E', '-C', '-I', '-d', database, '-b', '-Q', query]);
+  // It defaulted to MERIT_IT while the suite targets MERIT, so it ran against an app that could not see its account (issue #175).
+  test.skip(ISOLATED_DATA_ONLY !== null, ISOLATED_DATA_ONLY ?? '');
   sql(`INSERT auth.appUser (appUserId, rootTenantId, homeTenantId, userName, displayName, passwordHash, securityStamp)
     SELECT '${id}', rootTenantId, homeTenantId, N'e2e-${id}', N'Recovery test', passwordHash, NEWID () FROM auth.appUser WHERE userName = N'admin';`);
   const context = await browser.newContext({ ignoreHTTPSErrors: true }); const page = await context.newPage();

@@ -1,7 +1,7 @@
-import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { Page } from '@playwright/test';
 import { expect, expectAccessible, test } from './helpers';
+import { ISOLATED_DATA_ONLY, sql } from '../database';
 
 // axe excludes closed dialogs; inspect ID references in the entire DOM as well.
 async function expectResolvedReferences(page: Page) {
@@ -51,10 +51,8 @@ test('sign-in ARIA references and keyboard error links remain valid before and a
 });
 
 test('enrollment ARIA references and code hints remain valid through missing and invalid codes', async ({ browser }) => {
-  const database = process.env.MERIT_E2E_DATABASE ?? 'MERIT';
-  test.skip(database !== 'MERIT_IT', 'Creates an isolated account only in MERIT_IT.');
+  test.skip(ISOLATED_DATA_ONLY !== null, ISOLATED_DATA_ONLY ?? '');
   const id = randomUUID();
-  const sql = (query: string) => execFileSync('sqlcmd', ['-S', process.env.MERIT_E2E_SERVER ?? 'localhost\\PORTAL', '-E', '-C', '-I', '-d', database, '-b', '-Q', query]);
   sql(`INSERT auth.appUser(appUserId,rootTenantId,homeTenantId,userName,displayName,passwordHash,securityStamp)
     SELECT '${id}',rootTenantId,homeTenantId,N'aria-${id}',N'Enrollment accessibility test',passwordHash,NEWID()
     FROM auth.appUser WHERE userName='admin';`);

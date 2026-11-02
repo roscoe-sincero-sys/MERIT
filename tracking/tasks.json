@@ -1418,6 +1418,17 @@
       "started": "2026-11-02",
       "finished": "2026-11-02",
       "notes": "Add a person always offered and prefilled from the search; one search on /search; /help serves docs/guides; place added from the case dialog; roving map points; profile switch control; opt-in single-key review with double-press decisions; recovery codes gate; held causes grouped on Home with plain-language thresholds; Not permitted route guards; one choice per unit; spaced session actions; standard users filter"
+    },
+    {
+      "id": "T206",
+      "phase": "12 Quality",
+      "task": "End-to-end suite: one database default for setup and specs; queue side-nav test at tablet width",
+      "ref": "Issues #174, #175",
+      "where": "tests/e2e/database.ts, global-setup.ts, specs (mfa-recovery, lost-authenticator, authenticator-enrollment, auth-accessibility, hl7-intake, workflow-review-regressions)",
+      "status": "Done",
+      "started": "2026-11-02",
+      "finished": "2026-11-02",
+      "notes": "Shared MERIT_E2E_SERVER/DATABASE and sql(); isolated-data specs skip unless MERIT_IT; queue test opens the collapsed panel; default run 142 passed, 5 skipped; MERIT_IT run of the affected specs 15 passed"
     }
   ]
 }
