@@ -71,8 +71,13 @@ public sealed class CrossTenantHttpTests(MeritFixture fixture)
 /// comes back.
 /// </summary>
 [Collection(MeritCollection.Name)]
-public sealed class CrossTenantProcedureTests(MeritFixture fixture, ITestOutputHelper output)
+public sealed class CrossTenantProcedureTests(MeritFixture fixture, ITestOutputHelper output) : IAsyncLifetime
 {
+    public Task InitializeAsync() => Task.CompletedTask;
+
+    /// <summary>Issue #187: the scopes this test made through the procedure end with it.</summary>
+    public Task DisposeAsync() => TestSessionScopes.RevokeAllAsync();
+
     private sealed record ManifestParam(string Name, string Type, bool HasDefault, bool IsOutput);
 
     private sealed record ManifestProc(string Name, string Kind, string[] Grants, string? Permission, ManifestParam[] Params);
@@ -372,7 +377,7 @@ public sealed class CrossTenantProcedureTests(MeritFixture fixture, ITestOutputH
     {
         ActingTenant = fixture.Ids.BaltimoreCountyTenantId;
         CallerId = appUserId;
-        var scope = Guid.NewGuid();
+        var scope = TestSessionScopes.Track(Guid.NewGuid());
         await using var c = new SqlConnection(TestEnvironment.WebConnectionString);
         await c.OpenAsync();
         await using var cmd = new SqlCommand("auth.uspCreateSessionScope", c) { CommandType = CommandType.StoredProcedure };

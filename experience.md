@@ -9,3 +9,6 @@ These reviews did not find broken ARIA references found on almost every page.  #
 
 The application did not have any HL7 intakes.  Issue #140 
 
+3.  GEMINI 3.8 Flash has not met a PR she didn't like.  
+
+Unlike Claude Opus or ChatGPT Sol who always have something to say, GEMINI approves anything. And she signs all of her PRs as GEMINI 4 Argon.

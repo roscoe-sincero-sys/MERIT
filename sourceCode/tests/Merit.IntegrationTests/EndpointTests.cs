@@ -229,28 +229,43 @@ public sealed partial class EndpointTests(MeritFixture fixture, ITestOutputHelpe
         // Issue #21: sign-in, profile switches and the tenant refresh renew the session through one SessionRenewal.
         var supervisor = await fixture.SignedInAsync("supervisor");
         var page = await supervisor.Http.GetStringAsync("/account/profiles");
-        var before = await LatestScopeAsync("supervisor");
+        var open = await OpenSignInScopesAsync("supervisor");
 
         var response = await supervisor.Http.PostAsync("/account/view-as/end", MeritClient.Form(page));
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await supervisor.NoRedirect.GetAsync("/api/v1/me")).StatusCode);
 
-        var after = await LatestScopeAsync("supervisor");
-        Assert.NotEqual(before.Id, after.Id);
+        // Issue #187: the client's own scope is the one the renewal ended, not simply the newest; other tests and other
+        // clients may hold supervisor sessions too. Exactly one open session ended and exactly one began.
+        var nowOpen = await OpenSignInScopesAsync("supervisor");
+        var before = await ScopeAsync(Assert.Single(open.Except(nowOpen)));
+        var after = await ScopeAsync(Assert.Single(nowOpen.Except(open)));
         Assert.InRange(after.Expires - after.Created, TimeSpan.FromHours(12) - TimeSpan.FromMinutes(1), TimeSpan.FromHours(12) + TimeSpan.FromMinutes(1));
-        Assert.NotNull((await ScopeAsync(before.Id)).Revoked);
+        Assert.NotNull(before.Revoked);
     }
 
-    private static async Task<(Guid Id, DateTime Created, DateTime Expires, DateTime? Revoked)> LatestScopeAsync(string userName)
+    /// <summary>
+    /// The user's open sessions as sign-in and renewal create them: not revoked, not viewing as someone else, and living
+    /// for hours. Scopes tests create directly through the procedure last minutes and are left out.
+    /// </summary>
+    private static async Task<HashSet<Guid>> OpenSignInScopesAsync(string userName)
     {
         await using var c = new Microsoft.Data.SqlClient.SqlConnection(TestEnvironment.AdminConnectionString());
         await c.OpenAsync();
         await using var cmd = new Microsoft.Data.SqlClient.SqlCommand("""
-            SELECT TOP (1) s.sessionScopeId FROM auth.sessionScope AS s JOIN auth.appUser AS u ON u.appUserId = s.appUserId
-             WHERE u.userName = @u ORDER BY s.createdDateUtc DESC
+            SELECT s.sessionScopeId FROM auth.sessionScope AS s JOIN auth.appUser AS u ON u.appUserId = s.appUserId
+             WHERE u.userName = @u AND s.revokedUtc IS NULL AND s.viewAsUserId IS NULL
+               AND DATEDIFF (MINUTE, s.createdDateUtc, s.expiresUtc) > 60
             """, c);
         cmd.Parameters.AddWithValue("@u", userName);
-        return await ScopeAsync((Guid)(await cmd.ExecuteScalarAsync())!);
+        var ids = new HashSet<Guid>();
+        await using var r = await cmd.ExecuteReaderAsync();
+        while (await r.ReadAsync())
+        {
+            ids.Add(r.GetGuid(0));
+        }
+
+        return ids;
     }
 
     private static async Task<(Guid Id, DateTime Created, DateTime Expires, DateTime? Revoked)> ScopeAsync(Guid id)

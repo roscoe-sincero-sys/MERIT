@@ -1473,6 +1473,17 @@
       "started": "2026-11-03",
       "finished": "2026-11-03",
       "notes": "Policy emailCodesEnabled (default off, NIST acknowledgement on Settings), never for administrators; TOTP stays required; HMAC verifier, 5-minute single-use codes, cooldown/limits/attempts atomic in SQL; 17 fault scenarios tested (fake SMTP server, Mailpit Chaos, Playwright); Docker compose written but not run (no Docker on the build machine); not committed (prompt asked for no commit/push); flaky pre-existing test logged as #187"
+    },
+    {
+      "id": "T211",
+      "phase": "12 Quality",
+      "task": "Session renewal test finds its own scope; tests that create scopes directly revoke them",
+      "ref": "Issue #187",
+      "where": "tests/Merit.IntegrationTests: EndpointTests, TestSessionScopes (new), AuthorizationScenarioTests, CrossTenantTests, Hl7IntakeTests",
+      "status": "Done",
+      "started": "2026-11-03",
+      "finished": "2026-11-03",
+      "notes": "Both fix options applied (independent): the test identifies the scope the renewal ended among open sign-in scopes; directly created scopes (10-minute and HL7 one-hour) are revoked at the end of each test. Full suite 94/94; option 2 alone also 94/94; 0 short-lived scopes left open after a run"
     }
   ]
 }

@@ -15,8 +15,13 @@ namespace Merit.IntegrationTests;
 /// own answer, not the application's.
 /// </summary>
 [Collection(MeritCollection.Name)]
-public sealed class AuthorizationScenarioTests(MeritFixture fixture)
+public sealed class AuthorizationScenarioTests(MeritFixture fixture) : IAsyncLifetime
 {
+    public Task InitializeAsync() => Task.CompletedTask;
+
+    /// <summary>Issue #187: the scopes this test made through the procedure end with it.</summary>
+    public Task DisposeAsync() => TestSessionScopes.RevokeAllAsync();
+
     private static readonly object Gate = new();
     private static bool built;
 
@@ -379,7 +384,7 @@ public sealed class AuthorizationScenarioTests(MeritFixture fixture)
         await using var c2 = new SqlConnection(TestEnvironment.WebConnectionString);
         await c2.OpenAsync();
         await using var scope = new SqlCommand("auth.uspCreateSessionScope", c2) { CommandType = CommandType.StoredProcedure };
-        scope.Parameters.AddWithValue("@sessionScopeId", Guid.NewGuid());
+        scope.Parameters.AddWithValue("@sessionScopeId", TestSessionScopes.Track(Guid.NewGuid()));
         scope.Parameters.AddWithValue("@appUserId", user);
         scope.Parameters.AddWithValue("@expiresUtc", DateTime.UtcNow.AddMinutes(10));
         await using var r = await scope.ExecuteReaderAsync();
@@ -417,7 +422,7 @@ public sealed class AuthorizationScenarioTests(MeritFixture fixture)
         await using var c = new SqlConnection(TestEnvironment.WebConnectionString);
         await c.OpenAsync();
         await using var cmd = new SqlCommand("auth.uspCreateSessionScope", c) { CommandType = CommandType.StoredProcedure };
-        cmd.Parameters.AddWithValue("@sessionScopeId", Guid.NewGuid());
+        cmd.Parameters.AddWithValue("@sessionScopeId", TestSessionScopes.Track(Guid.NewGuid()));
         cmd.Parameters.AddWithValue("@appUserId", job.User);
         cmd.Parameters.AddWithValue("@expiresUtc", DateTime.UtcNow.AddMinutes(10));
         cmd.Parameters.AddWithValue("@userProfileId", (object?)job.Profile ?? DBNull.Value);
@@ -800,7 +805,7 @@ public sealed class AuthorizationScenarioTests(MeritFixture fixture)
     private static async Task<Session> ScopeAsync(string userName, Guid? profile = null, string? viewAs = null, string? acting = null)
     {
         var user = await UserIdAsync(userName);
-        var scope = Guid.NewGuid();
+        var scope = TestSessionScopes.Track(Guid.NewGuid());
         await using var c = new SqlConnection(TestEnvironment.WebConnectionString);
         await c.OpenAsync();
         await using var cmd = new SqlCommand("auth.uspCreateSessionScope", c) { CommandType = CommandType.StoredProcedure };
