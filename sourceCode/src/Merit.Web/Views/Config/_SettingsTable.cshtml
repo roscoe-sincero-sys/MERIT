@@ -16,6 +16,14 @@
                                 <label class="usa-sr-only" for="d-@s.SettingKey">Effective from</label>
                                 <input class="usa-input" id="d-@s.SettingKey" name="effectiveFrom" type="date" value="@Options.Iso(Clock.Today)" />
                                 <button class="usa-button usa-button--outline usa-button--small" type="submit">Change</button>
+                                @if (s.SettingKey == Merit.Application.Services.ConfigService.EmailCodesSetting)
+                                {
+                                    @* Before email codes can be turned on, NIST's position is stated and confirmed (specification, Authentication). *@
+                                    <div class="usa-checkbox merit-setting-ack">
+                                        <input class="usa-checkbox__input" id="ack-@s.SettingKey" type="checkbox" name="acknowledgeEmailCodeRisk" value="true" />
+                                        <label class="usa-checkbox__label" for="ack-@s.SettingKey">I understand that NIST SP 800-63B-4 does not accept email for out-of-band authentication. Email codes stay an extra option: everyone keeps the authenticator app, and administrators never get email codes.</label>
+                                    </div>
+                                }
                             </form>
                         }
                         else

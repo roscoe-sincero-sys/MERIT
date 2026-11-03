@@ -360,15 +360,35 @@ BEGIN
         ;THROW 51422, N'You cannot deactivate your own account.', 1;
     END;
 
+    -- Email codes were proven for the old address only: a new address turns them off and cancels any open code.
+    DECLARE @emailCodesOff BIT = CASE WHEN EXISTS (SELECT 1 FROM auth.appUser
+                                                    WHERE appUserId = @appUserId AND mfaEmailVerifiedUtc IS NOT NULL
+                                                      AND COALESCE (email, N'') <> COALESCE (@email, N''))
+                                      THEN 1 ELSE 0 END;
+
     UPDATE auth.appUser
-       SET displayName   = @displayName
-         , email         = @email
-         , isActive      = @isActive
-         , homeTenantId  = COALESCE (@homeTenantId, homeTenantId)
-         , rootTenantId  = COALESCE (@root, rootTenantId)
-         , passwordHash  = COALESCE (@passwordHash, passwordHash)
-         , securityStamp = CASE WHEN @passwordHash IS NOT NULL OR @isActive = 0 THEN NEWID () ELSE securityStamp END
+       SET displayName         = @displayName
+         , email               = @email
+         , isActive            = @isActive
+         , homeTenantId        = COALESCE (@homeTenantId, homeTenantId)
+         , rootTenantId        = COALESCE (@root, rootTenantId)
+         , passwordHash        = COALESCE (@passwordHash, passwordHash)
+         , securityStamp       = CASE WHEN @passwordHash IS NOT NULL OR @isActive = 0 THEN NEWID () ELSE securityStamp END
+         , mfaEmailVerifiedUtc = CASE WHEN COALESCE (email, N'') <> COALESCE (@email, N'') THEN NULL ELSE mfaEmailVerifiedUtc END
+         , mfaPreferredMethod  = CASE WHEN COALESCE (email, N'') <> COALESCE (@email, N'') THEN 'totp' ELSE mfaPreferredMethod END
      WHERE appUserId = @appUserId AND isDeleted = 0;
+
+    IF @emailCodesOff = 1 OR @isActive = 0
+    BEGIN
+        UPDATE auth.mfaEmailChallenge SET supersededUtc = SYSUTCDATETIME ()
+         WHERE appUserId = @appUserId AND consumedUtc IS NULL AND supersededUtc IS NULL AND isDeleted = 0;
+    END;
+
+    IF @emailCodesOff = 1
+    BEGIN
+        INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId)
+        SELECT @appUserId, rootTenantId, 'mfaEmailDisabled', 'appUser', @appUserId FROM auth.appUser WHERE appUserId = @appUserId;
+    END;
 
     IF @isActive = 0
     BEGIN
@@ -526,8 +546,8 @@ SET @Comments = N'Account unlocked.';
     {
         "schema": "auth", "name": "uspResetUserMfa", "kind": "write", "grants": WEB, "ticket": "T160",
         "permission": "tenant.administer",
-        "desc": "Clears a user's second factor after the administrator has verified the person, so they enroll again at "
-                "next sign-in. Only for accounts whose home tenant the administrator administers, and not their own.",
+        "desc": "Clears a user's second factors (authenticator, recovery codes and email codes) after the administrator has "
+                "verified the person, so they enroll again at next sign-in. Only for accounts whose home tenant the administrator administers, and not their own.",
         "params": "@appUserId UNIQUEIDENTIFIER",
         "key": "CONCAT (N'appUserId=', @appUserId)",
         "body": f"""
@@ -546,9 +566,12 @@ END;
 
 UPDATE auth.appUser
    SET mfaEnabled = 0, mfaSecretProtected = NULL, securityStamp = NEWID (), failedSignInCount = 0, lockoutEndUtc = NULL
+     , mfaEmailVerifiedUtc = NULL, mfaPreferredMethod = 'totp'
  WHERE appUserId = @appUserId AND isDeleted = 0;
 
 UPDATE auth.mfaRecoveryCode SET isDeleted = 1 WHERE appUserId = @appUserId AND isDeleted = 0;
+UPDATE auth.mfaEmailChallenge SET supersededUtc = SYSUTCDATETIME ()
+ WHERE appUserId = @appUserId AND consumedUtc IS NULL AND supersededUtc IS NULL AND isDeleted = 0;
 UPDATE auth.sessionScope SET revokedUtc = SYSUTCDATETIME () WHERE appUserId = @appUserId AND revokedUtc IS NULL;
 
 SET @Comments = N'MFA reset.';

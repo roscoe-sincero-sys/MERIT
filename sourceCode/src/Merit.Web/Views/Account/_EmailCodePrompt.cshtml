@@ -1,0 +1,10 @@
+@model EmailCodePrompt
+@* The email alternative on the MFA page: first when the person prefers it, otherwise after the authenticator form. *@
+<section class="merit-signin__alt" aria-labelledby="email-option-heading">
+    <h2 id="email-option-heading">@(Model.Primary ? "Get a code by email" : "Or get a code by email")</h2>
+    <p>We'll send a six-digit code to <strong>@Model.MaskedEmail</strong>. It works once, for @Model.Minutes minutes.</p>
+    <form method="post" action="/account/mfa/email/send" data-merit-busy="Sending your code…">
+        @Html.AntiForgeryToken()
+        <button class="usa-button @(Model.Primary ? "" : "usa-button--outline")" type="submit">Email me a code</button>
+    </form>
+</section>

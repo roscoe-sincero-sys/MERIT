@@ -1462,6 +1462,17 @@
       "started": "2026-11-03",
       "finished": "2026-11-03",
       "notes": "Legacy one-line menu and the setting removed; Show/Hide lists always available; a leftover setting is ignored (tested both ways); appsettings.Development.json left as-is per standing instruction; #137 human rollout checks remain the owner's decision"
+    },
+    {
+      "id": "T210",
+      "phase": "12 Quality",
+      "task": "Email one-time codes as an additional second factor; SMTP delivery with Mailpit and smtp4dev for local testing",
+      "ref": "Issue #186",
+      "where": "procs_mfa.py; tableDefinitions.py (auth.appUser columns, auth.mfaEmailChallenge); procs_access.py; 161_logs.auditEvent.sql; Merit.Application Email/EmailCodeService/OneTimeCodes; Merit.Web Infrastructure/Email (MailKit), AccountController, EmailCode/SignInMethods/Mfa views, merit.js; tools/mail scripts and compose; EmailCodeTests, SmtpFaultInjectionTests, LocalMailToolTests, email-codes.spec.ts; docs/email-codes.md",
+      "status": "Done",
+      "started": "2026-11-03",
+      "finished": "2026-11-03",
+      "notes": "Policy emailCodesEnabled (default off, NIST acknowledgement on Settings), never for administrators; TOTP stays required; HMAC verifier, 5-minute single-use codes, cooldown/limits/attempts atomic in SQL; 17 fault scenarios tested (fake SMTP server, Mailpit Chaos, Playwright); Docker compose written but not run (no Docker on the build machine); not committed (prompt asked for no commit/push); flaky pre-existing test logged as #187"
     }
   ]
 }

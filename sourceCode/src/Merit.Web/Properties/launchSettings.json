@@ -8,6 +8,32 @@
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development"
       }
+    },
+    "Merit.Web (Mailpit)": {
+      "commandName": "Project",
+      "launchBrowser": true,
+      "applicationUrl": "https://localhost:7243",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "Email__Provider": "Smtp",
+        "Email__Smtp__Host": "127.0.0.1",
+        "Email__Smtp__Port": "1025",
+        "Email__Smtp__Security": "None",
+        "Email__Smtp__FromAddress": "merit-dev@localhost.test"
+      }
+    },
+    "Merit.Web (smtp4dev)": {
+      "commandName": "Project",
+      "launchBrowser": true,
+      "applicationUrl": "https://localhost:7243",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "Email__Provider": "Smtp",
+        "Email__Smtp__Host": "127.0.0.1",
+        "Email__Smtp__Port": "2525",
+        "Email__Smtp__Security": "None",
+        "Email__Smtp__FromAddress": "merit-dev@localhost.test"
+      }
     }
   }
 }

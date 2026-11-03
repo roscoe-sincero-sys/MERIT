@@ -91,9 +91,9 @@ public sealed class ConfigController(IClock clock, ConfigService config, IRefere
 
     [HttpPost("settings/{key}")]
     [Authorize(Policy = Permissions.ConfigEdit)]
-    public async Task<IActionResult> SaveSetting(string key, string? settingValue, DateOnly? effectiveFrom, CancellationToken ct)
+    public async Task<IActionResult> SaveSetting(string key, string? settingValue, DateOnly? effectiveFrom, bool acknowledgeEmailCodeRisk, CancellationToken ct)
     {
-        await config.SaveSettingAsync(key, settingValue, effectiveFrom ?? clock.Today, ct);
+        await config.SaveSettingAsync(key, settingValue, effectiveFrom ?? clock.Today, acknowledgeEmailCodeRisk, ct);
         Response.Announce($"Setting {key} changed.");
         return await Settings(ct);
     }

@@ -64,6 +64,7 @@
                     <div class="merit-header__links">
                         @* The guides open beside the work, never over it (issue #148). *@
                         <a class="merit-header__help" href="/help" target="_blank" rel="noopener">User guide<span class="usa-sr-only"> (opens in a new tab)</span></a>
+                        <a class="merit-header__help" href="/account/security">Sign-in methods</a>
                         <form method="post" action="/account/signout">
                             @Html.AntiForgeryToken()
                             <button class="usa-button usa-button--unstyled" type="submit">Sign out</button>

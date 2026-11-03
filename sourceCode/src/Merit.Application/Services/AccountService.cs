@@ -114,6 +114,28 @@ public sealed class AccountService(IAccountData data, IPasswordHasher hasher, IS
         return ok;
     }
 
+    /// <summary>
+    /// A current authenticator code from a signed-in person, before a change to their sign-in methods (turning on email
+    /// codes). Recovery codes do not count here. A wrong code counts toward the account lockout like one at sign-in.
+    /// </summary>
+    public async Task<bool> CheckAuthenticatorCodeAsync(string userName, string? code, string? clientAddress, CancellationToken ct = default)
+    {
+        var user = await data.GetUserForSignInAsync(userName, ct).ConfigureAwait(false);
+        if (user?.MfaSecretProtected is null || !user.IsActive || (user.LockoutEndUtc is DateTime until && until > DateTime.UtcNow))
+        {
+            return false;
+        }
+
+        byte[] secret = Totp.FromBase32(protector.Unprotect(user.MfaSecretProtected));
+        if (Totp.Verify(secret, (code ?? string.Empty).Trim(), DateTimeOffset.UtcNow))
+        {
+            return true;
+        }
+
+        await data.RecordSignInResultAsync(user.AppUserId, false, MaxFailedAttempts, LockoutMinutes, clientAddress, ct).ConfigureAwait(false);
+        return false;
+    }
+
     /// <summary>Resolves the session scope: tenants and permissions the user holds right now.</summary>
     /// <summary>
     /// A new session scope: the master profile by default, one of the user's own profiles, or (for an administrator) another

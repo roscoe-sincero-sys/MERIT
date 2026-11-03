@@ -14,6 +14,10 @@ public static class AuditText
         ("view", "Viewed"), ("create", "Created"), ("update", "Changed"), ("export", "Exported"), ("search", "Searched"),
         ("signIn", "Signed in"), ("signInFailed", "Sign-in failed"), ("signOut", "Signed out"),
         ("mfaEnrolled", "Set up multi-factor authentication"),
+        ("mfaEmailEnabled", "Turned on email codes"), ("mfaEmailDisabled", "Turned off email codes"),
+        ("mfaMethodChanged", "Changed preferred sign-in method"), ("mfaCodeSent", "Email code sent"),
+        ("mfaCodeNotSent", "Email code could not be sent"), ("mfaCodeRefused", "Email code refused (wait or limit)"),
+        ("mfaCodeLocked", "Email code locked after wrong entries"),
     ];
 
     /// <summary>"report" stands for every report ("report:testingCounts").</summary>

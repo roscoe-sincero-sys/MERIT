@@ -1,5 +1,93 @@
 [
  {
+  "name": "auth.uspCreateEmailChallenge",
+  "kind": "write",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": null,
+  "params": [
+   {
+    "name": "mfaEmailChallengeId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "appUserId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "purpose",
+    "type": "VARCHAR (10)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "codeVerifier",
+    "type": "VARBINARY (32)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "supportReference",
+    "type": "VARCHAR (16)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "correlationId",
+    "type": "VARCHAR (64)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "clientAddress",
+    "type": "VARCHAR (45)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "lifetimeSeconds",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "maxAttempts",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "cooldownSeconds",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "windowMinutes",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "maxPerUser",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "maxPerAddress",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
   "name": "auth.uspCreateSessionScope",
   "kind": "write",
   "grants": [
@@ -59,6 +147,42 @@
     "type": "NVARCHAR (100)",
     "hasDefault": false,
     "isOutput": false
+   }
+  ]
+ },
+ {
+  "name": "auth.uspGetEmailCodeOption",
+  "kind": "read",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": null,
+  "params": [
+   {
+    "name": "appUserId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   }
+  ]
+ },
+ {
+  "name": "auth.uspGetEmailCodePolicy",
+  "kind": "read",
+  "grants": [],
+  "permission": null,
+  "params": [
+   {
+    "name": "appUserId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "emailCodesAllowed",
+    "type": "BIT",
+    "hasDefault": false,
+    "isOutput": true
    }
   ]
  },
@@ -175,6 +299,46 @@
   "params": []
  },
  {
+  "name": "auth.uspRecordEmailChallengeDelivery",
+  "kind": "write",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": null,
+  "params": [
+   {
+    "name": "mfaEmailChallengeId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "submitted",
+    "type": "BIT",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "deliveryAttempts",
+    "type": "INT",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "failureKind",
+    "type": "VARCHAR (30)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "smtpReplyCode",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
   "name": "auth.uspRecordSignInResult",
   "kind": "write",
   "grants": [
@@ -270,6 +434,28 @@
    {
     "name": "recoveryCodeHashesJson",
     "type": "NVARCHAR (MAX)",
+    "hasDefault": false,
+    "isOutput": false
+   }
+  ]
+ },
+ {
+  "name": "auth.uspSaveMyMfaMethods",
+  "kind": "write",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": null,
+  "params": [
+   {
+    "name": "emailCodesOn",
+    "type": "BIT",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "preferredMethod",
+    "type": "VARCHAR (10)",
     "hasDefault": false,
     "isOutput": false
    }
@@ -453,6 +639,40 @@
     "name": "mfaRecoveryCodeId",
     "type": "UNIQUEIDENTIFIER",
     "hasDefault": false,
+    "isOutput": false
+   }
+  ]
+ },
+ {
+  "name": "auth.uspVerifyEmailChallenge",
+  "kind": "write",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": null,
+  "params": [
+   {
+    "name": "appUserId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "purpose",
+    "type": "VARCHAR (10)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "codeVerifier",
+    "type": "VARBINARY (32)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "clientAddress",
+    "type": "VARCHAR (45)",
+    "hasDefault": true,
     "isOutput": false
    }
   ]

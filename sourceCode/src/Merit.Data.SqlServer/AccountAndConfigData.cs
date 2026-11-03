@@ -40,6 +40,40 @@ public sealed class AccountData(Db db) : IAccountData
     public Task UseRecoveryCodeAsync(Guid mfaRecoveryCodeId, CancellationToken ct = default)
         => db.ExecuteAsync("auth.uspUseRecoveryCode", new { mfaRecoveryCodeId }, ct);
 
+    public Task<EmailCodeOptionRow?> GetEmailCodeOptionAsync(Guid appUserId, CancellationToken ct = default)
+        => db.QuerySingleAsync<EmailCodeOptionRow>("auth.uspGetEmailCodeOption", new { appUserId }, ct);
+
+    public async Task<EmailChallengeCreatedRow> CreateEmailChallengeAsync(EmailChallengeRequest request, CancellationToken ct = default)
+        => await db.QuerySingleAsync<EmailChallengeCreatedRow>("auth.uspCreateEmailChallenge", new
+        {
+            mfaEmailChallengeId = request.MfaEmailChallengeId,
+            appUserId = request.AppUserId,
+            purpose = request.Purpose,
+            codeVerifier = request.CodeVerifier,
+            supportReference = request.SupportReference,
+            correlationId = request.CorrelationId,
+            clientAddress = request.ClientAddress,
+            lifetimeSeconds = request.LifetimeSeconds,
+            maxAttempts = request.MaxAttempts,
+            cooldownSeconds = request.CooldownSeconds,
+            windowMinutes = request.WindowMinutes,
+            maxPerUser = request.MaxPerUser,
+            maxPerAddress = request.MaxPerAddress,
+        }, ct).ConfigureAwait(false) ?? new EmailChallengeCreatedRow();
+
+    public Task RecordEmailChallengeDeliveryAsync(Guid mfaEmailChallengeId, bool submitted, int deliveryAttempts, string? failureKind, int? smtpReplyCode,
+                                                  CancellationToken ct = default)
+        => db.ExecuteAsync("auth.uspRecordEmailChallengeDelivery",
+            new { mfaEmailChallengeId, submitted, deliveryAttempts, failureKind, smtpReplyCode }, ct);
+
+    public async Task<EmailChallengeVerifiedRow> VerifyEmailChallengeAsync(Guid appUserId, string purpose, byte[] codeVerifier, string? clientAddress,
+                                                                     CancellationToken ct = default)
+        => await db.QuerySingleAsync<EmailChallengeVerifiedRow>("auth.uspVerifyEmailChallenge",
+            new { appUserId, purpose, codeVerifier, clientAddress }, ct).ConfigureAwait(false) ?? new EmailChallengeVerifiedRow();
+
+    public Task SaveMyMfaMethodsAsync(bool emailCodesOn, string preferredMethod, CancellationToken ct = default)
+        => db.ExecuteAsync("auth.uspSaveMyMfaMethods", new { emailCodesOn, preferredMethod }, ct);
+
     public Task<IReadOnlyList<UserListRow>> ListUsersAsync(CancellationToken ct = default)
         => db.QueryAsync<UserListRow>("auth.uspListUsers", null, ct);
 

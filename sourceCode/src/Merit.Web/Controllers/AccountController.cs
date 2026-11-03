@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.Extensions.Options;
 
 namespace Merit.Web.Controllers;
 
@@ -17,8 +18,17 @@ namespace Merit.Web.Controllers;
 /// with no authenticator enrolls at first sign-in. Only after both factors is the session scope created.
 /// </summary>
 [Route("account")]
-public sealed class AccountController(AccountService accounts, QrCodes qr, SessionRenewal sessions, RecoveryCodesPending recoveryPending) : Controller
+public sealed class AccountController(AccountService accounts, EmailCodeService emailCodes, QrCodes qr, SessionRenewal sessions,
+                                      RecoveryCodesPending recoveryPending, StepUp stepUp, IOptions<EmailCodeOptions> codeOptions) : Controller
 {
+    /// <summary>Shown whenever a code could not be sent, with a support reference; the cause stays in the log.</summary>
+    public const string DeliveryFailedMessage = "We couldn't send your verification code. Please try again. If the problem continues, contact support.";
+
+    private const string SentKey = "emailCode.sent";
+    private const string ResendAtKey = "emailCode.resendAt";
+    private const string NoticeKey = "emailCode.notice";
+    private const string FailedKey = "emailCode.reference";
+
     [HttpGet("signin")]
     [AllowAnonymous]
     public IActionResult SignIn(string? returnUrl) => View(new SignInModel { ReturnUrl = returnUrl });
@@ -109,7 +119,13 @@ public sealed class AccountController(AccountService accounts, QrCodes qr, Sessi
 
     [HttpGet("mfa")]
     [Authorize(AuthenticationSchemes = AuthSchemes.PendingMfa)]
-    public IActionResult Mfa(bool useRecoveryCode = false) => View(new MfaModel { UseRecoveryCode = useRecoveryCode });
+    public async Task<IActionResult> Mfa(bool useRecoveryCode = false, CancellationToken ct = default)
+        => View(new MfaModel
+        {
+            UseRecoveryCode = useRecoveryCode,
+            Email = await PendingEmailOptionAsync(ct),
+            Notice = TempData[NoticeKey] as string,
+        });
 
     [HttpPost("mfa")]
     [Authorize(AuthenticationSchemes = AuthSchemes.PendingMfa)]
@@ -118,6 +134,7 @@ public sealed class AccountController(AccountService accounts, QrCodes qr, Sessi
     {
         if (!ModelState.IsValid)
         {
+            model.Email = await PendingEmailOptionAsync(ct);
             return View(model);
         }
 
@@ -125,6 +142,7 @@ public sealed class AccountController(AccountService accounts, QrCodes qr, Sessi
         var userId = Guid.Parse(User.FindFirstValue(MeritClaims.UserId)!, CultureInfo.InvariantCulture);
         if (!await accounts.VerifyMfaAsync(userName, model.Code!, ClientAddress(), ct))
         {
+            model.Email = await PendingEmailOptionAsync(ct);
             model.Message = model.UseRecoveryCode
                 ? "That recovery code did not work. Try an unused recovery code, or ask your MERIT administrator for an MFA reset after verifying your identity."
                 : "That code did not work. Enter the current code from your authenticator app, or choose Can't access your authenticator? for help.";
@@ -136,6 +154,64 @@ public sealed class AccountController(AccountService accounts, QrCodes qr, Sessi
         var destination = await PendingReturnAsync();
         await CompleteSignInAsync(userId, ct);
         return LocalRedirect(destination);
+    }
+
+    /// <summary>Emails a sign-in code. Every outcome lands on the code page, or back on the MFA page when email codes are not available.</summary>
+    [HttpPost("mfa/email/send")]
+    [Authorize(AuthenticationSchemes = AuthSchemes.PendingMfa)]
+    [EnableRateLimiting(SignInRateLimits.EmailCode)]
+    public async Task<IActionResult> SendEmailCode(CancellationToken ct)
+    {
+        var result = await emailCodes.SendAsync(PendingUserId(), EmailCodePurpose.SignIn, ClientAddress(), null, ct);
+        if (result.Status == EmailCodeSendStatus.NotAvailable)
+        {
+            TempData[NoticeKey] = NotAvailableNotice;
+            return RedirectToAction(nameof(Mfa));
+        }
+
+        Remember(result);
+        return RedirectToAction(nameof(EmailCode));
+    }
+
+    [HttpGet("mfa/email")]
+    [Authorize(AuthenticationSchemes = AuthSchemes.PendingMfa)]
+    public async Task<IActionResult> EmailCode(CancellationToken ct)
+    {
+        var option = await PendingEmailOptionAsync(ct);
+        if (option is not { Available: true })
+        {
+            TempData[NoticeKey] = NotAvailableNotice;
+            return RedirectToAction(nameof(Mfa));
+        }
+
+        Response.Headers.CacheControl = "no-store";
+        return View(Recall(new EmailCodeModel { MaskedEmail = option.MaskedEmail }));
+    }
+
+    [HttpPost("mfa/email")]
+    [Authorize(AuthenticationSchemes = AuthSchemes.PendingMfa)]
+    [EnableRateLimiting(SignInRateLimits.Code)]
+    public async Task<IActionResult> EmailCode(EmailCodeModel model, CancellationToken ct)
+    {
+        var userId = PendingUserId();
+        var option = await PendingEmailOptionAsync(ct);
+        var page = Recall(new EmailCodeModel { MaskedEmail = option?.MaskedEmail }, afterCheck: true);
+        if (!ModelState.IsValid)
+        {
+            Response.Headers.CacheControl = "no-store";
+            return View(page);
+        }
+
+        var result = await emailCodes.VerifySignInAsync(userId, User.FindFirstValue(MeritClaims.UserName)!, model.Code, ClientAddress(), ct);
+        if (result.Outcome == EmailCodeCheck.Verified)
+        {
+            ForgetSend();
+            var destination = await PendingReturnAsync();
+            await CompleteSignInAsync(userId, ct);
+            return LocalRedirect(destination);
+        }
+
+        return CodeRejected(page, result);
     }
 
     [HttpPost("restart-signin")]
@@ -172,6 +248,251 @@ public sealed class AccountController(AccountService accounts, QrCodes qr, Sessi
 
         RecoveryCodesPending.Release(Response);
         return LocalRedirect(SafeReturn(returnUrl));
+    }
+
+    // ------------------------------------------------------------------------------------------ sign-in methods
+
+    /// <summary>The person's sign-in methods: the authenticator app, always on, and email codes where the jurisdiction allows them.</summary>
+    [HttpGet("security")]
+    [Authorize(Policy = Permissions.SignedIn)]
+    public async Task<IActionResult> SignInMethods(CancellationToken ct)
+    {
+        Response.Headers.CacheControl = "no-store";
+        string? reference = TempData[FailedKey] as string;
+        return View(new SignInMethodsModel
+        {
+            Email = await emailCodes.GetOptionAsync(SignedInUserId(), ct),
+            Notice = TempData[NoticeKey] as string,
+            SupportReference = reference,
+            Message = reference is null ? null : DeliveryFailedMessage,
+        });
+    }
+
+    /// <summary>Turning email codes on starts with a current authenticator code, then a code sent to the address.</summary>
+    [HttpPost("security/email/start")]
+    [Authorize(Policy = Permissions.SignedIn)]
+    [EnableRateLimiting(SignInRateLimits.EmailCode)]
+    public async Task<IActionResult> StartEmailCodes(SignInMethodsModel model, CancellationToken ct)
+    {
+        var userId = SignedInUserId();
+        var option = await emailCodes.GetOptionAsync(userId, ct);
+        if (!option.Allowed || option.TurnedOn)
+        {
+            return RedirectToAction(nameof(SignInMethods));
+        }
+
+        if (!await accounts.CheckAuthenticatorCodeAsync(User.FindFirstValue(MeritClaims.UserName)!, model.AuthenticatorCode, ClientAddress(), ct))
+        {
+            ModelState.AddModelError(nameof(SignInMethodsModel.AuthenticatorCode),
+                "That code did not match. Enter the current six-digit code from your authenticator app.");
+            Response.Headers.CacheControl = "no-store";
+            return View(nameof(SignInMethods), new SignInMethodsModel { Email = option });
+        }
+
+        stepUp.Grant(Response, userId);
+        return await SendEnrollmentCodeAsync(userId, ct);
+    }
+
+    [HttpPost("security/email/resend")]
+    [Authorize(Policy = Permissions.SignedIn)]
+    [EnableRateLimiting(SignInRateLimits.EmailCode)]
+    public async Task<IActionResult> ResendEnrollmentCode(CancellationToken ct)
+        => stepUp.Holds(HttpContext) ? await SendEnrollmentCodeAsync(SignedInUserId(), ct) : StartAgain();
+
+    [HttpGet("security/email")]
+    [Authorize(Policy = Permissions.SignedIn)]
+    public async Task<IActionResult> ConfirmEmailCodes(CancellationToken ct)
+    {
+        if (!stepUp.Holds(HttpContext))
+        {
+            return StartAgain();
+        }
+
+        var option = await emailCodes.GetOptionAsync(SignedInUserId(), ct);
+        if (!option.Allowed || option.TurnedOn)
+        {
+            return RedirectToAction(nameof(SignInMethods));
+        }
+
+        Response.Headers.CacheControl = "no-store";
+        return View(nameof(EmailCode), Recall(new EmailCodeModel { MaskedEmail = option.MaskedEmail, ForEnrollment = true }));
+    }
+
+    [HttpPost("security/email/confirm")]
+    [Authorize(Policy = Permissions.SignedIn)]
+    [EnableRateLimiting(SignInRateLimits.Code)]
+    public async Task<IActionResult> ConfirmEmailCodes(EmailCodeModel model, CancellationToken ct)
+    {
+        if (!stepUp.Holds(HttpContext))
+        {
+            return StartAgain();
+        }
+
+        var userId = SignedInUserId();
+        var option = await emailCodes.GetOptionAsync(userId, ct);
+        var page = Recall(new EmailCodeModel { MaskedEmail = option.MaskedEmail, ForEnrollment = true }, afterCheck: true);
+        if (!ModelState.IsValid)
+        {
+            Response.Headers.CacheControl = "no-store";
+            return View(nameof(EmailCode), page);
+        }
+
+        var result = await emailCodes.VerifyEnrollmentAsync(userId, model.Code, ClientAddress(), ct);
+        if (result.Outcome == EmailCodeCheck.Verified)
+        {
+            ForgetSend();
+            StepUp.Release(Response);
+            TempData[NoticeKey] = $"Email codes are on. At sign-in you can choose to get a code at {option.MaskedEmail}. Your authenticator app still works.";
+            return RedirectToAction(nameof(SignInMethods));
+        }
+
+        return CodeRejected(page, result);
+    }
+
+    [HttpPost("security/email/off")]
+    [Authorize(Policy = Permissions.SignedIn)]
+    public async Task<IActionResult> TurnOffEmailCodes(CancellationToken ct)
+    {
+        await emailCodes.SaveMyMethodsAsync(false, false, ct);
+        TempData[NoticeKey] = "Email codes are off. Sign in with your authenticator app.";
+        return RedirectToAction(nameof(SignInMethods));
+    }
+
+    [HttpPost("security/preference")]
+    [Authorize(Policy = Permissions.SignedIn)]
+    public async Task<IActionResult> SavePreferredMethod(string? preferredMethod, CancellationToken ct)
+    {
+        var option = await emailCodes.GetOptionAsync(SignedInUserId(), ct);
+        if (option.TurnedOn)
+        {
+            bool preferEmail = preferredMethod == "email";
+            await emailCodes.SaveMyMethodsAsync(true, preferEmail, ct);
+            TempData[NoticeKey] = preferEmail
+                ? "Sign-in will offer an email code first. You can still use your authenticator app."
+                : "Sign-in will ask for your authenticator app first.";
+        }
+
+        return RedirectToAction(nameof(SignInMethods));
+    }
+
+    private const string NotAvailableNotice = "Email codes are not available for this account right now. Enter a code from your authenticator app.";
+
+    private async Task<IActionResult> SendEnrollmentCodeAsync(Guid userId, CancellationToken ct)
+    {
+        var result = await emailCodes.SendAsync(userId, EmailCodePurpose.Enroll, ClientAddress(), null, ct);
+        if (result.Status == EmailCodeSendStatus.NotAvailable)
+        {
+            StepUp.Release(Response);
+            TempData[NoticeKey] = "Email codes are not available for your account right now.";
+            return RedirectToAction(nameof(SignInMethods));
+        }
+
+        Remember(result);
+        return LocalRedirect("/account/security/email");
+    }
+
+    private RedirectToActionResult StartAgain()
+    {
+        TempData[NoticeKey] = "To turn on email codes, start again with a current code from your authenticator app.";
+        return RedirectToAction(nameof(SignInMethods));
+    }
+
+    /// <summary>Carries a send's outcome across the redirect to the code page (post, redirect, get).</summary>
+    private void Remember(EmailCodeSendResult result)
+    {
+        // Unix seconds as text: TempData would turn a date-shaped string back into a DateTime.
+        string resendAt = DateTimeOffset.UtcNow.AddSeconds(result.RetryAfterSeconds).ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture);
+        switch (result.Status)
+        {
+            case EmailCodeSendStatus.Sent:
+                TempData[SentKey] = true;
+                TempData[ResendAtKey] = resendAt;
+                break;
+            case EmailCodeSendStatus.Cooldown:
+                TempData[NoticeKey] = $"A code was sent a moment ago. Check your email, including junk or spam folders. You can ask for another code in {Seconds(result.RetryAfterSeconds)}.";
+                TempData[ResendAtKey] = resendAt;
+                break;
+            case EmailCodeSendStatus.Limited:
+                TempData[NoticeKey] = $"Too many codes have been sent. You can ask for another in {Minutes(result.RetryAfterSeconds)}, or use your authenticator app.";
+                TempData[ResendAtKey] = resendAt;
+                break;
+            case EmailCodeSendStatus.DeliveryFailed:
+                TempData[FailedKey] = result.SupportReference;
+                TempData.Remove(ResendAtKey);
+                break;
+        }
+    }
+
+    /// <summary>
+    /// The code page's state from the last send. After a wrong code (<paramref name="afterCheck"/>) the "we sent a code"
+    /// banner and old notices do not come back; only the resend wait carries on.
+    /// </summary>
+    private EmailCodeModel Recall(EmailCodeModel model, bool afterCheck = false)
+    {
+        if (afterCheck)
+        {
+            TempData.Remove(SentKey);
+            TempData.Remove(NoticeKey);
+            TempData.Remove(FailedKey);
+        }
+        else
+        {
+            model.JustSent = TempData[SentKey] is true;
+            model.Notice = TempData[NoticeKey] as string;
+            model.SupportReference = TempData[FailedKey] as string;
+            model.Message = model.DeliveryFailed ? DeliveryFailedMessage : null;
+        }
+
+        if (TempData.Peek(ResendAtKey) is string at && long.TryParse(at, NumberStyles.None, CultureInfo.InvariantCulture, out long resendAt))
+        {
+            model.ResendInSeconds = (int)Math.Clamp(resendAt - DateTimeOffset.UtcNow.ToUnixTimeSeconds(), 0, 86_400);
+        }
+
+        model.LifetimeMinutes = Math.Max(1, codeOptions.Value.LifetimeSeconds / 60);
+        return model;
+    }
+
+    private void ForgetSend()
+    {
+        TempData.Remove(SentKey);
+        TempData.Remove(ResendAtKey);
+        TempData.Remove(NoticeKey);
+        TempData.Remove(FailedKey);
+    }
+
+    private ViewResult CodeRejected(EmailCodeModel page, EmailCodeVerifyResult result)
+    {
+        string message = result.Outcome switch
+        {
+            EmailCodeCheck.Malformed => "Enter the six-digit code from the email.",
+            EmailCodeCheck.Wrong => $"That code did not match. You can try {result.RemainingAttempts} more time{(result.RemainingAttempts == 1 ? "" : "s")} before you need a new code.",
+            EmailCodeCheck.Locked => "That code was entered wrong too many times and no longer works. Send a new code, or use your authenticator app.",
+            EmailCodeCheck.Expired => "That code has expired. Send a new code.",
+            EmailCodeCheck.AccountLocked => "Too many failed attempts. The account is locked for 15 minutes; an administrator can unlock it.",
+            EmailCodeCheck.Superseded => "That code was replaced by a newer one. Enter the code from the newest email, or send a new code.",
+            _ => "That code can no longer be used. Enter the code from the newest email, or send a new code.",
+        };
+        ModelState.Remove(nameof(EmailCodeModel.Code));
+        ModelState.AddModelError(nameof(EmailCodeModel.Code), message);
+        Response.Headers.CacheControl = "no-store";
+        return View(nameof(EmailCode), page);
+    }
+
+    private async Task<EmailCodeOption?> PendingEmailOptionAsync(CancellationToken ct)
+        => User.FindFirstValue(MeritClaims.MfaStep) == "verify" && Guid.TryParse(User.FindFirstValue(MeritClaims.UserId), CultureInfo.InvariantCulture, out var id)
+            ? await emailCodes.GetOptionAsync(id, ct)
+            : null;
+
+    private Guid PendingUserId() => Guid.Parse(User.FindFirstValue(MeritClaims.UserId)!, CultureInfo.InvariantCulture);
+
+    private Guid SignedInUserId() => Guid.Parse(User.FindFirstValue(MeritClaims.UserId)!, CultureInfo.InvariantCulture);
+
+    private static string Seconds(int seconds) => seconds == 1 ? "1 second" : $"{seconds} seconds";
+
+    private static string Minutes(int seconds)
+    {
+        int minutes = Math.Max(1, (int)Math.Ceiling(seconds / 60.0));
+        return minutes == 1 ? "1 minute" : $"{minutes} minutes";
     }
 
     private async Task<string> PendingReturnAsync()

@@ -21,30 +21,38 @@ public static class SignInRateLimits
     /// <summary>The password step (POST /account/signin).</summary>
     public const string Password = "signin";
 
-    /// <summary>The authenticator-code steps (POST /account/mfa and /account/enroll).</summary>
+    /// <summary>The code steps (POST /account/mfa, /account/mfa/email and /account/enroll).</summary>
     public const string Code = "signin-code";
+
+    /// <summary>Requests to email a one-time code (sign-in and turning email codes on). Each sends a message, so it is counted on its own.</summary>
+    public const string EmailCode = "signin-email";
 
     public const string PasswordSetting = "Merit:SignInAttemptsPerMinute";
     public const string CodeSetting = "Merit:MfaAttemptsPerMinute";
+    public const string EmailCodeSetting = "Merit:EmailCodeSendsPerMinute";
 
     /// <summary>Defaults sized for an office behind one address: about 30 people signing in within a minute.</summary>
     public const int DefaultPerMinute = 30;
 
+    /// <summary>Per address; each account is also limited in the database (EmailCodes:MaxCodesPerAccount).</summary>
+    public const int DefaultEmailCodesPerMinute = 10;
+
     public static void Configure(RateLimiterOptions o)
     {
         o.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-        o.AddPolicy(Password, http => Partition(http, PasswordSetting));
-        o.AddPolicy(Code, http => Partition(http, CodeSetting));
+        o.AddPolicy(Password, http => Partition(http, PasswordSetting, DefaultPerMinute));
+        o.AddPolicy(Code, http => Partition(http, CodeSetting, DefaultPerMinute));
+        o.AddPolicy(EmailCode, http => Partition(http, EmailCodeSetting, DefaultEmailCodesPerMinute));
         o.OnRejected = RejectAsync;
     }
 
     /// <summary>The partition key: the client address (after forwarded headers, when a proxy is configured).</summary>
     public static string ClientKey(HttpContext http) => http.Connection.RemoteIpAddress?.ToString() ?? "unknown";
 
-    private static RateLimitPartition<string> Partition(HttpContext http, string setting)
+    private static RateLimitPartition<string> Partition(HttpContext http, string setting, int defaultPerMinute)
     {
         // Read at request time, so a deployment (or a test) can set the limit in configuration.
-        int perMinute = Math.Max(1, http.RequestServices.GetRequiredService<IConfiguration>().GetValue(setting, DefaultPerMinute));
+        int perMinute = Math.Max(1, http.RequestServices.GetRequiredService<IConfiguration>().GetValue(setting, defaultPerMinute));
         return RateLimitPartition.GetSlidingWindowLimiter(ClientKey(http), _ => new SlidingWindowRateLimiterOptions
         {
             PermitLimit = perMinute,

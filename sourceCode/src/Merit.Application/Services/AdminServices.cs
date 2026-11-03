@@ -81,10 +81,25 @@ public sealed class ConfigService(IConfigData config, IReferenceDataProvider ref
         return await config.GetSettingsAsync(null, includeHistory, ct).ConfigureAwait(false);
     }
 
-    public async Task SaveSettingAsync(string key, string? value, DateOnly effectiveFrom, CancellationToken ct = default)
+    /// <summary>The jurisdiction setting that allows email one-time codes as an additional second factor.</summary>
+    public const string EmailCodesSetting = "emailCodesEnabled";
+
+    public async Task SaveSettingAsync(string key, string? value, DateOnly effectiveFrom, bool acknowledgedEmailCodeRisk = false, CancellationToken ct = default)
     {
         session.Require(Permissions.ConfigEdit);
-        new Validator().Required("SettingValue", value, "Value").MaxLength("SettingValue", value, 2000, "Value").ThrowIfInvalid();
+        var v = new Validator();
+        v.Required("SettingValue", value, "Value").MaxLength("SettingValue", value, 2000, "Value");
+        if (key == EmailCodesSetting && value is not null)
+        {
+            // The specification: the settings screen states NIST's position before email codes can be turned on.
+            string normalized = value.Trim().ToLowerInvariant();
+            v.When(normalized is not ("true" or "false"), "SettingValue", "Enter true or false.");
+            v.When(normalized == "true" && !acknowledgedEmailCodeRisk, "SettingValue",
+                "Email codes are not accepted by NIST SP 800-63B-4 for out-of-band authentication. Tick the confirmation to turn them on.");
+            value = normalized;
+        }
+
+        v.ThrowIfInvalid();
         await config.SaveSettingAsync(key, value!.Trim(), effectiveFrom, ct).ConfigureAwait(false);
         settings.Invalidate();
     }

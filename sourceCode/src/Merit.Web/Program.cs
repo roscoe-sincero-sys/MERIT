@@ -4,6 +4,7 @@ using Merit.Application.Security;
 using Merit.Application.Services;
 using Merit.Data.SqlServer;
 using Merit.Web.Infrastructure;
+using Merit.Web.Infrastructure.Email;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
@@ -32,6 +33,9 @@ services.AddSingleton<IBreachedPasswordList, CommonBreachedPasswordList>();
 services.AddSingleton<AngularAssets>();
 services.AddSingleton<RecoveryCodesPending>();
 services.AddSingleton<QrCodes>();
+services.AddSingleton<StepUp>();
+// Outgoing mail for email one-time codes: Disabled unless Email:Provider is Smtp (docs/email-codes.md).
+services.AddMeritEmail(builder.Configuration, builder.Environment);
 services.AddScoped<Merit.Web.Mapping.PersonPageBuilder>();
 
 // Data protection keys live where every web copy can read them, so any copy accepts any session cookie.

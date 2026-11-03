@@ -372,6 +372,14 @@
     <li><b>Locked after too many wrong passwords:</b> on the person's page select <b>Unlock account</b>. Their password and authenticator stay as they were.</li>
     <li><b>Lost or replaced phone:</b> the person first tries <b>Can't access your authenticator?</b> with a recovery code. If they have none, verify who they are, then select <b>Reset MFA after verifying the person</b>. Their old authenticator and recovery codes stop working and their sessions end; they set up a new authenticator at their next sign-in and save new recovery codes.</li>
     <li>Nobody resets their own second factor: ask another administrator.</li>
+    <li>An MFA reset, or a change to the person's email address, also turns off email codes.</li>
+  </ul>
+  <h3>Email codes (optional)</h3>
+  <p>Every account signs in with an authenticator app. Where your jurisdiction allows it, a person who is not an administrator can also get a one-time code by email at sign-in. NIST SP 800-63B-4 does not accept email for out-of-band authentication, so email codes are off unless an administrator with configuration rights turns on <b>Email codes enabled</b> under <b>Settings</b> and ticks the confirmation.</p>
+  <ul>
+    <li><b>Turn them on:</b> select <b>Sign-in methods</b> in the header, enter a current authenticator code, then type the code sent to your email address.</li>
+    <li><b>At sign-in:</b> after your password, choose <b>Email me a code</b>. The code works once, for 5 minutes. You can ask for a new one after 30 seconds. The authenticator app and recovery codes always still work.</li>
+    <li><b>If a code can't be sent:</b> the page says <i>We couldn't send your verification code</i> and gives a support reference such as <code>EM-7KQ2M9XA</code>. Try again, or use your authenticator app. Give the reference to support if the problem continues.</li>
   </ul>
   <h3>Check what someone sees: View as</h3>
   <ol>

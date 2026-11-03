@@ -133,6 +133,13 @@ TABLES = [
             c("lockoutEndUtc", "DATETIME2 (3)", "Account is locked until this UTC time after repeated failures."),
             c("lastSignInUtc", "DATETIME2 (3)", "UTC time of the last successful sign-in."),
             c("isActive", "BIT", "0 disables sign-in without removing history.", null=False, default="1"),
+            c("mfaEmailVerifiedUtc", "DATETIME2 (3)", "UTC time the user confirmed a code sent to their email and turned on "
+              "email codes as an additional way to sign in. NULL = off. Cleared when the email address changes or MFA is "
+              "reset. Honored only while the jurisdiction allows email codes and the user holds no administrator role; "
+              "the authenticator app always remains."),
+            c("mfaPreferredMethod", "VARCHAR (10)", "Second factor the sign-in page offers first: totp (authenticator app) or "
+              "email. Falls back to totp whenever email codes are not available.", null=False, default="'totp'",
+              check="mfaPreferredMethod IN ('totp', 'email')"),
         ],
         "fks": [("rootTenantId", "auth.tenant", "tenantId"), ("homeTenantId", "auth.tenant", "tenantId")],
         "indexes": [{"name": "UX_auth_appUser_userName", "cols": "userName", "unique": True},
@@ -1461,5 +1468,47 @@ TABLES = [
         "fks": [("sessionScopeId", "auth.sessionScope", "sessionScopeId"), ("tenantId", "auth.tenant", "tenantId")],
         "indexes": [{"name": "UX_auth_sessionScopeAdminTenant_sessionScopeId_tenantId", "cols": "sessionScopeId, tenantId",
                      "unique": True}],
+    },
+    {
+        "schema": "auth", "name": "mfaEmailChallenge", "rls": None, "tenantKey": False,
+        "desc": "One emailed one-time code: who it is for, why (sign-in or turning on email codes), a keyed verifier of "
+                "the code, its expiry and attempt count, and what the mail server said. The code itself is never stored. "
+                "A new code supersedes the user's open one, so at most one code per user can be used at a time.",
+        "cols": [
+            c("mfaEmailChallengeId", UUID, "Surrogate key.", null=False),
+            c("appUserId", UUID, "User the code was sent to.", null=False),
+            c("purpose", "VARCHAR (10)", "signIn (a second factor at sign-in) or enroll (proving the address before email "
+              "codes are turned on).", null=False, check="purpose IN ('signIn', 'enroll')"),
+            c("codeVerifier", "VARBINARY (32)", "HMAC-SHA256 of the user, purpose and code under a key held by the web "
+              "application (EmailCodes:VerifierKey). Without the key the six digits cannot be recovered from it.",
+              null=False),
+            c("expiresUtc", "DATETIME2 (3)", "The code does not work after this UTC time.", null=False),
+            c("failedAttempts", "INT", "Wrong codes entered against this challenge.", null=False, default="0"),
+            c("maxAttempts", "INT", "Wrong codes allowed before the challenge stops accepting any code.", null=False,
+              check="maxAttempts BETWEEN 1 AND 10"),
+            c("consumedUtc", "DATETIME2 (3)", "UTC time the code was accepted. A consumed code never works again."),
+            c("supersededUtc", "DATETIME2 (3)", "UTC time the challenge was replaced by a newer code, closed because its "
+              "email could not be sent, or cancelled by an email change or MFA reset."),
+            c("deliveryStatus", "VARCHAR (10)", "pending (being sent), submitted (the mail server accepted it; delivery to "
+              "the mailbox is not confirmed) or failed.", null=False, default="'pending'",
+              check="deliveryStatus IN ('pending', 'submitted', 'failed')"),
+            c("deliveryUpdatedUtc", "DATETIME2 (3)", "UTC time the send finished."),
+            c("deliveryAttempts", "INT", "Connections made to the mail server for this code, retries included.",
+              null=False, default="0"),
+            c("failureKind", "VARCHAR (30)", "Category of a failed send, e.g. timeout, certificate, recipientRejected. "
+              "Never the server's own text."),
+            c("smtpReplyCode", "INT", "Numeric SMTP reply of a failed send (e.g. 451, 550), when the server gave one."),
+            c("supportReference", "VARCHAR (16)", "Reference shown to the user when a code cannot be sent, so support can "
+              "find the log entries.", null=False),
+            c("correlationId", "VARCHAR (64)", "Trace id of the request that asked for the code; joins this row to the "
+              "application log."),
+            c("clientAddress", "VARCHAR (45)", "IP address the request came from, for per-address limits."),
+        ],
+        "fks": [("appUserId", "auth.appUser", "appUserId")],
+        "indexes": [{"name": "IX_auth_mfaEmailChallenge_appUserId_createdDateUtc", "cols": "appUserId, createdDateUtc"},
+                    {"name": "IX_auth_mfaEmailChallenge_clientAddress_createdDateUtc", "cols": "clientAddress, createdDateUtc"},
+                    {"name": "IX_auth_mfaEmailChallenge_supportReference", "cols": "supportReference"},
+                    {"name": "UX_auth_mfaEmailChallenge_appUserId_open", "cols": "appUserId", "unique": True,
+                     "filter": "consumedUtc IS NULL AND supersededUtc IS NULL"}],
     },
 ]
