@@ -159,7 +159,7 @@ public sealed class Hl7IntakeTests(MeritFixture fixture)
             var accounts = Web.GetRequiredService<IAccountData>();
             webSession.Current = null;
             var person = await accounts.GetUserForSignInAsync(user);
-            webSession.Current = await accounts.CreateSessionScopeAsync(Guid.NewGuid(), person!.AppUserId, DateTime.UtcNow.AddHours(1));
+            webSession.Current = await accounts.CreateSessionScopeAsync(TestSessionScopes.Track(Guid.NewGuid()), person!.AppUserId, DateTime.UtcNow.AddHours(1));
         }
 
         public async Task<Guid> ProfileAsync(string type, bool secondSender = false)
@@ -190,6 +190,7 @@ public sealed class Hl7IntakeTests(MeritFixture fixture)
             workerSession.Current = null;
             var accounts = Worker.GetRequiredService<IAccountData>();
             workerSession.Current = await JobSessions.OpenAsync(accounts, job, DateTime.UtcNow.AddHours(1));
+            TestSessionScopes.Track(workerSession.Current.Summary.SessionScopeId);
             var result = await Worker.GetRequiredService<JobDispatcher>().RunAsync(job, CancellationToken.None);
             await Worker.GetRequiredService<IWorkData>().CompleteJobAsync(job.JobId, result);
             return (await Worker.GetRequiredService<IIntakeData>().GetBatchAsync(batch, true))!;
@@ -197,6 +198,8 @@ public sealed class Hl7IntakeTests(MeritFixture fixture)
 
         public async ValueTask DisposeAsync()
         {
+            // Issue #187: the web and worker sessions this harness opened end with it.
+            await TestSessionScopes.RevokeAllAsync();
             await Web.DisposeAsync();
             await Worker.DisposeAsync();
         }
