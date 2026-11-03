@@ -8,6 +8,7 @@
       MERIT_IT_SERVER        SQL Server instance (default localhost\PORTAL); a SQL Server container works the same way
       MERIT_IT_DATABASE      database name (default MERIT_IT)
       MERIT_IT_WEB_PASSWORD  meritWeb login password (default: read from src/Merit.Web/appsettings.Development.json)
+      MERIT_IT_WORKER_PASSWORD  meritWorker login password (default: read from src/Merit.Worker/appsettings.Development.json)
       MERIT_IT_SKIP_DEPLOY   1 to reuse an already deployed database
     When the server cannot be reached, every test is reported as skipped rather than failed.
   -->

@@ -398,7 +398,7 @@ SELECT j.rootTenantId, t.tenantName, j.jobType,
         "permission": "case.open",
         "desc": "Cluster detection for the caller's root tenant: two or more cases at one primary residence location or "
                 "building, or at one employer worksite, opened within the window. Each new group becomes a cluster "
-                "record and an alert task; nothing is merged and no case changes.",
+                "record and an alert task; nothing is merged and no case changes. Returns how many clusters it created.",
         "params": """@windowDays INT = 365
 , @minCount   INT = 2""",
         "key": "CONCAT (N'windowDays=', @windowDays, N', minCount=', @minCount)",
@@ -472,6 +472,9 @@ SELECT {NEWID}, @root, n.owner, 'cluster', n.title,
        CONCAT (N'Cluster alert for the ', CASE n.clusterType WHEN 'building' THEN N'residential' ELSE N'occupational' END,
                N' team: review the linked cases.'), n.clusterId, 0
   FROM @new AS n;
+
+-- The caller reports how many clusters this run created (issue #181).
+SELECT COUNT (*) AS createdCount FROM @new;
 
 SET @Comments = CONCAT ((SELECT COUNT (*) FROM @new), N' new cluster(s).');
 """,

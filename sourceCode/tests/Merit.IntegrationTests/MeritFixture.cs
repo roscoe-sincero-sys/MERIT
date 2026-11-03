@@ -154,13 +154,23 @@ public sealed partial class MeritFixture : IDisposable
 public sealed partial class MeritClient : IDisposable
 {
     private static readonly Uri BaseAddress = new("https://localhost");
-    private readonly CookieContainer cookies = new();
+    private readonly CookieContainer cookies;
 
     public MeritClient(WebApplicationFactory<Program> factory)
+        : this(factory, new CookieContainer())
     {
+    }
+
+    private MeritClient(WebApplicationFactory<Program> factory, CookieContainer cookies)
+    {
+        this.cookies = cookies;
         Http = factory.CreateDefaultClient(BaseAddress, new RedirectHandler(), new XsrfHandler(cookies), new CookieContainerHandler(cookies));
         NoRedirect = factory.CreateDefaultClient(BaseAddress, new XsrfHandler(cookies), new CookieContainerHandler(cookies));
     }
+
+    /// <summary>The same session on another host of the app, such as one with a different setting: the hosts share the
+    /// database and data-protection keys, so the session cookie is good on both.</summary>
+    public MeritClient On(WebApplicationFactory<Program> factory) => new(factory, cookies) { UserName = UserName };
 
     public HttpClient Http { get; }
 

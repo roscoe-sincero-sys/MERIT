@@ -25,8 +25,16 @@ public static partial class TestEnvironment
     /// <summary>The web application's login: EXECUTE on procedures only, filtered by row-level security.</summary>
     public static string WebConnectionString { get; } = new SqlConnectionStringBuilder
     {
-        DataSource = Server, InitialCatalog = Database, UserID = "meritWeb", Password = WebPassword(), TrustServerCertificate = true,
-        Encrypt = true, ApplicationName = "Merit.IntegrationTests (web)",
+        DataSource = Server, InitialCatalog = Database, UserID = "meritWeb", Password = LoginPassword("Merit.Web", "MERIT_IT_WEB_PASSWORD"),
+        TrustServerCertificate = true, Encrypt = true, ApplicationName = "Merit.IntegrationTests (web)",
+    }.ConnectionString;
+
+    /// <summary>The worker's login, for the procedures only background jobs may run (cluster detection, for example).</summary>
+    public static string WorkerConnectionString { get; } = new SqlConnectionStringBuilder
+    {
+        DataSource = Server, InitialCatalog = Database, UserID = "meritWorker",
+        Password = LoginPassword("Merit.Worker", "MERIT_IT_WORKER_PASSWORD"), TrustServerCertificate = true, Encrypt = true,
+        ApplicationName = "Merit.IntegrationTests (worker)",
     }.ConnectionString;
 
     private static readonly Lazy<string?> Unavailable = new(Probe);
@@ -48,14 +56,15 @@ public static partial class TestEnvironment
         }
     }
 
-    private static string WebPassword()
+    /// <summary>A login's password: from the environment variable, else from that project's appsettings.Development.json.</summary>
+    private static string LoginPassword(string project, string variable)
     {
-        if (Environment.GetEnvironmentVariable("MERIT_IT_WEB_PASSWORD") is { Length: > 0 } fromEnv)
+        if (Environment.GetEnvironmentVariable(variable) is { Length: > 0 } fromEnv)
         {
             return fromEnv;
         }
 
-        var settings = Path.Combine(SourceRoot, "src", "Merit.Web", "appsettings.Development.json");
+        var settings = Path.Combine(SourceRoot, "src", project, "appsettings.Development.json");
         if (File.Exists(settings))
         {
             using var doc = JsonDocument.Parse(File.ReadAllText(settings));
