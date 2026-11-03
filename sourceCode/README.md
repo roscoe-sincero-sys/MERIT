@@ -146,6 +146,22 @@ and a ready run can be marked submitted (`extract.submit`, `dbo.uspMarkExtractSu
 The user guides are in the app too: **User guide** in the header opens `/help` (signed-in users), which serves the
 HTML guides from `docs/guides`. The build copies them and their images into `Help/` beside the web app.
 
+### Email one-time codes (optional)
+
+The authenticator app is always required. Where a jurisdiction allows it, a person can also turn on email codes. Mail
+is off unless configured. For local work, capture mail with Mailpit or smtp4dev. Both listen on 127.0.0.1 only and
+relay nothing:
+
+```powershell
+.\tools\mail\Start-MailTool.ps1 -Tool Mailpit -Chaos     # SMTP 1025, UI http://127.0.0.1:8025
+dotnet run --project src/Merit.Web --launch-profile "Merit.Web (Mailpit)"
+.\tools\mail\Stop-MailTool.ps1
+```
+
+`-Tool Smtp4dev` uses SMTP 2525 and http://127.0.0.1:8080, with the `Merit.Web (smtp4dev)` profile. See
+[../docs/email-codes.md](../docs/email-codes.md) for configuration, the failure matrix, troubleshooting and production
+relay guidance.
+
 ## 5. Tests
 
 | Layer | Command | Needs |

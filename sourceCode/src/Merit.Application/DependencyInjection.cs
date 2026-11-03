@@ -1,3 +1,4 @@
+using Merit.Application.Email;
 using Merit.Application.Extracts;
 using Merit.Application.Intake;
 using Merit.Application.Jobs;
@@ -22,6 +23,13 @@ public static class DependencyInjection
         services.AddScoped<IClock, JurisdictionClock>();
 
         services.AddScoped<AccountService>();
+        // Email one-time codes need a mail server and the verifier key, which only the web application configures; without
+        // a mail server the disabled sender keeps the feature hidden. The worker never issues codes; the throwaway key
+        // only lets its container validate (the web application registers the configured key over it).
+        services.AddOptions<EmailCodeOptions>();
+        services.TryAddSingleton<IEmailSender, DisabledEmailSender>();
+        services.TryAddSingleton<IOneTimeCodeHasher>(_ => new HmacOneTimeCodeHasher(System.Security.Cryptography.RandomNumberGenerator.GetBytes(HmacOneTimeCodeHasher.MinimumKeyBytes)));
+        services.AddScoped<EmailCodeService>();
         services.AddScoped<AuditService>();
         services.AddScoped<SearchService>();
         services.AddScoped<ClassificationService>();

@@ -84,6 +84,9 @@ public sealed class CrossTenantProcedureTests(MeritFixture fixture, ITestOutputH
     {
         "auth.uspCreateSessionScope", "auth.uspRevokeSessionScope", "auth.uspGetSessionScope", "auth.uspGetUserForSignIn",
         "auth.uspRecordSignInResult", "auth.uspSaveMfaEnrollment", "auth.uspUseRecoveryCode", "auth.uspGetRecoveryCodes",
+        // Email one-time codes: the caller's own account, before or after sign-in; no tenant rows.
+        "auth.uspGetEmailCodeOption", "auth.uspCreateEmailChallenge", "auth.uspRecordEmailChallengeDelivery", "auth.uspVerifyEmailChallenge",
+        "auth.uspSaveMyMfaMethods",
     };
 
     private static IReadOnlyList<ManifestProc> WebProcedures()

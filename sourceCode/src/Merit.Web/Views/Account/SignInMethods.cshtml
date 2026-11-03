@@ -1,0 +1,76 @@
+@model SignInMethodsModel
+@{
+    ViewData["Title"] = "Sign-in methods";
+    var email = Model.Email;
+}
+<h1>Sign-in methods</h1>
+@if (Model.Notice is string notice) { <div class="usa-alert usa-alert--info usa-alert--slim" role="status"><div class="usa-alert__body"><p class="usa-alert__text">@notice</p></div></div> }
+@if (Model.SupportReference is string reference)
+{
+    <div class="usa-alert usa-alert--error usa-alert--slim" role="alert" data-email-delivery="failed"><div class="usa-alert__body">
+        <p class="usa-alert__text">@Model.Message</p>
+        <p class="usa-alert__text">Support reference: <strong data-support-reference>@reference</strong></p>
+    </div></div>
+}
+<p>MERIT always asks for a second step after your password. These are the ways you can complete it.</p>
+
+<section class="merit-methods" aria-labelledby="totp-heading">
+    <h2 id="totp-heading">Authenticator app <span class="usa-tag merit-tag--on">On</span></h2>
+    <p>Required for every MERIT account, and it cannot be turned off. If you lose your device, sign in with one of your recovery codes and ask your MERIT administrator to reset MFA.</p>
+</section>
+
+<section class="merit-methods" aria-labelledby="email-heading">
+    <h2 id="email-heading">Email codes @if (email.TurnedOn) { <span class="usa-tag merit-tag--on">On</span> } else { <span class="usa-tag">Off</span> }</h2>
+    @if (email.TurnedOn && email.Allowed)
+    {
+        <p>At sign-in you can choose to get a six-digit code at <strong>@email.MaskedEmail</strong> instead of opening your authenticator app.</p>
+        <form class="usa-form" method="post" action="/account/security/preference">
+            @Html.AntiForgeryToken()
+            <fieldset class="usa-fieldset">
+                <legend class="usa-legend">At sign-in, offer first</legend>
+                <div class="usa-radio">
+                    <input class="usa-radio__input" id="prefer-totp" type="radio" name="preferredMethod" value="totp" checked="@(email.PreferredMethod != "email")" />
+                    <label class="usa-radio__label" for="prefer-totp">My authenticator app</label>
+                </div>
+                <div class="usa-radio">
+                    <input class="usa-radio__input" id="prefer-email" type="radio" name="preferredMethod" value="email" checked="@(email.PreferredMethod == "email")" />
+                    <label class="usa-radio__label" for="prefer-email">An email code</label>
+                </div>
+            </fieldset>
+            <button class="usa-button usa-button--outline" type="submit">Save choice</button>
+        </form>
+        <form method="post" action="/account/security/email/off">
+            @Html.AntiForgeryToken()
+            <button class="usa-button usa-button--secondary" type="submit">Turn off email codes</button>
+        </form>
+    }
+    else if (email.TurnedOn)
+    {
+        <p>Email codes are on for your account but cannot be used right now: your agency has turned them off, or your account now has an administrator role. Sign in with your authenticator app.</p>
+        <form method="post" action="/account/security/email/off">
+            @Html.AntiForgeryToken()
+            <button class="usa-button usa-button--secondary" type="submit">Turn off email codes</button>
+        </form>
+    }
+    else if (email.Allowed)
+    {
+        <div class="usa-alert usa-alert--warning usa-alert--slim"><div class="usa-alert__body">
+            <p class="usa-alert__text">Email codes are less secure than your authenticator app: anyone who can read your email could use them. NIST SP 800-63B-4 does not accept email as an out-of-band authenticator. Your agency allows them as an extra option; your authenticator app stays on either way.</p>
+        </div></div>
+        <p>To turn them on, enter a current code from your authenticator app. We will then send a code to <strong>@email.MaskedEmail</strong> to make sure the address is yours.</p>
+        <partial name="_ErrorSummary" model='new ErrorSummaryModel(["AuthenticatorCode"], SummaryId: "methods-errors")' />
+        <form class="usa-form" method="post" action="/account/security/email/start" data-merit-busy="Sending your code…">
+            @Html.AntiForgeryToken()
+            <div class="usa-form-group">
+                <label class="usa-label" for="AuthenticatorCode">Six-digit code from your authenticator app</label>
+                <input class="usa-input usa-input--medium" id="AuthenticatorCode" name="AuthenticatorCode" type="text" autocomplete="one-time-code" inputmode="numeric"
+                       maxlength="11" spellcheck="false" required />
+            </div>
+            <button class="usa-button" type="submit">Send a code to @email.MaskedEmail</button>
+        </form>
+    }
+    else
+    {
+        <p>Email codes are not available for your account. Your agency decides whether they can be used, they need an email address on your account, and they are never available to administrators.</p>
+    }
+</section>

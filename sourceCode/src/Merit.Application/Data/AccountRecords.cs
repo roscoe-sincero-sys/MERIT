@@ -29,6 +29,48 @@ public sealed class SignInUserRow
     public bool IsAdministrator { get; init; }
 }
 
+/// <summary>auth.uspGetEmailCodeOption: email codes for one account.</summary>
+public sealed class EmailCodeOptionRow
+{
+    public Guid AppUserId { get; init; }
+
+    public string? Email { get; init; }
+
+    public bool MfaEnabled { get; init; }
+
+    public DateTime? MfaEmailVerifiedUtc { get; init; }
+
+    public string MfaPreferredMethod { get; init; } = "totp";
+
+    /// <summary>The jurisdiction allows email codes and the account holds no administrator role.</summary>
+    public bool EmailCodesAllowed { get; init; }
+}
+
+/// <summary>What auth.uspCreateEmailChallenge needs: the new challenge and the limits it enforces.</summary>
+public sealed record EmailChallengeRequest(Guid MfaEmailChallengeId, Guid AppUserId, string Purpose, byte[] CodeVerifier, string SupportReference,
+                                           string? CorrelationId, string? ClientAddress, int LifetimeSeconds, int MaxAttempts, int CooldownSeconds,
+                                           int WindowMinutes, int MaxPerUser, int MaxPerAddress);
+
+/// <summary>auth.uspCreateEmailChallenge: created, cooldown, limit or notAvailable; the address only when created.</summary>
+public sealed class EmailChallengeCreatedRow
+{
+    public string Outcome { get; init; } = "notAvailable";
+
+    public int RetryAfterSeconds { get; init; }
+
+    public string? Email { get; init; }
+
+    public DateTime? ExpiresUtc { get; init; }
+}
+
+/// <summary>auth.uspVerifyEmailChallenge: verified, wrong, locked, expired, used, superseded or none.</summary>
+public sealed class EmailChallengeVerifiedRow
+{
+    public string Outcome { get; init; } = "none";
+
+    public int RemainingAttempts { get; init; }
+}
+
 public sealed class SessionScopeSummaryRow
 {
     public Guid SessionScopeId { get; init; }

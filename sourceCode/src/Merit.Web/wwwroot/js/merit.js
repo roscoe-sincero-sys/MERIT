@@ -273,6 +273,73 @@
         }
         if (ctx?.meritContactFocus && document.activeElement === document.body) (document.getElementById(ctx.meritContactFocus)?.querySelector('summary') || document.getElementById(ctx.meritContactFocus))?.focus();
     });
+    // ------------------------------------------------------------------------------------------ slow plain posts
+    // Sending an email code waits on a mail server. The form says it is working, refuses a second submit, and if the
+    // answer takes longer than the server's own limit, gives the controls back with a way forward instead of hanging.
+    // A little past the server's own SMTP budget (Email:Smtp:TotalTimeoutSeconds, 25 by default).
+    const busyTimeoutMs = 30000;
+    function busyReset(form) {
+        delete form.dataset.submitting;
+        form.removeAttribute('aria-busy');
+        form.querySelectorAll('[data-busy-disabled]').forEach(button => { button.disabled = false; delete button.dataset.busyDisabled; });
+        form.querySelectorAll('[data-busy-status]').forEach(status => status.remove());
+        window.clearTimeout(Number(form.dataset.busyTimer));
+    }
+    document.addEventListener('submit', evt => {
+        const form = evt.target.closest('form[data-merit-busy]');
+        if (!form) return;
+        if (form.dataset.submitting || form.dataset.cooling) { evt.preventDefault(); return; }
+        form.dataset.submitting = 'true';
+        form.setAttribute('aria-busy', 'true');
+        // Disabled after the browser has taken the submit, so the post still goes.
+        window.setTimeout(() => form.querySelectorAll('[type=submit]:not(:disabled)').forEach(button => { button.dataset.busyDisabled = 'true'; button.disabled = true; }), 0);
+        const status = document.createElement('p');
+        status.className = 'merit-busy-status';
+        status.setAttribute('role', 'status');
+        status.dataset.busyStatus = 'true';
+        status.textContent = form.dataset.meritBusy;
+        form.appendChild(status);
+        form.dataset.busyTimer = String(window.setTimeout(() => {
+            form.querySelectorAll('[data-busy-disabled]').forEach(button => { button.disabled = false; delete button.dataset.busyDisabled; });
+            delete form.dataset.submitting;
+            status.classList.add('merit-busy-status--slow');
+            status.textContent = 'This is taking longer than usual. A code may still arrive: check your email before asking again, or reload the page.';
+        }, Number(form.dataset.meritTimeout) || busyTimeoutMs));
+    });
+    // Back and forward restore the page from the cache with its busy state frozen: start clean.
+    window.addEventListener('pageshow', evt => { if (evt.persisted) document.querySelectorAll('form[data-merit-busy]').forEach(busyReset); });
+
+    // The resend wait counts down where it is shown; it is announced once, when it ends, not every second.
+    function resendCountdown(form) {
+        let left = Number(form.dataset.resendIn || 0);
+        const button = form.querySelector('[data-resend-button]');
+        const status = form.querySelector('[data-resend-status]');
+        if (!button || !status || left <= 0) return;
+        form.dataset.cooling = 'true';
+        button.setAttribute('aria-disabled', 'true');
+        const tick = () => {
+            left -= 1;
+            if (left > 0) {
+                status.textContent = `You can ask for a new code in ${left} second${left === 1 ? '' : 's'}.`;
+                return;
+            }
+            window.clearInterval(timer);
+            delete form.dataset.cooling;
+            button.removeAttribute('aria-disabled');
+            status.textContent = 'You can ask for a new code now.';
+            announce('You can ask for a new code now.');
+        };
+        const timer = window.setInterval(tick, 1000);
+    }
+    document.addEventListener('DOMContentLoaded', () => document.querySelectorAll('form[data-resend-in]').forEach(resendCountdown));
+    document.addEventListener('click', evt => {
+        const button = evt.target.closest('[data-resend-button][aria-disabled="true"]');
+        if (!button) return;
+        evt.preventDefault();
+        const status = button.closest('form')?.querySelector('[data-resend-status]');
+        if (status) announce(status.textContent);
+    });
+
     document.addEventListener('submit', evt => {
         const form = evt.target.closest('form[data-upload-busy]');
         if (!form) return;

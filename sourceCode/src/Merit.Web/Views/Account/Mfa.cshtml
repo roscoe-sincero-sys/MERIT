@@ -1,6 +1,12 @@
 @model MfaModel
+@inject Microsoft.Extensions.Options.IOptions<Merit.Application.Services.EmailCodeOptions> CodeOptions
 @{
     ViewData["Title"] = Model.UseRecoveryCode ? "Sign in with a recovery code" : "Verify your sign-in";
+    // Email codes: an extra way in for accounts whose jurisdiction allows them (never administrators). Offered first when
+    // the person chose that on Sign-in methods; the authenticator app always stays.
+    bool emailAvailable = !Model.UseRecoveryCode && Model.Email is { Available: true };
+    bool emailFirst = emailAvailable && Model.Email!.PreferredMethod == "email";
+    int codeMinutes = Math.Max(1, CodeOptions.Value.LifetimeSeconds / 60);
 }
 <div class="merit-signin merit-signin--single">
     <section class="merit-signin__card">
@@ -8,6 +14,15 @@
         @if (Model.UseRecoveryCode)
         {
             <p>If the MERIT entry is missing from your authenticator app, use one of the recovery codes you saved when you registered. Each code works once.</p>
+        }
+        @if (Model.Notice is not null)
+        {
+            <div class="usa-alert usa-alert--info usa-alert--slim" role="status"><div class="usa-alert__body"><p class="usa-alert__text">@Model.Notice</p></div></div>
+        }
+        @if (emailFirst)
+        {
+            <partial name="_EmailCodePrompt" model="new EmailCodePrompt(Model.Email!.MaskedEmail, true, codeMinutes)" />
+            <h2 class="merit-signin__or">Or enter a code from your authenticator app</h2>
         }
         @if (Model.Message is not null)
         {
@@ -19,9 +34,9 @@
             <div class="usa-form-group">
                 <label class="usa-label" asp-for="Code">@(Model.UseRecoveryCode ? "Recovery code" : "Six-digit code from your authenticator app")</label>
                 <div class="usa-hint" id="code-hint">@(Model.UseRecoveryCode ? "Enter an unused ten-character recovery code. You can include or omit its hyphen." : "Or enter one of your ten-character recovery codes.")</div>
-                <input class="usa-input usa-input--medium" asp-for="Code" autofocus="@(ViewData.ModelState.IsValid)" autocomplete="one-time-code" inputmode="text" aria-describedby="code-hint" required />
+                <input class="usa-input usa-input--medium" asp-for="Code" autofocus="@(ViewData.ModelState.IsValid && !emailFirst)" autocomplete="one-time-code" inputmode="text" aria-describedby="code-hint" required />
             </div>
-            <button class="usa-button" type="submit">@(Model.UseRecoveryCode ? "Use recovery code and sign in" : "Verify and sign in")</button>
+            <button class="usa-button @(emailFirst ? "usa-button--outline" : "")" type="submit">@(Model.UseRecoveryCode ? "Use recovery code and sign in" : "Verify and sign in")</button>
         </form>
         @if (Model.UseRecoveryCode)
         {
@@ -43,6 +58,10 @@
         }
         else
         {
+            if (emailAvailable && !emailFirst)
+            {
+                <partial name="_EmailCodePrompt" model="new EmailCodePrompt(Model.Email!.MaskedEmail, false, codeMinutes)" />
+            }
             <p><a class="usa-link" href="/account/mfa?useRecoveryCode=true">Can't access your authenticator?</a></p>
         }
     </section>

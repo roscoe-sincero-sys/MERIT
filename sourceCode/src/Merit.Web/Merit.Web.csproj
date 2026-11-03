@@ -22,6 +22,8 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
     <PackageReference Include="QRCoder" />
+    <!-- SMTP for email one-time codes (Infrastructure/Email). -->
+    <PackageReference Include="MailKit" />
   </ItemGroup>
 
   <!-- The user guides and their images, served under /help (issue #148); docs/guides is their single source. -->

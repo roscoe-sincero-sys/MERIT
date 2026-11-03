@@ -59,6 +59,69 @@ public sealed class MfaModel
     public string? Code { get; set; }
 
     public string? Message { get; set; }
+
+    /// <summary>Email codes for this account, when the jurisdiction allows them and the person turned them on.</summary>
+    public EmailCodeOption? Email { get; set; }
+
+    /// <summary>Information from an earlier step (email codes not available, for example).</summary>
+    public string? Notice { get; set; }
+}
+
+/// <summary>The "email me a code" offer on the MFA page.</summary>
+public sealed record EmailCodePrompt(string? MaskedEmail, bool Primary, int Minutes);
+
+/// <summary>
+/// The page where a person types a code sent to their email: at sign-in, or to turn email codes on. The two differ only
+/// in where the forms post and where "go back" leads.
+/// </summary>
+public sealed class EmailCodeModel
+{
+    [Required(ErrorMessage = "Enter the six-digit code from the email.")]
+    public string? Code { get; set; }
+
+    public bool ForEnrollment { get; set; }
+
+    public string? MaskedEmail { get; set; }
+
+    /// <summary>A code went out from this browser just now (not a later visit to the page).</summary>
+    public bool JustSent { get; set; }
+
+    public DateTime? ExpiresUtc { get; set; }
+
+    /// <summary>Seconds until another code may be sent; the page counts them down when script runs.</summary>
+    public int ResendInSeconds { get; set; }
+
+    /// <summary>An error the person must act on.</summary>
+    public string? Message { get; set; }
+
+    /// <summary>Information that needs no action (a code is already on its way).</summary>
+    public string? Notice { get; set; }
+
+    /// <summary>Shown with "We couldn't send your verification code", so support can find the log entries.</summary>
+    public string? SupportReference { get; set; }
+
+    public bool DeliveryFailed => SupportReference is not null;
+
+    public string VerifyAction => ForEnrollment ? "/account/security/email/confirm" : "/account/mfa/email";
+
+    public string ResendAction => ForEnrollment ? "/account/security/email/resend" : "/account/mfa/email/send";
+
+    public int LifetimeMinutes { get; set; } = 5;
+}
+
+/// <summary>The signed-in person's sign-in methods: the authenticator app (always on) and, where allowed, email codes.</summary>
+public sealed class SignInMethodsModel
+{
+    public EmailCodeOption Email { get; set; } = new(false, false, false, null, "totp");
+
+    /// <summary>The current authenticator code that must come before a code is sent to the address.</summary>
+    public string? AuthenticatorCode { get; set; }
+
+    public string? Message { get; set; }
+
+    public string? Notice { get; set; }
+
+    public string? SupportReference { get; set; }
 }
 
 public sealed class EnrollModel

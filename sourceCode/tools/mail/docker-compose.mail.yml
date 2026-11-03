@@ -1,0 +1,30 @@
+# Local mail capture for MERIT development, for machines with Docker. Without Docker use Start-MailTool.ps1, which runs
+# the same tools natively on the same ports.
+#
+#   docker compose -f tools/mail/docker-compose.mail.yml up -d mailpit      # or smtp4dev, or both
+#   docker compose -f tools/mail/docker-compose.mail.yml down
+#
+# Every port is published on 127.0.0.1 only, messages are kept inside the container, and neither tool relays mail, so
+# nothing sent here reaches a real mailbox. Images are pinned to the versions the native scripts and tests use.
+# NOTE: this file was written to the tools' published Docker guidance but has not been run on the build machine, which
+# has no Docker (see docs/email-codes.md, "What was verified").
+services:
+  mailpit:
+    image: axllent/mailpit:v1.33.0
+    restart: unless-stopped
+    # Flags as for the native binary: Chaos on (all triggers start at probability 0), no update check.
+    command: ["--enable-chaos", "--disable-version-check", "--max", "500"]
+    ports:
+      - "127.0.0.1:1025:1025"   # SMTP
+      - "127.0.0.1:8025:8025"   # web UI and API
+
+  smtp4dev:
+    image: rnwood/smtp4dev:3.14.0
+    restart: unless-stopped
+    environment:
+      - ServerOptions__Urls=http://*:80
+      - ServerOptions__HostName=localhost
+      # Relaying stays off: no RelayOptions__SmtpServer.
+    ports:
+      - "127.0.0.1:2525:25"     # SMTP
+      - "127.0.0.1:8080:80"     # web UI and API

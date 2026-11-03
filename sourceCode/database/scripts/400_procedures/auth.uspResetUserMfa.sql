@@ -13,7 +13,7 @@ CreateDate:   2026-10-24
 ========================================================================================================================
 Description:
 
-Clears a user's second factor after the administrator has verified the person, so they enroll again at next sign-in. Only for accounts whose home tenant the administrator administers, and not their own.
+Clears a user's second factors (authenticator, recovery codes and email codes) after the administrator has verified the person, so they enroll again at next sign-in. Only for accounts whose home tenant the administrator administers, and not their own.
 
 ========================================================================================================================
 Requirements and Key Dependencies:
@@ -110,9 +110,12 @@ BEGIN
 
         UPDATE auth.appUser
            SET mfaEnabled = 0, mfaSecretProtected = NULL, securityStamp = NEWID (), failedSignInCount = 0, lockoutEndUtc = NULL
+             , mfaEmailVerifiedUtc = NULL, mfaPreferredMethod = 'totp'
          WHERE appUserId = @appUserId AND isDeleted = 0;
 
         UPDATE auth.mfaRecoveryCode SET isDeleted = 1 WHERE appUserId = @appUserId AND isDeleted = 0;
+        UPDATE auth.mfaEmailChallenge SET supersededUtc = SYSUTCDATETIME ()
+         WHERE appUserId = @appUserId AND consumedUtc IS NULL AND supersededUtc IS NULL AND isDeleted = 0;
         UPDATE auth.sessionScope SET revokedUtc = SYSUTCDATETIME () WHERE appUserId = @appUserId AND revokedUtc IS NULL;
 
         SET @Comments = N'MFA reset.';
@@ -198,7 +201,7 @@ EXEC util.uspSetObjectDescription
       @SchemaName  = N'auth'
     , @ObjectType  = N'PROCEDURE'
     , @ObjectName  = N'uspResetUserMfa'
-    , @Description = N'Clears a user''s second factor after the administrator has verified the person, so they enroll again at next sign-in. Only for accounts whose home tenant the administrator administers, and not their own.';
+    , @Description = N'Clears a user''s second factors (authenticator, recovery codes and email codes) after the administrator has verified the person, so they enroll again at next sign-in. Only for accounts whose home tenant the administrator administers, and not their own.';
 GO
 
 IF DATABASE_PRINCIPAL_ID (N'meritWebRole') IS NOT NULL

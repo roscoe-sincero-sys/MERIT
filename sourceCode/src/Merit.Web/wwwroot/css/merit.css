@@ -225,6 +225,22 @@ th .merit-sort:hover, th .merit-sort:focus { color: var(--merit-primary); }
 .merit-signin__mfa { margin: 1.25rem 0 0; padding-top: 1rem; border-top: 1px solid #dfe1e2; color: #565c65; font-size: .9rem; }
 .merit-signin__about { padding-top: 2.25rem; color: #1b1b1b; }
 .merit-signin__about h2 { margin-top: 0; font-size: 1.25rem; color: #1a4480; }
+/* Email one-time codes: the alternative on the MFA page, the resend control and the busy state merit.js shows. */
+.merit-signin__alt { margin: 1.25rem 0; padding: 1rem; border: 1px solid #dfe1e2; border-radius: .25rem; background: #f0f0f0; }
+.merit-signin__alt h2, .merit-signin__or { margin: 0 0 .5rem; font-size: 1.1rem; color: #1b1b1b; }
+.merit-signin__or { margin-top: 1.5rem; }
+.merit-resend { margin-top: 1.25rem; }
+.merit-resend [aria-disabled="true"] { opacity: .6; cursor: not-allowed; }
+.merit-busy-status { display: flex; align-items: center; gap: .5rem; margin: .75rem 0 0; }
+.merit-busy-status::before { content: ""; flex: none; width: 1rem; height: 1rem; border: .2rem solid #a9aeb1; border-top-color: #005ea2; border-radius: 50%;
+  animation: merit-spin .8s linear infinite; }
+.merit-busy-status--slow::before { display: none; }
+@keyframes merit-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .merit-busy-status::before { animation: none; } }
+.merit-methods { max-width: 46rem; margin: 1.5rem 0; }
+.merit-methods h2 { display: flex; align-items: center; gap: .5rem; }
+.merit-methods form { margin-top: 1rem; }
+.merit-tag--on { background: #216e1f; }
 .merit-signin__about ul { padding-left: 1.1rem; }
 .merit-signin__about li { margin-bottom: .5rem; }
 .merit-signin__about p { color: #565c65; font-size: .9rem; }

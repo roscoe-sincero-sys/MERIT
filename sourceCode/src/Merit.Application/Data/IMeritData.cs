@@ -24,6 +24,19 @@ public interface IAccountData
 
     Task UseRecoveryCodeAsync(Guid mfaRecoveryCodeId, CancellationToken ct = default);
 
+    Task<EmailCodeOptionRow?> GetEmailCodeOptionAsync(Guid appUserId, CancellationToken ct = default);
+
+    Task<EmailChallengeCreatedRow> CreateEmailChallengeAsync(EmailChallengeRequest request, CancellationToken ct = default);
+
+    Task RecordEmailChallengeDeliveryAsync(Guid mfaEmailChallengeId, bool submitted, int deliveryAttempts, string? failureKind, int? smtpReplyCode,
+                                           CancellationToken ct = default);
+
+    Task<EmailChallengeVerifiedRow> VerifyEmailChallengeAsync(Guid appUserId, string purpose, byte[] codeVerifier, string? clientAddress,
+                                                              CancellationToken ct = default);
+
+    /// <summary>The signed-in user's own choices: email codes off, or which second factor sign-in offers first.</summary>
+    Task SaveMyMfaMethodsAsync(bool emailCodesOn, string preferredMethod, CancellationToken ct = default);
+
     Task<IReadOnlyList<UserListRow>> ListUsersAsync(CancellationToken ct = default);
 
     Task<UserDetail?> GetUserAsync(Guid appUserId, CancellationToken ct = default);

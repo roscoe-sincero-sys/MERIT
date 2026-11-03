@@ -198,6 +198,10 @@ dotnet run --project src/Merit.Web         # terminal 2: https://localhost:7243
 | `DataProtection:KeyPath` | app data folder | Web | Where ASP.NET Core data-protection keys are kept. They protect MFA secrets and cookies, so share them across web servers. |
 | `Merit:SignInAttemptsPerMinute` | `30` | Web | Password attempts allowed per client address in any minute. Over the limit the client sees a **Too many attempts** page (HTTP 429 with `Retry-After`). Other clients are not affected, and repeated wrong passwords still lock the account after 5 tries. |
 | `Merit:MfaAttemptsPerMinute` | `30` | Web | The same limit for the authenticator-code and enrollment steps, counted separately. |
+| `Email:Provider`, `Email:Smtp:*` | `Disabled` | Web | Outgoing mail for email one-time codes, an optional extra second factor next to the required authenticator app. Off unless set. `Security` is `StartTls` by default; `None` is accepted only for a mail server on this machine. Put the password in user secrets or the environment, never in appsettings. See [docs/email-codes.md](docs/email-codes.md). |
+| `EmailCodes:VerifierKey` | random per process in Development | Web | Base64 key (32+ bytes) for the email-code verifier. Use the same key on every web server. Required outside Development when mail is configured. |
+| `EmailCodes:LifetimeSeconds`, `MaxAttempts`, `ResendCooldownSeconds`, `MaxCodesPerAccount`, `MaxCodesPerAddress`, `LimitWindowMinutes` | `300`, `5`, `30`, `5`, `20`, `15` | Web | Email-code expiry, wrong-entry limit, resend wait and send limits. |
+| `Merit:EmailCodeSendsPerMinute` | `10` | Web | Email-code send requests allowed per client address in any minute. |
 | `Merit:ForwardedHeaders:KnownProxies` | empty | Web | Addresses of reverse proxies whose `X-Forwarded-For` is trusted. Set it behind a proxy or load balancer, or every client shares the proxy's address and its limit. |
 | `Urls` | `http://localhost:5280` | Worker | Health endpoints `/health` and `/health/queues`. |
 | `Worker:PollSeconds` | `2` | Worker | How often the worker looks for queued jobs. |
@@ -241,6 +245,8 @@ outlines gets the plain latitude and longitude grid.
 | Variable | Meaning |
 | --- | --- |
 | `MERIT_IT_SERVER`, `MERIT_IT_DATABASE`, `MERIT_IT_WEB_PASSWORD`, `MERIT_IT_WORKER_PASSWORD`, `MERIT_IT_SKIP_DEPLOY` | Integration test server and database (the default database is `MERIT_IT`). |
+| `MERIT_MAILPIT_URL`, `MERIT_SMTP4DEV_URL` (and `..._SMTP_PORT`) | Run the opt-in tests against a running Mailpit or smtp4dev (`sourceCode/tools/mail/Start-MailTool.ps1`). |
+| `MERIT_E2E_MAILPIT_URL`, `MERIT_E2E_SMTP4DEV_URL` | Let the email-code browser spec read codes from the capture tool the app is using. |
 | `MERIT_E2E_URL`, `MERIT_E2E_SERVER`, `MERIT_E2E_DATABASE`, `MERIT_E2E_CHANNEL` | End-to-end test target and browser. `MERIT_E2E_DATABASE` (default `MERIT`) names the database the running app uses; specs that create their own accounts or records run only when it is `MERIT_IT`. |
 | `Merit__SignInAttemptsPerMinute`, `Merit__MfaAttemptsPerMinute` | Set on the web app (not the test runner) to raise the sign-in limits when end-to-end runs are repeated in quick succession from one machine. The integration tests set their own limits. |
 
