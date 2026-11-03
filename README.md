@@ -35,8 +35,9 @@ seeing more (or less) than they should.
 - Administrators who manage access across a region, state and its counties.
 
 **Key features.**
-- **Intake that fixes causes, not rows.** Files are parsed, validated and matched. Held records are grouped by cause,
-  and urgent results sort first.
+- **Intake that fixes causes, not rows.** Delimited files and native HL7 v2.3.1/v2.5.1 result messages are parsed,
+  validated and matched. Held records are grouped by cause, a cause is corrected once for all its rows, and urgent
+  results sort first.
 - **Person matching review.** Candidates are compared field by field ("Jon" vs "Jonathan", day and month swapped,
   possible twins). The screen is keyboard-driven, and "different person" decisions are remembered.
 - **Case classification.** Rules cover the CDC reference value, the child capillary-confirmation window, adult and
@@ -74,7 +75,8 @@ Interactive diagrams:
 | [NPI and CLIA import](docs/npi-clia-import_workflow.html) | Loading the reporter registry from a CSV file: check, fix, import, release |
 | [CBLS extract lifecycle](docs/cbls-extract_lifecycle.html) | A quarterly CDC extract run from request to submitted |
 
-User guides (PDF, with the HTML sources in `docs/guides/`):
+User guides (PDF, with the HTML sources in `docs/guides/`; signed-in users also open them from **User guide** in the
+header, at `/help`):
 
 | Guide | For |
 | --- | --- |
@@ -172,7 +174,7 @@ dotnet run --project src/Merit.Web         # terminal 2: https://localhost:7243
 | Try this | Sign in as |
 | --- | --- |
 | Upload `samples/chesapeake_lab_sample.csv` on **Intake**, then work **Held records** | `intake` |
-| Upload `samples/chesapeake_match_review_sample.csv`, then open **Match review** (keys 1–5, S, D, N, J, K) | `supervisor` |
+| Upload `samples/chesapeake_match_review_sample.csv`, then open **Match review** (Alt+Shift with 1–5, S, D, N, C, J, K; or tick **Single-key shortcuts**, where a decision key is pressed twice) | `supervisor` |
 | See cases, the **Map**, **Clusters** and **Reports** | `supervisor` |
 | See only one county's records | `cmbalt` (Baltimore City) or `cmbaltco` (Baltimore County) |
 | Work across two counties, then make a read-only profile under **Profile** in the header | `cmboth` |
@@ -196,6 +198,7 @@ dotnet run --project src/Merit.Web         # terminal 2: https://localhost:7243
 | `DataProtection:KeyPath` | app data folder | Web | Where ASP.NET Core data-protection keys are kept. They protect MFA secrets and cookies, so share them across web servers. |
 | `Merit:SignInAttemptsPerMinute` | `30` | Web | Password attempts allowed per client address in any minute. Over the limit the client sees a **Too many attempts** page (HTTP 429 with `Retry-After`). Other clients are not affected, and repeated wrong passwords still lock the account after 5 tries. |
 | `Merit:MfaAttemptsPerMinute` | `30` | Web | The same limit for the authenticator-code and enrollment steps, counted separately. |
+| `Navigation:Enhanced` | `false` (`true` in Development) | Web | The grouped header (Intake, Surveillance, Registry & reports, Administration) and the collapsible queue and report lists. Off, the header lists each screen. |
 | `Merit:ForwardedHeaders:KnownProxies` | empty | Web | Addresses of reverse proxies whose `X-Forwarded-For` is trusted. Set it behind a proxy or load balancer, or every client shares the proxy's address and its limit. |
 | `Urls` | `http://localhost:5280` | Worker | Health endpoints `/health` and `/health/queues`. |
 | `Worker:PollSeconds` | `2` | Worker | How often the worker looks for queued jobs. |
@@ -239,7 +242,7 @@ outlines gets the plain latitude and longitude grid.
 | Variable | Meaning |
 | --- | --- |
 | `MERIT_IT_SERVER`, `MERIT_IT_DATABASE`, `MERIT_IT_WEB_PASSWORD`, `MERIT_IT_SKIP_DEPLOY` | Integration test server and database (the default database is `MERIT_IT`). |
-| `MERIT_E2E_URL`, `MERIT_E2E_SERVER`, `MERIT_E2E_DATABASE`, `MERIT_E2E_CHANNEL` | End-to-end test target and browser. |
+| `MERIT_E2E_URL`, `MERIT_E2E_SERVER`, `MERIT_E2E_DATABASE`, `MERIT_E2E_CHANNEL` | End-to-end test target and browser. `MERIT_E2E_DATABASE` (default `MERIT`) names the database the running app uses; specs that create their own accounts or records run only when it is `MERIT_IT`. |
 | `Merit__SignInAttemptsPerMinute`, `Merit__MfaAttemptsPerMinute` | Set on the web app (not the test runner) to raise the sign-in limits when end-to-end runs are repeated in quick succession from one machine. The integration tests set their own limits. |
 
 ---

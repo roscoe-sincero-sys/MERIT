@@ -1,7 +1,8 @@
 # Native HL7 laboratory intake
 
 MERIT accepts ER7 text files containing **HL7 v2.3.1 or v2.5.1 ORU^R01** messages.
-Choose the laboratory's **HL7** profile on **Intake** and upload a `.hl7` or `.txt` file.
+Choose the laboratory's HL7 profile on **Intake**, listed by format first (for example **HL7 message from Chesapeake
+Reference Laboratory**), and upload a `.hl7` or `.txt` file.
 The worker parses the original messages directly; no CSV conversion is required.
 This is file intake, not an MLLP listener or an HL7 acknowledgment service.
 

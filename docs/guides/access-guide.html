@@ -40,6 +40,8 @@
   .bar .nav span { margin-right: .9em; font-size: 9pt; }
   .bar .me { text-align: right; font-size: 8.5pt; line-height: 1.25; }
   .bar .me u { color: #fff; }
+  .bar .switch { display: inline-block; margin-left: .5em; padding: .1em .45em; border: 1px solid #ffffffb3; border-radius: 4px; text-align: left; vertical-align: middle; }
+  .bar .switch small { font-size: 7pt; opacity: .85; }
   .scr { padding: .6em .9em; background: #fff; }
   .scr h4 { margin: .2em 0 .4em; font-size: 12pt; }
   .btn { display: inline-block; background: var(--blue2); color: #fff; padding: .2em .7em; border-radius: 4px; font-size: 8.5pt; font-weight: 700; }
@@ -267,16 +269,16 @@
   <h2>5. Using profiles: step by step</h2>
   <h3>See which profile you are using</h3>
   <p>In the grouped-navigation preview, profile access stays in the header. On smaller screens, open <b>Menu</b> to reveal it. <b>Administration</b> groups reference levels/configuration, Users and Tenants according to your current profile's permissions; unavailable destinations and empty groups are omitted. The illustration below shows the original header, which remains available outside the preview.</p>
-  <p>The top right of every page shows your name, the place you are working in, and your profile. Select the profile name to open <b>My profiles</b>.</p>
+  <p>The top right of every page shows your name, the place you are working in, and your profile in an outlined box. Select the box (<b>Switch</b>) to open <b>My profiles</b>.</p>
   <div class="screen"><div class="cap">Every page: the header</div>
     <div class="bar"><b>MERIT</b><span class="nav"><span>Home</span><span>Work queues</span><span>Cases</span><span>Reports</span></span>
-      <span class="me">Bailey Kim<br>Jefferson County Health Department<br><u>Profile: Read only - Berkeley</u> <span class="callout">1</span></span></div>
+      <span class="me">Bailey Kim<br>Jefferson County Health Department <span class="switch"><small>Profile</small> <b>Read only - Berkeley</b> <u>Switch &#9662;</u></span> <span class="callout">1</span></span></div>
   </div>
-  <p><span class="callout">1</span> Select the profile to switch or manage your profiles.</p>
+  <p><span class="callout">1</span> Select the profile box to switch or manage your profiles. Beside it, <b>User guide</b> opens these guides in a new tab.</p>
 
   <h3>My profiles</h3>
   <div class="screen"><div class="cap">Account &rsaquo; My profiles</div>
-    <div class="bar"><b>MERIT</b><span class="me">Bailey Kim<br><u>Profile: Master profile</u></span></div>
+    <div class="bar"><b>MERIT</b><span class="me">Bailey Kim <span class="switch"><small>Profile</small> <b>Master profile</b> <u>Switch &#9662;</u></span></span></div>
     <div class="scr">
       <h4>My profiles</h4>
       <div class="box" style="margin:.3em 0"><b>You are using: Master profile</b><br><span class="note">What you can see and do right now comes from this profile.</span></div>
@@ -301,7 +303,7 @@
 <section class="page">
   <h3>Create a profile</h3>
   <div class="screen"><div class="cap">Account &rsaquo; My profiles &rsaquo; Create a profile</div>
-    <div class="bar"><b>MERIT</b><span class="me">Bailey Kim<br><u>Profile: Master profile</u></span></div>
+    <div class="bar"><b>MERIT</b><span class="me">Bailey Kim <span class="switch"><small>Profile</small> <b>Master profile</b> <u>Switch &#9662;</u></span></span></div>
     <div class="scr">
       <h4>Create a profile</h4>
       <div class="two">
@@ -339,17 +341,18 @@
 <!-- ============================================================ admins -->
 <section>
   <h2>6. For administrators</h2>
-  <h3>Add a person</h3>
+  <h3>Add a user</h3>
   <ol>
     <li>Go to <b>Users</b> and select <b>Add a user</b>.</li>
     <li>Fill in the name, user name and work email, and choose <b>Works for</b>. You can only choose places you administer.</li>
     <li>Set an initial password. The person sets up an authenticator app the first time they sign in.</li>
-    <li>On their page, add grants to build their master profile.</li>
+    <li>Under <b>First access</b>, choose the person's first grant: a role, the place, the access level and whether it includes everything under it. One save then creates the account with that access. Leave the role on <b>No access yet</b> to give access later.</li>
+    <li>Add any further grants on their page under <b>Give access</b>. Without a grant the person can sign in but sees nothing, and the page says so.</li>
   </ol>
   <h3>Give access to someone from another place</h3>
   <p>Example: Bailey works for Jefferson County but also needs Berkeley County. The Berkeley administrator types Bailey's exact user name in <b>Give access to someone from another tenant</b>, opens Bailey's page and adds a Berkeley grant. The Berkeley administrator can see and end only the Berkeley part; Bailey's account itself stays with Jefferson's administrators.</p>
   <div class="screen"><div class="cap">Users &rsaquo; Bailey Kim (seen by the Berkeley County administrator)</div>
-    <div class="bar"><b>MERIT</b><span class="me">Blair Ortiz<br>Berkeley County Health Department<br><u>Profile: Master profile</u></span></div>
+    <div class="bar"><b>MERIT</b><span class="me">Blair Ortiz<br>Berkeley County Health Department <span class="switch"><small>Profile</small> <b>Master profile</b> <u>Switch &#9662;</u></span></span></div>
     <div class="scr">
       <h4>Bailey Kim</h4>
       <div class="box" style="margin:.2em 0"><span class="note"><b>Bailey Kim</b> (bkim) works for <b>Jefferson County Health Department</b>. Their administrators manage the account itself. You can give or end access only at the tenants you administer.</span></div>
@@ -358,11 +361,18 @@
         <li>Case manager at Jefferson County and everything under it &middot; full <span class="note">(managed by another administrator)</span></li>
         <li>Case manager at Berkeley County and everything under it &middot; full <u>End</u></li>
       </ul>
+      <p class="lbl">Give access</p>
       <table><tr><th>Role</th><th>At</th><th>Access</th></tr>
         <tr><td>Case manager (West Virginia) &#9662;</td><td>Berkeley County Health Department &#9662;</td><td>Read and write (no delete) &#9662;</td></tr></table>
       <span class="btn o">Add grant</span> &nbsp; <span class="btn o">View MERIT as Bailey Kim</span>
     </div>
   </div>
+  <h3>A locked account or a lost authenticator</h3>
+  <ul>
+    <li><b>Locked after too many wrong passwords:</b> on the person's page select <b>Unlock account</b>. Their password and authenticator stay as they were.</li>
+    <li><b>Lost or replaced phone:</b> the person first tries <b>Can't access your authenticator?</b> with a recovery code. If they have none, verify who they are, then select <b>Reset MFA after verifying the person</b>. Their old authenticator and recovery codes stop working and their sessions end; they set up a new authenticator at their next sign-in and save new recovery codes.</li>
+    <li>Nobody resets their own second factor: ask another administrator.</li>
+  </ul>
   <h3>Check what someone sees: View as</h3>
   <ol>
     <li>Open the person's page and select <b>View MERIT as ...</b> (or use <b>My profiles</b> &rsaquo; <b>View MERIT as someone you manage</b>).</li>
@@ -380,7 +390,7 @@
   <h2>7. The platform administrator</h2>
   <p>The first account created in a new MERIT installation is the platform administrator. It has one purpose: managing accounts.</p>
   <div class="screen"><div class="cap">What the platform administrator sees after signing in</div>
-    <div class="bar"><b>MERIT</b><span class="nav"><span>Users</span></span><span class="me">Pat Lee<br>MERIT platform<br><u>Profile: Master profile</u></span></div>
+    <div class="bar"><b>MERIT</b><span class="nav"><span>Users</span></span><span class="me">Pat Lee<br>MERIT platform <span class="switch"><small>Profile</small> <b>Master profile</b></span></span></div>
     <div class="scr">
       <h4>Users</h4>
       <table>
@@ -401,7 +411,7 @@
   </ul>
 
   <h3>Adding tenants</h3>
-  <p>New agencies join MERIT on the <b>Tenants</b> screen (<b>Tenants</b> in the top menu). You choose where the new tenant goes, what kind it is, its code and name, and for a county the county FIPS codes it serves. The menu item appears only for people who may add tenants:</p>
+  <p>New agencies join MERIT on the <b>Tenants</b> screen (<b>Tenants</b> in the top menu). You choose where the new tenant goes, what kind it is, its code and name, and for a county the counties it serves (ticked from the list, or added as new counties under a state). The menu item appears only for people who may add tenants:</p>
   <table>
     <tr><th>Who</th><th>Can add</th><th>Under</th></tr>
     <tr><td>Platform administrator</td><td class="yes">Regions, states, tribes, stand-alone jurisdictions; programs and counties</td><td>Anywhere in the tree</td></tr>
@@ -424,12 +434,13 @@
 <section>
   <h2>9. Common questions</h2>
   <p><b>I can see Jefferson, but not Berkeley. Why?</b><br>Your master profile has a grant for Jefferson only. Ask the Berkeley administrator to give you Berkeley access.</p>
-  <p><b>A button I normally use is missing.</b><br>Check the profile in the header. You may be using a read-only or smaller profile. Switch back to your master profile.</p>
+  <p><b>A button I normally use is missing, or a page says Not permitted.</b><br>Check the profile in the header. You may be using a read-only or smaller profile. Switch back to your master profile.</p>
+  <p><b>After setting up my authenticator, MERIT keeps showing my recovery codes.</b><br>That is on purpose: save them (copy or print), tick <b>I have saved these codes</b> and choose <b>Continue to MERIT</b>. The codes are shown only until then.</p>
   <p><b>Can I give myself Pennsylvania access in a profile?</b><br>No. A profile can only be a smaller copy of your master profile.</p>
   <p><b>My administrator changed my access, and I was signed out.</b><br>That is on purpose: your new access takes effect at once. Sign in again.</p>
   <p><b>Can my administrator see my password when viewing as me?</b><br>No. View as never uses your password or your second factor, and everything the administrator does is recorded under their own name.</p>
   <p><b>Why can't the platform administrator look up a case for me?</b><br>Platform administrators manage accounts only, by design. Ask someone with access to that state or county.</p>
-  <p><b>Our county was reorganized. Can I add the new health district myself?</b><br>Yes, if you hold the Administrator role at the state: open <b>Tenants</b>, choose the state, choose <b>Local jurisdiction</b>, and list the county FIPS codes it serves. County user administrators ask the state administrator.</p>
+  <p><b>Our county was reorganized. Can I add the new health district myself?</b><br>Yes, if you hold the Administrator role at the state: open <b>Tenants</b>, choose the state, choose <b>Local jurisdiction</b>, and tick the counties it serves. County user administrators ask the state administrator.</p>
   <p><b>Region staff: which settings does a new record use?</b><br>Those of the place under <b>Working in</b>. Choose the state you are entering records for.</p>
   <p class="foot" style="margin-top:2em">MERIT user guide: access, profiles and switching. The examples are illustrative; names and screens are made up.</p>
 </section>

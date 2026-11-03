@@ -122,21 +122,23 @@
   <h2>1. Signing in and finding your way</h2>
   <ol class="steps">
     <li>Go to your MERIT address and enter your <b>user name</b> and <b>password</b>.</li>
-    <li>Enter the 6-digit <b>code from your authenticator app</b>. The first time, MERIT shows a QR code and a key: add it to an authenticator app on your phone, type the code it shows, then <b>save your recovery codes</b> somewhere safe. Each recovery code works once if you lose your phone.</li>
-    <li>MERIT opens on <span class="ui">Home</span>. After 20 minutes without activity (your agency may set a different time) you are signed out; unsaved typing is lost, so save as you go.</li>
+    <li>Enter the 6-digit <b>code from your authenticator app</b>. The first time, MERIT shows a QR code and a key: add it to an authenticator app on your phone, type the code it shows, then <b>save your recovery codes</b> somewhere safe (<span class="ui">Copy codes</span> or <span class="ui">Print codes</span>). Each recovery code works once if you lose your phone. Tick <b>I have saved these codes</b> and choose <span class="ui">Continue to MERIT</span>: until you do, MERIT keeps bringing you back to the codes.</li>
+    <li>Lost your phone? On the code page choose <b>Can't access your authenticator?</b> and sign in with one of your recovery codes. Without one, ask your MERIT administrator to reset your second factor after checking who you are.</li>
+    <li>MERIT opens on <span class="ui">Home</span>. After 20 minutes without activity (your agency may set a different time) you are signed out. Unsaved typing stays on the page: MERIT says the session ended, you choose <b>Sign in in a new tab</b>, then come back and <span class="ui">Check session</span> before saving.</li>
   </ol>
   <figure class="shot"><img src="../images/guide/00-signin.jpg" style="width:7.20in" alt="The MERIT sign-in page: user name, password and Continue, with a short description of MERIT beside it"><figcaption>Sign-in: your user name and password, then <b>Continue</b>. The next page asks for the code from your authenticator app.</figcaption></figure>
   </div>
-  <figure class="shot"><img src="../images/guide/01-home.jpg" style="width:7.20in" alt="The MERIT Home page with count tiles, the Needs attention list and the work queue tiles"><figcaption>Home: your counts across the top, <b>Needs attention</b> (urgent items first), then a tile for each work queue. Click any count or tile to open the list behind it.</figcaption></figure>
+  <figure class="shot"><img src="../images/guide/01-home.jpg" style="width:7.20in" alt="The MERIT Home page with count tiles, the Needs attention list and the work queue tiles"><figcaption>Home: your counts across the top, each saying what it counts; <b>Needs attention</b>, where held results with high values come one line per cause and laboratory (with how many), then urgent and overdue tasks; then a tile for each work queue. Click any count, line or tile to open the list behind it.</figcaption></figure>
   <h3>The header</h3>
-  <p>When the grouped-navigation preview is enabled, <b>Home</b>, <b>Work queues</b> and <b>People</b> stay directly in the header. Open <b>Intake</b> for intake, held records and match review; <b>Surveillance</b> for cases, clusters, map and investigations; <b>Registry &amp; reports</b> for results, reports, reporters and extracts; and <b>Administration</b> for reference levels/configuration and account administration. Only permitted destinations appear. On smaller screens, first open <b>Menu</b>. <b>Escape</b> closes a group and returns focus; press it again to close Menu.</p>
+  <p>When the grouped-navigation preview is enabled, <b>Home</b>, <b>Work queues</b> and <b>People</b> stay directly in the header. Open <b>Intake</b> for intake, held records and match review; <b>Surveillance</b> for cases, clusters, map and investigations; <b>Registry &amp; reports</b> for results, reports, reporters and extracts; and <b>Administration</b> for reference levels/configuration and account administration. Only permitted destinations appear, and the group holding the page you are on is marked. With <i>View the audit log</i>, Administration also lists <b>Audit log</b>. On smaller screens, first open <b>Menu</b>. <b>Escape</b> closes a group and returns focus; press it again to close Menu.</p>
   <p>In that preview, Work queues and Reports have <b>Show/Hide queues</b> and <b>Show/Hide report library</b> controls. Hide the contextual list to give the table or chart more width. Desktop choices are remembered for each page; narrow screens start closed. Opening the list never changes your selected queue, report or filters. The screenshots below also illustrate the original navigation, which remains the default outside the preview.</p>
   <ul>
     <li><b>Menu:</b> only the screens your role allows are shown.</li>
-    <li><b>Search:</b> type a name, date of birth, address, case number or accession number and press <span class="key">Enter</span>.</li>
-    <li><b>Your name, the agency you are working in, and your profile.</b> Click <span class="ui">Profile</span> to switch to a smaller profile (for example read-only) or back to your master profile.</li>
+    <li><b>Search:</b> type a name, date of birth, address, case number or accession number and press <span class="key">Enter</span>. On <span class="ui">People</span> the page has its own, larger search box instead.</li>
+    <li><b>Your name, the agency you are working in, and your profile.</b> The outlined <b>Profile</b> box names the profile you are using; choose it (<b>Switch</b>) to change to a smaller profile (for example read-only), to another place you work in, or back to your master profile.</li>
+    <li><b>User guide</b> opens these guides in a new tab, so your work stays as it is.</li>
   </ul>
-  <div class="box"><strong>Tip:</strong> every screen works with the keyboard alone. <span class="key">Tab</span> moves between fields, <span class="key">Enter</span> presses the focused button, and the first <span class="key">Tab</span> on a page offers <i>Skip to main content</i>.</div>
+  <div class="box"><strong>Tip:</strong> every screen works with the keyboard alone. <span class="key">Tab</span> moves between fields, <span class="key">Enter</span> presses the focused button, and the first <span class="key">Tab</span> on a page offers <i>Skip to main content</i>. A screen your profile does not allow says <b>Not permitted</b>.</div>
 </section>
 
 <!-- ============================================================ 3 intake -->
@@ -144,13 +146,13 @@
   <div class="keep">
   <h2>3. Importing blood test results</h2>
   <p class="who">Who: anyone with the <i>Upload intake files</i> permission (intake clerks and supervisors).</p>
-  <p>Laboratories send results as files (CSV, pipe- or tab-delimited). Each laboratory has an <b>intake profile</b> that tells MERIT how to read its file. MERIT stores the file unchanged, then checks every row in the background, usually within a few minutes.</p>
+  <p>Laboratories send results as files: a spreadsheet export (comma, tab or pipe separated) or an HL7 laboratory result message (version 2.3.1 or 2.5.1). Each laboratory has an <b>intake profile</b> for each format it sends, which tells MERIT how to read its file. MERIT stores the file unchanged, then checks every row in the background, usually within a few minutes.</p>
   <figure class="shot diagram"><img src="../images/guide/diagram-daily-intake.png" style="width:7.20in" alt="Workflow diagram: a lab file is uploaded, checked and matched; it is loaded, held, or sent to match review; loaded results can open a case and create tasks"><figcaption>The daily intake workflow. Interactive version: <code>docs/daily-intake_workflow.html</code>.</figcaption></figure>
   </div>
   <h3>Upload a file</h3>
   <ol class="steps">
     <li>Open <span class="ui">Intake</span>.</li>
-    <li>Under <b>Sender and intake profile</b>, choose the laboratory that sent the file. If the laboratory is not listed, ask your administrator to set up its intake profile.</li>
+    <li>Under <b>Sender and intake profile</b>, choose the laboratory and format of the file, for example <i>CSV file from Chesapeake Reference Laboratory</i> or <i>HL7 message from Chesapeake Reference Laboratory</i>. If the laboratory or format is not listed, ask your administrator to set up its intake profile.</li>
     <li>Click <b>Choose File</b>, pick the file, then click <span class="ui">Upload</span>.</li>
     <li>Watch the batch card under <b>Recent batches</b>. It updates by itself until processing ends.</li>
   </ol>
@@ -160,7 +162,8 @@
     <tr><th>The card says</th><th>What it means</th><th>What to do</th></tr>
     <tr><td>Loaded</td><td>Every row was checked; good rows are on people's records</td><td>Clear any held rows (next section)</td></tr>
     <tr><td>Processing</td><td>MERIT is still working</td><td>Wait; the card refreshes itself</td></tr>
-    <tr><td>Failed</td><td>The file could not be read (wrong format or sender)</td><td>Check you chose the right sender; ask the laboratory for a corrected file</td></tr>
+    <tr><td>Paused</td><td>MERIT stopped before loading anything, and says why: the file's columns differ from its profile, the profile sends two columns to one field, or an HL7 message is in a layout MERIT cannot read</td><td>Ask your administrator to correct the profile, then resume the batch; a paused batch also appears as a task</td></tr>
+    <tr><td>Failed</td><td>The file could not be read (wrong format or sender)</td><td>Check you chose the right sender and format; ask the laboratory for a corrected file</td></tr>
   </table>
   <div class="box warn"><strong>The same file twice?</strong> MERIT does not process a file it has already received for the same sender: it says when the file arrived, links to that batch, and loads nothing. If the laboratory really sent the same file again, choose it again and tick <b>This is a genuine re-send</b>. Corrected results should come from the laboratory marked as corrected.</div>
 </section>
@@ -171,13 +174,14 @@
   <h2>4. Clearing held records</h2>
   <p class="who">Who: anyone with the <i>Release held results</i> permission (intake clerks and supervisors).</p>
   <p>A row is <b>held</b> when MERIT cannot load it safely. It waits with a named <b>cause</b>. Held records are grouped by cause, laboratory and reported value, so you fix a cause once and release every row it held. Groups with high results are marked <b>urgent</b>: work them first.</p>
-  <figure class="shot"><img src="../images/guide/03-held.jpg" style="width:7.20in" alt="Held records grouped by cause, with Release selected and Reject selected buttons and the list of rows"><figcaption>Held records: groups by cause at the top, rows below. Selecting a single row opens its reported values beside a correction form.</figcaption></figure>
+  <figure class="shot"><img src="../images/guide/03-held.jpg" style="width:5.87in" alt="Held records grouped by cause, with Release selected and Reject selected buttons and the list of rows"><figcaption>Held records: groups by cause at the top, rows below. Selecting a single row opens its reported values beside a correction form.</figcaption></figure>
   </div>
   <ol class="steps">
-    <li>Open <span class="ui">Held records</span> (or click <b>Held intake records</b> on Home).</li>
+    <li>Open <span class="ui">Held records</span> (or click a held line under <b>Needs attention</b> on Home, which opens that cause).</li>
     <li>Click a group under <b>By cause</b>. Its rows appear under <b>Rows</b>.</li>
-    <li>Fix the cause (table below). To correct one row, tick only that row: type the right value in the <b>Correction</b> column and click <span class="ui">Save correction</span>. The reported value is never changed; the correction sits beside it. You can correct one field, save, then correct another: every saved correction is kept. To remove a correction, clear its box and save.</li>
-    <li>Tick the rows and click <span class="ui">Release selected</span>. MERIT checks them again; rows that now pass are loaded.</li>
+    <li>Fix the cause (table below). For the whole group at once, use <b>Correct this cause</b>: the <b>Field</b> starts on the field the cause is about (Date of birth for a missing date of birth, Unit for an unknown unit), type the <b>Correction</b>, then <span class="ui">Correct selected in this group</span> or <span class="ui">Correct entire group</span>. MERIT asks you to confirm the field, the value and how many rows.</li>
+    <li>To correct one row, tick only that row: type the right value in the <b>Correction</b> column and click <span class="ui">Save correction</span>, or <span class="ui">Save and release this row</span>. The reported value is never changed; the correction sits beside it. You can correct one field, save, then correct another: every saved correction is kept. To remove a correction, clear its box and save.</li>
+    <li>Tick the rows and click <span class="ui">Release selected</span>. MERIT checks them again; rows that now pass are loaded. A row held for an uncertain match is not released here: its <b>Review the match</b> link opens it on Match review.</li>
     <li>If a row should never load (a test row, or a result for another state), type a <b>Reject reason</b> and click <span class="ui">Reject selected</span>.</li>
   </ol>
   <figure class="shot"><img src="../images/guide/03b-held-correction.jpg" style="width:7.11in" alt="Correcting one held row: each field with its reported value and an empty Correction box"><figcaption>Correcting one row: the reported values stay as sent; type the right value in <b>Correction</b> and click <b>Save correction</b> below the list.</figcaption></figure>
@@ -187,7 +191,7 @@
     <tr><td>Unknown test code</td><td>The LOINC code is not mapped to a metal. Ask your administrator to map it, or correct an obvious typo, then release.</td></tr>
     <tr><td>Unknown unit</td><td>The unit is not accepted for this test (for example mg/L for blood lead). Confirm the right unit with the laboratory and correct it.</td></tr>
     <tr><td>Missing date of birth / missing result value / impossible dates</td><td>Call the laboratory or the ordering provider; correct the field.</td></tr>
-    <tr><td>Uncertain person match</td><td>Decide it on <span class="ui">Match review</span> (next section).</td></tr>
+    <tr><td>Uncertain person match</td><td>Decide it on <span class="ui">Match review</span> (next section): choose <b>Review the match</b> on the row.</td></tr>
     <tr><td>Possible duplicate</td><td>Compare with the result already loaded; reject the duplicate with a reason.</td></tr>
     <tr><td>Out of jurisdiction / unusable address</td><td>Check the address; correct it, or reject with a reason and forward the report as your program requires.</td></tr>
   </table>
@@ -198,17 +202,18 @@
   <div class="keep">
   <h2>5. Match review: is this the same person?</h2>
   <p>MERIT links a result to a person automatically only when name, date of birth and sex agree exactly. When a record looks like someone already in MERIT but not exactly (a nickname, a swapped day and month, a hyphenated name, a possible twin), it waits for you on <span class="ui">Match review</span>. Placeholder names such as "Baby Boy" are never linked automatically.</p>
-  <figure class="shot"><img src="../images/guide/04-match-review.jpg" style="width:6.42in" alt="Person matching review: the waiting records on the left, the incoming record and its candidates field by field"><figcaption>Match review: the waiting records on the left (urgent first); the incoming record and each candidate side by side, field by field, with <b>Why suggested</b> and the decision buttons below.</figcaption></figure>
+  <figure class="shot side"><img src="../images/guide/04-match-review.jpg" style="width:4.90in" alt="Person matching review: the waiting records on the left, the incoming record and its candidates field by field"><figcaption>Match review: the waiting records on the left (urgent first); a line of advice for the record; the incoming record and each candidate side by side, field by field, with <b>Why suggested</b> and the decision buttons below.</figcaption></figure>
   </div>
   <table>
-    <tr><th>Decision</th><th>Key</th><th>What happens</th></tr>
-    <tr><td>Same person as …</td><td><span class="key">S</span> (or <span class="key">1</span>–<span class="key">5</span> to pick a candidate)</td><td>The result is linked to that person</td></tr>
+    <tr><th>Decision</th><th>Key (with <span class="key">Alt</span>+<span class="key">Shift</span>)</th><th>What happens</th></tr>
+    <tr><td>Same person as …</td><td><span class="key">S</span> (or <span class="key">1</span>–<span class="key">5</span> to pick a candidate)</td><td>The result is linked to that person. If a candidate has a safeguard (for example a different date of birth), MERIT asks you to confirm</td></tr>
     <tr><td>Different person</td><td><span class="key">D</span></td><td>MERIT remembers the pair and will not suggest it again; with no candidate left, the record loads as a new person</td></tr>
     <tr><td>Not sure</td><td><span class="key">N</span></td><td>Sent to a supervisor, with your optional note</td></tr>
-    <tr><td>Create as a new person</td><td><span class="key">C</span></td><td>A new person record is created</td></tr>
+    <tr><td>Create as a new person</td><td><span class="key">C</span></td><td>A new person record is created. With no candidate, this is the main button</td></tr>
     <tr><td>History / next / previous</td><td><span class="key">H</span> <span class="key">J</span> <span class="key">K</span></td><td>Show the candidate's history; move through the queue</td></tr>
   </table>
-  <div class="box"><strong>When in doubt, choose Not sure.</strong> Linking two different people is much harder to undo than waiting a day for a supervisor. Supervisors tick <b>Sent to a supervisor only</b> to see the records escalated to them.</div>
+  <p>Hold <span class="key">Alt</span>+<span class="key">Shift</span> with each key, so typing never decides by accident. For a long review, tick <b>Single-key shortcuts</b>: the keys then work alone, a decision key must be pressed <b>twice</b> (the first press highlights the button; <span class="key">Esc</span> cancels), and keys typed in the note never count.</p>
+  <div class="box"><strong>When in doubt, choose Not sure.</strong> Linking two different people is much harder to undo than waiting a day for a supervisor. Supervisors tick <b>Show only records sent to a supervisor</b> to see the records escalated to them. For a placeholder name such as "Baby Boy" the names will not agree: decide on the date of birth, address and guardian.</div>
 </section>
 
 <!-- ============================================================ 6 reporters -->
@@ -233,11 +238,11 @@
   <h2>7. Entering people and results by hand</h2>
   <p class="who">For fax and paper reports, phone calls, and records from other programs. Who: anyone with <i>Edit people</i> and <i>Enter results</i>.</p>
   <h3>Always search first</h3>
-  <p>Use the header search with the person's name and date of birth. MERIT keeps <b>one record per person</b>; a duplicate splits their history and can hide a case. Open the person if they are already there.</p>
+  <p>Open <span class="ui">People</span> and search with the person's name and date of birth, last name first (<code>Rivera Mia 2023-05-14</code>). MERIT keeps <b>one record per person</b>; a duplicate splits their history and can hide a case. Open the person if they are already there.</p>
   <h3>Add a person</h3>
   <ol class="steps">
-    <li>From the search results, choose <b>Add a person</b>.</li>
-    <li>Enter last, first and middle name, date of birth (tick <b>Verified against a second source</b> when you have checked it), sex, race (any that apply), ethnicity and preferred language.</li>
+    <li>Below the search, choose <b>Add a person</b>. After a search, the form starts with the name and date of birth you searched for, so check them rather than retype them.</li>
+    <li>Enter or check last, first and middle name, date of birth (tick <b>Verified against a second source</b> when you have checked it), sex, race (any that apply), ethnicity and preferred language.</li>
     <li>Save. The person page opens. A person record holds identity only; places, relationships and jobs are added on the person page.</li>
   </ol>
   <figure class="shot side"><img src="../images/guide/07-person-new.jpg" style="width:4.71in" alt="The Add a person form"><figcaption><b>Add a person.</b> Last and first name, date of birth (tick <b>Verified against a second source</b> once checked), sex, race, ethnicity and preferred language, then <b>Save</b>.</figcaption></figure>
@@ -256,7 +261,7 @@
     <li>Enter the <b>Collected</b> date (required), and the analyzed and reported dates, test method, accession number, reason for test and payer when you have them.</li>
     <li>Save. MERIT shows the standardized value and whether it reached any level. A result at or above the case level opens or updates a case, exactly as for an uploaded file.</li>
   </ol>
-  <figure class="shot side"><img src="../images/guide/09-result-new.jpg" style="width:4.71in" alt="The Enter a result form"><figcaption><b>Enter a result.</b> Choose the analyte first: the specimen and unit choices follow it. Type the value as reported, the collected date, and the other details you have, then <b>Save result</b>.</figcaption></figure>
+  <figure class="shot side"><img src="../images/guide/09-result-new.jpg" style="width:4.68in" alt="The Enter a result form"><figcaption><b>Enter a result.</b> Choose the analyte first: the specimen and unit choices follow it. Type the value as reported, the collected date, and the other details you have, then <b>Save result</b>.</figcaption></figure>
 </section>
 
 <!-- ============================================================ 8 other data -->
@@ -280,22 +285,22 @@
   <div class="keep">
   <h2>9. Cases and work queues</h2>
   <p>MERIT opens a <b>case</b> automatically when a result reaches the case level for the person's population (child, adult, pregnant). The case collects the results, tasks, activity and investigations for that exposure.</p>
-  <figure class="shot"><img src="../images/guide/11-case.jpg" style="width:7.20in" alt="A case page: summary, assignment, status, open tasks and investigations"><figcaption>A case: the summary, assignment and status on the left; open tasks and investigations on the right.</figcaption></figure>
+  <figure class="shot"><img src="../images/guide/11-case.jpg" style="width:7.20in" alt="A case page: summary, assignment, status, open tasks and investigations"><figcaption>A case: the summary, assignment and status on the left, with <b>Save</b>; open tasks and investigations on the right.</figcaption></figure>
   </div>
   <h3>Working a case</h3>
   <ol class="steps">
     <li>Open it from <span class="ui">Cases</span>, from Home, from a task, or from the person page.</li>
     <li>Set <b>Assigned to</b>, the <b>Exposure category</b> and the <b>Status</b>, then save.</li>
-    <li>Record every call, letter and visit in the <b>Activity log</b>. Contact attempts count toward the letter MERIT queues after repeated failed attempts.</li>
-    <li>Click <span class="ui">Request an investigation</span> for a home, child-care or workplace investigation (section 10).</li>
-    <li>If the automatic classification is wrong, use <b>Override classification</b> and give the reason; the override and its reason stay on the case. When follow-up is complete, <span class="ui">Close case</span> with the closing reason.</li>
+    <li>Record every call, letter and visit under <b>Log an activity</b>, below the activity history. Contact attempts count toward the letter MERIT queues after repeated failed attempts.</li>
+    <li>Click <span class="ui">Request an investigation</span> for a home, child-care or workplace investigation (section 10). It needs a place or employer on the person's record: if there is none, choose <b>Add a place now</b>, add it in the window that opens, and the request is available straight away.</li>
+    <li>If the automatic classification is wrong, open <b>Change classification…</b>, choose the classification and population and give the reason; the override and its reason stay on the case. When follow-up is complete, open <b>Close case…</b>: closing dismisses the case's open tasks, and the case cannot be edited until someone reopens it with a reason.</li>
   </ol>
 </section>
 
 <section class="flow">
   <div class="keep">
   <h3>Work queues</h3>
-  <figure class="shot"><img src="../images/guide/13-queues.jpg" style="width:7.20in" alt="Work queues: the queue list on the left and the task table with Assign to me, Assign, Complete and Dismiss"><figcaption>Work queues: pick a queue on the left; filter by status, <b>Assigned to me</b> or <b>Urgent only</b>; tick tasks and use the buttons above the table.</figcaption></figure>
+  <figure class="shot"><img src="../images/guide/13-queues.jpg" style="width:7.20in" alt="Work queues: the queue list on the left and the task table with Assign to me, Assign, Complete and Dismiss"><figcaption>Work queues: pick a queue on the left; filter by status, <b>Assigned to me</b>, <b>Urgent only</b> or <b>Overdue only</b>; each task's detail reads under its title (<b>Show more</b> for long ones); tick tasks and use the buttons above the table.</figcaption></figure>
   </div>
   <table>
     <tr><th>Queue</th><th>What it asks you to do</th></tr>
@@ -307,7 +312,7 @@
     <tr><td>Cluster alerts</td><td>Several cases share a building, child-care site or worksite: review the cluster</td></tr>
     <tr><td>Person match review (supervisor)</td><td>A reviewer was not sure; decide on Match review</td></tr>
   </table>
-  <p>Tick one or more tasks, then <span class="ui">Assign to me</span>, choose a person and <span class="ui">Assign</span>, <span class="ui">Complete</span>, or <span class="ui">Dismiss</span> a task that no longer applies. Change <b>Status</b> to see done and dismissed tasks.</p>
+  <p>Tick one or more tasks, then <span class="ui">Assign to me</span>, choose a person and <span class="ui">Assign</span>, <span class="ui">Complete</span>, or <span class="ui">Dismiss</span> a task that no longer applies, with a <b>Reason for dismissal</b>. Change <b>Status</b> to see done and dismissed tasks, and <span class="ui">Reopen selected</span> to bring them back. <b>Columns</b> shows or hides columns, such as Created. On a phone, tasks show as cards, and the buttons appear at the foot of the screen once you tick a task.</p>
 </section>
 
 <!-- ============================================================ 10 investigations -->
@@ -329,11 +334,11 @@
 <section class="flow">
   <div class="keep">
   <h2>11. Searching, results, clusters, map and reports</h2>
-  <figure class="shot"><img src="../images/guide/19-search.jpg" style="width:7.20in" alt="Search results for Rivera: people with date of birth, sex, county, open cases and what matched"><figcaption><b>Search</b> (header): people, cases and accession numbers. Each open case shows its metal, classification and number, and opens the case. <b>Add a person</b> is at the bottom of the results.</figcaption></figure>
+  <figure class="shot"><img src="../images/guide/19-search.jpg" style="width:7.20in" alt="Search results for Rivera: people with date of birth, sex, county, open cases and what matched"><figcaption><b>Search</b>: people, cases and accession numbers. Each open case shows its metal, classification and number, and opens the case. <b>Add a person</b> is below the results, beside the reminder to search first.</figcaption></figure>
   </div>
   <figure class="shot"><img src="../images/guide/18-results.jpg" style="width:7.20in" alt="The Results list with filters and a table of results"><figcaption><b>Results</b>: every result you may see; filter by analyte, collection dates, population and value, and sort by any column.</figcaption></figure>
   <figure class="shot"><img src="../images/guide/14-clusters.jpg" style="width:7.20in" alt="The Clusters list"><figcaption><b>Clusters</b>: cases sharing a building, child-care site or worksite within the detection window. Cases join or leave a cluster; nothing is merged.</figcaption></figure>
-  <figure class="shot side"><img src="../images/guide/15-map.jpg" style="width:4.88in" alt="The case map with filters, zoom buttons, a legend and case points"><figcaption><b>Map</b>: cases by residence, ringed when in an open cluster. Zoom and pan with the buttons, mouse or keyboard; select a point to read it. Cases without coordinates are listed below the map.</figcaption></figure>
+  <figure class="shot"><img src="../images/guide/15-map.jpg" style="width:5.11in" alt="The case map with filters, zoom buttons, a legend and case points"><figcaption><b>Map</b>: cases by residence, ringed when in an open cluster. Zoom and pan with the buttons, mouse or keyboard; select a point to read it. From the keyboard, <span class="key">Tab</span> reaches the points as one stop and the arrow keys move from point to point. Cases without coordinates are listed below the map.</figcaption></figure>
   <h3>Reports</h3>
   <p>Choose a report on the left, set <b>From</b>, <b>To</b> and the analyte, click <span class="ui">Apply</span>, and use <span class="ui">Export CSV</span> or <span class="ui">Export Excel</span> to share it. Exports are recorded in the audit log.</p>
   <figure class="shot"><img src="../images/guide/16-reports.jpg" style="width:6.32in" alt="Reports: the list of reports, the date and analyte filters, export buttons and a line chart of tests by month and population"><figcaption><b>Testing counts and rates</b>: tests by month for each population; the table below the chart has the numbers.</figcaption></figure>
@@ -362,11 +367,11 @@
     <li>A card appears: <b>Queued</b>, then <b>Running</b>, then <b>Ready</b>. It refreshes by itself.</li>
     <li>On the ready card, read the record count and the number of <b>validation findings</b>. Click <span class="ui">View findings</span> to see each one: the surrogate record id, the field and the rule.</li>
     <li>Fix what you can in MERIT (for example a missing county or a wrong date of birth) and click <span class="ui">Request</span> again for a fresh file. Findings are warnings: your program decides whether a file with findings may be sent.</li>
-    <li>Click <span class="ui">Download</span> and upload the file to CDC the way your CDC program contact has set up.</li>
-    <li>When CDC has received it, click <span class="ui">Mark submitted</span> and confirm. The card shows <b>Submitted</b>, and the file can still be downloaded later.</li>
+    <li>Click <span class="ui">Download</span> and upload the file to CDC the way your CDC program contact has set up. When a period has several runs, send the one marked <b>Latest</b>; older ones say which run replaced them.</li>
+    <li>When CDC has received it, click <span class="ui">Mark submitted</span>. MERIT names the run and asks you to confirm, because this cannot be undone. The card shows <b>Submitted</b>, and the file can still be downloaded later.</li>
   </ol>
   <figure class="shot"><img src="../images/guide/17-extracts.jpg" style="width:7.20in" alt="Federal extracts: the Request a file form with Extract, Year and Quarter"><figcaption>Request a file: the extract, the year and, for CBLS, the quarter.</figcaption></figure>
-  <figure class="shot side"><img src="../images/guide/17b-extract-runs.jpg" style="width:2.09in" alt="A ready extract run card: Ready, record and finding counts, Download and Mark submitted"><figcaption>A ready run: the record count and the number of validation findings (<b>View findings</b> appears when there are any), <b>Download</b>, and <b>Mark submitted</b> once the file is sent.</figcaption></figure>
+  <figure class="shot side"><img src="../images/guide/17b-extract-runs.jpg" style="width:2.09in" alt="A ready extract run card: Ready, record and finding counts, Download and Mark submitted"><figcaption>A ready run: <b>Latest</b> for its period, the record count and the number of validation findings (<b>View findings</b> appears when there are any), <b>Download</b>, and <b>Mark submitted</b> once the file is sent.</figcaption></figure>
   <h3>The annual ABLES file</h3>
   <p>The same steps, with <b>Extract</b> = ABLES (annual) and the year. ABLES uses each adult's employment (industry and occupation codes) and exposure sources, so check the Employment section of adult cases during the year.</p>
   <div class="box warn"><strong>A run failed?</strong> The card shows the error. Most failures are an inactive layout or missing setting; tell your administrator, then request again.</div>
@@ -377,17 +382,17 @@
   <h2>13. For supervisors and administrators</h2>
   <h3>Weekly checks for supervisors</h3>
   <ul>
-    <li><b>Home:</b> overdue tasks and elevated results held at intake should be near zero.</li>
+    <li><b>Home:</b> <i>Overdue tasks, all queues</i> and <i>Held results with an elevated value</i> should be near zero.</li>
     <li><b>Work queues:</b> filter <b>Urgent only</b>; reassign tasks of people who are away.</li>
-    <li><b>Match review:</b> tick <b>Sent to a supervisor only</b> and decide the escalated records.</li>
+    <li><b>Match review:</b> tick <b>Show only records sent to a supervisor</b> and decide the escalated records.</li>
     <li><b>Clusters:</b> review new clusters and set their status.</li>
   </ul>
   <h3>Configuration (administrators)</h3>
   <p><span class="ui">Configuration</span> holds the <b>thresholds</b> (case and action levels for each metal, specimen and population, with the date each takes effect), the <b>jurisdiction settings</b> (for example the investigation look-back, contact attempts before a letter, cluster window and size) and the <b>analytes</b> in use. A new value takes effect from its date; old values are kept for history. Review them once a year and whenever guidance changes.</p>
   <div class="keep">
   <h3>Users and access</h3>
-  <p>On <span class="ui">Users</span>, add people, set where they work, and give them roles at a tenant. The companion guide <i>Who sees what, and your profiles</i> explains roles, master profiles and viewing as someone.</p>
-  <figure class="shot"><img src="../images/guide/21-users.jpg" style="width:7.20in" alt="The Users list: name, user name, works for, master profile, MFA, last sign-in and status"><figcaption>Users: everyone who works for the tenants you administer, with their master profile and second-factor status. <b>Add a user</b> is at the top right.</figcaption></figure>
+  <p>On <span class="ui">Users</span>, add people, set where they work, and give them roles at a tenant: <span class="ui">Add a user</span> can give a new account its first access in the same save. The companion guide <i>Who sees what, and your profiles</i> explains roles, master profiles and viewing as someone. The <span class="ui">Audit log</span> lists every view, change and export, filtered by user, action, record type, record or dates, with a CSV export. Open it from <span class="ui">Users</span>, or under <b>Administration</b> in the grouped-navigation preview.</p>
+  <figure class="shot"><img src="../images/guide/21-users.jpg" style="width:7.20in" alt="The Users list: name, user name, works for, master profile, MFA, last sign-in and status"><figcaption>Users: everyone who works for the tenants you administer, with their master profile and second-factor status. Filter the list by name, user name or tenant; <b>Add a user</b> and <b>Audit log</b> are at the top right.</figcaption></figure>
   </div>
   <div class="keep">
   <h3>Adding a county, program or other tenant</h3>
@@ -397,7 +402,7 @@
     <li>Open <span class="ui">Tenants</span>. Under <b>Goes under</b> choose the parent (only tenants you administer are listed).</li>
     <li>Choose the <b>Kind of tenant</b>: under a state, a <i>local jurisdiction</i> (a county or city health department) or a <i>program</i> (for example occupational health). A platform administrator can also add regions, states and tribes; a region administrator can add states and tribes to the region.</li>
     <li>Give a <b>Code</b> (capital letters, digits and hyphens, for example <code>WV-JEFFERSON</code>; it cannot be changed) and a <b>Name</b>.</li>
-    <li>For a county, list the three-digit county FIPS codes it serves (<code>037, 003</code>). Counties not yet in MERIT go in <b>New counties</b>, one per line: <code>037 Jefferson County</code>. Under a county or program you can choose only counties it already serves, and <b>New counties</b> is not offered: new counties are added under the state. For a new state or tribe, give its two-letter postal code and state FIPS code.</li>
+    <li>For a county or program, tick the counties it serves under <b>Counties it serves</b> (each listed with its three-digit FIPS code). Counties not yet in MERIT go in <b>New counties</b>, one per line: <code>037 Jefferson County</code>. Under a county or program you can choose only counties it already serves, and <b>New counties</b> is not offered: new counties are added under the state. For a new state or tribe, give its two-letter postal code and state FIPS code.</li>
     <li>Click <span class="ui">Add tenant</span>, then add its people on <span class="ui">Users</span>.</li>
   </ol>
 </section>
@@ -427,8 +432,8 @@
   <p><b>Can I change a result a laboratory reported?</b><br>No. Reported values are kept as sent. Corrections come from the laboratory as a corrected result, or as a correction beside a held row before it is released.</p>
   <p><b>The Extracts card says Ready but shows findings. Can I send it?</b><br>Findings are warnings. Fix what you can and request the file again; your program decides whether to send a file that still has findings.</p>
   <p><b>I marked an extract submitted by mistake.</b><br>The file is unchanged and can still be downloaded. Ask your administrator if the status needs correcting.</p>
-  <p><b>A menu item a colleague has is missing for me.</b><br>Your role or profile does not include it. Check the profile in the header, then ask your administrator.</p>
-  <p class="foot" style="margin-top:2em">MERIT user guide: daily, weekly and quarterly work. Screens are from the demonstration site; people and data are made up.</p>
+  <p><b>A menu item a colleague has is missing for me, or a page says Not permitted.</b><br>Your role or profile does not include it. Check the profile in the header, switch if another profile has it, then ask your administrator.</p>
+  <p class="foot" style="margin-top:.6em">MERIT user guide: daily, weekly and quarterly work. Screens are from the demonstration site; people and data are made up.</p>
 </section>
 </body>
 </html>
