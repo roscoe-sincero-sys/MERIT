@@ -1,5 +1,9 @@
 # Issue #137: horizontal navigation and contextual panels
 
+> **Superseded by #184** (November 3, 2026): the grouped navigation is now the only header and the
+> `Navigation:Enhanced` setting was removed. The record below is kept as it was written.
+
+
 ## Implementation and rollout
 
 The enhancement keeps global navigation horizontal. Home, Work queues and People are direct links; Intake,

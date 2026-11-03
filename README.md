@@ -198,7 +198,6 @@ dotnet run --project src/Merit.Web         # terminal 2: https://localhost:7243
 | `DataProtection:KeyPath` | app data folder | Web | Where ASP.NET Core data-protection keys are kept. They protect MFA secrets and cookies, so share them across web servers. |
 | `Merit:SignInAttemptsPerMinute` | `30` | Web | Password attempts allowed per client address in any minute. Over the limit the client sees a **Too many attempts** page (HTTP 429 with `Retry-After`). Other clients are not affected, and repeated wrong passwords still lock the account after 5 tries. |
 | `Merit:MfaAttemptsPerMinute` | `30` | Web | The same limit for the authenticator-code and enrollment steps, counted separately. |
-| `Navigation:Enhanced` | `false` (`true` in Development) | Web | The grouped header (Intake, Surveillance, Registry & reports, Administration) and the collapsible queue and report lists. Off, the header lists each screen. |
 | `Merit:ForwardedHeaders:KnownProxies` | empty | Web | Addresses of reverse proxies whose `X-Forwarded-For` is trusted. Set it behind a proxy or load balancer, or every client shares the proxy's address and its limit. |
 | `Urls` | `http://localhost:5280` | Worker | Health endpoints `/health` and `/health/queues`. |
 | `Worker:PollSeconds` | `2` | Worker | How often the worker looks for queued jobs. |

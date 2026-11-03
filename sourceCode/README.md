@@ -82,11 +82,9 @@ dotnet run --project src/Merit.Worker      # in one terminal
 dotnet run --project src/Merit.Web         # in another
 ```
 
-The navigation enhancement preview (#137) is enabled by `Navigation:Enhanced` in Development. Other environments
-default to the existing header; set `Navigation__Enhanced=true` to evaluate the grouped horizontal header and
-collapsible contextual navigation on Work queues and Reports. Complete the manual rollout checks in
-`../docs/issue-137-enhancement-verification.md` before enabling it by default. Browser navigation specs expect the
-preview to be enabled. Both layouts retain server-side permission filtering.
+The header groups the screens into Intake, Surveillance, Registry & reports and Administration menus, with
+collapsible queue and report lists on Work queues and Reports (#137). It is the only header (#184): the former
+`Navigation:Enhanced` setting no longer exists, and a deployment that still sets it gets the same header.
 
 The first build runs `npm install` and `ng build` in `src/Merit.Web/ClientApp`, which writes to `wwwroot/app`. Later
 Debug builds skip that step until the output is deleted; Release builds always rebuild the client. To skip it, pass

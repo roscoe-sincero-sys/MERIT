@@ -1,18 +1,16 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, inject, input, OnInit, signal, viewChild } from '@angular/core';
 
-/** Reclaims working width on the two pages that already have contextual navigation (#137). */
+/** Reclaims working width on the two pages that already have contextual navigation (#137), in every installation (#184). */
 @Component({
   selector: 'merit-context-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="layout" [class.collapsed]="!expanded()" (keydown.escape)="dismiss($event)">
       <div class="panel">
-        @if (enabled) {
-          <button #toggleButton type="button" class="usa-button usa-button--outline toggle"
-                  [attr.aria-controls]="panelId()" [attr.aria-expanded]="expanded()" (click)="toggle()">
-            {{ expanded() ? 'Hide' : 'Show' }} {{ label() }}
-          </button>
-        }
+        <button #toggleButton type="button" class="usa-button usa-button--outline toggle"
+                [attr.aria-controls]="panelId()" [attr.aria-expanded]="expanded()" (click)="toggle()">
+          {{ expanded() ? 'Hide' : 'Show' }} {{ label() }}
+        </button>
         <div #navigation [id]="panelId()" [hidden]="!expanded()" (click)="choose($event)">
           <ng-content select="[panelNavigation]" />
         </div>
@@ -31,7 +29,6 @@ import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, inject, inp
 export class ContextPanelComponent implements OnInit {
   readonly panelId = input.required<string>();
   readonly label = input.required<string>();
-  protected readonly enabled = document.querySelector('header')?.getAttribute('data-enhanced-navigation') === 'true';
   protected readonly expanded = signal(true);
   private readonly navigation = viewChild.required<ElementRef<HTMLElement>>('navigation');
   private readonly toggleButton = viewChild<ElementRef<HTMLButtonElement>>('toggleButton');
@@ -40,7 +37,6 @@ export class ContextPanelComponent implements OnInit {
   private desktopExpanded = true;
 
   ngOnInit(): void {
-    if (!this.enabled) return;
     try { this.desktopExpanded = localStorage.getItem(this.storageKey()) !== 'false'; } catch { /* Storage may be disabled. */ }
     this.expanded.set(!this.narrow.matches && this.desktopExpanded);
     const resize = () => this.setExpanded(!this.narrow.matches && this.desktopExpanded);
@@ -59,7 +55,7 @@ export class ContextPanelComponent implements OnInit {
   }
 
   protected dismiss(event: Event): void {
-    if (!this.enabled || !this.expanded()) return;
+    if (!this.expanded()) return;
     if (!this.navigation().nativeElement.contains(event.target as Node) && event.target !== this.toggleButton()?.nativeElement) return;
     event.preventDefault();
     this.setExpanded(false);
@@ -67,7 +63,7 @@ export class ContextPanelComponent implements OnInit {
   }
 
   protected choose(event: Event): void {
-    if (this.enabled && this.narrow.matches && (event.target as HTMLElement).closest('a')) this.setExpanded(false);
+    if (this.narrow.matches && (event.target as HTMLElement).closest('a')) this.setExpanded(false);
   }
 
   private setExpanded(open: boolean): void {

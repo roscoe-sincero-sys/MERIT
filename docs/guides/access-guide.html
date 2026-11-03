@@ -37,7 +37,7 @@
   .screen .cap { background: #71767a; color: #fff; font-size: 8.5pt; padding: .15em .6em; }
   .bar { background: var(--blue); color: #fff; padding: .45em .8em; display: flex; justify-content: space-between; align-items: center; }
   .bar b { font-size: 13pt; letter-spacing: .03em; }
-  .bar .nav span { margin-right: .9em; font-size: 9pt; }
+  .bar .nav span { margin-right: .9em; font-size: 9pt; white-space: nowrap; }
   .bar .me { text-align: right; font-size: 8.5pt; line-height: 1.25; }
   .bar .me u { color: #fff; }
   .bar .switch { display: inline-block; margin-left: .5em; padding: .1em .45em; border: 1px solid #ffffffb3; border-radius: 4px; text-align: left; vertical-align: middle; }
@@ -268,10 +268,10 @@
 <section class="page">
   <h2>5. Using profiles: step by step</h2>
   <h3>See which profile you are using</h3>
-  <p>In the grouped-navigation preview, profile access stays in the header. On smaller screens, open <b>Menu</b> to reveal it. <b>Administration</b> groups reference levels/configuration, Users and Tenants according to your current profile's permissions; unavailable destinations and empty groups are omitted. The illustration below shows the original header, which remains available outside the preview.</p>
+  <p>Your profile is always in the header. On smaller screens, open <b>Menu</b> to reveal it. The <b>Administration</b> menu lists reference levels or configuration, Users, Tenants and the Audit log according to your current profile's permissions; unavailable destinations and empty menus are left out.</p>
   <p>The top right of every page shows your name, the place you are working in, and your profile in an outlined box. Select the box (<b>Switch</b>) to open <b>My profiles</b>.</p>
   <div class="screen"><div class="cap">Every page: the header</div>
-    <div class="bar"><b>MERIT</b><span class="nav"><span>Home</span><span>Work queues</span><span>Cases</span><span>Reports</span></span>
+    <div class="bar"><b>MERIT</b><span class="nav"><span>Home</span><span>Work queues</span><span>People</span><span>&#9656; Surveillance</span><span>&#9656; Administration</span></span>
       <span class="me">Bailey Kim<br>Jefferson County Health Department <span class="switch"><small>Profile</small> <b>Read only - Berkeley</b> <u>Switch &#9662;</u></span> <span class="callout">1</span></span></div>
   </div>
   <p><span class="callout">1</span> Select the profile box to switch or manage your profiles. Beside it, <b>User guide</b> opens these guides in a new tab.</p>
