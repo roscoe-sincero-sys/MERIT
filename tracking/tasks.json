@@ -1440,6 +1440,17 @@
       "started": "2026-11-02",
       "finished": "2026-11-03",
       "notes": "Guide text brought up to date with PRs #121-#178; 30 screenshots retaken on a fresh MERIT_GUIDES_20261102 demo with the default header; diagram regenerated with HL7; PDFs reprinted (26, 9 and 13 pages); capture tool selectors fixed"
+    },
+    {
+      "id": "T208",
+      "phase": "12 Quality",
+      "task": "Audit log in the default header; cluster detection reports the clusters it created",
+      "ref": "Issues #180, #181",
+      "where": "Views/Shared/_Layout.cshtml; dbo.uspDetectClusters (procs_work.py); WorkData.DetectClustersAsync; HeaderNavigationTests, ClusterDetectionTests; operations guide",
+      "status": "Done",
+      "started": "2026-11-03",
+      "finished": "2026-11-03",
+      "notes": "Default header lists Audit log for audit.view; procedure returns createdCount and the worker logs it; tests cover both headers and a 1-then-0 detection run; guide sentence and Home screenshot updated, PDF reprinted"
     }
   ]
 }

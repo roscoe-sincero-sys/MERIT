@@ -241,7 +241,7 @@ outlines gets the plain latitude and longitude grid.
 
 | Variable | Meaning |
 | --- | --- |
-| `MERIT_IT_SERVER`, `MERIT_IT_DATABASE`, `MERIT_IT_WEB_PASSWORD`, `MERIT_IT_SKIP_DEPLOY` | Integration test server and database (the default database is `MERIT_IT`). |
+| `MERIT_IT_SERVER`, `MERIT_IT_DATABASE`, `MERIT_IT_WEB_PASSWORD`, `MERIT_IT_WORKER_PASSWORD`, `MERIT_IT_SKIP_DEPLOY` | Integration test server and database (the default database is `MERIT_IT`). |
 | `MERIT_E2E_URL`, `MERIT_E2E_SERVER`, `MERIT_E2E_DATABASE`, `MERIT_E2E_CHANNEL` | End-to-end test target and browser. `MERIT_E2E_DATABASE` (default `MERIT`) names the database the running app uses; specs that create their own accounts or records run only when it is `MERIT_IT`. |
 | `Merit__SignInAttemptsPerMinute`, `Merit__MfaAttemptsPerMinute` | Set on the web app (not the test runner) to raise the sign-in limits when end-to-end runs are repeated in quick succession from one machine. The integration tests set their own limits. |
 

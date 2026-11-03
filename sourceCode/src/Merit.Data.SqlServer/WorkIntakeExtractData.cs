@@ -51,11 +51,9 @@ public sealed class WorkData(Db db) : IWorkData
     public Task<IReadOnlyList<QueueDepthRow>> GetQueueDepthAsync(CancellationToken ct = default)
         => db.QueryAsync<QueueDepthRow>("dbo.uspGetQueueDepth", null, ct);
 
+    /// <summary>Runs cluster detection; returns how many clusters it created (issue #181: it always said 0).</summary>
     public async Task<int> DetectClustersAsync(int windowDays, int minCount, CancellationToken ct = default)
-    {
-        await db.ExecuteAsync("dbo.uspDetectClusters", new { windowDays, minCount }, ct).ConfigureAwait(false);
-        return 0;
-    }
+        => await db.QuerySingleAsync<int>("dbo.uspDetectClusters", new { windowDays, minCount }, ct).ConfigureAwait(false);
 
     public Task RecordAuditAsync(string eventAction, string entityType, Guid? entityId, int? recordCount, string? clientAddress,
                                  CancellationToken ct = default)

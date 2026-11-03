@@ -67,6 +67,8 @@
                         @if (!CurrentSession.IsPlatformAdmin) { <li><a href="/config/thresholds" aria-current="@Current("/config")">@(CurrentSession.Has(Permissions.ConfigEdit) ? "Configuration" : "Reference levels")</a></li> }
                         @if (CurrentSession.Has(Permissions.TenantAdminister)) { <li><a href="/admin/users" aria-current="@Current("/admin/users")">Users</a></li> }
                         @if (CurrentSession.Has(Permissions.TenantCreate)) { <li><a href="/admin/tenants" aria-current="@Current("/admin/tenants")">Tenants</a></li> }
+                        @* Both headers list the audit log for audit.view, which supervisors hold without Users (issue #180). *@
+                        @if (CurrentSession.Has(Permissions.AuditView)) { <li><a href="/admin/audit" aria-current="@Current("/admin/audit")">Audit log</a></li> }
                     </ul>
                     }
                 </nav>

@@ -165,6 +165,8 @@ HTML guides from `docs/guides`. The build copies them and their images into `Hel
   - `MERIT_IT_SERVER`: the SQL Server instance. The default is `localhost\PORTAL`. A SQL Server 2022 container works too.
   - `MERIT_IT_DATABASE`: the database name.
   - `MERIT_IT_WEB_PASSWORD`: the meritWeb password. By default it is read from `src/Merit.Web/appsettings.Development.json`.
+  - `MERIT_IT_WORKER_PASSWORD`: the meritWorker password, for the worker-only procedures. By default it is read from
+    `src/Merit.Worker/appsettings.Development.json`.
   - `MERIT_IT_SKIP_DEPLOY=1`: reuse the deployed database.
 - What it covers:
   - Every page in both its full and its htmx partial shape.
