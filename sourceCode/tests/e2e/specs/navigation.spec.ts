@@ -13,7 +13,7 @@ for (const [user, count] of [['cmbalt', 11], ['supervisor', 16], ['admin', 18]] 
     for (const width of widths) {
       await page.setViewportSize({ width, height: 900 });
       await page.goto('/');
-      await expect(page.locator('header')).toHaveAttribute('data-enhanced-navigation', 'true');
+      await expect(page.locator('header details.merit-nav-group').first()).toBeAttached();
       const nav = page.getByRole('navigation', { name: 'Primary', exact: true });
       if (width <= 1024) await page.getByRole('button', { name: 'Menu', exact: true }).click();
       const links = await nav.locator('a').evaluateAll(els => els.map(a => a.getAttribute('href')!));

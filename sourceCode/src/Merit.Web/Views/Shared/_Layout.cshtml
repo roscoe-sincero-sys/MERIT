@@ -3,11 +3,9 @@
 @using Microsoft.AspNetCore.Authentication
 @{
     string path = Context.Request.Path.Value ?? "/";
-    string Current(string prefix) => (prefix == "/" ? path == "/" : path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) ? "page" : "false";
     bool signedIn = CurrentSession.IsAuthenticated;
     bool minimalHeader = ViewData["MinimalHeader"] is true;
     string profileHref = "/account/profiles?returnUrl=" + Uri.EscapeDataString($"{Context.Request.PathBase}{Context.Request.Path}{Context.Request.QueryString}");
-    bool enhancedNavigation = Configuration.GetValue<bool>("Navigation:Enhanced");
     long? sessionExpires = (await Context.AuthenticateAsync(AuthSchemes.Session)).Properties?.ExpiresUtc?.ToUnixTimeMilliseconds();
 }
 <!DOCTYPE html>
@@ -25,7 +23,8 @@
 </head>
 <body data-session-minutes="@(signedIn ? Configuration.GetValue("Session:IdleTimeoutMinutes", 20) : 0)" data-session-user="@CurrentSession.UserName" data-session-expires="@sessionExpires">
     <a class="merit-skip" href="#main-content">Skip to main content</a>
-    <header class="merit-header @(enhancedNavigation ? "merit-header--enhanced" : "")" role="banner" data-enhanced-navigation="@(enhancedNavigation ? "true" : "false")">
+    @* One header for every installation: the grouped navigation from #137, no longer behind a setting (issue #184). *@
+    <header class="merit-header" role="banner">
         <div class="merit-header__inner">
             <a class="merit-brand" href="/">MERIT<small>Metals Exposure Registry and Investigation Tracking</small></a>
             @if (signedIn && minimalHeader)
@@ -43,34 +42,7 @@
                 @* On a phone the menu and the user block fold behind this button; merit.js shows it (issue #47). *@
                 <button class="usa-button usa-button--outline usa-button--inverse merit-menu-button" type="button" aria-expanded="false" aria-controls="merit-nav merit-user">Menu</button>
                 <nav id="merit-nav" class="merit-header__nav" aria-label="Primary">
-                    @if (enhancedNavigation)
-                    {
-                        @await Html.PartialAsync("_PrimaryNavigation")
-                    }
-                    else
-                    {
-                    <ul class="merit-nav">
-                        @if (CurrentSession.Has(Permissions.PersonView)) { <li><a href="/search" aria-current="@(path.StartsWith("/people", StringComparison.OrdinalIgnoreCase) ? "page" : Current("/search"))">People</a></li> }
-                        @if (CurrentSession.Has(Permissions.TaskView)) { <li><a href="/" aria-current="@Current("/")">Home</a></li> }
-                        @if (CurrentSession.Has(Permissions.TaskView)) { <li><a href="/app/queues" aria-current="@Current("/app/queues")">Work queues</a></li> }
-                        @if (CurrentSession.Has(Permissions.ResultReleaseHold)) { <li><a href="/app/held" aria-current="@Current("/app/held")">Held records</a></li> }
-                        @if (CurrentSession.Has(Permissions.ResultReleaseHold)) { <li><a href="/app/match-review" aria-current="@Current("/app/match-review")">Match review</a></li> }
-                        @if (CurrentSession.Has(Permissions.ResultView)) { <li><a href="/app/results" aria-current="@Current("/app/results")">Results</a></li> }
-                        @if (CurrentSession.Has(Permissions.CaseView)) { <li><a href="/cases" aria-current="@Current("/cases")">Cases</a></li> }
-                        @if (CurrentSession.Has(Permissions.CaseView)) { <li><a href="/app/clusters" aria-current="@Current("/app/clusters")">Clusters</a></li> }
-                        @if (CurrentSession.Has(Permissions.CaseView)) { <li><a href="/app/map" aria-current="@Current("/app/map")">Map</a></li> }
-                        @if (CurrentSession.Has(Permissions.ResultView) || CurrentSession.Has(Permissions.CaseView)) { <li><a href="/app/reports" aria-current="@Current("/app/reports")">Reports</a></li> }
-                        @if (CurrentSession.Has(Permissions.CaseView)) { <li><a href="/investigations" aria-current="@Current("/investigations")">Investigations</a></li> }
-                        @if (CurrentSession.Has(Permissions.IntakeUpload)) { <li><a href="/intake" aria-current="@Current("/intake")">Intake</a></li> }
-                        @if (CurrentSession.Has(Permissions.ExtractRun)) { <li><a href="/extracts" aria-current="@Current("/extracts")">Extracts</a></li> }
-                        @if (CurrentSession.Has(Permissions.PersonView)) { <li><a href="/reporters" aria-current="@Current("/reporters")">Reporters</a></li> }
-                        @if (!CurrentSession.IsPlatformAdmin) { <li><a href="/config/thresholds" aria-current="@Current("/config")">@(CurrentSession.Has(Permissions.ConfigEdit) ? "Configuration" : "Reference levels")</a></li> }
-                        @if (CurrentSession.Has(Permissions.TenantAdminister)) { <li><a href="/admin/users" aria-current="@Current("/admin/users")">Users</a></li> }
-                        @if (CurrentSession.Has(Permissions.TenantCreate)) { <li><a href="/admin/tenants" aria-current="@Current("/admin/tenants")">Tenants</a></li> }
-                        @* Both headers list the audit log for audit.view, which supervisors hold without Users (issue #180). *@
-                        @if (CurrentSession.Has(Permissions.AuditView)) { <li><a href="/admin/audit" aria-current="@Current("/admin/audit")">Audit log</a></li> }
-                    </ul>
-                    }
+                    @await Html.PartialAsync("_PrimaryNavigation")
                 </nav>
                 @* People search has its own, larger box; one search per page (issue #147). *@
                 @if (CurrentSession.Has(Permissions.PersonView) && !path.Equals("/search", StringComparison.OrdinalIgnoreCase))

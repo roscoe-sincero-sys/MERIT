@@ -1451,6 +1451,17 @@
       "started": "2026-11-03",
       "finished": "2026-11-03",
       "notes": "Default header lists Audit log for audit.view; procedure returns createdCount and the worker logs it; tests cover both headers and a 1-then-0 detection run; guide sentence and Home screenshot updated, PDF reprinted"
+    },
+    {
+      "id": "T209",
+      "phase": "12 Quality",
+      "task": "Grouped navigation is the only header; Navigation:Enhanced removed",
+      "ref": "Issue #184",
+      "where": "Views/Shared/_Layout.cshtml; appsettings.json; merit.css; context-panel.component.ts; HeaderNavigationTests; navigation.spec.ts; guides, PDFs, READMEs",
+      "status": "Done",
+      "started": "2026-11-03",
+      "finished": "2026-11-03",
+      "notes": "Legacy one-line menu and the setting removed; Show/Hide lists always available; a leftover setting is ignored (tested both ways); appsettings.Development.json left as-is per standing instruction; #137 human rollout checks remain the owner's decision"
     }
   ]
 }
