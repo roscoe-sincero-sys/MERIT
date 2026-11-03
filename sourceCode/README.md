@@ -95,7 +95,9 @@ Debug builds skip that step until the output is deleted; Release builds always r
 ## 4. Sign in
 
 Every demo user has the password `MeritDemo!2026`. The first sign-in enrolls an authenticator app: scan the QR code
-or type the key, then keep the recovery codes.
+or type the key, then keep the recovery codes. Until you tick **I have saved these codes** and continue, every other
+page leads back to them; the codes wait for half an hour in an encrypted, HttpOnly cookie on that browser, never in the
+database, which keeps only their hashes.
 
 In Microsoft Authenticator, choose **Add account > Other account (Google, Facebook, etc.)** and scan the QR code.
 For manual setup, choose **Enter code manually** and enter the account name and setup key shown by MERIT, without
@@ -129,7 +131,8 @@ administrators can view MERIT as the people they manage. `docs/MERIT User Guide 
 the model for users.
 
 To try intake, sign in as `intake` and upload `samples/chesapeake_lab_sample.csv` on the Intake screen.
-Native HL7 v2.3.1/v2.5.1 ORU^R01 files use the **Chesapeake Reference Laboratory HL7** profile.
+Native HL7 v2.3.1/v2.5.1 ORU^R01 files use the Chesapeake HL7 profile, listed as **HL7 message from Chesapeake
+Reference Laboratory** (profiles are listed by format, then sender).
 Try `samples/chesapeake_hl7_231.hl7` and `samples/chesapeake_hl7_251.hl7`; no CSV conversion is needed.
 See [HL7 intake](../docs/hl7-intake.md) for source profile provisioning, mappings, supported structures and limitations.
 
@@ -141,6 +144,9 @@ NPI. Try it with `samples/registry_npi_clia_sample.csv`. On **Extracts**, a run 
 and a ready run can be marked submitted (`extract.submit`, `dbo.uspMarkExtractSubmitted`).
 `samples/README.md` describes what each row should do. To try the person matching review, also upload
 `samples/chesapeake_match_review_sample.csv`, then open **Match review**.
+
+The user guides are in the app too: **User guide** in the header opens `/help` (signed-in users), which serves the
+HTML guides from `docs/guides`. The build copies them and their images into `Help/` beside the web app.
 
 ## 5. Tests
 
@@ -169,9 +175,12 @@ and a ready run can be marked submitted (`extract.submit`, `dbo.uspMarkExtractSu
     changes. A self-check proves the scan would notice a leak.
 
 **End-to-end tests.**
-- Settings: `MERIT_E2E_URL`, `MERIT_E2E_SERVER` and `MERIT_E2E_DATABASE`.
-- They reset MFA for the demo users `supervisor` and `cmbalt`, sign them in with the keyboard alone, then check two
-  things at tablet width (768 × 1024):
+- Settings: `MERIT_E2E_URL`, `MERIT_E2E_SERVER` and `MERIT_E2E_DATABASE` (default `MERIT`, the database the running
+  app uses; `tests/e2e/database.ts` holds the defaults for the setup and every spec).
+- Specs that create their own accounts or synthetic records run only when `MERIT_E2E_DATABASE=MERIT_IT`, with the app
+  pointed at `MERIT_IT` too; against the everyday demo they are skipped.
+- They reset MFA for the demo users `supervisor`, `cmbalt` and `admin`, sign them in with the keyboard alone, then check
+  two things at tablet width (768 × 1024):
   - Every key screen of both front ends meets WCAG 2.1 AA, checked with axe.
   - The keyboard-only flows work: skip link, search, the queue bulk select, match review J/K, the report measure
     picker, and the map zoom, pan and point focus.
@@ -214,5 +223,7 @@ and a ready run can be marked submitted (`extract.submit`, `dbo.uspMarkExtractSu
   cannot switch or view as anyone.
 - `tests/Merit.IntegrationTests/AuthorizationScenarioTests.cs` checks all of this on an EPA Region 3 tree: West
   Virginia, Pennsylvania, Delaware, a tribe, and Jefferson and Berkeley counties.
-- The Content Security Policy uses a per-request nonce, and there are no inline scripts or styles. htmx and USWDS CSS are served from
-  MERIT's own origin.
+- The Content Security Policy uses a per-request nonce, and the application pages have no inline scripts or styles.
+  htmx and USWDS CSS are served from MERIT's own origin. The user guides under `/help` are static documents with their
+  styles inline, so they get their own policy: no scripts at all (`default-src 'none'`), images from MERIT and inline
+  styles only.

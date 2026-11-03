@@ -155,7 +155,7 @@ async function signedIn(page, user) {
   ctx = await context(browser, 'supervisor', 680);
   p = await ctx.newPage();
   await p.goto('/people/new'); await p.waitForLoadState('networkidle'); await signedIn(p, 'supervisor');
-  await shot(p, '07-person-new', { top: '#dialog-title', bottom: 'main form button[type=submit]' });
+  await shot(p, '07-person-new', { top: 'main h1', bottom: 'main form button[type=submit]' });
   await p.goto(`/people/${personId}/results/new`); await p.waitForLoadState('networkidle');
   await shot(p, '09-result-new', { bottom: 'main button:has-text("Save result")' });
   await ctx.close();
@@ -164,7 +164,8 @@ async function signedIn(page, user) {
   ctx = await context(browser, 'admin', 1040);
   p = await ctx.newPage();
   await p.goto('/admin/tenants'); await p.waitForLoadState('networkidle'); await signedIn(p, 'admin');
-  await shot(p, '20-tenants', { bottom: ['details.merit-details', 'main ul.merit-tree'] });
+  // The county list runs long: stop after its first few counties, then the code and name come in the steps.
+  await shot(p, '20-tenants', { bottom: ['section[aria-labelledby="add-h"] .usa-checkbox >> nth=5', 'main ul.merit-tree'], padBottom: 4 });
   await ctx.close();
   ctx = await context(browser, 'admin', 1280);
   p = await ctx.newPage();

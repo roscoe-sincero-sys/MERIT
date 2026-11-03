@@ -1,6 +1,8 @@
 # User guide sources
 
-The PDF guides in `docs/` are printed from these HTML files:
+The PDF guides in `docs/` are printed from these HTML files. The web app also serves the HTML files to signed-in users
+under `/help` (the **User guide** link in the header); the build copies them and `docs/images/guide` into the app, and
+a `@media screen` block in each guide gives the browser a readable column without changing the print layout.
 
 | PDF | Source |
 | --- | --- |
@@ -22,6 +24,8 @@ their Archify candidates are under `.archify/`.
    .\Deploy-MeritDatabase.ps1 -DatabaseName MERIT_GUIDES -IncludeDemoData
    cd ..
    $env:ConnectionStrings__Merit = "<the Development connection string, with Database=MERIT_GUIDES>"
+   # The guides show the default header (each screen listed), not the grouped-navigation preview Development turns on:
+   $env:Navigation__Enhanced = "false"
    dotnet run --project src/Merit.Web --launch-profile Merit.Web
    # in a second window, with the worker's connection string and cluster detection on:
    $env:Worker__ClusterDetection__RunAsUserName = "supervisor"; dotnet run --project src/Merit.Worker

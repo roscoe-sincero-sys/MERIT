@@ -1429,6 +1429,17 @@
       "started": "2026-11-02",
       "finished": "2026-11-02",
       "notes": "Shared MERIT_E2E_SERVER/DATABASE and sql(); isolated-data specs skip unless MERIT_IT; queue test opens the collapsed panel; default run 142 passed, 5 skipped; MERIT_IT run of the affected specs 15 passed"
+    },
+    {
+      "id": "T207",
+      "phase": "12 Quality",
+      "task": "Documentation refresh: user guides, PDFs, screenshots, intake diagram, READMEs",
+      "ref": "Issue #179",
+      "where": "docs/guides/*.html, docs/*.pdf, docs/images/guide, docs/daily-intake_workflow.html, README.md, sourceCode/README.md, samples/README.md, docs/hl7-intake.md",
+      "status": "Done",
+      "started": "2026-11-02",
+      "finished": "2026-11-03",
+      "notes": "Guide text brought up to date with PRs #121-#178; 30 screenshots retaken on a fresh MERIT_GUIDES_20261102 demo with the default header; diagram regenerated with HL7; PDFs reprinted (26, 9 and 13 pages); capture tool selectors fixed"
     }
   ]
 }
