@@ -192,7 +192,8 @@ export class Stage {
       await this.call('ripple', this.cursor.x, this.cursor.y);
       await this.call('hideOptions');
     }
-    await target.selectOption({ label });
+    // By position: labels can carry indentation (non-breaking spaces) that an exact label match would miss.
+    await target.selectOption({ index });
     await this.settle();
     await this.pause(250);
   }

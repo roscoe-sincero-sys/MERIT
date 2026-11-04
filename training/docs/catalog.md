@@ -39,7 +39,8 @@ Status: **built** has a script in `workflows/`. **Planned** is proposed, in roug
 | Role | Video | Feature | Account | Suitability | Status |
 |---|---|---|---|---|---|
 | All users | Signing in, setting up an authenticator, saving recovery codes | signIn | a fresh synthetic account | High. Every user does it once. Codes are masked; the QR code and secret are never shown. | Planned |
-| All users | Finding your way: menu, search, profiles | navigation | `cmboth` | High | Planned |
+| All users | **Profiles: the right access for the work in hand** (EPA Region 3 staff: every state read only, all of Maryland, Harford County only) | profiles | `r3staff` | High. Every user benefits; uses the Region 3 scenario. | **Built** |
+| All users | Finding your way: menu and search | navigation | `cmboth` | High | Planned |
 | All users | Changing your password; a forgotten password | signIn | `cmbalt` | Medium. The reset link is read from Mailpit off camera. | Planned |
 | Intake clerk | **Entering a result from a paper report** | peopleAndResults | `intake` | High. Done daily; covers search first, the form, the lookup and the outcome. | **Built** (proof of concept) |
 | Intake clerk | Uploading a lab file and reading the batch | intake | `intake` | High. Uses `samples/chesapeake_lab_sample.csv`. Needs the worker. | Planned |
@@ -62,6 +63,12 @@ Status: **built** has a script in `workflows/`. **Planned** is proposed, in roug
 | User administrator | Managing accounts in one county | access | `cityadmin` | Medium | Planned |
 | Platform administrator | Adding a tenant | access | `platform` | Low. Rare. | Planned |
 | Platform administrator | Investigating unknown user names | security | `platform` | Medium. *Show names* needs a fresh code, entered off camera. | Planned |
+
+The shipped demo data has one state (Maryland) directly under the platform. The profiles video adds the access guide's
+EPA Region 3 tree to the training database through [lib/scenarios.ts](../lib/scenarios.ts): the region, Delaware, the
+District of Columbia, Maryland, Pennsylvania, Virginia and West Virginia under it, Harford County Health Department
+under that Maryland, the `r3staff` account (Sky Region, Supervisor at the region and everything under it) and one
+labelled task per place.
 
 Each planned video needs its own `prepare()` reset. Workflows that create users, tenants or batches need a reset in
 [lib/data.ts](../lib/data.ts) for that kind of record, following `resetTrainingResults`.

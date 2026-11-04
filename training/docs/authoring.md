@@ -8,8 +8,10 @@ kebab case; `role` and `feature` in the script are the identifiers in [lib/workf
 1. Copy [the proof of concept](../workflows/intake-clerk/people-and-results/enter-paper-result.workflow.ts) into the
    right folder and give it a new `id`.
 2. **Choose the account.** Use a synthetic demo account whose role matches the video: `intake`, `cmbalt`,
-   `supervisor`, `admin`, `cityadmin`, `epi`, `occinv` or `platform`. Its first build enrolls an authenticator off
-   camera.
+   `supervisor`, `admin`, `cityadmin`, `epi`, `occinv`, `platform`, or `r3staff` from the Region 3 scenario. Its first
+   build enrolls an authenticator off camera. When a video needs places, accounts or records the demo lacks, add an
+   idempotent scenario to [lib/scenarios.ts](../lib/scenarios.ts) that builds them with the application's own procedures,
+   and call it from `prepare()`.
 3. **Make it repeatable.** Write `prepare()` so every build starts from the same data. Mark what the video creates (an
    accession number starting `TRN-`, a name ending `(training)`) and soft-delete it in `prepare()`. Add a reset to
    [lib/data.ts](../lib/data.ts) when a new kind of record needs one. Never hard-delete; MERIT doesn't.

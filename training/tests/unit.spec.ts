@@ -22,6 +22,13 @@ test.describe('captions', () => {
     expect(chunk(text).join(' ')).toBe(text);
   });
 
+  test('a chunk that has no balanced break is shortened until it wraps', () => {
+    const text = 'See your master profile, make smaller profiles for a region, a state and a county, and switch between them.';
+    const parts = chunk(text);
+    expect(parts.join(' ')).toBe(text);
+    for (const part of parts) for (const line of wrap(part)) expect(line.length).toBeLessThanOrEqual(MAX_LINE);
+  });
+
   test('cues follow the speech, never overlap, and last at least a second', () => {
     const list = cues([
       { text: 'First line of speech. And a second sentence here.', start: 300, seconds: 4, until: 6000 },
@@ -74,7 +81,7 @@ test.describe('catalog', () => {
     for (const { workflow: w, file } of catalog) {
       expect(Object.keys(ROLES)).toContain(w.role);
       expect(Object.keys(FEATURES)).toContain(w.feature);
-      expect(w.user, `${w.id} names its synthetic account`).toMatch(/^[a-z]+$/);
+      expect(w.user, `${w.id} names its synthetic account`).toMatch(/^[a-z][a-z0-9]*$/);
       expect(w.recap.length, `${w.id} has a recap`).toBeGreaterThan(0);
       expect(file.replace(/\\/g, '/')).toMatch(new RegExp(`/workflows/[a-z-]+/[a-z-]+/${w.id}\\.workflow\\.ts$`));
       for (const scene of w.scenes) {
