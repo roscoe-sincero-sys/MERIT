@@ -1,0 +1,75 @@
+@model UnknownNamesModel
+@{
+    ViewData["Title"] = "Unknown user names";
+}
+<p><a class="usa-link" href="/admin/sign-in-activity">Back to sign-in activity</a></p>
+<h1>Unknown user names</h1>
+<p>Sign-in attempts at user names that match no account, over the last @(Model.Hours / 24) day@(Model.Hours == 24 ? "" : "s"). Each row is one name, shown by the start of its keyed hash. The same name always has the same hash, so repeated guesses group together.</p>
+
+<div class="usa-alert usa-alert--warning usa-alert--slim"><div class="usa-alert__body">
+    <p class="usa-alert__text">Names may occasionally include a password someone typed into the user-name box by mistake. Showing names is recorded in the audit log. Use them for this investigation only; don't copy them out of this page or share them.</p>
+</div></div>
+
+<partial name="_ErrorSummary" model='new ErrorSummaryModel(["AuthenticatorCode", "LookupName"], SummaryId: "unknown-names-errors")' />
+
+<div class="merit-unknown-names__tools">
+    @if (!Model.Revealed)
+    {
+        <form class="usa-form" method="post" action="/admin/sign-in-activity/unknown-names/reveal" aria-labelledby="reveal-heading">
+            @Html.AntiForgeryToken()
+            <h2 id="reveal-heading">Show names</h2>
+            <input type="hidden" name="Hours" value="@Model.Hours" />
+            <div class="usa-form-group">
+                <label class="usa-label" for="AuthenticatorCode">Six-digit code from your authenticator app</label>
+                <input class="usa-input usa-input--medium" id="AuthenticatorCode" name="AuthenticatorCode" type="text" autocomplete="one-time-code" inputmode="numeric" maxlength="11" required />
+            </div>
+            <button class="usa-button" type="submit">Show names</button>
+        </form>
+    }
+    <form class="usa-form" method="post" action="/admin/sign-in-activity/unknown-names/lookup" aria-labelledby="lookup-heading">
+        @Html.AntiForgeryToken()
+        <h2 id="lookup-heading">Look up a name</h2>
+        <input type="hidden" name="Hours" value="@Model.Hours" />
+        <div class="usa-form-group">
+            <label class="usa-label" for="LookupName">User name someone may have tried</label>
+            <div class="usa-hint" id="lookup-hint">For example MeritAdmin. It is hashed the same way and matched; nothing is decrypted.</div>
+            <input class="usa-input" id="LookupName" name="LookupName" type="text" spellcheck="false" autocomplete="off" aria-describedby="lookup-hint" value="@Model.LookupName" required />
+        </div>
+        <button class="usa-button usa-button--outline" type="submit">Look up</button>
+    </form>
+</div>
+
+@if (Model.Attempts is { } attempts)
+{
+    <section aria-labelledby="attempts-heading">
+        <h2 id="attempts-heading">Attempts at "@Model.LookupName"</h2>
+        @if (attempts.Count == 0) { <p role="status">No attempts at that name in the last 90 days.</p> }
+        else
+        {
+            <p role="status">@attempts.Count attempt@(attempts.Count == 1 ? "" : "s") in the last 90 days.</p>
+            <div class="merit-table-wrap" tabindex="0" role="region" aria-label="Attempts at the name looked up; scroll sideways for more columns"><table class="usa-table usa-table--borderless usa-table--compact">
+                <caption class="usa-sr-only">Attempts at the name looked up</caption>
+                <thead><tr><th scope="col">When</th><th scope="col">Where</th><th scope="col">Address</th><th scope="col">Browser</th></tr></thead>
+                <tbody>@foreach (var r in attempts) { <tr><td class="merit-nowrap">@Options.Date(r.EventUtc)</td><td>@SignInEventText.Event(r.EventType)</td><td>@r.ClientAddress @if (r.ForwardedFor is string chain) { <div class="merit-meta">via @chain</div> }</td><td class="merit-signin-history__agent">@r.UserAgent</td></tr> }</tbody>
+            </table></div>
+        }
+    </section>
+}
+
+<section aria-labelledby="names-heading">
+    <h2 id="names-heading">@(Model.Revealed ? "Names (shown for this page only)" : "Names (hashed)")</h2>
+    <p><a class="usa-link" href="/admin/sign-in-activity/unknown-names.csv?hours=@Model.Hours">Export the hashed list (CSV)</a></p>
+    @if (Model.Names.Count == 0) { <p>No attempts at unknown user names.</p> }
+    else
+    {
+        <div class="merit-table-wrap" tabindex="0" role="region" aria-label="Unknown user names; scroll sideways for more columns"><table class="usa-table usa-table--borderless usa-table--compact">
+            <caption class="usa-sr-only">Unknown user names, most attempts first</caption>
+            <thead><tr><th scope="col">@(Model.Revealed ? "Name" : "Hash")</th><th scope="col">Attempts</th><th scope="col">Addresses</th><th scope="col">First</th><th scope="col">Last</th><th scope="col">Addresses seen</th></tr></thead>
+            <tbody>@foreach (var n in Model.Names)
+            {
+                <tr><td>@if (Model.Revealed && n.Name is string name) { <span data-unknown-name>@name</span> <div class="merit-meta"><code>@SignInEventText.ShortHash(n.Hash)</code></div> } else { <code>@SignInEventText.ShortHash(n.Hash)</code> }</td>
+                    <td>@n.Attempts</td><td>@n.Addresses</td><td class="merit-nowrap">@Options.Date(n.FirstUtc)</td><td class="merit-nowrap">@Options.Date(n.LastUtc)</td><td>@n.TopAddresses</td></tr>
+            }</tbody>
+        </table></div>
+    }
+</section>

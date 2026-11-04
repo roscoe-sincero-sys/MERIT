@@ -49,7 +49,7 @@ public static class SessionCookie
         var principal = new ClaimsPrincipal(new ClaimsIdentity(claims, AuthSchemes.Session, MeritClaims.UserName, null));
         await http.SignInAsync(AuthSchemes.Session,
             principal,
-            new AuthenticationProperties { IsPersistent = false, IssuedUtc = DateTimeOffset.UtcNow });
+            new AuthenticationProperties { IsPersistent = false, IssuedUtc = http.RequestServices.GetRequiredService<TimeProvider>().GetUtcNow() });
         // A view rendered on this response must mint antiforgery tokens for the newly signed-in identity.
         http.User = principal;
     }

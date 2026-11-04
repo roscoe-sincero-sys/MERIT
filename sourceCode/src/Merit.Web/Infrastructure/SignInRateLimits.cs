@@ -66,6 +66,11 @@ public static class SignInRateLimits
     private static async ValueTask RejectAsync(OnRejectedContext context, CancellationToken ct)
     {
         var http = context.HttpContext;
+        // Refusals are part of the sign-in record (#191): the policy that refused, from this address.
+        string? policy = http.GetEndpoint()?.Metadata.GetMetadata<EnableRateLimitingAttribute>()?.PolicyName;
+        await http.RequestServices.GetRequiredService<Merit.Application.Security.ISignInEvents>().RecordAsync(
+            new Merit.Application.Security.SignInEvent(Merit.Application.Security.SignInEventTypes.RateLimited,
+                Merit.Application.Security.SignInSteps.Request, Reason: policy), ct).ConfigureAwait(false);
         int seconds = context.Lease.TryGetMetadata(MetadataName.RetryAfter, out TimeSpan retry) ? (int)Math.Ceiling(retry.TotalSeconds) : 60;
         seconds = Math.Clamp(seconds, 1, 60);
         http.Response.Headers.RetryAfter = seconds.ToString(CultureInfo.InvariantCulture);

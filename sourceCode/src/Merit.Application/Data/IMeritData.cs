@@ -56,6 +56,22 @@ public interface IAccountData
 
     Task<MyPasswordPolicyRow> GetMyPasswordPolicyAsync(CancellationToken ct = default);
 
+    // ------------------------------------------------------------------ sign-in event log (#191)
+    Task RecordSignInEventAsync(SignInEventInput input, CancellationToken ct = default);
+
+    Task<IReadOnlyList<SignInEventRow>> ListSignInEventsAsync(Guid appUserId, int top, CancellationToken ct = default);
+
+    Task<SignInActivity> GetSignInActivityAsync(int hours, int sprayThreshold, int stuffingThreshold, int failuresBefore, CancellationToken ct = default);
+
+    Task<IReadOnlyList<UnknownUserNameRow>> ListUnknownUserNamesAsync(int hours, bool includeProtected, CancellationToken ct = default);
+
+    Task<IReadOnlyList<SignInAttemptRow>> FindSignInAttemptsByNameAsync(byte[] attemptedNameHash, int hours, CancellationToken ct = default);
+
+    /// <summary>Strips the personal data from events older than the retention and marks them deleted; returns how many.</summary>
+    Task<int> PurgeSignInEventsAsync(int retentionDays, CancellationToken ct = default);
+
+    Task<SessionScopeStateRow?> GetSessionScopeStateAsync(Guid sessionScopeId, CancellationToken ct = default);
+
     Task<IReadOnlyList<UserListRow>> ListUsersAsync(CancellationToken ct = default);
 
     Task<UserDetail?> GetUserAsync(Guid appUserId, CancellationToken ct = default);

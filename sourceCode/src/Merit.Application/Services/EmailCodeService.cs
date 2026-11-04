@@ -81,7 +81,7 @@ public sealed record EmailCodeOption(bool Available, bool TurnedOn, bool Allowed
 /// request's trace id are.
 /// </summary>
 public sealed partial class EmailCodeService(IAccountData data, IEmailSender email, IOneTimeCodeHasher hasher, IOptions<EmailCodeOptions> options,
-                                             ILogger<EmailCodeService> logger)
+                                             AccountService accounts, ISignInEvents events, ILogger<EmailCodeService> logger)
 {
     private EmailCodeOptions Limits => options.Value;
 
@@ -118,6 +118,13 @@ public sealed partial class EmailCodeService(IAccountData data, IEmailSender ema
             Limits.ResendCooldownSeconds, Limits.LimitWindowMinutes, Limits.MaxCodesPerAccount, Limits.MaxCodesPerAddress), ct).ConfigureAwait(false);
 
         LogIssue(logger, created.Outcome, appUserId, purposeCode, reference, correlationId);
+        string step = purpose == EmailCodePurpose.SignIn ? SignInSteps.SecondFactor : SignInSteps.Account;
+        if (created.Outcome is "cooldown" or "limit")
+        {
+            await events.RecordAsync(new SignInEvent(SignInEventTypes.EmailCodeRefused, step, SignInMethods.EmailCode, created.Outcome, appUserId), ct)
+                .ConfigureAwait(false);
+        }
+
         switch (created.Outcome)
         {
             case "cooldown":
@@ -152,6 +159,8 @@ public sealed partial class EmailCodeService(IAccountData data, IEmailSender ema
             LogRecordFailed(logger, ex, appUserId, reference, correlationId);
         }
 
+        await events.RecordAsync(new SignInEvent(sent.Submitted ? SignInEventTypes.EmailCodeSent : SignInEventTypes.EmailCodeNotSent, step,
+            SignInMethods.EmailCode, sent.Submitted ? purposeCode : FailureCode(sent.Failure), appUserId), ct).ConfigureAwait(false);
         if (sent.Submitted)
         {
             LogSubmitted(logger, appUserId, purposeCode, reference, sent.Attempts, sent.ElapsedMilliseconds, correlationId);
@@ -175,6 +184,8 @@ public sealed partial class EmailCodeService(IAccountData data, IEmailSender ema
 
         if (user.LockoutEndUtc is DateTime until && until > DateTime.UtcNow)
         {
+            await events.RecordAsync(new SignInEvent(SignInEventTypes.AttemptWhileLocked, SignInSteps.SecondFactor, SignInMethods.EmailCode,
+                AppUserId: appUserId), ct).ConfigureAwait(false);
             return new EmailCodeVerifyResult(EmailCodeCheck.AccountLocked, LockedUntilUtc: until);
         }
 
@@ -190,22 +201,52 @@ public sealed partial class EmailCodeService(IAccountData data, IEmailSender ema
             bool ok = result.Outcome == EmailCodeCheck.Verified;
             await data.RecordSignInResultAsync(appUserId, ok, AccountService.MaxFailedAttempts, AccountService.LockoutMinutes, clientAddress, ct)
                 .ConfigureAwait(false);
-            if (!ok && user.FailedSignInCount + 1 >= AccountService.MaxFailedAttempts)
+            if (ok)
             {
-                return new EmailCodeVerifyResult(EmailCodeCheck.AccountLocked, LockedUntilUtc: DateTime.UtcNow.AddMinutes(AccountService.LockoutMinutes));
+                await events.RecordAsync(new SignInEvent(SignInEventTypes.MfaSucceeded, SignInSteps.SecondFactor, SignInMethods.EmailCode,
+                    AppUserId: appUserId), ct).ConfigureAwait(false);
             }
+            else
+            {
+                await accounts.RecordFailureAsync(user, SignInEventTypes.MfaFailed, SignInSteps.SecondFactor, SignInMethods.EmailCode, Camel(result.Outcome), ct)
+                    .ConfigureAwait(false);
+                if (user.FailedSignInCount + 1 >= AccountService.MaxFailedAttempts)
+                {
+                    return new EmailCodeVerifyResult(EmailCodeCheck.AccountLocked, LockedUntilUtc: DateTime.UtcNow.AddMinutes(AccountService.LockoutMinutes));
+                }
+            }
+        }
+        else
+        {
+            // Expired, used, replaced or malformed: not a guess, so no lockout count, but still worth seeing.
+            await events.RecordAsync(new SignInEvent(SignInEventTypes.MfaFailed, SignInSteps.SecondFactor, SignInMethods.EmailCode, Camel(result.Outcome),
+                appUserId), ct).ConfigureAwait(false);
         }
 
         return result;
     }
 
     /// <summary>Confirms the address: a verified enroll code turns email codes on for the account, in the same transaction.</summary>
-    public Task<EmailCodeVerifyResult> VerifyEnrollmentAsync(Guid appUserId, string? typed, string? clientAddress, CancellationToken ct = default)
-        => VerifyAsync(appUserId, EmailCodePurpose.Enroll, typed, clientAddress, ct);
+    public async Task<EmailCodeVerifyResult> VerifyEnrollmentAsync(Guid appUserId, string? typed, string? clientAddress, CancellationToken ct = default)
+    {
+        var result = await VerifyAsync(appUserId, EmailCodePurpose.Enroll, typed, clientAddress, ct).ConfigureAwait(false);
+        await events.RecordAsync(result.Outcome == EmailCodeCheck.Verified
+            ? new SignInEvent(SignInEventTypes.EmailCodesEnabled, SignInSteps.Account, SignInMethods.EmailCode, AppUserId: appUserId)
+            : new SignInEvent(SignInEventTypes.MfaFailed, SignInSteps.Account, SignInMethods.EmailCode, Camel(result.Outcome), appUserId), ct)
+            .ConfigureAwait(false);
+        return result;
+    }
 
     /// <summary>Turns email codes off for the signed-in user, or sets which second factor sign-in offers first.</summary>
-    public Task SaveMyMethodsAsync(bool emailCodesOn, bool preferEmail, CancellationToken ct = default)
-        => data.SaveMyMfaMethodsAsync(emailCodesOn, emailCodesOn && preferEmail ? "email" : "totp", ct);
+    public async Task SaveMyMethodsAsync(bool emailCodesOn, bool preferEmail, CancellationToken ct = default)
+    {
+        await data.SaveMyMfaMethodsAsync(emailCodesOn, emailCodesOn && preferEmail ? "email" : "totp", ct).ConfigureAwait(false);
+        if (!emailCodesOn)
+        {
+            await events.RecordAsync(new SignInEvent(SignInEventTypes.EmailCodesDisabled, SignInSteps.Account, SignInMethods.EmailCode), ct)
+                .ConfigureAwait(false);
+        }
+    }
 
     private async Task<EmailCodeVerifyResult> VerifyAsync(Guid appUserId, EmailCodePurpose purpose, string? typed, string? clientAddress, CancellationToken ct)
     {
@@ -253,6 +294,12 @@ public sealed partial class EmailCodeService(IAccountData data, IEmailSender ema
             Reference: {reference}
             """);
         return new OutgoingEmail(to, "Your MERIT verification code", body, reference, correlationId);
+    }
+
+    private static string Camel(EmailCodeCheck check)
+    {
+        string name = check.ToString();
+        return char.ToLowerInvariant(name[0]) + name[1..];
     }
 
     private static string Code(EmailCodePurpose purpose) => purpose == EmailCodePurpose.SignIn ? "signIn" : "enroll";

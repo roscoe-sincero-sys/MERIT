@@ -1,0 +1,92 @@
+using System.Globalization;
+using Merit.Application.Errors;
+using Merit.Application.Security;
+using Merit.Application.Services;
+using Merit.Web.Infrastructure;
+using Merit.Web.Models;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
+
+namespace Merit.Web.Controllers;
+
+/// <summary>
+/// The sign-in event log's reports (#191): suspicious activity for administrators, and the investigation of user names that
+/// matched no account for holders of security.investigate. Names stay hashed until a holder reveals them with a current
+/// authenticator code; each reveal, lookup and export is in the audit ledger.
+/// </summary>
+[Route("admin/sign-in-activity")]
+public sealed class SignInActivityController(SignInLogService log, ICurrentSession session, IClock clock) : Controller
+{
+    [HttpGet("")]
+    [Authorize(Policy = Permissions.TenantAdminister)]
+    public async Task<IActionResult> Index(int hours = 24, CancellationToken ct = default)
+        => View(new SignInActivityModel(await log.ActivityAsync(hours, ct), Math.Clamp(hours, 1, 2160), session.Has(Permissions.SecurityInvestigate)));
+
+    [HttpGet("unknown-names")]
+    [Authorize(Policy = Permissions.SecurityInvestigate)]
+    public async Task<IActionResult> UnknownNames(int hours = 168, CancellationToken ct = default)
+        => View(new UnknownNamesModel { Hours = Math.Clamp(hours, 1, 2160), Names = await log.UnknownNamesAsync(hours, ct) });
+
+    /// <summary>The names themselves, after a current authenticator code; the reveal is audited.</summary>
+    [HttpPost("unknown-names/reveal")]
+    [Authorize(Policy = Permissions.SecurityInvestigate)]
+    [EnableRateLimiting(SignInRateLimits.Code)]
+    public async Task<IActionResult> Reveal(UnknownNamesModel model, CancellationToken ct)
+    {
+        Response.Headers.CacheControl = "no-store";
+        model.Hours = Math.Clamp(model.Hours, 1, 2160);
+        try
+        {
+            model.Names = await log.RevealUnknownNamesAsync(model.Hours, model.AuthenticatorCode, HttpContext.Connection.RemoteIpAddress?.ToString(), ct);
+            model.Revealed = true;
+        }
+        catch (ValidationException ex)
+        {
+            foreach (var (field, messages) in ex.Errors)
+            {
+                foreach (var message in messages)
+                {
+                    ModelState.AddModelError(field, message);
+                }
+            }
+
+            model.Names = await log.UnknownNamesAsync(model.Hours, ct);
+        }
+
+        model.AuthenticatorCode = null;
+        return View(nameof(UnknownNames), model);
+    }
+
+    /// <summary>Every attempt at one typed name, by its hash: nothing is decrypted, and the lookup is audited.</summary>
+    [HttpPost("unknown-names/lookup")]
+    [Authorize(Policy = Permissions.SecurityInvestigate)]
+    public async Task<IActionResult> Lookup(UnknownNamesModel model, CancellationToken ct)
+    {
+        Response.Headers.CacheControl = "no-store";
+        model.Hours = Math.Clamp(model.Hours, 1, 2160);
+        try
+        {
+            model.Attempts = await log.FindAttemptsAsync(model.LookupName, ct);
+        }
+        catch (ValidationException ex)
+        {
+            ModelState.AddModelError(nameof(UnknownNamesModel.LookupName), ex.Errors.Values.SelectMany(v => v).First());
+        }
+
+        model.Names = await log.UnknownNamesAsync(model.Hours, ct);
+        return View(nameof(UnknownNames), model);
+    }
+
+    /// <summary>The hashed report as CSV. Names are never exported; the export is audited.</summary>
+    [HttpGet("unknown-names.csv")]
+    [Authorize(Policy = Permissions.SecurityInvestigate)]
+    public async Task<IActionResult> Export(int hours = 168, CancellationToken ct = default)
+    {
+        var rows = await log.ExportUnknownNamesAsync(hours, ct);
+        byte[] csv = TabularExport.Csv(["Name hash", "Attempts", "Addresses", "First (UTC)", "Last (UTC)", "Addresses seen"],
+            rows.Select(r => (IReadOnlyList<object?>)[r.Hash, r.Attempts, r.Addresses, r.FirstUtc.ToString("u", CultureInfo.InvariantCulture),
+                r.LastUtc.ToString("u", CultureInfo.InvariantCulture), r.TopAddresses]));
+        return File(csv, "text/csv", $"merit-unknown-user-names-{clock.Today:yyyy-MM-dd}.csv");
+    }
+}

@@ -23,6 +23,7 @@
         <label class="usa-label" for="action">Action</label>
         <select class="usa-select" id="action" name="action">
             <option value="">Any action</option>
+            <option value="signInEvents" selected="@(f.Action == "signInEvents")">Sign-in and account security (all)</option>
             @foreach (var a in AuditText.Actions) { <option value="@a.Code" selected="@(a.Code == f.Action)">@a.Label</option> }
         </select>
     </div>

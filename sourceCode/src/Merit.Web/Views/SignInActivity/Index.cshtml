@@ -1,0 +1,107 @@
+@model SignInActivityModel
+@{
+    ViewData["Title"] = "Sign-in activity";
+    var a = Model.Activity;
+    string Window(int h) => h % 24 == 0 ? $"{h / 24} day{(h == 24 ? "" : "s")}" : $"{h} hours";
+}
+<h1>Sign-in activity</h1>
+<p>Patterns worth a look in the last <strong>@Window(Model.Hours)</strong>.
+    @(Model.CanInvestigate
+        ? "You see every sign-in event, including attempts at user names that match no account."
+        : "You see events for the accounts you administer. Attempts at unknown user names are investigated at the platform level.")</p>
+<form class="usa-form merit-form-row" method="get" action="/admin/sign-in-activity">
+    <label class="usa-label" for="hours">Window</label>
+    <select class="usa-select" id="hours" name="hours">
+        @foreach (var h in new[] { 1, 24, 168, 720 }) { <option value="@h" selected="@(h == Model.Hours)">@Window(h)</option> }
+    </select>
+    <button class="usa-button usa-button--outline" type="submit">Show</button>
+</form>
+@if (Model.CanInvestigate)
+{
+    <p><a class="usa-link" href="/admin/sign-in-activity/unknown-names">Unknown user names</a></p>
+}
+
+<section aria-labelledby="spray-heading">
+    <h2 id="spray-heading">One address trying many accounts</h2>
+    <p class="merit-meta">Five or more different accounts or unknown names from one address: a sign of password spraying.</p>
+    @if (a.Spraying.Count == 0) { <p>None.</p> }
+    else
+    {
+        <div class="merit-table-wrap" tabindex="0" role="region" aria-label="Addresses trying many accounts; scroll sideways for more columns"><table class="usa-table usa-table--borderless usa-table--compact">
+            <caption class="usa-sr-only">Addresses trying many accounts</caption>
+            <thead><tr><th scope="col">Address</th><th scope="col">Accounts or names</th><th scope="col">Failures</th><th scope="col">First</th><th scope="col">Last</th></tr></thead>
+            <tbody>@foreach (var r in a.Spraying) { <tr><td>@r.ClientAddress</td><td>@r.Targets</td><td>@r.Failures</td><td class="merit-nowrap">@Options.Date(r.FirstUtc)</td><td class="merit-nowrap">@Options.Date(r.LastUtc)</td></tr> }</tbody>
+        </table></div>
+    }
+</section>
+
+<section aria-labelledby="stuffing-heading">
+    <h2 id="stuffing-heading">One account tried from many addresses</h2>
+    <p class="merit-meta">Failures from three or more addresses: a sign of credential stuffing.</p>
+    @if (a.Stuffing.Count == 0) { <p>None.</p> }
+    else
+    {
+        <div class="merit-table-wrap" tabindex="0" role="region" aria-label="Accounts tried from many addresses; scroll sideways for more columns"><table class="usa-table usa-table--borderless usa-table--compact">
+            <caption class="usa-sr-only">Accounts tried from many addresses</caption>
+            <thead><tr><th scope="col">Account</th><th scope="col">Addresses</th><th scope="col">Failures</th><th scope="col">Last</th></tr></thead>
+            <tbody>@foreach (var r in a.Stuffing)
+            {
+                <tr><td>@if (r.AppUserId is Guid id) { <a class="usa-link" href="/admin/users/@id">@r.DisplayName</a> <span class="merit-meta">@r.UserName</span> } else { <span>Unknown name <code>@SignInEventText.ShortHash(r.AttemptedNameHash)</code></span> }</td>
+                    <td>@r.Addresses</td><td>@r.Failures</td><td class="merit-nowrap">@Options.Date(r.LastUtc)</td></tr>
+            }</tbody>
+        </table></div>
+    }
+</section>
+
+<section aria-labelledby="success-heading">
+    <h2 id="success-heading">Signed in after repeated failures</h2>
+    <p class="merit-meta">A full sign-in after three or more failures on the same account within the hour before it.</p>
+    @if (a.SuccessAfterFailures.Count == 0) { <p>None.</p> }
+    else
+    {
+        <div class="merit-table-wrap" tabindex="0" role="region" aria-label="Sign-ins after repeated failures; scroll sideways for more columns"><table class="usa-table usa-table--borderless usa-table--compact">
+            <caption class="usa-sr-only">Sign-ins after repeated failures</caption>
+            <thead><tr><th scope="col">Account</th><th scope="col">Signed in</th><th scope="col">From</th><th scope="col">Failures before</th><th scope="col">Their addresses</th></tr></thead>
+            <tbody>@foreach (var r in a.SuccessAfterFailures) { <tr><td><a class="usa-link" href="/admin/users/@r.AppUserId">@r.DisplayName</a> <span class="merit-meta">@r.UserName</span></td><td class="merit-nowrap">@Options.Date(r.SuccessUtc)</td><td>@r.SuccessAddress</td><td>@r.Failures</td><td>@r.Addresses</td></tr> }</tbody>
+        </table></div>
+    }
+</section>
+
+<section aria-labelledby="address-heading">
+    <h2 id="address-heading">Failures by address</h2>
+    @if (a.ByAddress.Count == 0) { <p>None.</p> }
+    else
+    {
+        <div class="merit-table-wrap" tabindex="0" role="region" aria-label="Failures by address; scroll sideways for more columns"><table class="usa-table usa-table--borderless usa-table--compact">
+            <caption class="usa-sr-only">Failures by address</caption>
+            <thead><tr><th scope="col">Address</th><th scope="col">Failures</th><th scope="col">Accounts</th><th scope="col">Unknown names</th><th scope="col">Lockouts</th><th scope="col">Refused (rate limit)</th><th scope="col">Last</th></tr></thead>
+            <tbody>@foreach (var r in a.ByAddress) { <tr><td>@r.ClientAddress</td><td>@r.Failures</td><td>@r.DistinctAccounts</td><td>@r.DistinctUnknownNames</td><td>@r.Lockouts</td><td>@r.RateLimited</td><td class="merit-nowrap">@Options.Date(r.LastUtc)</td></tr> }</tbody>
+        </table></div>
+    }
+</section>
+
+<section aria-labelledby="account-heading">
+    <h2 id="account-heading">Failures by account</h2>
+    @if (a.ByAccount.Count == 0) { <p>None.</p> }
+    else
+    {
+        <div class="merit-table-wrap" tabindex="0" role="region" aria-label="Failures by account; scroll sideways for more columns"><table class="usa-table usa-table--borderless usa-table--compact">
+            <caption class="usa-sr-only">Failures by account</caption>
+            <thead><tr><th scope="col">Account</th><th scope="col">Failures</th><th scope="col">Addresses</th><th scope="col">Lockouts</th><th scope="col">Last</th></tr></thead>
+            <tbody>@foreach (var r in a.ByAccount) { <tr><td><a class="usa-link" href="/admin/users/@r.AppUserId">@r.DisplayName</a> <span class="merit-meta">@r.UserName</span></td><td>@r.Failures</td><td>@r.DistinctAddresses</td><td>@r.Lockouts</td><td class="merit-nowrap">@Options.Date(r.LastUtc)</td></tr> }</tbody>
+        </table></div>
+    }
+</section>
+
+<section aria-labelledby="locks-heading">
+    <h2 id="locks-heading">Lockouts and refusals</h2>
+    @if (a.LockoutsAndLimits.Count == 0) { <p>None.</p> }
+    else
+    {
+        <div class="merit-table-wrap" tabindex="0" role="region" aria-label="Lockouts and refusals; scroll sideways for more columns"><table class="usa-table usa-table--borderless usa-table--compact">
+            <caption class="usa-sr-only">Lockouts and rate-limit refusals</caption>
+            <thead><tr><th scope="col">When</th><th scope="col">Event</th><th scope="col">Account</th><th scope="col">Address</th><th scope="col">Detail</th></tr></thead>
+            <tbody>@foreach (var r in a.LockoutsAndLimits) { <tr><td class="merit-nowrap">@Options.Date(r.EventUtc)</td><td>@SignInEventText.Event(r.EventType)</td><td>@(r.UserName ?? "")</td><td>@r.ClientAddress</td><td>@SignInEventText.Reason(r.Reason)</td></tr> }</tbody>
+        </table></div>
+    }
+</section>

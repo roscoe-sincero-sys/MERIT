@@ -126,7 +126,8 @@ public sealed record UserInput(Guid? AppUserId, string? UserName, string? Displa
                                Guid? HomeTenantId = null, bool? RequirePasswordChange = null);
 
 /// <summary>User administration: accounts, profile assignments at tenant nodes, MFA resets.</summary>
-public sealed class AdminService(IClock clock, IAccountData accounts, AccountService accountService, ISettingsProvider settings, ICurrentSession session)
+public sealed class AdminService(IClock clock, IAccountData accounts, AccountService accountService, ISettingsProvider settings, ICurrentSession session,
+                                 ISignInEvents events)
 {
     public async Task<IReadOnlyList<UserListRow>> UsersAsync(CancellationToken ct = default)
     {
@@ -157,8 +158,23 @@ public sealed class AdminService(IClock clock, IAccountData accounts, AccountSer
         }
 
         Guid id = input.AppUserId ?? TimeOrderedId.New();
+        var before = input.AppUserId is Guid existing ? await accounts.GetUserAsync(existing, ct).ConfigureAwait(false) : null;
         await accounts.SaveUserAsync(id, input.UserName!.Trim(), input.DisplayName!.Trim(), input.Email?.Trim(), input.IsActive, hash,
             input.HomeTenantId, input.RequirePasswordChange, ct).ConfigureAwait(false);
+        if (before is not null && hash is not null)
+        {
+            await events.RecordAsync(new SignInEvent(SignInEventTypes.PasswordSetByAdmin, SignInSteps.Account, AppUserId: id, ActorUserId: session.UserId), ct)
+                .ConfigureAwait(false);
+        }
+
+        if (before is { User.IsActive: true } && !input.IsActive)
+        {
+            await events.RecordAsync(new SignInEvent(SignInEventTypes.AccountDeactivated, SignInSteps.Account, AppUserId: id, ActorUserId: session.UserId), ct)
+                .ConfigureAwait(false);
+            await events.RecordAsync(new SignInEvent(SignInEventTypes.SessionRevoked, SignInSteps.Session, Reason: "deactivated", AppUserId: id,
+                ActorUserId: session.UserId), ct).ConfigureAwait(false);
+        }
+
         return id;
     }
 
@@ -198,12 +214,25 @@ public sealed class AdminService(IClock clock, IAccountData accounts, AccountSer
     {
         session.Require(Permissions.TenantAdminister);
         await accounts.UnlockUserAsync(appUserId, ct).ConfigureAwait(false);
+        await events.RecordAsync(new SignInEvent(SignInEventTypes.UnlockedByAdmin, SignInSteps.Account, AppUserId: appUserId, ActorUserId: session.UserId), ct)
+            .ConfigureAwait(false);
     }
 
     public async Task ResetMfaAsync(Guid appUserId, CancellationToken ct = default)
     {
         session.Require(Permissions.TenantAdminister);
         await accounts.ResetUserMfaAsync(appUserId, ct).ConfigureAwait(false);
+        await events.RecordAsync(new SignInEvent(SignInEventTypes.MfaResetByAdmin, SignInSteps.Account, AppUserId: appUserId, ActorUserId: session.UserId), ct)
+            .ConfigureAwait(false);
+        await events.RecordAsync(new SignInEvent(SignInEventTypes.SessionRevoked, SignInSteps.Session, Reason: "mfaReset", AppUserId: appUserId,
+            ActorUserId: session.UserId), ct).ConfigureAwait(false);
+    }
+
+    /// <summary>An account's sign-in history (#191), for an administrator of its home tenant.</summary>
+    public async Task<IReadOnlyList<SignInEventRow>> SignInHistoryAsync(Guid appUserId, int top = 50, CancellationToken ct = default)
+    {
+        session.Require(Permissions.TenantAdminister);
+        return await accounts.ListSignInEventsAsync(appUserId, top, ct).ConfigureAwait(false);
     }
 
     public Task<IReadOnlyList<RoleRow>> RolesAsync(CancellationToken ct = default) => accounts.ListRolesAsync(ct);

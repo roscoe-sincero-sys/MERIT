@@ -134,6 +134,8 @@ public sealed partial class EndpointTests(MeritFixture fixture, ITestOutputHelpe
     {
         var supervisor = await fixture.SignedInAsync("supervisor");
         var admin = await fixture.SignedInAsync("admin");
+        // Unknown user names (#191) are for security.investigate, which the platform role holds.
+        var platform = await fixture.SignedInAsync("platform");
         var failures = new List<string>();
         int checkedCount = 0;
         foreach (var a in Actions().Where(a => a.Method == "GET" && !a.IsApi && a.Controller is not "Account" and not "AppHost" and not "Lookup"))
@@ -146,9 +148,14 @@ public sealed partial class EndpointTests(MeritFixture fixture, ITestOutputHelpe
 
             var client = supervisor;
             var full = await client.NoRedirect.GetAsync(a.Url);
-            if (full.StatusCode == HttpStatusCode.Forbidden || full.Headers.Location?.ToString().Contains("denied", StringComparison.Ordinal) == true)
+            foreach (var next in new[] { admin, platform })
             {
-                client = admin;
+                if (full.StatusCode != HttpStatusCode.Forbidden && full.Headers.Location?.ToString().Contains("denied", StringComparison.Ordinal) != true)
+                {
+                    break;
+                }
+
+                client = next;
                 full = await client.NoRedirect.GetAsync(a.Url);
             }
 

@@ -1,9 +1,10 @@
 import { chromium, expect, FullConfig } from '@playwright/test';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { totp } from './totp';
 import { sql } from './database';
 
-export const USERS = ['supervisor', 'cmbalt', 'admin'] as const;
+// platform holds security.investigate, for the sign-in investigation screens (#191).
+export const USERS = ['supervisor', 'cmbalt', 'admin', 'platform'] as const;
 export const PASSWORD = 'MeritDemo!2026';
 
 /**
@@ -48,6 +49,8 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
     const me = await page.request.get('/api/v1/me');
     if (!me.ok()) throw new Error(`Enrollment for ${user} did not complete (${me.status()}).`);
     await context.storageState({ path: `.auth/${user}.json` });
+    // The authenticator secret, beside the session (both git-ignored), for screens that ask for a current code again.
+    writeFileSync(`.auth/${user}.totp`, secret);
     await context.close();
   }
   await browser.close();

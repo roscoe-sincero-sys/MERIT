@@ -22,6 +22,7 @@ BEGIN
     (
         sessionScopeId             UNIQUEIDENTIFIER  NOT NULL,
         appUserId                  UNIQUEIDENTIFIER  NOT NULL,
+        sessionReference           UNIQUEIDENTIFIER  NOT NULL CONSTRAINT DF_auth_sessionScope_sessionReference DEFAULT (NEWID ()),
         rootTenantId               UNIQUEIDENTIFIER  NOT NULL,
         actingTenantId             UNIQUEIDENTIFIER  NULL,
         userProfileId              UNIQUEIDENTIFIER  NULL,
@@ -48,6 +49,8 @@ GO
 -- 2. Additive columns. Each column is also added on its own when missing, so a table deployed by an
 --    earlier release converges on the current definition. A no-op on a fresh install.
 -- -------------------------------------------------------------------------------------------
+IF COL_LENGTH (N'auth.sessionScope', N'sessionReference') IS NULL
+    ALTER TABLE auth.sessionScope ADD sessionReference           UNIQUEIDENTIFIER  NOT NULL CONSTRAINT DF_auth_sessionScope_sessionReference DEFAULT (NEWID ());
 IF COL_LENGTH (N'auth.sessionScope', N'actingTenantId') IS NULL
     ALTER TABLE auth.sessionScope ADD actingTenantId             UNIQUEIDENTIFIER  NULL;
 IF COL_LENGTH (N'auth.sessionScope', N'userProfileId') IS NULL
@@ -160,6 +163,7 @@ GO
 EXEC util.uspSetObjectDescription @SchemaName = N'auth', @ObjectType = N'TABLE', @ObjectName = N'sessionScope', @Description = N'A signed-in session''s resolved access, created at sign-in. Its key is placed in SESSION_CONTEXT (read-only) on every connection, and the row-level security predicates test membership against it.';
 EXEC util.uspSetObjectDescription @SchemaName = N'auth', @ObjectType = N'TABLE', @ObjectName = N'sessionScope', @ColumnName = N'sessionScopeId', @Description = N'Scope key carried in the session cookie and in SESSION_CONTEXT(N''scopeKey'').';
 EXEC util.uspSetObjectDescription @SchemaName = N'auth', @ObjectType = N'TABLE', @ObjectName = N'sessionScope', @ColumnName = N'appUserId', @Description = N'User the scope was resolved for.';
+EXEC util.uspSetObjectDescription @SchemaName = N'auth', @ObjectType = N'TABLE', @ObjectName = N'sessionScope', @ColumnName = N'sessionReference', @Description = N'Non-secret id of the session for logs and reports (#191); unlike the scope key, it grants nothing.';
 EXEC util.uspSetObjectDescription @SchemaName = N'auth', @ObjectType = N'TABLE', @ObjectName = N'sessionScope', @ColumnName = N'rootTenantId', @Description = N'Data root of the acting tenant; new reference rows are created in it.';
 EXEC util.uspSetObjectDescription @SchemaName = N'auth', @ObjectType = N'TABLE', @ObjectName = N'sessionScope', @ColumnName = N'actingTenantId', @Description = N'Tenant the session works as; owns new rows that have no other owner rule.';
 EXEC util.uspSetObjectDescription @SchemaName = N'auth', @ObjectType = N'TABLE', @ObjectName = N'sessionScope', @ColumnName = N'userProfileId', @Description = N'Profile the scope was resolved from; NULL = the master profile.';

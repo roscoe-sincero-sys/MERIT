@@ -220,6 +220,43 @@ public sealed partial class ClusterScheduler(IServiceProvider services, JobSessi
     private static partial void LogError(ILogger logger, string exceptionType);
 }
 
+/// <summary>
+/// Daily retention for the sign-in event log (#191): events older than SignInLog:RetentionDays (default 365, at least 30)
+/// lose their address, forwarded chain, user agent and attempted name and are marked deleted. This database never
+/// hard-deletes, so an anonymous count remains.
+/// </summary>
+public sealed partial class SignInLogPurger(IServiceProvider services, IConfiguration configuration, ILogger<SignInLogPurger> logger) : BackgroundService
+{
+    public const string RetentionSetting = "SignInLog:RetentionDays";
+
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        await Task.Delay(TimeSpan.FromMinutes(1), stoppingToken).ConfigureAwait(false);
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            int days = Math.Max(30, configuration.GetValue(RetentionSetting, 365));
+            try
+            {
+                using var scope = services.CreateScope();
+                int purged = await scope.ServiceProvider.GetRequiredService<IAccountData>().PurgeSignInEventsAsync(days, stoppingToken).ConfigureAwait(false);
+                LogPurged(logger, purged, days);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                LogError(logger, ex.GetType().Name);
+            }
+
+            await Task.Delay(TimeSpan.FromHours(24), stoppingToken).ConfigureAwait(false);
+        }
+    }
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Sign-in event retention: {Purged} event(s) older than {Days} days purged")]
+    private static partial void LogPurged(ILogger logger, int purged, int days);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Sign-in event retention failed: {ExceptionType}")]
+    private static partial void LogError(ILogger logger, string exceptionType);
+}
+
 /// <summary>Reports degraded when a job has waited more than ten minutes or any job has finally failed.</summary>
 public sealed class QueueHealthCheck(IServiceProvider services) : IHealthCheck
 {

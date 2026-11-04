@@ -109,6 +109,26 @@ public sealed class EmailCodeModel
     public int LifetimeMinutes { get; set; } = 5;
 }
 
+/// <summary>The suspicious sign-in activity report (#191).</summary>
+public sealed record SignInActivityModel(SignInActivity Activity, int Hours, bool CanInvestigate);
+
+/// <summary>Attempts at user names that match no account (#191): hashed, or revealed after a step-up.</summary>
+public sealed class UnknownNamesModel
+{
+    public int Hours { get; set; } = 168;
+
+    public IReadOnlyList<UnknownUserName> Names { get; set; } = [];
+
+    public bool Revealed { get; set; }
+
+    public string? AuthenticatorCode { get; set; }
+
+    public string? LookupName { get; set; }
+
+    /// <summary>Attempts at the looked-up name, when a lookup ran.</summary>
+    public IReadOnlyList<SignInAttemptRow>? Attempts { get; set; }
+}
+
 /// <summary>"Forgot your password?" (#190). Available only with a mail server and a public address for links.</summary>
 public sealed class ForgotPasswordModel
 {
@@ -859,6 +879,9 @@ public sealed class UserFormModel
 
     /// <summary>Ask the person to choose their own password right after their next sign-in (#190).</summary>
     public bool RequirePasswordChange { get; set; }
+
+    /// <summary>The account's recent sign-in events (#191).</summary>
+    public IReadOnlyList<SignInEventRow> SignInHistory { get; set; } = [];
 
     public DateTime? PasswordChangedUtc { get; set; }
 

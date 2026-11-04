@@ -1495,6 +1495,17 @@
       "started": "2026-11-03",
       "finished": "2026-11-03",
       "notes": "Reset needs the emailed link and an authenticator or recovery code; same answer for every user name (background queue); HMAC token, 20 min, single use, 5 code attempts, cooldown and limits; links from Merit:PublicBaseUrl only; sessions revoked on every change; audit passwordChanged/passwordResetRequested/passwordResetCompleted/passwordSetByAdmin; logs.auditEvent.eventAction widened to 40 (PR review); required change enforced through the session cookie"
+    },
+    {
+      "id": "T213",
+      "phase": "12 Quality",
+      "task": "Sign-in event log: every sign-in and account-security event with reason, address, user agent, session and attempt; activity report; unknown user names hashed and encrypted",
+      "ref": "Issue #191",
+      "where": "tableDefinitions.py (logs.signInEvent, auth.sessionScope.sessionReference), procs_signin.py (7 procs), procs_work.py audit filter, seeds (security.investigate); SignInEvents.cs, SignInLogService, Account/EmailCode/Password/Admin services; SignInEventLog.cs (recorder, name protection, idle-expiry middleware), SignInActivityController and views, user page history; worker SignInLogPurger; SignInEventTests, sign-in-activity.spec.ts; docs/sign-in-event-log.md",
+      "status": "Done",
+      "started": "2026-11-03",
+      "finished": "2026-11-03",
+      "notes": "29 event types; unknown names only as HMAC + data protection, revealed by security.investigate after an authenticator code, reveals/lookups/exports audited; tenant admins see their accounts; retention strips personal data and soft-deletes (database never hard-deletes); attempt id kept in cookie properties, not claims, so antiforgery tokens stay valid"
     }
   ]
 }

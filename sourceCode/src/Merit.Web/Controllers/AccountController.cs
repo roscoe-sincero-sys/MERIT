@@ -22,7 +22,7 @@ namespace Merit.Web.Controllers;
 public sealed class AccountController(AccountService accounts, EmailCodeService emailCodes, PasswordService passwords, QrCodes qr,
                                       SessionRenewal sessions, RecoveryCodesPending recoveryPending, StepUp stepUp, ResetLinkCookie resetLink,
                                       AccountMailQueue mail, IOptions<EmailCodeOptions> codeOptions, IConfiguration configuration,
-                                      IHostEnvironment environment) : Controller
+                                      IHostEnvironment environment, ISignInEvents signInEvents) : Controller
 {
     /// <summary>Shown whenever a code could not be sent, with a support reference; the cause stays in the log.</summary>
     public const string DeliveryFailedMessage = "We couldn't send your verification code. Please try again. If the problem continues, contact support.";
@@ -46,6 +46,9 @@ public sealed class AccountController(AccountService accounts, EmailCodeService 
             return View(model);
         }
 
+        // One id for this sign-in attempt, from the password step through the second factor (#191).
+        var attemptId = Guid.NewGuid();
+        HttpContext.Items[SignInEventRecorder.AttemptItem] = attemptId;
         var step = await accounts.CheckPasswordAsync(model.UserName!, model.Password!, ClientAddress(), ct);
         switch (step.Status)
         {
@@ -72,7 +75,11 @@ public sealed class AccountController(AccountService accounts, EmailCodeService 
 
         await HttpContext.SignInAsync(AuthSchemes.PendingMfa,
             new ClaimsPrincipal(new ClaimsIdentity(claims, AuthSchemes.PendingMfa)),
-            new AuthenticationProperties { RedirectUri = SafeReturn(model.ReturnUrl) });
+            // The attempt id rides in the cookie's properties, not its claims: claims bind antiforgery tokens to the identity.
+            new AuthenticationProperties(new Dictionary<string, string?> { [SignInEventRecorder.AttemptProperty] = attemptId.ToString() })
+            {
+                RedirectUri = SafeReturn(model.ReturnUrl),
+            });
         TempData["returnUrl"] = SafeReturn(model.ReturnUrl);
         return RedirectToAction(step.Status == SignInStatus.NeedsMfaEnrollment ? nameof(Enroll) : nameof(Mfa));
     }
@@ -729,6 +736,7 @@ public sealed class AccountController(AccountService accounts, EmailCodeService 
     {
         if (Guid.TryParse(User.FindFirstValue(MeritClaims.ScopeKey), CultureInfo.InvariantCulture, out var scope))
         {
+            await signInEvents.RecordAsync(new SignInEvent(SignInEventTypes.SignedOut, SignInSteps.Session, SessionScopeId: scope));
             await accounts.SignOutAsync(scope);
         }
 
@@ -748,6 +756,13 @@ public sealed class AccountController(AccountService accounts, EmailCodeService 
 
     private async Task CompleteSignInAsync(Guid userId, CancellationToken ct)
     {
+        // The attempt id rides in the pending-MFA cookie; keep it for the sessionStarted event once that cookie is gone.
+        var pending = await HttpContext.AuthenticateAsync(AuthSchemes.PendingMfa);
+        if (Guid.TryParse(pending.Properties?.GetString(SignInEventRecorder.AttemptProperty), CultureInfo.InvariantCulture, out var attempt))
+        {
+            HttpContext.Items[SignInEventRecorder.AttemptItem] = attempt;
+        }
+
         // Every sign-in starts on the master profile; the person switches from the header when they want another.
         await HttpContext.SignOutAsync(AuthSchemes.PendingMfa);
         await sessions.SignInAsync(HttpContext, userId, ct);

@@ -7,7 +7,7 @@ namespace Merit.Web.Infrastructure;
 /// Starting and renewing the database session scope behind the session cookie, in one place (issue #21). A renewal creates
 /// the new scope first, then ends the old one and rewrites the cookie, so a failure leaves the current session working.
 /// </summary>
-public sealed class SessionRenewal(AccountService accounts, ICurrentSession session, IConfiguration configuration)
+public sealed class SessionRenewal(AccountService accounts, ICurrentSession session, IConfiguration configuration, ISignInEvents events)
 {
     public const string LifetimeSetting = "Session:LifetimeHours";
 
@@ -19,6 +19,8 @@ public sealed class SessionRenewal(AccountService accounts, ICurrentSession sess
     {
         var scope = await accounts.CreateSessionAsync(userId, Lifetime, ct: ct).ConfigureAwait(false);
         await SessionCookie.SignInAsync(http, scope.Scope).ConfigureAwait(false);
+        await events.RecordAsync(new SignInEvent(SignInEventTypes.SessionStarted, SignInSteps.Session, AppUserId: userId,
+            SessionScopeId: scope.Scope.Summary.SessionScopeId), ct).ConfigureAwait(false);
     }
 
     /// <summary>Replaces the current session with one for this profile, view-as user and working tenant.</summary>

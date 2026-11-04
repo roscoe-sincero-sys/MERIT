@@ -1,0 +1,36 @@
+@model IReadOnlyList<Merit.Application.Data.SignInEventRow>
+@* An account's sign-in history (#191): newest first, for an administrator of its home tenant. *@
+<section aria-labelledby="signin-history-heading">
+    <h2 id="signin-history-heading">Sign-in history</h2>
+    @if (Model.Count == 0)
+    {
+        <p>No sign-in events recorded yet.</p>
+    }
+    else
+    {
+        <p class="merit-meta">The latest @Model.Count events. Times are local; addresses come from the client after any trusted proxy.</p>
+        <div class="merit-table-wrap" tabindex="0" role="region" aria-label="Sign-in history; scroll sideways for more columns">
+            <table class="usa-table usa-table--borderless usa-table--compact merit-signin-history">
+                <caption class="usa-sr-only">Sign-in history, newest first</caption>
+                <thead><tr><th scope="col">When</th><th scope="col">Event</th><th scope="col">Detail</th><th scope="col">Address</th><th scope="col">Browser</th><th scope="col">Session · attempt</th></tr></thead>
+                <tbody>
+                    @foreach (var e in Model)
+                    {
+                        <tr class="@(SignInEventText.IsFailure(e.EventType) ? "merit-signin-history__failure" : "")">
+                            <td class="merit-nowrap">@Options.Date(e.EventUtc)</td>
+                            <td>@SignInEventText.Event(e.EventType)</td>
+                            <td>
+                                @SignInEventText.Method(e.Method)@(e.Method is not null && e.Reason is not null ? " · " : "")@SignInEventText.Reason(e.Reason)
+                                @if (e.ActorDisplayName is string actor) { <div class="merit-meta">by @actor</div> }
+                                @if (e.LockoutEndUtc is DateTime locked) { <div class="merit-meta">locked until @Options.Date(locked)</div> }
+                            </td>
+                            <td class="merit-nowrap">@e.ClientAddress @if (e.ForwardedFor is string chain) { <div class="merit-meta">via @chain</div> }</td>
+                            <td class="merit-signin-history__agent">@e.UserAgent</td>
+                            <td class="merit-nowrap merit-meta">@SignInEventText.ShortReference(e.SessionReference)@(e.AttemptId is null ? "" : " · " + SignInEventText.ShortReference(e.AttemptId))</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</section>

@@ -235,6 +235,8 @@ TABLES = [
             c("sessionScopeId", UUID, "Scope key carried in the session cookie and in SESSION_CONTEXT(N'scopeKey').",
               null=False),
             c("appUserId", UUID, "User the scope was resolved for.", null=False),
+            c("sessionReference", UUID, "Non-secret id of the session for logs and reports (#191); unlike the scope key, it "
+              "grants nothing.", null=False, default="NEWID ()"),
             c("rootTenantId", UUID, "Data root of the acting tenant; new reference rows are created in it.", null=False),
             c("actingTenantId", UUID, "Tenant the session works as; owns new rows that have no other owner rule."),
             c("userProfileId", UUID, "Profile the scope was resolved from; NULL = the master profile."),
@@ -1548,5 +1550,60 @@ TABLES = [
                     {"name": "IX_auth_passwordReset_clientAddress_createdDateUtc", "cols": "clientAddress, createdDateUtc"},
                     {"name": "UX_auth_passwordReset_appUserId_open", "cols": "appUserId", "unique": True,
                      "filter": "consumedUtc IS NULL AND supersededUtc IS NULL"}],
+    },
+    # ------------------------------------------------------------------------------------------------ sign-in events (#191)
+    {
+        "schema": "logs", "name": "signInEvent", "rls": None, "tenantKey": False,
+        "desc": "One sign-in or account-security event: what happened, why, to whom, from where (address, forwarded chain, "
+                "user agent), in which session and sign-in attempt, and the request's trace id. Kept apart from the "
+                "tamper-evident ledger so its personal data can be removed after SignInLog:RetentionDays; never holds a password, code, "
+                "token, cookie or the scope key, and a name typed for an unknown account only as a keyed hash and "
+                "encrypted.",
+        "cols": [
+            c("signInEventId", UUID, "Surrogate key.", null=False),
+            c("eventUtc", "DATETIME2 (3)", "UTC time of the event.", null=False, default="SYSUTCDATETIME ()"),
+            c("eventType", "VARCHAR (40)", "What happened, e.g. passwordFailed, mfaSucceeded, sessionRevoked, rateLimited.",
+              null=False,
+              check=("eventType IN ("
+                    "'passwordSucceeded', 'passwordFailed', 'unknownUser', 'accountInactive', "
+                    "'attemptWhileLocked', 'accountLocked', 'mfaSucceeded', 'mfaFailed', "
+                    "'mfaEnrolled', 'recoveryCodeUsed', 'sessionStarted', 'rateLimited', "
+                    "'signedOut', 'sessionExpired', 'sessionRevoked', 'passwordChanged', "
+                    "'passwordResetRequested', 'passwordResetCompleted', 'passwordSetByAdmin', "
+                    "'unlockedByAdmin', 'mfaResetByAdmin', 'accountDeactivated', 'viewAsStarted', "
+                    "'viewAsEnded', 'emailCodeSent', 'emailCodeNotSent', 'emailCodeRefused', "
+                    "'emailCodesEnabled', 'emailCodesDisabled'"
+                    ")")),
+            c("step", "VARCHAR (20)", "Where it happened: password, secondFactor, enrollment, session, passwordReset, "
+              "account or request.",
+              check="step IN ('password', 'secondFactor', 'enrollment', 'session', 'passwordReset', 'account', 'request')"),
+            c("method", "VARCHAR (20)", "Second factor used or tried: totp, recoveryCode or emailCode.",
+              check="method IN ('totp', 'recoveryCode', 'emailCode')"),
+            c("reason", "VARCHAR (60)", "Why, as a code: e.g. wrongCode, expiredCode, passwordChange, mfaReset, idle, "
+              "lifetime, deactivated, or the rate-limit policy refused."),
+            c("appUserId", UUID, "Account the event is about, when known."),
+            c("actorUserId", UUID, "Administrator who acted, for administrator actions."),
+            c("rootTenantId", UUID, "Data root of the account, when known."),
+            c("attemptedNameHash", "VARBINARY (32)", "For a user name that matched no account: HMAC-SHA256 of the name, "
+              "lower-cased and trimmed, under SignInLog:NameHashKey. Groups repeated guesses and answers a lookup; the "
+              "name cannot be read from it."),
+            c("attemptedNameProtected", "NVARCHAR (1000)", "The same name encrypted with ASP.NET Core data protection. "
+              "Readable only through the Unknown user names report, by a holder of security.investigate after a "
+              "current authenticator code; each reveal is audited."),
+            c("clientAddress", "VARCHAR (45)", "Client IP address, after forwarded headers from trusted proxies."),
+            c("forwardedFor", "VARCHAR (500)", "The raw X-Forwarded-For chain, when a trusted proxy is configured."),
+            c("userAgent", "NVARCHAR (400)", "The browser's user agent, truncated."),
+            c("sessionReference", UUID, "Non-secret id of the session involved (auth.sessionScope.sessionReference), "
+              "never the scope key itself."),
+            c("attemptId", UUID, "Id of one sign-in attempt, carried from the password step to the second factor."),
+            c("traceId", "VARCHAR (64)", "Trace id of the request; joins the event to the application log."),
+            c("failedSignInCount", "INT", "The account's consecutive failed attempts after the event."),
+            c("lockoutEndUtc", "DATETIME2 (3)", "When the account's lockout ends, if it is locked after the event."),
+        ],
+        "fks": [],
+        "indexes": [{"name": "IX_logs_signInEvent_eventUtc", "cols": "eventUtc"},
+                    {"name": "IX_logs_signInEvent_appUserId_eventUtc", "cols": "appUserId, eventUtc"},
+                    {"name": "IX_logs_signInEvent_clientAddress_eventUtc", "cols": "clientAddress, eventUtc"},
+                    {"name": "IX_logs_signInEvent_attemptedNameHash_eventUtc", "cols": "attemptedNameHash, eventUtc"}],
     },
 ]

@@ -409,6 +409,22 @@
   ]
  },
  {
+  "name": "auth.uspGetSessionScopeState",
+  "kind": "read",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": null,
+  "params": [
+   {
+    "name": "sessionScopeId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   }
+  ]
+ },
+ {
   "name": "auth.uspGetUser",
   "kind": "read",
   "grants": [
@@ -5838,6 +5854,62 @@
   ]
  },
  {
+  "name": "logs.uspFindSignInAttemptsByName",
+  "kind": "read",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": "security.investigate",
+  "params": [
+   {
+    "name": "attemptedNameHash",
+    "type": "VARBINARY (32)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "hours",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
+  "name": "logs.uspGetSignInActivity",
+  "kind": "read",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": "tenant.administer",
+  "params": [
+   {
+    "name": "hours",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "sprayThreshold",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "stuffingThreshold",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "failuresBefore",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
   "name": "logs.uspListAuditUsers",
   "kind": "read",
   "grants": [
@@ -5845,6 +5917,66 @@
   ],
   "permission": "audit.view",
   "params": []
+ },
+ {
+  "name": "logs.uspListSignInEvents",
+  "kind": "read",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": "tenant.administer",
+  "params": [
+   {
+    "name": "appUserId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "top",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
+  "name": "logs.uspListUnknownUserNames",
+  "kind": "read",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": "security.investigate",
+  "params": [
+   {
+    "name": "hours",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "includeProtected",
+    "type": "BIT",
+    "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
+  "name": "logs.uspPurgeSignInEvents",
+  "kind": "write",
+  "grants": [
+   "meritWorkerRole"
+  ],
+  "permission": null,
+  "params": [
+   {
+    "name": "retentionDays",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   }
+  ]
  },
  {
   "name": "logs.uspRecordAuditEvent",
@@ -5882,6 +6014,100 @@
    {
     "name": "clientAddress",
     "type": "VARCHAR (45)",
+    "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
+  "name": "logs.uspRecordSignInEvent",
+  "kind": "write",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": null,
+  "params": [
+   {
+    "name": "eventType",
+    "type": "VARCHAR (40)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "step",
+    "type": "VARCHAR (20)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "method",
+    "type": "VARCHAR (20)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "reason",
+    "type": "VARCHAR (60)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "appUserId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "actorUserId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "attemptedNameHash",
+    "type": "VARBINARY (32)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "attemptedNameProtected",
+    "type": "NVARCHAR (1000)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "clientAddress",
+    "type": "VARCHAR (45)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "forwardedFor",
+    "type": "VARCHAR (500)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "userAgent",
+    "type": "NVARCHAR (400)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "sessionScopeId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "attemptId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "traceId",
+    "type": "VARCHAR (64)",
     "hasDefault": true,
     "isOutput": false
    }

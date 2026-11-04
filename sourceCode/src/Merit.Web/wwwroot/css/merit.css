@@ -230,6 +230,10 @@ th .merit-sort:hover, th .merit-sort:focus { color: var(--merit-primary); }
 .merit-signin__alt h2, .merit-signin__or { margin: 0 0 .5rem; font-size: 1.1rem; color: #1b1b1b; }
 .merit-signin__or { margin-top: 1.5rem; }
 .merit-signin__forgot { margin: .5rem 0 0; font-size: .9rem; }
+/* Sign-in event log (#191). */
+.merit-signin-history__failure td:first-child { box-shadow: inset .25rem 0 0 #b50909; }
+.merit-signin-history__agent { max-width: 22rem; overflow-wrap: anywhere; font-size: .85rem; color: #565c65; }
+.merit-unknown-names__tools { display: flex; flex-wrap: wrap; gap: 1rem 3rem; align-items: flex-start; }
 .merit-resend { margin-top: 1.25rem; }
 .merit-resend [aria-disabled="true"] { opacity: .6; cursor: not-allowed; }
 .merit-busy-status { display: flex; align-items: center; gap: .5rem; margin: .75rem 0 0; }
