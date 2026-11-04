@@ -544,6 +544,19 @@ public sealed class CapturingEmailSender : IEmailSender
 
     public bool IsConfigured => true;
 
+    /// <summary>The message numbered <paramref name="count"/> (1-based), waiting for it: account mail is sent from a background queue (#190).</summary>
+    public async Task<OutgoingEmail> WaitForAsync(int count, int timeoutSeconds = 15)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(timeoutSeconds);
+        while (messages.Count < count && DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(50);
+        }
+
+        Assert.True(messages.Count >= count, $"Expected {count} message(s), got {messages.Count}.");
+        return messages.ElementAt(count - 1);
+    }
+
     public async Task<EmailSendResult> SendAsync(OutgoingEmail message, CancellationToken ct = default)
     {
         messages.Enqueue(message);

@@ -735,3 +735,9 @@ BEGIN
         ADD CONSTRAINT FK_auth_mfaEmailChallenge_auth_appUser FOREIGN KEY (appUserId) REFERENCES auth.appUser (appUserId);
 END;
 GO
+IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_auth_passwordReset_auth_appUser')
+BEGIN
+    ALTER TABLE auth.passwordReset
+        ADD CONSTRAINT FK_auth_passwordReset_auth_appUser FOREIGN KEY (appUserId) REFERENCES auth.appUser (appUserId);
+END;
+GO

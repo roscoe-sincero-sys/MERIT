@@ -54,6 +54,7 @@ CREATE OR ALTER PROCEDURE auth.uspSaveUser
       , @isActive     BIT = 1
       , @passwordHash NVARCHAR (500) = NULL
       , @homeTenantId UNIQUEIDENTIFIER = NULL
+      , @passwordChangeRequired BIT = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -139,7 +140,19 @@ BEGIN
                  , securityStamp       = CASE WHEN @passwordHash IS NOT NULL OR @isActive = 0 THEN NEWID () ELSE securityStamp END
                  , mfaEmailVerifiedUtc = CASE WHEN COALESCE (email, N'') <> COALESCE (@email, N'') THEN NULL ELSE mfaEmailVerifiedUtc END
                  , mfaPreferredMethod  = CASE WHEN COALESCE (email, N'') <> COALESCE (@email, N'') THEN 'totp' ELSE mfaPreferredMethod END
+                 , passwordChangedUtc  = CASE WHEN @passwordHash IS NOT NULL THEN SYSUTCDATETIME () ELSE passwordChangedUtc END
+                 , passwordChangeRequired = COALESCE (@passwordChangeRequired, passwordChangeRequired)
              WHERE appUserId = @appUserId AND isDeleted = 0;
+
+            IF @passwordHash IS NOT NULL
+            BEGIN
+                -- A new password from an administrator ends open reset links, and is audited with the administrator as the actor.
+                UPDATE auth.passwordReset SET supersededUtc = SYSUTCDATETIME ()
+                 WHERE appUserId = @appUserId AND consumedUtc IS NULL AND supersededUtc IS NULL AND isDeleted = 0;
+
+                INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId)
+                SELECT @me, rootTenantId, 'passwordSetByAdmin', 'appUser', @appUserId FROM auth.appUser WHERE appUserId = @appUserId;
+            END;
 
             IF @emailCodesOff = 1 OR @isActive = 0
             BEGIN
@@ -176,8 +189,9 @@ BEGIN
             END;
 
             INSERT auth.appUser (appUserId, rootTenantId, homeTenantId, userName, displayName, email, passwordHash, securityStamp,
-                                 isActive)
-            VALUES (@appUserId, @root, @homeTenantId, @userName, @displayName, @email, @passwordHash, NEWID (), @isActive);
+                                 isActive, passwordChangedUtc, passwordChangeRequired)
+            VALUES (@appUserId, @root, @homeTenantId, @userName, @displayName, @email, @passwordHash, NEWID (), @isActive,
+                    SYSUTCDATETIME (), COALESCE (@passwordChangeRequired, 0));
 
             INSERT auth.userProfile (userProfileId, appUserId, profileName, profileDescription, isMaster, isActive)
             VALUES (CAST (HASHBYTES ('MD5', CONCAT (N'masterProfile:', @appUserId)) AS UNIQUEIDENTIFIER), @appUserId,

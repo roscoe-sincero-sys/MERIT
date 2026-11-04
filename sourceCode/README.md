@@ -162,6 +162,12 @@ dotnet run --project src/Merit.Web --launch-profile "Merit.Web (Mailpit)"
 [../docs/email-codes.md](../docs/email-codes.md) for configuration, the failure matrix, troubleshooting and production
 relay guidance.
 
+### Passwords
+
+People change their password on **Sign-in methods** and reset a forgotten one with an emailed link, which still needs
+their authenticator app or a recovery code. Reset links use the same mail settings, and outside Development they need
+`Merit:PublicBaseUrl`. See [../docs/password-self-service.md](../docs/password-self-service.md).
+
 ## 5. Tests
 
 | Layer | Command | Needs |

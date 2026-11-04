@@ -140,6 +140,11 @@ TABLES = [
             c("mfaPreferredMethod", "VARCHAR (10)", "Second factor the sign-in page offers first: totp (authenticator app) or "
               "email. Falls back to totp whenever email codes are not available.", null=False, default="'totp'",
               check="mfaPreferredMethod IN ('totp', 'email')"),
+            c("passwordChangedUtc", "DATETIME2 (3)", "UTC time the password was last changed: by the person, by a reset "
+              "link, or by an administrator."),
+            c("passwordChangeRequired", "BIT", "1 = the person must choose a new password right after their next sign-in "
+              "(an administrator asked for it, so they never keep a password the administrator knows).", null=False,
+              default="0"),
         ],
         "fks": [("rootTenantId", "auth.tenant", "tenantId"), ("homeTenantId", "auth.tenant", "tenantId")],
         "indexes": [{"name": "UX_auth_appUser_userName", "cols": "userName", "unique": True},
@@ -1509,6 +1514,39 @@ TABLES = [
                     {"name": "IX_auth_mfaEmailChallenge_clientAddress_createdDateUtc", "cols": "clientAddress, createdDateUtc"},
                     {"name": "IX_auth_mfaEmailChallenge_supportReference", "cols": "supportReference"},
                     {"name": "UX_auth_mfaEmailChallenge_appUserId_open", "cols": "appUserId", "unique": True,
+                     "filter": "consumedUtc IS NULL AND supersededUtc IS NULL"}],
+    },
+    {
+        "schema": "auth", "name": "passwordReset", "rls": None, "tenantKey": False,
+        "desc": "One emailed password-reset link: whose, a keyed verifier of its token, its expiry, how many wrong second-"
+                "factor codes were entered against it, and what the mail server said. The token itself is never stored. "
+                "A new link supersedes the user's open one; using a link also needs the authenticator app or a recovery code.",
+        "cols": [
+            c("passwordResetId", UUID, "Surrogate key; also the link's public id.", null=False),
+            c("appUserId", UUID, "Account the link resets.", null=False),
+            c("tokenVerifier", "VARBINARY (32)", "HMAC-SHA256 of the link's id and its random token under the web "
+              "application's key (EmailCodes:VerifierKey). The token cannot be recovered from it.", null=False),
+            c("expiresUtc", "DATETIME2 (3)", "The link does not work after this UTC time.", null=False),
+            c("failedAttempts", "INT", "Wrong second-factor codes entered with this link.", null=False, default="0"),
+            c("maxAttempts", "INT", "Wrong codes allowed before the link stops working.", null=False,
+              check="maxAttempts BETWEEN 1 AND 10"),
+            c("consumedUtc", "DATETIME2 (3)", "UTC time the link set a new password. A used link never works again."),
+            c("supersededUtc", "DATETIME2 (3)", "UTC time the link was replaced by a newer one, closed by too many wrong "
+              "codes or a failed send, or cancelled by a password change."),
+            c("deliveryStatus", "VARCHAR (10)", "pending, submitted (the mail server accepted it) or failed.", null=False,
+              default="'pending'", check="deliveryStatus IN ('pending', 'submitted', 'failed')"),
+            c("deliveryUpdatedUtc", "DATETIME2 (3)", "UTC time the send finished."),
+            c("deliveryAttempts", "INT", "Connections made to the mail server, retries included.", null=False, default="0"),
+            c("failureKind", "VARCHAR (30)", "Category of a failed send; never the server's own text."),
+            c("smtpReplyCode", "INT", "Numeric SMTP reply of a failed send, when the server gave one."),
+            c("supportReference", "VARCHAR (16)", "Reference for support, written to the application log.", null=False),
+            c("correlationId", "VARCHAR (64)", "Trace id of the request that asked for the link."),
+            c("clientAddress", "VARCHAR (45)", "IP address the request came from, for per-address limits."),
+        ],
+        "fks": [("appUserId", "auth.appUser", "appUserId")],
+        "indexes": [{"name": "IX_auth_passwordReset_appUserId_createdDateUtc", "cols": "appUserId, createdDateUtc"},
+                    {"name": "IX_auth_passwordReset_clientAddress_createdDateUtc", "cols": "clientAddress, createdDateUtc"},
+                    {"name": "UX_auth_passwordReset_appUserId_open", "cols": "appUserId", "unique": True,
                      "filter": "consumedUtc IS NULL AND supersededUtc IS NULL"}],
     },
 ]

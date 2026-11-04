@@ -87,6 +87,7 @@ BEGIN
         INSERT @admin SELECT tenantId FROM auth.tvfAdminTenants ();
 
         SELECT u.appUserId, u.userName, u.displayName, u.email, u.isActive, u.mfaEnabled, u.lastSignInUtc, u.lockoutEndUtc,
+               u.passwordChangeRequired, u.passwordChangedUtc,
                u.homeTenantId, h.tenantName AS homeTenantName, h.tenantType AS homeTenantType,
                CAST (CASE WHEN EXISTS (SELECT 1 FROM @admin AS a WHERE a.tenantId = u.homeTenantId) THEN 1 ELSE 0 END AS BIT)
                    AS canManageAccount

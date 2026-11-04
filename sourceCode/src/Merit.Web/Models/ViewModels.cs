@@ -109,9 +109,69 @@ public sealed class EmailCodeModel
     public int LifetimeMinutes { get; set; } = 5;
 }
 
+/// <summary>"Forgot your password?" (#190). Available only with a mail server and a public address for links.</summary>
+public sealed class ForgotPasswordModel
+{
+    [Required(ErrorMessage = "Enter your user name.")]
+    public string? UserName { get; set; }
+
+    public bool Available { get; set; }
+
+    public int LinkMinutes { get; set; } = 20;
+}
+
+/// <summary>The page a reset link opens: the link's state, then the second factor and the new password.</summary>
+public sealed class ResetPasswordModel
+{
+    public PasswordResetLinkStatus Status { get; set; } = PasswordResetLinkStatus.None;
+
+    public string? UserName { get; set; }
+
+    public int PasswordMinLength { get; set; } = 8;
+
+    public int RemainingAttempts { get; set; }
+
+    /// <summary>The reset worked: the page says so and offers sign-in.</summary>
+    public bool Done { get; set; }
+
+    /// <summary>Too many wrong codes closed the link.</summary>
+    public bool Closed { get; set; }
+
+    public string? Code { get; set; }
+
+    public string? NewPassword { get; set; }
+
+    public string? ConfirmPassword { get; set; }
+}
+
+/// <summary>The new password an administrator asked for at this sign-in.</summary>
+public sealed class RequiredPasswordModel
+{
+    public string? NewPassword { get; set; }
+
+    public string? ConfirmPassword { get; set; }
+
+    public string? ReturnUrl { get; set; }
+
+    public int PasswordMinLength { get; set; } = 8;
+}
+
 /// <summary>The signed-in person's sign-in methods: the authenticator app (always on) and, where allowed, email codes.</summary>
 public sealed class SignInMethodsModel
 {
+    public int PasswordMinLength { get; set; } = 8;
+
+    public DateTime? PasswordChangedUtc { get; set; }
+
+    public string? CurrentPassword { get; set; }
+
+    public string? NewPassword { get; set; }
+
+    public string? ConfirmPassword { get; set; }
+
+    /// <summary>The authenticator code for a password change; separate from the one that turns on email codes.</summary>
+    public string? PasswordAuthenticatorCode { get; set; }
+
     public EmailCodeOption Email { get; set; } = new(false, false, false, null, "totp");
 
     /// <summary>The current authenticator code that must come before a code is sent to the address.</summary>
@@ -796,6 +856,11 @@ public sealed class UserFormModel
 
     [DataType(DataType.Password)]
     public string? NewPassword { get; set; }
+
+    /// <summary>Ask the person to choose their own password right after their next sign-in (#190).</summary>
+    public bool RequirePasswordChange { get; set; }
+
+    public DateTime? PasswordChangedUtc { get; set; }
 
     public bool MfaEnabled { get; set; }
     public DateTime? LockoutEndUtc { get; set; }

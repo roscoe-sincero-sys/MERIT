@@ -35,7 +35,7 @@ OUT = HERE.parent / "scripts" / "400_procedures"
 AUTHOR = "MERIT build"
 CREATE_DATE = "2026-10-24"
 MODULES = ["procs_auth", "procs_config", "procs_person", "procs_places", "procs_results", "procs_cases",
-           "procs_work", "procs_intake", "procs_extracts", "procs_setup", "procs_review", "procs_mfa"]
+           "procs_work", "procs_intake", "procs_extracts", "procs_setup", "procs_review", "procs_mfa", "procs_password"]
 
 PROLOGUE = """-- SET XACT_ABORT ON sits ABOVE the header block deliberately: sys.sql_modules stores only the batch containing
 -- CREATE, so the header must be the last thing before CREATE with no GO between them.

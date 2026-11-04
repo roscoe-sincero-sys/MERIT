@@ -164,6 +164,7 @@ public sealed class AdminController(IClock clock, AdminService admin, AuditServi
                 AppUserId = uid, UserName = u.User.UserName, DisplayName = u.User.DisplayName, Email = u.User.Email,
                 IsActive = u.User.IsActive, MfaEnabled = u.User.MfaEnabled, LockoutEndUtc = u.User.LockoutEndUtc, Assignments = u.Assignments, HomeTenantId = u.User.HomeTenantId,
                 HomeTenantName = u.User.HomeTenantName, CanManageAccount = u.User.CanManageAccount,
+                RequirePasswordChange = u.User.PasswordChangeRequired, PasswordChangedUtc = u.User.PasswordChangedUtc,
                 CanViewAs = !session.IsPlatformAdmin && u.User.HomeTenantType != "platform" && u.User.AppUserId != session.UserId,
             };
         }
@@ -196,7 +197,7 @@ public sealed class AdminController(IClock clock, AdminService admin, AuditServi
         {
             bool created = form.AppUserId is null;
             var id = await admin.SaveUserAsync(new UserInput(form.AppUserId, form.UserName, form.DisplayName, form.Email, form.IsActive,
-                form.NewPassword, form.HomeTenantId), ct);
+                form.NewPassword, form.HomeTenantId, form.RequirePasswordChange), ct);
             if (firstAccess)
             {
                 try

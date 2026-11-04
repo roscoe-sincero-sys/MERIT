@@ -4,6 +4,7 @@ using Merit.Application.Errors;
 using Merit.Application.Security;
 using Merit.Application.Services;
 using Merit.Web.Infrastructure;
+using Merit.Web.Infrastructure.Email;
 using Merit.Web.Models;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
@@ -18,8 +19,10 @@ namespace Merit.Web.Controllers;
 /// with no authenticator enrolls at first sign-in. Only after both factors is the session scope created.
 /// </summary>
 [Route("account")]
-public sealed class AccountController(AccountService accounts, EmailCodeService emailCodes, QrCodes qr, SessionRenewal sessions,
-                                      RecoveryCodesPending recoveryPending, StepUp stepUp, IOptions<EmailCodeOptions> codeOptions) : Controller
+public sealed class AccountController(AccountService accounts, EmailCodeService emailCodes, PasswordService passwords, QrCodes qr,
+                                      SessionRenewal sessions, RecoveryCodesPending recoveryPending, StepUp stepUp, ResetLinkCookie resetLink,
+                                      AccountMailQueue mail, IOptions<EmailCodeOptions> codeOptions, IConfiguration configuration,
+                                      IHostEnvironment environment) : Controller
 {
     /// <summary>Shown whenever a code could not be sent, with a support reference; the cause stays in the log.</summary>
     public const string DeliveryFailedMessage = "We couldn't send your verification code. Please try again. If the problem continues, contact support.";
@@ -259,13 +262,11 @@ public sealed class AccountController(AccountService accounts, EmailCodeService 
     {
         Response.Headers.CacheControl = "no-store";
         string? reference = TempData[FailedKey] as string;
-        return View(new SignInMethodsModel
-        {
-            Email = await emailCodes.GetOptionAsync(SignedInUserId(), ct),
-            Notice = TempData[NoticeKey] as string,
-            SupportReference = reference,
-            Message = reference is null ? null : DeliveryFailedMessage,
-        });
+        var model = await MethodsModelAsync(SignedInUserId(), ct);
+        model.Notice = TempData[NoticeKey] as string;
+        model.SupportReference = reference;
+        model.Message = reference is null ? null : DeliveryFailedMessage;
+        return View(model);
     }
 
     /// <summary>Turning email codes on starts with a current authenticator code, then a code sent to the address.</summary>
@@ -286,7 +287,7 @@ public sealed class AccountController(AccountService accounts, EmailCodeService 
             ModelState.AddModelError(nameof(SignInMethodsModel.AuthenticatorCode),
                 "That code did not match. Enter the current six-digit code from your authenticator app.");
             Response.Headers.CacheControl = "no-store";
-            return View(nameof(SignInMethods), new SignInMethodsModel { Email = option });
+            return View(nameof(SignInMethods), await MethodsModelAsync(userId, ct, option));
         }
 
         stepUp.Grant(Response, userId);
@@ -373,6 +374,225 @@ public sealed class AccountController(AccountService accounts, EmailCodeService 
         }
 
         return RedirectToAction(nameof(SignInMethods));
+    }
+
+    // ------------------------------------------------------------------------------------------ passwords (#190)
+
+    /// <summary>A signed-in change: current password, new password and an authenticator code. Every other session ends.</summary>
+    [HttpPost("security/password")]
+    [Authorize(Policy = Permissions.SignedIn)]
+    [EnableRateLimiting(SignInRateLimits.Code)]
+    public async Task<IActionResult> ChangePassword(SignInMethodsModel model, CancellationToken ct)
+    {
+        var userId = SignedInUserId();
+        try
+        {
+            await passwords.ChangePasswordAsync(User.FindFirstValue(MeritClaims.UserName)!, model.CurrentPassword, model.NewPassword, model.ConfirmPassword,
+                model.PasswordAuthenticatorCode, ClientAddress(), ct);
+        }
+        catch (ValidationException ex)
+        {
+            AddErrors(ex);
+            Response.Headers.CacheControl = "no-store";
+            return View(nameof(SignInMethods), await MethodsModelAsync(userId, ct));
+        }
+
+        // The change ended every session, this one included; this browser carries on in a fresh one.
+        await sessions.SignInAsync(HttpContext, userId, ct);
+        mail.Enqueue(new PasswordChangedNoticeJob(userId, HttpContext.TraceIdentifier));
+        TempData[NoticeKey] = "Your password was changed. Your other MERIT sessions were signed out.";
+        return RedirectToAction(nameof(SignInMethods));
+    }
+
+    /// <summary>The new password an administrator asked for, right after sign-in.</summary>
+    [HttpGet("password/required")]
+    [Authorize(Policy = Permissions.SignedIn)]
+    public async Task<IActionResult> RequiredPassword(string? returnUrl, CancellationToken ct)
+    {
+        if (User.FindFirstValue(MeritClaims.PasswordChangeRequired) != "1")
+        {
+            return LocalRedirect(SafeReturn(returnUrl));
+        }
+
+        Response.Headers.CacheControl = "no-store";
+        var policy = await passwords.MyPolicyAsync(ct);
+        return View(new RequiredPasswordModel { ReturnUrl = SafeReturn(returnUrl), PasswordMinLength = policy.PasswordMinLength });
+    }
+
+    [HttpPost("password/required")]
+    [Authorize(Policy = Permissions.SignedIn)]
+    [EnableRateLimiting(SignInRateLimits.Code)]
+    public async Task<IActionResult> RequiredPassword(RequiredPasswordModel model, CancellationToken ct)
+    {
+        var userId = SignedInUserId();
+        if (User.FindFirstValue(MeritClaims.PasswordChangeRequired) != "1")
+        {
+            return LocalRedirect(SafeReturn(model.ReturnUrl));
+        }
+
+        try
+        {
+            await passwords.SetRequiredPasswordAsync(User.FindFirstValue(MeritClaims.UserName)!, model.NewPassword, model.ConfirmPassword, ClientAddress(), ct);
+        }
+        catch (ValidationException ex)
+        {
+            AddErrors(ex);
+            Response.Headers.CacheControl = "no-store";
+            model.PasswordMinLength = (await passwords.MyPolicyAsync(ct)).PasswordMinLength;
+            model.NewPassword = model.ConfirmPassword = null;
+            return View(model);
+        }
+
+        await sessions.SignInAsync(HttpContext, userId, ct);
+        mail.Enqueue(new PasswordChangedNoticeJob(userId, HttpContext.TraceIdentifier));
+        return LocalRedirect(SafeReturn(model.ReturnUrl));
+    }
+
+    [HttpGet("forgot")]
+    [AllowAnonymous]
+    public IActionResult ForgotPassword()
+        => View(new ForgotPasswordModel { Available = ResetBaseUrl() is not null, LinkMinutes = passwords.LinkLifetimeMinutes });
+
+    /// <summary>
+    /// The same answer whatever the user name: the lookup and the email happen off the request (AccountMailQueue), so
+    /// neither the page nor its timing says whether the account exists.
+    /// </summary>
+    [HttpPost("forgot")]
+    [AllowAnonymous]
+    [EnableRateLimiting(SignInRateLimits.EmailCode)]
+    public IActionResult ForgotPassword(ForgotPasswordModel model)
+    {
+        string? baseUrl = ResetBaseUrl();
+        model.Available = baseUrl is not null;
+        model.LinkMinutes = passwords.LinkLifetimeMinutes;
+        if (!ModelState.IsValid || baseUrl is null)
+        {
+            return View(model);
+        }
+
+        mail.Enqueue(new PasswordResetJob(model.UserName!.Trim(), ClientAddress(), baseUrl, HttpContext.TraceIdentifier));
+        return RedirectToAction(nameof(ForgotPasswordSent));
+    }
+
+    [HttpGet("forgot/sent")]
+    [AllowAnonymous]
+    public IActionResult ForgotPasswordSent() => View(new ForgotPasswordModel { Available = true, LinkMinutes = passwords.LinkLifetimeMinutes });
+
+    /// <summary>A reset link. With r and t it stores them in a cookie and comes back clean, so the token leaves the address bar.</summary>
+    [HttpGet("reset")]
+    [AllowAnonymous]
+    public async Task<IActionResult> ResetPassword(string? r, string? t, CancellationToken ct)
+    {
+        NoTraces();
+        if (r is not null || t is not null)
+        {
+            if (Guid.TryParse(r, CultureInfo.InvariantCulture, out var linkId) && t is { Length: <= 64 })
+            {
+                resetLink.Hold(Response, linkId, t);
+            }
+            else
+            {
+                ResetLinkCookie.Release(Response);
+            }
+
+            return Redirect("/account/reset");
+        }
+
+        return View(await ResetModelAsync(ct));
+    }
+
+    [HttpPost("reset")]
+    [AllowAnonymous]
+    [EnableRateLimiting(SignInRateLimits.Code)]
+    public async Task<IActionResult> ResetPassword(ResetPasswordModel model, CancellationToken ct)
+    {
+        NoTraces();
+        if (resetLink.Read(Request) is not { } held)
+        {
+            return View(new ResetPasswordModel());
+        }
+
+        PasswordResetResult result;
+        try
+        {
+            result = await passwords.CompleteResetAsync(held.Id, held.Token, model.Code, model.NewPassword, model.ConfirmPassword, ClientAddress(), ct);
+        }
+        catch (ValidationException ex)
+        {
+            AddErrors(ex);
+            return View(await ResetModelAsync(ct));
+        }
+
+        switch (result.Outcome)
+        {
+            case PasswordResetOutcome.Reset:
+                ResetLinkCookie.Release(Response);
+                // Anything this browser held for the account ended with the reset; it starts from the sign-in page.
+                await HttpContext.SignOutAsync(AuthSchemes.Session);
+                await HttpContext.SignOutAsync(AuthSchemes.PendingMfa);
+                if (result.AppUserId is Guid id)
+                {
+                    mail.Enqueue(new PasswordChangedNoticeJob(id, HttpContext.TraceIdentifier));
+                }
+
+                return View(new ResetPasswordModel { Done = true });
+            case PasswordResetOutcome.WrongCode:
+                ModelState.AddModelError(nameof(ResetPasswordModel.Code),
+                    $"That code did not match. You can try {result.RemainingAttempts} more time{(result.RemainingAttempts == 1 ? "" : "s")} with this link.");
+                return View(await ResetModelAsync(ct));
+            case PasswordResetOutcome.LinkClosed:
+                ResetLinkCookie.Release(Response);
+                return View(new ResetPasswordModel { Closed = true });
+            default:
+                return View(await ResetModelAsync(ct));
+        }
+    }
+
+    private async Task<ResetPasswordModel> ResetModelAsync(CancellationToken ct)
+    {
+        if (resetLink.Read(Request) is not { } held)
+        {
+            return new ResetPasswordModel();
+        }
+
+        var link = await passwords.CheckLinkAsync(held.Id, held.Token, ct);
+        return new ResetPasswordModel
+        {
+            Status = link.Status, UserName = link.UserName, PasswordMinLength = link.PasswordMinLength, RemainingAttempts = link.RemainingAttempts,
+        };
+    }
+
+    private async Task<SignInMethodsModel> MethodsModelAsync(Guid userId, CancellationToken ct, EmailCodeOption? email = null)
+    {
+        var policy = await passwords.MyPolicyAsync(ct);
+        return new SignInMethodsModel
+        {
+            Email = email ?? await emailCodes.GetOptionAsync(userId, ct),
+            PasswordMinLength = policy.PasswordMinLength,
+            PasswordChangedUtc = policy.PasswordChangedUtc,
+        };
+    }
+
+    /// <summary>Where reset links point; null when they can't be offered (no mail server, or no public address outside Development).</summary>
+    private string? ResetBaseUrl()
+        => passwords.ResetByEmailAvailable ? PublicBaseUrl.Resolve(Request, configuration, environment) : null;
+
+    /// <summary>The reset pages leave nothing behind: not in caches, and no referrer that could carry the link.</summary>
+    private void NoTraces()
+    {
+        Response.Headers.CacheControl = "no-store";
+        Response.Headers["Referrer-Policy"] = "no-referrer";
+    }
+
+    private void AddErrors(ValidationException ex)
+    {
+        foreach (var (field, messages) in ex.Errors)
+        {
+            foreach (var message in messages)
+            {
+                ModelState.AddModelError(field, message);
+            }
+        }
     }
 
     private const string NotAvailableNotice = "Email codes are not available for this account right now. Enter a code from your authenticator app.";

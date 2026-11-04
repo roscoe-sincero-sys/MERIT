@@ -484,7 +484,7 @@ SET @Comments = CONCAT ((SELECT COUNT (*) FROM @new), N' new cluster(s).');
         "schema": "logs", "name": "uspRecordAuditEvent", "kind": "write", "grants": BOTH, "ticket": "T051",
         "desc": "Writes one event to the tamper-evident audit ledger: a view, change, merge or export of a person, result "
                 "or case. The user and root tenant come from the session, never from a parameter.",
-        "params": """@eventAction   VARCHAR (20)
+        "params": """@eventAction   VARCHAR (40)
 , @entityType    VARCHAR (30)
 , @entityId      UNIQUEIDENTIFIER = NULL
 , @recordCount   INT = NULL
@@ -505,7 +505,7 @@ SET @Comments = N'Audit event recorded.';
                 "newest first, one page at a time with the total. Record type 'report' covers every report.",
         "params": """@appUserId   UNIQUEIDENTIFIER = NULL
 , @entityId    UNIQUEIDENTIFIER = NULL
-, @eventAction VARCHAR (20) = NULL
+, @eventAction VARCHAR (40) = NULL
 , @entityType  VARCHAR (30) = NULL
 , @fromUtc     DATETIME2 (3) = NULL
 , @toUtc       DATETIME2 (3) = NULL

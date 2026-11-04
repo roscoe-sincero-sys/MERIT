@@ -123,7 +123,7 @@ public sealed class ConfigService(IConfigData config, IReferenceDataProvider ref
 }
 
 public sealed record UserInput(Guid? AppUserId, string? UserName, string? DisplayName, string? Email, bool IsActive, string? NewPassword,
-                               Guid? HomeTenantId = null);
+                               Guid? HomeTenantId = null, bool? RequirePasswordChange = null);
 
 /// <summary>User administration: accounts, profile assignments at tenant nodes, MFA resets.</summary>
 public sealed class AdminService(IClock clock, IAccountData accounts, AccountService accountService, ISettingsProvider settings, ICurrentSession session)
@@ -158,7 +158,7 @@ public sealed class AdminService(IClock clock, IAccountData accounts, AccountSer
 
         Guid id = input.AppUserId ?? TimeOrderedId.New();
         await accounts.SaveUserAsync(id, input.UserName!.Trim(), input.DisplayName!.Trim(), input.Email?.Trim(), input.IsActive, hash,
-            input.HomeTenantId, ct).ConfigureAwait(false);
+            input.HomeTenantId, input.RequirePasswordChange, ct).ConfigureAwait(false);
         return id;
     }
 

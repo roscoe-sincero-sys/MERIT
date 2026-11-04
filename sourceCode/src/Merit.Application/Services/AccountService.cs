@@ -136,6 +136,31 @@ public sealed class AccountService(IAccountData data, IPasswordHasher hasher, IS
         return false;
     }
 
+    /// <summary>
+    /// The second factor on its own, for a password reset (#190): a current authenticator code, or an unused recovery code,
+    /// which is then used up. Nothing is recorded here; the caller counts a failure against the link and the lockout.
+    /// </summary>
+    public async Task<bool> CheckSecondFactorAsync(SignInUserRow user, string? code, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(user);
+        string typed = (code ?? string.Empty).Trim();
+        if (user.MfaSecretProtected is null || typed.Length == 0)
+        {
+            return false;
+        }
+
+        byte[] secret = Totp.FromBase32(protector.Unprotect(user.MfaSecretProtected));
+        return Totp.Verify(secret, typed, DateTimeOffset.UtcNow)
+               || (typed.Length > 6 && await TryRecoveryCodeAsync(user.AppUserId, typed, ct).ConfigureAwait(false));
+    }
+
+    /// <summary>Whether a password is the account's current one.</summary>
+    public bool IsCurrentPassword(SignInUserRow user, string? password)
+    {
+        ArgumentNullException.ThrowIfNull(user);
+        return !string.IsNullOrEmpty(password) && hasher.Verify(user.PasswordHash, password) != PasswordCheck.Failed;
+    }
+
     /// <summary>Resolves the session scope: tenants and permissions the user holds right now.</summary>
     /// <summary>
     /// A new session scope: the master profile by default, one of the user's own profiles, or (for an administrator) another
@@ -159,15 +184,15 @@ public sealed class AccountService(IAccountData data, IPasswordHasher hasher, IS
     public Task SignOutAsync(Guid scopeKey, CancellationToken ct = default) => data.RevokeSessionScopeAsync(scopeKey, ct);
 
     /// <summary>NIST SP 800-63B-4 password rules: a minimum length and a breached-password check; no composition rules.</summary>
-    public void ValidateNewPassword(string? password, int minLength)
+    public void ValidateNewPassword(string? password, int minLength, string field = "Password")
     {
         var v = new Validator();
-        v.Required("Password", password, "Password");
+        v.Required(field, password, "Password");
         if (password is not null)
         {
-            v.When(password.Length < minLength, "Password", $"Use at least {minLength} characters.");
-            v.When(password.Length > 128, "Password", "Use 128 characters or fewer.");
-            v.When(breached.IsBreached(password), "Password", "That password appears in lists of breached passwords. Choose another.");
+            v.When(password.Length < minLength, field, $"Use at least {minLength} characters.");
+            v.When(password.Length > 128, field, "Use 128 characters or fewer.");
+            v.When(breached.IsBreached(password), field, "That password appears in lists of breached passwords. Choose another.");
         }
 
         v.ThrowIfInvalid();

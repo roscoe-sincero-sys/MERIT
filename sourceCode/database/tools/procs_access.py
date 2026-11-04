@@ -227,6 +227,7 @@ SELECT @sessionScopeId                AS sessionScopeId
      , @viewAsUserId                  AS viewAsUserId
      , v.displayName                  AS viewAsDisplayName
      , @isPlatformAdmin               AS isPlatformAdmin
+     , u.passwordChangeRequired
   FROM auth.appUser AS u
   LEFT JOIN auth.tenant  AS r ON r.tenantId = @root
   LEFT JOIN auth.tenant  AS t ON t.tenantId = @acting
@@ -288,6 +289,7 @@ SELECT u.appUserId, u.userName, u.displayName, u.email, u.isActive, u.mfaEnabled
 {ADMIN_TENANTS}
 
 SELECT u.appUserId, u.userName, u.displayName, u.email, u.isActive, u.mfaEnabled, u.lastSignInUtc, u.lockoutEndUtc,
+       u.passwordChangeRequired, u.passwordChangedUtc,
        u.homeTenantId, h.tenantName AS homeTenantName, h.tenantType AS homeTenantType,
        CAST (CASE WHEN EXISTS (SELECT 1 FROM @admin AS a WHERE a.tenantId = u.homeTenantId) THEN 1 ELSE 0 END AS BIT)
            AS canManageAccount
@@ -335,7 +337,8 @@ SELECT u.appUserId, u.userName, u.displayName, h.tenantName AS homeTenantName
 , @email        NVARCHAR (200) = NULL
 , @isActive     BIT = 1
 , @passwordHash NVARCHAR (500) = NULL
-, @homeTenantId UNIQUEIDENTIFIER = NULL""",
+, @homeTenantId UNIQUEIDENTIFIER = NULL
+, @passwordChangeRequired BIT = NULL""",
         "key": "CONCAT (N'appUserId=', @appUserId, N', homeTenantId=', @homeTenantId)",
         "body": f"""
 {ADMIN_TENANTS}
@@ -376,7 +379,19 @@ BEGIN
          , securityStamp       = CASE WHEN @passwordHash IS NOT NULL OR @isActive = 0 THEN NEWID () ELSE securityStamp END
          , mfaEmailVerifiedUtc = CASE WHEN COALESCE (email, N'') <> COALESCE (@email, N'') THEN NULL ELSE mfaEmailVerifiedUtc END
          , mfaPreferredMethod  = CASE WHEN COALESCE (email, N'') <> COALESCE (@email, N'') THEN 'totp' ELSE mfaPreferredMethod END
+         , passwordChangedUtc  = CASE WHEN @passwordHash IS NOT NULL THEN SYSUTCDATETIME () ELSE passwordChangedUtc END
+         , passwordChangeRequired = COALESCE (@passwordChangeRequired, passwordChangeRequired)
      WHERE appUserId = @appUserId AND isDeleted = 0;
+
+    IF @passwordHash IS NOT NULL
+    BEGIN
+        -- A new password from an administrator ends open reset links, and is audited with the administrator as the actor.
+        UPDATE auth.passwordReset SET supersededUtc = SYSUTCDATETIME ()
+         WHERE appUserId = @appUserId AND consumedUtc IS NULL AND supersededUtc IS NULL AND isDeleted = 0;
+
+        INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId)
+        SELECT @me, rootTenantId, 'passwordSetByAdmin', 'appUser', @appUserId FROM auth.appUser WHERE appUserId = @appUserId;
+    END;
 
     IF @emailCodesOff = 1 OR @isActive = 0
     BEGIN
@@ -413,8 +428,9 @@ BEGIN
     END;
 
     INSERT auth.appUser (appUserId, rootTenantId, homeTenantId, userName, displayName, email, passwordHash, securityStamp,
-                         isActive)
-    VALUES (@appUserId, @root, @homeTenantId, @userName, @displayName, @email, @passwordHash, NEWID (), @isActive);
+                         isActive, passwordChangedUtc, passwordChangeRequired)
+    VALUES (@appUserId, @root, @homeTenantId, @userName, @displayName, @email, @passwordHash, NEWID (), @isActive,
+            SYSUTCDATETIME (), COALESCE (@passwordChangeRequired, 0));
 
     INSERT auth.userProfile (userProfileId, appUserId, profileName, profileDescription, isMaster, isActive)
     VALUES (CAST (HASHBYTES ('MD5', CONCAT (N'masterProfile:', @appUserId)) AS UNIQUEIDENTIFIER), @appUserId,
@@ -571,6 +587,8 @@ UPDATE auth.appUser
 
 UPDATE auth.mfaRecoveryCode SET isDeleted = 1 WHERE appUserId = @appUserId AND isDeleted = 0;
 UPDATE auth.mfaEmailChallenge SET supersededUtc = SYSUTCDATETIME ()
+ WHERE appUserId = @appUserId AND consumedUtc IS NULL AND supersededUtc IS NULL AND isDeleted = 0;
+UPDATE auth.passwordReset SET supersededUtc = SYSUTCDATETIME ()
  WHERE appUserId = @appUserId AND consumedUtc IS NULL AND supersededUtc IS NULL AND isDeleted = 0;
 UPDATE auth.sessionScope SET revokedUtc = SYSUTCDATETIME () WHERE appUserId = @appUserId AND revokedUtc IS NULL;
 

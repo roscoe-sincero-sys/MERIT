@@ -27,6 +27,8 @@ public static class MeritClaims
     public const string ViewAsUserId = "merit:viewAs";
     public const string ViewAsName = "merit:viewAsName";
     public const string IsPlatformAdmin = "merit:platform";
+    /// <summary>"1" while an administrator's request for a new password is outstanding (#190).</summary>
+    public const string PasswordChangeRequired = "merit:pwchange";
 }
 
 public static class AuthSchemes

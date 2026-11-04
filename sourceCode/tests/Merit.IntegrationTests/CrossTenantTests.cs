@@ -92,6 +92,9 @@ public sealed class CrossTenantProcedureTests(MeritFixture fixture, ITestOutputH
         // Email one-time codes: the caller's own account, before or after sign-in; no tenant rows.
         "auth.uspGetEmailCodeOption", "auth.uspCreateEmailChallenge", "auth.uspRecordEmailChallengeDelivery", "auth.uspVerifyEmailChallenge",
         "auth.uspSaveMyMfaMethods",
+        // Password self-service (#190): the caller's own account, or a reset link before any session.
+        "auth.uspCreatePasswordReset", "auth.uspRecordPasswordResetDelivery", "auth.uspGetPasswordReset", "auth.uspRecordPasswordResetFailure",
+        "auth.uspCompletePasswordReset", "auth.uspChangeMyPassword", "auth.uspGetMyPasswordPolicy",
     };
 
     private static IReadOnlyList<ManifestProc> WebProcedures()

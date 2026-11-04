@@ -116,6 +116,8 @@ BEGIN
         UPDATE auth.mfaRecoveryCode SET isDeleted = 1 WHERE appUserId = @appUserId AND isDeleted = 0;
         UPDATE auth.mfaEmailChallenge SET supersededUtc = SYSUTCDATETIME ()
          WHERE appUserId = @appUserId AND consumedUtc IS NULL AND supersededUtc IS NULL AND isDeleted = 0;
+        UPDATE auth.passwordReset SET supersededUtc = SYSUTCDATETIME ()
+         WHERE appUserId = @appUserId AND consumedUtc IS NULL AND supersededUtc IS NULL AND isDeleted = 0;
         UPDATE auth.sessionScope SET revokedUtc = SYSUTCDATETIME () WHERE appUserId = @appUserId AND revokedUtc IS NULL;
 
         SET @Comments = N'MFA reset.';
