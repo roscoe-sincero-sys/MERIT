@@ -1,0 +1,27 @@
+{
+  "name": "merit-training-videos",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Generates MERIT training videos (1080p MP4, captions, transcripts) from scripted workflows against synthetic data. Separate from the application's dependencies.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "doctor": "node scripts/doctor.ts",
+    "setup:voice": "node scripts/setup-voice.ts",
+    "db:deploy": "powershell -NoProfile -ExecutionPolicy Bypass -File ../sourceCode/database/Deploy-MeritDatabase.ps1 -ServerInstance localhost\\PORTAL -DatabaseName MERIT_TRAINING -IncludeDemoData",
+    "app": "node scripts/app.ts",
+    "videos": "node scripts/build.ts",
+    "test": "playwright test",
+    "typecheck": "tsc -p ."
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.0",
+    "@types/node": "^24.10.1",
+    "typescript": "6.0.3"
+  },
+  "overrides": {
+    "playwright-core": "1.64.0"
+  }
+}

@@ -1506,6 +1506,17 @@
       "started": "2026-11-03",
       "finished": "2026-11-03",
       "notes": "29 event types; unknown names only as HMAC + data protection, revealed by security.investigate after an authenticator code, reveals/lookups/exports audited; tenant admins see their accounts; retention strips personal data and soft-deletes (database never hard-deletes); attempt id kept in cookie properties, not claims, so antiforgery tokens stay valid"
+    },
+    {
+      "id": "T214",
+      "phase": "12 Quality",
+      "task": "Training-video generation: scripted workflows recorded against synthetic data into 1080p MP4s with captions, transcripts and checks; proof of concept for manual result entry",
+      "ref": "Training-video plan (approved 2026-11-04)",
+      "where": "training/ (own package.json): lib/ (director, stage, overlay, capture, narration, compose, captions, transcript, privacy, validate, auth, data, catalog), scripts/ (build, doctor, app, setup-voice), workflows/intake-clerk/people-and-results/enter-paper-result.workflow.ts, tests/ (unit, privacy, workflows, outputs), docs/ (authoring, review checklist, catalog, design); MERIT_TRAINING database; README pointer",
+      "status": "Done",
+      "started": "2026-11-04",
+      "finished": "2026-11-04",
+      "notes": "Playwright (Edge, Chromium screencast) + FFmpeg; Remotion rejected (paid company licence); narration Windows speech, Piper optional; guard refuses non-training databases and scans every step for secrets; dry runs fail at the step a screen change broke; no application code changed"
     }
   ]
 }

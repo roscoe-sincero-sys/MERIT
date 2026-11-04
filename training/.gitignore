@@ -1,0 +1,11 @@
+node_modules/
+# Sessions and authenticator secrets of the synthetic accounts
+.auth/
+# Piper and its voices (npm run setup:voice)
+.tools/
+# Frames, narration clips and cards made during a build
+.work/
+# Generated videos, captions and transcripts (npm run videos)
+output/
+test-results/
+playwright-report/
