@@ -84,6 +84,9 @@ header, at `/help`):
 | [Importing NPI and CLIA records](docs/MERIT%20User%20Guide%20-%20Importing%20NPI%20and%20CLIA%20Records.pdf) | Keeping the laboratory, facility and provider registry current |
 | [Access and profiles](docs/MERIT%20User%20Guide%20-%20Access%20and%20Profiles.pdf) | Who sees what, profiles, view as, and who can add tenants |
 
+Training videos (1080p MP4 with captions and transcripts) are generated from scripted workflows against synthetic data
+by the separate tooling in [`training/`](training/README.md).
+
 ---
 
 ## Prerequisites and tech stack
@@ -291,6 +294,7 @@ merit/
 │       ├── Merit.Tests/           unit, architecture and endpoint-inventory tests
 │       ├── Merit.IntegrationTests/ pages, APIs, cross-tenant and authorization scenarios on real SQL Server
 │       └── e2e/                   Playwright and axe: keyboard flows and WCAG 2.1 AA
+├── training/                  training-video tooling (own package.json; Playwright + FFmpeg), separate from the app
 ├── tracking/                  task list and progress spreadsheet
 └── journal/                   Claude Code usage log
 ```
