@@ -20,6 +20,7 @@ export const ROLES = {
 export const FEATURES = {
   signIn: 'Signing in and your account',
   navigation: 'Finding your way around',
+  profiles: 'Profiles and working in',
   intake: 'Lab file intake',
   peopleAndResults: 'People and results',
   cases: 'Cases and work queues',

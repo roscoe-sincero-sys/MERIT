@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Browser } from '@playwright/test';
 import { BASE_URL, DEMO_PASSWORD, PATHS } from './config.ts';
@@ -13,6 +13,11 @@ import { totp } from './totp.ts';
  */
 export function sessionFile(user: string): string {
   return join(PATHS.auth, `${user}.json`);
+}
+
+/** Drops the saved session (not the authenticator secret), so the next one starts from a fresh sign-in. */
+export function forgetSession(user: string): void {
+  rmSync(sessionFile(user), { force: true });
 }
 
 export async function ensureSession(browser: Browser, user: string): Promise<string> {

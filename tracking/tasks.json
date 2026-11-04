@@ -1517,6 +1517,17 @@
       "started": "2026-11-04",
       "finished": "2026-11-04",
       "notes": "Playwright (Edge, Chromium screencast) + FFmpeg; Remotion rejected (paid company licence); narration Windows speech, Piper optional; guard refuses non-training databases and scans every step for secrets; dry runs fail at the step a screen change broke; no application code changed"
+    },
+    {
+      "id": "T215",
+      "phase": "12 Quality",
+      "task": "Training video: profiles, with an EPA Region 3 staff member making every-state (read only), all-Maryland and Harford County profiles and switching between them",
+      "ref": "Training videos (T214)",
+      "where": "training/workflows/all-users/profiles/making-profiles.workflow.ts; training/lib/scenarios.ts (EPA Region 3 tree, Harford County, r3staff, one task per place); lib/sql.ts (queries through a file); caption chunking fix; docs/catalog.md, docs/authoring.md",
+      "status": "Done",
+      "started": "2026-11-04",
+      "finished": "2026-11-04",
+      "notes": "Built with the shipped tenant, user and assignment procedures in MERIT_TRAINING only; Work queues shows 8, 2 and 1 tasks for the region, Maryland and Harford profiles; the read-only profile drops Intake from the menu; video 2:56 with Piper narration"
     }
   ]
 }

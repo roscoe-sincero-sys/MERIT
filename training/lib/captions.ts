@@ -16,18 +16,26 @@ export function chunk(text: string): string[] {
   const sentences = text.replace(/\s+/g, ' ').trim().split(/(?<=[.!?]["”’)]*)\s+/).filter(Boolean);
   const out: string[] = [];
   for (const sentence of sentences) {
-    if (sentence.length <= MAX_LINE * 2) { out.push(sentence); continue; }
     let rest = sentence;
-    while (rest.length > MAX_LINE * 2) {
-      const window = rest.slice(0, MAX_LINE * 2);
-      const clause = Math.max(window.lastIndexOf(', '), window.lastIndexOf('; '), window.lastIndexOf(': '));
-      const cut = clause > MAX_LINE * 0.6 ? clause + 1 : window.lastIndexOf(' ');
-      out.push(rest.slice(0, cut).trim());
-      rest = rest.slice(cut).trim();
+    while (!fits(rest)) {
+      // The longest start that still wraps into two lines, ending at a clause break when there is one.
+      const words = rest.split(' ');
+      let cut = 1;
+      for (let i = 1; i < words.length && fits(words.slice(0, i).join(' ')); i++) cut = i;
+      for (let i = cut; i > Math.ceil(cut * 0.6); i--) {
+        if (/[,;:]$/.test(words[i - 1])) { cut = i; break; }
+      }
+      out.push(words.slice(0, cut).join(' '));
+      rest = words.slice(cut).join(' ');
     }
     if (rest) out.push(rest);
   }
   return out;
+}
+
+/** True when the text wraps into at most two lines of MAX_LINE characters. */
+function fits(text: string): boolean {
+  return wrap(text).every(line => line.length <= MAX_LINE);
 }
 
 /** Wraps a chunk into one or two balanced lines. */
