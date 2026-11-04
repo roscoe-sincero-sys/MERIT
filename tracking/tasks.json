@@ -1494,7 +1494,7 @@
       "status": "Done",
       "started": "2026-11-03",
       "finished": "2026-11-03",
-      "notes": "Reset needs the emailed link and an authenticator or recovery code; same answer for every user name (background queue); HMAC token, 20 min, single use, 5 code attempts, cooldown and limits; links from Merit:PublicBaseUrl only; sessions revoked on every change; audit passwordChanged/passwordResetSent/passwordReset/passwordSetByAdmin; required change enforced through the session cookie"
+      "notes": "Reset needs the emailed link and an authenticator or recovery code; same answer for every user name (background queue); HMAC token, 20 min, single use, 5 code attempts, cooldown and limits; links from Merit:PublicBaseUrl only; sessions revoked on every change; audit passwordChanged/passwordResetRequested/passwordResetCompleted/passwordSetByAdmin; logs.auditEvent.eventAction widened to 40 (PR review); required change enforced through the session cookie"
     }
   ]
 }

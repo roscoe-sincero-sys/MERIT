@@ -49,7 +49,7 @@ Description:	Initial version.
 CREATE OR ALTER PROCEDURE logs.uspSearchAuditEvents
       @appUserId   UNIQUEIDENTIFIER = NULL
       , @entityId    UNIQUEIDENTIFIER = NULL
-      , @eventAction VARCHAR (20) = NULL
+      , @eventAction VARCHAR (40) = NULL
       , @entityType  VARCHAR (30) = NULL
       , @fromUtc     DATETIME2 (3) = NULL
       , @toUtc       DATETIME2 (3) = NULL

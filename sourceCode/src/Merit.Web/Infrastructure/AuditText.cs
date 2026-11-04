@@ -18,8 +18,8 @@ public static class AuditText
         ("mfaMethodChanged", "Changed preferred sign-in method"), ("mfaCodeSent", "Email code sent"),
         ("mfaCodeNotSent", "Email code could not be sent"), ("mfaCodeRefused", "Email code refused (wait or limit)"),
         ("mfaCodeLocked", "Email code locked after wrong entries"),
-        ("passwordChanged", "Changed their password"), ("passwordResetSent", "Password reset link sent"),
-        ("passwordReset", "Reset their password with a link"), ("passwordSetByAdmin", "Set a password for the person"),
+        ("passwordChanged", "Changed their password"), ("passwordResetRequested", "Password reset link sent"),
+        ("passwordResetCompleted", "Reset their password with a link"), ("passwordSetByAdmin", "Set a password for the person"),
     ];
 
     /// <summary>"report" stands for every report ("report:testingCounts").</summary>

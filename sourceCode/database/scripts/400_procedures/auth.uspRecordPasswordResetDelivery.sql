@@ -13,7 +13,7 @@ CreateDate:   2026-10-24
 ========================================================================================================================
 Description:
 
-Records how sending a reset link ended. A failed send closes the link. Submitted means the mail server accepted it, which is audited as passwordResetSent.
+Records how sending a reset link ended. A failed send closes the link. Submitted means the mail server accepted it, which is audited as passwordResetRequested.
 
 ========================================================================================================================
 Requirements and Key Dependencies:
@@ -105,7 +105,7 @@ BEGIN
         IF @@ROWCOUNT > 0 AND @submitted = 1
         BEGIN
             INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, clientAddress)
-            SELECT r.appUserId, u.rootTenantId, 'passwordResetSent', 'appUser', r.appUserId, r.clientAddress
+            SELECT r.appUserId, u.rootTenantId, 'passwordResetRequested', 'appUser', r.appUserId, r.clientAddress
               FROM auth.passwordReset AS r
               JOIN auth.appUser       AS u ON u.appUserId = r.appUserId
              WHERE r.passwordResetId = @passwordResetId;
@@ -194,7 +194,7 @@ EXEC util.uspSetObjectDescription
       @SchemaName  = N'auth'
     , @ObjectType  = N'PROCEDURE'
     , @ObjectName  = N'uspRecordPasswordResetDelivery'
-    , @Description = N'Records how sending a reset link ended. A failed send closes the link. Submitted means the mail server accepted it, which is audited as passwordResetSent.';
+    , @Description = N'Records how sending a reset link ended. A failed send closes the link. Submitted means the mail server accepted it, which is audited as passwordResetRequested.';
 GO
 
 IF DATABASE_PRINCIPAL_ID (N'meritWebRole') IS NOT NULL

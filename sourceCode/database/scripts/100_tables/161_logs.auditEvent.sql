@@ -30,7 +30,7 @@ BEGIN
         eventUtc        DATETIME2 (3)   NOT NULL CONSTRAINT DF_logs_auditEvent_eventUtc DEFAULT (SYSUTCDATETIME ()),
         appUserId       UNIQUEIDENTIFIER NULL,
         rootTenantId    UNIQUEIDENTIFIER NULL,
-        eventAction     VARCHAR (20)    NOT NULL,
+        eventAction     VARCHAR (40)    NOT NULL,
         entityType      VARCHAR (30)    NOT NULL,
         entityId        UNIQUEIDENTIFIER NULL,
         recordCount     INT             NULL,
@@ -49,33 +49,62 @@ BEGIN
             CHECK (eventAction IN ('view', 'create', 'update', 'delete', 'merge', 'export', 'search', 'signIn',
                                    'signInFailed', 'signOut', 'mfaEnrolled', 'permissionDenied', 'mfaEmailEnabled',
                                    'mfaEmailDisabled', 'mfaMethodChanged', 'mfaCodeSent', 'mfaCodeNotSent',
-                                   'mfaCodeRefused', 'mfaCodeLocked', 'passwordChanged', 'passwordResetSent',
-                                   'passwordReset', 'passwordSetByAdmin'))
+                                   'mfaCodeRefused', 'mfaCodeLocked', 'passwordChanged', 'passwordResetRequested',
+                                   'passwordResetCompleted', 'passwordSetByAdmin'))
     )
     WITH (LEDGER = ON (APPEND_ONLY = ON));
 END;
 GO
 
--- Email one-time codes (#186) and password self-service (#190) added actions. An append-only ledger still accepts a
--- replaced CHECK constraint (rows are never rewritten), so an existing database converges: the old list is dropped and the
--- new one checked against every row. The LIKE names the newest action.
-IF NOT EXISTS (SELECT 1
-                 FROM sys.check_constraints
-                WHERE name = N'CK_logs_auditEvent_eventAction'
-                  AND parent_object_id = OBJECT_ID (N'logs.auditEvent')
-                  AND definition LIKE N'%passwordSetByAdmin%')
+-- eventAction held 20 characters; password self-service (#190) names need more, so it holds 40. An append-only ledger
+-- accepts a wider column (rows are never rewritten). The CHECK constraint refers to the column, so it goes first and
+-- comes back below.
+IF COL_LENGTH (N'logs.auditEvent', N'eventAction') < 40
 BEGIN
     IF OBJECT_ID (N'logs.CK_logs_auditEvent_eventAction', N'C') IS NOT NULL
     BEGIN
         ALTER TABLE logs.auditEvent DROP CONSTRAINT CK_logs_auditEvent_eventAction;
     END;
 
-    ALTER TABLE logs.auditEvent WITH CHECK ADD CONSTRAINT CK_logs_auditEvent_eventAction
-        CHECK (eventAction IN ('view', 'create', 'update', 'delete', 'merge', 'export', 'search', 'signIn',
-                               'signInFailed', 'signOut', 'mfaEnrolled', 'permissionDenied', 'mfaEmailEnabled',
-                               'mfaEmailDisabled', 'mfaMethodChanged', 'mfaCodeSent', 'mfaCodeNotSent',
-                               'mfaCodeRefused', 'mfaCodeLocked', 'passwordChanged', 'passwordResetSent',
-                               'passwordReset', 'passwordSetByAdmin'));
+    ALTER TABLE logs.auditEvent ALTER COLUMN eventAction VARCHAR (40) NOT NULL;
+END;
+GO
+
+-- Email one-time codes (#186) and password self-service (#190) added actions. An append-only ledger still accepts a
+-- replaced CHECK constraint (rows are never rewritten), so an existing database converges: the old list is dropped and the
+-- new one checked against every row. The LIKE names the newest action. A database that ran a build of #190 from before
+-- the names were lengthened holds rows with the interim names (passwordResetSent, passwordReset), which a ledger can never
+-- change; there the constraint is added WITH NOCHECK, so it still holds for every new row.
+IF NOT EXISTS (SELECT 1
+                 FROM sys.check_constraints
+                WHERE name = N'CK_logs_auditEvent_eventAction'
+                  AND parent_object_id = OBJECT_ID (N'logs.auditEvent')
+                  AND definition LIKE N'%passwordResetCompleted%')
+BEGIN
+    IF OBJECT_ID (N'logs.CK_logs_auditEvent_eventAction', N'C') IS NOT NULL
+    BEGIN
+        ALTER TABLE logs.auditEvent DROP CONSTRAINT CK_logs_auditEvent_eventAction;
+    END;
+
+    IF EXISTS (SELECT 1 FROM logs.auditEvent WHERE eventAction IN ('passwordResetSent', 'passwordReset'))
+    BEGIN
+        PRINT N'logs.auditEvent holds interim #190 action names; CK_logs_auditEvent_eventAction is added WITH NOCHECK.';
+        ALTER TABLE logs.auditEvent WITH NOCHECK ADD CONSTRAINT CK_logs_auditEvent_eventAction
+            CHECK (eventAction IN ('view', 'create', 'update', 'delete', 'merge', 'export', 'search', 'signIn',
+                                   'signInFailed', 'signOut', 'mfaEnrolled', 'permissionDenied', 'mfaEmailEnabled',
+                                   'mfaEmailDisabled', 'mfaMethodChanged', 'mfaCodeSent', 'mfaCodeNotSent',
+                                   'mfaCodeRefused', 'mfaCodeLocked', 'passwordChanged', 'passwordResetRequested',
+                                   'passwordResetCompleted', 'passwordSetByAdmin'));
+    END
+    ELSE
+    BEGIN
+        ALTER TABLE logs.auditEvent WITH CHECK ADD CONSTRAINT CK_logs_auditEvent_eventAction
+            CHECK (eventAction IN ('view', 'create', 'update', 'delete', 'merge', 'export', 'search', 'signIn',
+                                   'signInFailed', 'signOut', 'mfaEnrolled', 'permissionDenied', 'mfaEmailEnabled',
+                                   'mfaEmailDisabled', 'mfaMethodChanged', 'mfaCodeSent', 'mfaCodeNotSent',
+                                   'mfaCodeRefused', 'mfaCodeLocked', 'passwordChanged', 'passwordResetRequested',
+                                   'passwordResetCompleted', 'passwordSetByAdmin'));
+    END;
 END;
 GO
 
@@ -104,7 +133,7 @@ EXEC util.uspSetObjectDescription @SchemaName = N'logs', @ObjectType = N'TABLE',
 EXEC util.uspSetObjectDescription @SchemaName = N'logs', @ObjectType = N'TABLE', @ObjectName = N'auditEvent', @ColumnName = N'eventUtc', @Description = N'UTC time of the event.';
 EXEC util.uspSetObjectDescription @SchemaName = N'logs', @ObjectType = N'TABLE', @ObjectName = N'auditEvent', @ColumnName = N'appUserId', @Description = N'User who acted; NULL for a failed sign-in with an unknown user name, or a named system account.';
 EXEC util.uspSetObjectDescription @SchemaName = N'logs', @ObjectType = N'TABLE', @ObjectName = N'auditEvent', @ColumnName = N'rootTenantId', @Description = N'Root tenant the event belongs to.';
-EXEC util.uspSetObjectDescription @SchemaName = N'logs', @ObjectType = N'TABLE', @ObjectName = N'auditEvent', @ColumnName = N'eventAction', @Description = N'What happened: view, create, update, delete (soft), merge, export, search, signIn, signInFailed, signOut, mfaEnrolled, permissionDenied, or an email one-time code event: mfaEmailEnabled, mfaEmailDisabled, mfaMethodChanged, mfaCodeSent, mfaCodeNotSent, mfaCodeRefused (cooldown or limit), mfaCodeLocked (too many wrong codes); or a password event: passwordChanged (by the person), passwordResetSent (reset link emailed), passwordReset (reset link used), passwordSetByAdmin.';
+EXEC util.uspSetObjectDescription @SchemaName = N'logs', @ObjectType = N'TABLE', @ObjectName = N'auditEvent', @ColumnName = N'eventAction', @Description = N'What happened: view, create, update, delete (soft), merge, export, search, signIn, signInFailed, signOut, mfaEnrolled, permissionDenied, or an email one-time code event: mfaEmailEnabled, mfaEmailDisabled, mfaMethodChanged, mfaCodeSent, mfaCodeNotSent, mfaCodeRefused (cooldown or limit), mfaCodeLocked (too many wrong codes); or a password event: passwordChanged (by the person), passwordResetRequested (reset link emailed), passwordResetCompleted (reset link used), passwordSetByAdmin. Up to 40 characters.';
 EXEC util.uspSetObjectDescription @SchemaName = N'logs', @ObjectType = N'TABLE', @ObjectName = N'auditEvent', @ColumnName = N'entityType', @Description = N'Kind of record acted on, e.g. person, labResult, exposureCase, export.';
 EXEC util.uspSetObjectDescription @SchemaName = N'logs', @ObjectType = N'TABLE', @ObjectName = N'auditEvent', @ColumnName = N'entityId', @Description = N'Id of the record acted on.';
 EXEC util.uspSetObjectDescription @SchemaName = N'logs', @ObjectType = N'TABLE', @ObjectName = N'auditEvent', @ColumnName = N'recordCount', @Description = N'Rows returned or exported, for list views and exports.';

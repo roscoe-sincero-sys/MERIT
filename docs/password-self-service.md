@@ -28,8 +28,8 @@ People can change their own password, and reset a forgotten one by email. A rese
 - **Notice.** After a change or reset, MERIT emails "Your MERIT password was changed", if mail is configured and the account has an address.
 - **Audit** (`logs.auditEvent`):
   - `passwordChanged` (by the person);
-  - `passwordResetSent` (a link was submitted to the mail server);
-  - `passwordReset` (a link was used);
+  - `passwordResetRequested` (a link was submitted to the mail server);
+  - `passwordResetCompleted` (a link was used);
   - `passwordSetByAdmin` (the administrator is the actor, the person is the record).
 - **Logging.** Passwords, tokens, links and email addresses never reach the application log. Log lines carry the user id, support reference and correlation id.
 

@@ -45,7 +45,7 @@ Description:	Initial version.
 
 ***********************************************************************************************************************/
 CREATE OR ALTER PROCEDURE logs.uspRecordAuditEvent
-      @eventAction   VARCHAR (20)
+      @eventAction   VARCHAR (40)
       , @entityType    VARCHAR (30)
       , @entityId      UNIQUEIDENTIFIER = NULL
       , @recordCount   INT = NULL

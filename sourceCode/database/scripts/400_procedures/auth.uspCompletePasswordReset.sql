@@ -13,7 +13,7 @@ CreateDate:   2026-10-24
 ========================================================================================================================
 Description:
 
-Sets a new password with a reset link, after the web application has checked the second factor. The link is consumed in the same statement that checks it, so it works once. The security stamp changes and every session ends, the lockout clears, other open links close, and passwordReset is audited.
+Sets a new password with a reset link, after the web application has checked the second factor. The link is consumed in the same statement that checks it, so it works once. The security stamp changes and every session ends, the lockout clears, other open links close, and passwordResetCompleted is audited.
 
 ========================================================================================================================
 Requirements and Key Dependencies:
@@ -115,7 +115,7 @@ BEGIN
             UPDATE auth.sessionScope SET revokedUtc = @now WHERE appUserId = @appUserId AND revokedUtc IS NULL;
 
             INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, clientAddress)
-            SELECT @appUserId, rootTenantId, 'passwordReset', 'appUser', @appUserId, @clientAddress
+            SELECT @appUserId, rootTenantId, 'passwordResetCompleted', 'appUser', @appUserId, @clientAddress
               FROM auth.appUser WHERE appUserId = @appUserId;
         END;
 
@@ -204,7 +204,7 @@ EXEC util.uspSetObjectDescription
       @SchemaName  = N'auth'
     , @ObjectType  = N'PROCEDURE'
     , @ObjectName  = N'uspCompletePasswordReset'
-    , @Description = N'Sets a new password with a reset link, after the web application has checked the second factor. The link is consumed in the same statement that checks it, so it works once. The security stamp changes and every session ends, the lockout clears, other open links close, and passwordReset is audited.';
+    , @Description = N'Sets a new password with a reset link, after the web application has checked the second factor. The link is consumed in the same statement that checks it, so it works once. The security stamp changes and every session ends, the lockout clears, other open links close, and passwordResetCompleted is audited.';
 GO
 
 IF DATABASE_PRINCIPAL_ID (N'meritWebRole') IS NOT NULL

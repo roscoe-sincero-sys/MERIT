@@ -78,8 +78,8 @@ public sealed partial class PasswordSelfServiceTests(MeritFixture fixture)
         Assert.Contains("Your password has been reset", Decode(await done.Content.ReadAsStringAsync()), StringComparison.Ordinal);
         Assert.Equal(0, await account.ScalarAsync<int>("SELECT failedSignInCount FROM auth.appUser WHERE appUserId = @id AND passwordChangedUtc IS NOT NULL"));
         Assert.Equal(0, await account.ScalarAsync<int>("SELECT COUNT (*) FROM auth.sessionScope WHERE appUserId = @id AND revokedUtc IS NULL"));
-        Assert.Equal(1, await account.ScalarAsync<int>("SELECT COUNT (*) FROM logs.auditEvent WHERE appUserId = @id AND eventAction = 'passwordResetSent'"));
-        Assert.Equal(1, await account.ScalarAsync<int>("SELECT COUNT (*) FROM logs.auditEvent WHERE appUserId = @id AND eventAction = 'passwordReset'"));
+        Assert.Equal(1, await account.ScalarAsync<int>("SELECT COUNT (*) FROM logs.auditEvent WHERE appUserId = @id AND eventAction = 'passwordResetRequested'"));
+        Assert.Equal(1, await account.ScalarAsync<int>("SELECT COUNT (*) FROM logs.auditEvent WHERE appUserId = @id AND eventAction = 'passwordResetCompleted'"));
         Assert.Equal("Your MERIT password was changed", (await mail.WaitForAsync(2)).Subject);
 
         // The old password no longer works; the new one does.

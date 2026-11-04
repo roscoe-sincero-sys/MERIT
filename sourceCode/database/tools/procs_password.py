@@ -121,7 +121,7 @@ SET @Comments = CONCAT (N'Password reset ', @outcome, N'.');
     {
         "schema": "auth", "name": "uspRecordPasswordResetDelivery", "kind": "write", "grants": WEB, "ticket": "T211",
         "desc": "Records how sending a reset link ended. A failed send closes the link. Submitted means the mail server "
-                "accepted it, which is audited as passwordResetSent.",
+                "accepted it, which is audited as passwordResetRequested.",
         "params": """@passwordResetId  UNIQUEIDENTIFIER
 , @submitted        BIT
 , @deliveryAttempts INT
@@ -144,7 +144,7 @@ UPDATE auth.passwordReset
 IF @@ROWCOUNT > 0 AND @submitted = 1
 BEGIN
     INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, clientAddress)
-    SELECT r.appUserId, u.rootTenantId, 'passwordResetSent', 'appUser', r.appUserId, r.clientAddress
+    SELECT r.appUserId, u.rootTenantId, 'passwordResetRequested', 'appUser', r.appUserId, r.clientAddress
       FROM auth.passwordReset AS r
       JOIN auth.appUser       AS u ON u.appUserId = r.appUserId
      WHERE r.passwordResetId = @passwordResetId;
@@ -220,7 +220,7 @@ SET @Comments = N'Reset link attempt counted.';
         "schema": "auth", "name": "uspCompletePasswordReset", "kind": "write", "grants": WEB, "ticket": "T211",
         "desc": "Sets a new password with a reset link, after the web application has checked the second factor. The "
                 "link is consumed in the same statement that checks it, so it works once. The security stamp changes "
-                "and every session ends, the lockout clears, other open links close, and passwordReset is audited.",
+                "and every session ends, the lockout clears, other open links close, and passwordResetCompleted is audited.",
         "params": """@passwordResetId UNIQUEIDENTIFIER
 , @tokenVerifier   VARBINARY (32)
 , @passwordHash    NVARCHAR (500)
@@ -250,7 +250,7 @@ BEGIN
     UPDATE auth.sessionScope SET revokedUtc = @now WHERE appUserId = @appUserId AND revokedUtc IS NULL;
 
     INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, clientAddress)
-    SELECT @appUserId, rootTenantId, 'passwordReset', 'appUser', @appUserId, @clientAddress
+    SELECT @appUserId, rootTenantId, 'passwordResetCompleted', 'appUser', @appUserId, @clientAddress
       FROM auth.appUser WHERE appUserId = @appUserId;
 END;
 

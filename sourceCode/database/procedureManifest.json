@@ -5857,7 +5857,7 @@
   "params": [
    {
     "name": "eventAction",
-    "type": "VARCHAR (20)",
+    "type": "VARCHAR (40)",
     "hasDefault": false,
     "isOutput": false
    },
@@ -5909,7 +5909,7 @@
    },
    {
     "name": "eventAction",
-    "type": "VARCHAR (20)",
+    "type": "VARCHAR (40)",
     "hasDefault": true,
     "isOutput": false
    },
