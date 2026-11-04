@@ -29,6 +29,7 @@ public static class AuditText
         ("cluster", "Cluster"), ("stagingRow", "Laboratory file row"), ("workTask", "Work queue tasks"), ("caseMap", "Case map"),
         ("report", "Report"), ("extractRun", "Extract"), ("appUser", "User account"), ("viewAsUser", "User account (view as)"),
         ("personOutsideScope", "Person outside your access"), ("auditEvent", "Audit log"),
+        ("unknownUserNames", "Unknown user names (sign-in)"),
     ];
 
     private static readonly Dictionary<string, string> ActionNames = Actions.ToDictionary(a => a.Code, a => a.Label, StringComparer.Ordinal);

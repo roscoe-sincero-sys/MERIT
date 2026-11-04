@@ -113,6 +113,50 @@ public sealed class AccountData(Db db) : IAccountData
     public async Task<MyPasswordPolicyRow> GetMyPasswordPolicyAsync(CancellationToken ct = default)
         => await db.QuerySingleAsync<MyPasswordPolicyRow>("auth.uspGetMyPasswordPolicy", null, ct).ConfigureAwait(false) ?? new MyPasswordPolicyRow();
 
+    public Task RecordSignInEventAsync(SignInEventInput input, CancellationToken ct = default)
+        => db.ExecuteAsync("logs.uspRecordSignInEvent", new
+        {
+            eventType = input.EventType,
+            step = input.Step,
+            method = input.Method,
+            reason = input.Reason,
+            appUserId = input.AppUserId,
+            actorUserId = input.ActorUserId,
+            attemptedNameHash = input.AttemptedNameHash,
+            attemptedNameProtected = input.AttemptedNameProtected,
+            clientAddress = input.ClientAddress,
+            forwardedFor = input.ForwardedFor,
+            userAgent = input.UserAgent,
+            sessionScopeId = input.SessionScopeId,
+            attemptId = input.AttemptId,
+            traceId = input.TraceId,
+        }, ct);
+
+    public Task<IReadOnlyList<SignInEventRow>> ListSignInEventsAsync(Guid appUserId, int top, CancellationToken ct = default)
+        => db.QueryAsync<SignInEventRow>("logs.uspListSignInEvents", new { appUserId, top }, ct);
+
+    public Task<SignInActivity> GetSignInActivityAsync(int hours, int sprayThreshold, int stuffingThreshold, int failuresBefore, CancellationToken ct = default)
+        => db.MultipleAsync("logs.uspGetSignInActivity", new { hours, sprayThreshold, stuffingThreshold, failuresBefore }, async g =>
+            new SignInActivity(
+                (await g.ReadAsync<SignInAddressRow>().ConfigureAwait(false)).AsList(),
+                (await g.ReadAsync<SignInAccountRow>().ConfigureAwait(false)).AsList(),
+                (await g.ReadAsync<SignInSprayRow>().ConfigureAwait(false)).AsList(),
+                (await g.ReadAsync<SignInStuffingRow>().ConfigureAwait(false)).AsList(),
+                (await g.ReadAsync<SignInSuccessAfterFailuresRow>().ConfigureAwait(false)).AsList(),
+                (await g.ReadAsync<SignInLockoutRow>().ConfigureAwait(false)).AsList()), ct);
+
+    public Task<IReadOnlyList<UnknownUserNameRow>> ListUnknownUserNamesAsync(int hours, bool includeProtected, CancellationToken ct = default)
+        => db.QueryAsync<UnknownUserNameRow>("logs.uspListUnknownUserNames", new { hours, includeProtected }, ct);
+
+    public Task<IReadOnlyList<SignInAttemptRow>> FindSignInAttemptsByNameAsync(byte[] attemptedNameHash, int hours, CancellationToken ct = default)
+        => db.QueryAsync<SignInAttemptRow>("logs.uspFindSignInAttemptsByName", new { attemptedNameHash, hours }, ct);
+
+    public async Task<int> PurgeSignInEventsAsync(int retentionDays, CancellationToken ct = default)
+        => await db.QuerySingleAsync<int>("logs.uspPurgeSignInEvents", new { retentionDays }, ct).ConfigureAwait(false);
+
+    public Task<SessionScopeStateRow?> GetSessionScopeStateAsync(Guid sessionScopeId, CancellationToken ct = default)
+        => db.QuerySingleAsync<SessionScopeStateRow>("auth.uspGetSessionScopeState", new { sessionScopeId }, ct);
+
     private sealed class ResetOutcome
     {
         public string Outcome { get; init; } = "invalid";

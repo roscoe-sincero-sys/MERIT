@@ -18,6 +18,9 @@ public sealed class AuditService(IWorkData data)
     public Task CreatedAsync(string entityType, Guid id, CancellationToken ct = default)
         => data.RecordAuditAsync("create", entityType, id, null, null, ct);
 
+    public Task SearchedAsync(string entityType, int rowCount, CancellationToken ct = default)
+        => data.RecordAuditAsync("search", entityType, null, rowCount, null, ct);
+
     public Task ExportedAsync(string entityType, Guid? id, int rowCount, CancellationToken ct = default)
         => data.RecordAuditAsync("export", entityType, id, rowCount, null, ct);
 

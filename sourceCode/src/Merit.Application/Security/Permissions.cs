@@ -33,6 +33,9 @@ public static class Permissions
     public const string AuditView = "audit.view";
     public const string PlatformAdminister = "platform.administer";
 
+    /// <summary>Sign-in investigation (#191): every sign-in event, unknown user names, and revealing them.</summary>
+    public const string SecurityInvestigate = "security.investigate";
+
     /// <summary>Policy for actions any signed-in user may take (their own account, sign-out).</summary>
     public const string SignedIn = "signedIn";
 
@@ -41,5 +44,6 @@ public static class Permissions
         PersonView, PersonEdit, PersonViewIdentifiers, PersonMerge, ResultView, ResultEdit, ResultReleaseHold, CaseView,
         CaseOpen, CaseEdit, InvestigationEdit, TaskView, TaskEdit, IntakeUpload, IntakeConfigure, DataExport,
         MatchingConfigure, ExtractRun, ExtractSubmit, ConfigEdit, RegistryEdit, TenantAdminister, TenantCreate, AuditView, PlatformAdminister,
+        SecurityInvestigate,
     ];
 }

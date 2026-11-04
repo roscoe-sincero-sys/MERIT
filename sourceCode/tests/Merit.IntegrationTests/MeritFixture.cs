@@ -170,7 +170,7 @@ public sealed partial class MeritClient : IDisposable
 
     /// <summary>The same session on another host of the app, such as one with a different setting: the hosts share the
     /// database and data-protection keys, so the session cookie is good on both.</summary>
-    public MeritClient On(WebApplicationFactory<Program> factory) => new(factory, cookies) { UserName = UserName };
+    public MeritClient On(WebApplicationFactory<Program> factory) => new(factory, cookies) { UserName = UserName, TotpSecret = TotpSecret };
 
     public HttpClient Http { get; }
 
@@ -178,6 +178,11 @@ public sealed partial class MeritClient : IDisposable
     public HttpClient NoRedirect { get; }
 
     public string? UserName { get; private set; }
+
+    /// <summary>The authenticator secret enrolled at sign-in, for steps that ask for a current code again (#191).</summary>
+    public string? TotpSecret { get; private set; }
+
+    public string CurrentTotpCode() => CurrentCode(TotpSecret ?? throw new InvalidOperationException("Not enrolled by this client."));
 
     public async Task SignInAsync(string userName, string password)
     {
@@ -188,6 +193,7 @@ public sealed partial class MeritClient : IDisposable
         if (path.EndsWith("/enroll", StringComparison.OrdinalIgnoreCase))
         {
             var secret = SecretPattern().Match(html).Groups[1].Value.Replace(" ", string.Empty, StringComparison.Ordinal);
+            TotpSecret = secret;
             response = await Http.PostAsync("/account/enroll", Form(html, ("Code", CurrentCode(secret))));
             // Acknowledge the recovery codes, as a person must before using MERIT (issue #156).
             if (response.IsSuccessStatusCode)

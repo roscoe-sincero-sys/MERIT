@@ -30,8 +30,8 @@ public sealed partial class PasswordSelfServiceTests(MeritFixture fixture)
         var mail = new CapturingEmailSender();
         var logs = new CapturingLoggerProvider();
         using var host = Host(mail, logs);
-        await using var account = await Account.CreateAsync(host);
-        await using var other = await Account.CreateAsync(host);
+        await using var account = await SyntheticAccount.CreateAsync(host, "pw");
+        await using var other = await SyntheticAccount.CreateAsync(host, "pw");
 
         // A session the reset must end.
         using var earlier = new MeritClient(host);
@@ -111,8 +111,8 @@ public sealed partial class PasswordSelfServiceTests(MeritFixture fixture)
         var mail = new CapturingEmailSender();
         using var host = Host(mail, null, ("PasswordReset:MaxCodeAttempts", "2"), ("PasswordReset:CooldownSeconds", "0"),
             ("PasswordReset:MaxLinksPerAccount", "4"));
-        await using var account = await Account.CreateAsync(host);
-        await using var noAuthenticator = await Account.CreateAsync(host, mfa: false);
+        await using var account = await SyntheticAccount.CreateAsync(host, "pw");
+        await using var noAuthenticator = await SyntheticAccount.CreateAsync(host, "pw", mfa: false);
         using var visitor = new MeritClient(host);
 
         // Two wrong codes close the link.
@@ -176,7 +176,7 @@ public sealed partial class PasswordSelfServiceTests(MeritFixture fixture)
     {
         var mail = new CapturingEmailSender();
         using var host = Host(mail);
-        await using var account = await Account.CreateAsync(host);
+        await using var account = await SyntheticAccount.CreateAsync(host, "pw");
         using var client = new MeritClient(host);
         using var elsewhere = new MeritClient(host);
         await account.SignInAsync(client, MeritFixture.Password);
@@ -215,7 +215,7 @@ public sealed partial class PasswordSelfServiceTests(MeritFixture fixture)
     public async Task AnAdministratorCanRequireANewPasswordAtNextSignIn()
     {
         using var host = Host(new CapturingEmailSender());
-        await using var account = await Account.CreateAsync(host);
+        await using var account = await SyntheticAccount.CreateAsync(host, "pw");
         var admin = (await fixture.SignedInAsync("admin")).On(host);
         const string adminSet = "Admin-Set-Temporary-77";
 
@@ -304,82 +304,4 @@ public sealed partial class PasswordSelfServiceTests(MeritFixture fixture)
 
     [GeneratedRegex(@"https://merit\.example\.test/account/reset\?r=([0-9a-f]{32})&t=([A-Za-z0-9_-]{43})")]
     private static partial Regex LinkPattern();
-
-    /// <summary>A synthetic account with the demo password, a known authenticator secret and an example.test address.</summary>
-    private sealed class Account : IAsyncDisposable
-    {
-        private readonly string secret = Totp.ToBase32(Totp.NewSecret());
-
-        public Guid Id { get; } = Guid.NewGuid();
-
-        public string Name => "pw-" + Id.ToString("N")[..20];
-
-        public string Email => $"{Name}@example.test";
-
-        public string TotpCode() => Totp.Code(Totp.FromBase32(secret), DateTimeOffset.UtcNow.ToUnixTimeSeconds() / 30);
-
-        public static async Task<Account> CreateAsync(WebApplicationFactory<Program> host, bool mfa = true)
-        {
-            var account = new Account();
-            string protectedSecret = host.Services.GetRequiredService<ISecretProtector>().Protect(account.secret);
-            await account.ScalarAsync<int>("""
-                INSERT auth.appUser (appUserId, rootTenantId, homeTenantId, userName, displayName, email, passwordHash, securityStamp,
-                                     mfaSecretProtected, mfaEnabled)
-                SELECT @id, rootTenantId, homeTenantId, @name, N'Password test', @email, passwordHash, NEWID (),
-                       CASE WHEN @mfa = 1 THEN @secret END, @mfa
-                  FROM auth.appUser WHERE userName = N'admin';
-                SELECT 0;
-                """, ("@email", account.Email), ("@secret", protectedSecret), ("@mfa", mfa));
-            return account;
-        }
-
-        /// <summary>Password and authenticator code, as a person signs in; ends wherever sign-in leads.</summary>
-        public async Task SignInAsync(MeritClient client, string password, string returnUrl = "/")
-        {
-            string page = await client.Http.GetStringAsync("/account/signin");
-            using var step = await client.NoRedirect.PostAsync("/account/signin",
-                MeritClient.Form(page, ("UserName", Name), ("Password", password), ("ReturnUrl", returnUrl)));
-            Assert.Equal("/account/mfa", step.Headers.Location?.OriginalString);
-            string mfa = await client.Http.GetStringAsync("/account/mfa");
-            using var done = await client.NoRedirect.PostAsync("/account/mfa", MeritClient.Form(mfa, ("Code", TotpCode())));
-            Assert.Equal(HttpStatusCode.Redirect, done.StatusCode);
-        }
-
-        public async Task AddRecoveryCodeAsync(WebApplicationFactory<Program> host, string code)
-        {
-            string hash = host.Services.GetRequiredService<IPasswordHasher>().Hash(code);
-            await ScalarAsync<int>("INSERT auth.mfaRecoveryCode (mfaRecoveryCodeId, appUserId, codeHash) VALUES (NEWID (), @id, @hash); SELECT 0", ("@hash", hash));
-        }
-
-        public async Task<T> ScalarAsync<T>(string sql, params (string Name, object Value)[] args)
-        {
-            await using var connection = new SqlConnection(TestEnvironment.AdminConnectionString());
-            await connection.OpenAsync();
-            await using var command = new SqlCommand(sql, connection);
-            command.Parameters.AddWithValue("@id", Id);
-            command.Parameters.AddWithValue("@name", Name);
-            foreach (var (name, value) in args)
-            {
-                command.Parameters.AddWithValue(name, value);
-            }
-
-            return (T)(await command.ExecuteScalarAsync())!;
-        }
-
-        public async ValueTask DisposeAsync() => await ScalarAsync<int>("""
-            DECLARE @scopes TABLE (id UNIQUEIDENTIFIER); INSERT @scopes SELECT sessionScopeId FROM auth.sessionScope WHERE appUserId = @id;
-            DELETE auth.sessionScopePermission WHERE sessionScopeId IN (SELECT id FROM @scopes);
-            DELETE auth.sessionScopeAdminTenant WHERE sessionScopeId IN (SELECT id FROM @scopes);
-            DELETE auth.sessionScopeRoot WHERE sessionScopeId IN (SELECT id FROM @scopes);
-            DELETE auth.sessionScopeTenant WHERE sessionScopeId IN (SELECT id FROM @scopes);
-            DELETE auth.sessionScope WHERE appUserId = @id;
-            DELETE auth.passwordReset WHERE appUserId = @id;
-            DELETE auth.mfaEmailChallenge WHERE appUserId = @id;
-            DELETE auth.mfaRecoveryCode WHERE appUserId = @id;
-            DELETE auth.userAssignment WHERE appUserId = @id;
-            DELETE auth.userProfile WHERE appUserId = @id;
-            DELETE auth.appUser WHERE appUserId = @id;
-            SELECT 0;
-            """);
-    }
 }

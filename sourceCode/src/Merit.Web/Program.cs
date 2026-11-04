@@ -41,6 +41,12 @@ services.Configure<PasswordResetOptions>(builder.Configuration.GetSection(Passwo
 services.AddSingleton<ResetLinkCookie>();
 services.AddSingleton<AccountMailQueue>();
 services.AddHostedService<AccountMailService>();
+// Sign-in event log (#191): every sign-in and account-security event, with address, user agent, session and attempt.
+services.AddSingleton<IAttemptedNameProtection, AttemptedNameProtection>();
+services.AddScoped<ISignInEvents, SignInEventRecorder>();
+// Cookie expiry follows the same clock as everything else (tests move it to check idle and lifetime expiry).
+services.AddOptions<CookieAuthenticationOptions>(AuthSchemes.Session).Configure<TimeProvider>((o, time) => o.TimeProvider = time);
+services.AddOptions<CookieAuthenticationOptions>(AuthSchemes.PendingMfa).Configure<TimeProvider>((o, time) => o.TimeProvider = time);
 services.AddScoped<Merit.Web.Mapping.PersonPageBuilder>();
 
 // Data protection keys live where every web copy can read them, so any copy accepts any session cookie.
@@ -104,17 +110,27 @@ services.AddAuthentication(AuthSchemes.Session)
             // Re-check the session scope every five minutes: sign-out, an assignment change or an MFA reset ends it.
             OnValidatePrincipal = async ctx =>
             {
+                var services = ctx.HttpContext.RequestServices;
                 var issued = ctx.Properties.IssuedUtc ?? DateTimeOffset.MinValue;
-                if (DateTimeOffset.UtcNow - issued < TimeSpan.FromMinutes(5))
+                if (services.GetRequiredService<TimeProvider>().GetUtcNow() - issued < TimeSpan.FromMinutes(5))
                 {
                     return;
                 }
 
                 var scope = ctx.Principal?.FindFirst(MeritClaims.ScopeKey)?.Value;
                 var stamp = ctx.Principal?.FindFirst(MeritClaims.SecurityStamp)?.Value;
-                var account = ctx.HttpContext.RequestServices.GetRequiredService<AccountService>();
+                var account = services.GetRequiredService<AccountService>();
                 if (!Guid.TryParse(scope, out var s) || !Guid.TryParse(stamp, out var st) || !await account.IsSessionValidAsync(s, st))
                 {
+                    // Why it ended, for the sign-in log (#191). A revocation was recorded by the action that revoked it.
+                    if (Guid.TryParse(scope, out var ended) && await account.SessionStateAsync(ended) is { } state && state.RevokedUtc is null)
+                    {
+                        bool expired = state.ExpiresUtc <= DateTime.UtcNow;
+                        await services.GetRequiredService<ISignInEvents>().RecordAsync(new SignInEvent(
+                            expired ? SignInEventTypes.SessionExpired : SignInEventTypes.SessionRevoked, SignInSteps.Session,
+                            Reason: expired ? "lifetime" : "securityStampChanged", AppUserId: state.AppUserId, SessionScopeId: ended));
+                    }
+
                     ctx.RejectPrincipal();
                     await ctx.HttpContext.SignOutAsync(AuthSchemes.Session);
                 }
@@ -220,6 +236,7 @@ app.UseStaticFiles(new StaticFileOptions
 
 app.UseRouting();
 app.UseAuthentication();
+app.UseMiddleware<SessionExpiryMiddleware>();     // an idle session that ended in the browser is recorded once (issue #191)
 app.Use(async (http, next) =>
 {
     // Times on this request's pages follow the session's jurisdiction (issue #36), and codes show as words (issue #37).

@@ -28,7 +28,7 @@ public sealed record SignedInSession(SessionScopeResult Scope);
 /// created afterwards decides what they can see and do.
 /// </summary>
 public sealed class AccountService(IAccountData data, IPasswordHasher hasher, ISecretProtector protector,
-                                   IBreachedPasswordList breached)
+                                   IBreachedPasswordList breached, ISignInEvents events)
 {
     public const int MaxFailedAttempts = 5;
     public const int LockoutMinutes = 15;
@@ -42,22 +42,30 @@ public sealed class AccountService(IAccountData data, IPasswordHasher hasher, IS
             // Same work and the same answer whether or not the account exists.
             hasher.Verify(DummyHash.Value, password);
             await data.RecordSignInResultAsync(null, false, MaxFailedAttempts, LockoutMinutes, clientAddress, ct).ConfigureAwait(false);
+            await events.RecordAsync(user is null
+                ? new SignInEvent(SignInEventTypes.UnknownUser, SignInSteps.Password, AttemptedUserName: userName)
+                : new SignInEvent(SignInEventTypes.AccountInactive, SignInSteps.Password, AppUserId: user.AppUserId), ct).ConfigureAwait(false);
             return new SignInStep(SignInStatus.Failed);
         }
 
         if (user.LockoutEndUtc is DateTime until && until > DateTime.UtcNow)
         {
+            await events.RecordAsync(new SignInEvent(SignInEventTypes.AttemptWhileLocked, SignInSteps.Password, AppUserId: user.AppUserId), ct)
+                .ConfigureAwait(false);
             return new SignInStep(SignInStatus.LockedOut, LockedUntilUtc: until);
         }
 
         if (hasher.Verify(user.PasswordHash, password) == PasswordCheck.Failed)
         {
             await data.RecordSignInResultAsync(user.AppUserId, false, MaxFailedAttempts, LockoutMinutes, clientAddress, ct).ConfigureAwait(false);
+            await RecordFailureAsync(user, SignInEventTypes.PasswordFailed, SignInSteps.Password, null, "wrongPassword", ct).ConfigureAwait(false);
             return user.FailedSignInCount + 1 >= MaxFailedAttempts
                 ? new SignInStep(SignInStatus.LockedOut, LockedUntilUtc: DateTime.UtcNow.AddMinutes(LockoutMinutes))
                 : new SignInStep(SignInStatus.Failed);
         }
 
+        await events.RecordAsync(new SignInEvent(SignInEventTypes.PasswordSucceeded, SignInSteps.Password, AppUserId: user.AppUserId), ct)
+            .ConfigureAwait(false);
         return new SignInStep(user.MfaEnabled ? SignInStatus.NeedsMfaCode : SignInStatus.NeedsMfaEnrollment,
             user.AppUserId, user.UserName, user.SecurityStamp, user.IsAdministrator);
     }
@@ -80,11 +88,15 @@ public sealed class AccountService(IAccountData data, IPasswordHasher hasher, IS
         if (!Totp.Verify(secret, code, DateTimeOffset.UtcNow))
         {
             await data.RecordSignInResultAsync(appUserId, false, MaxFailedAttempts, LockoutMinutes, clientAddress, ct).ConfigureAwait(false);
+            await events.RecordAsync(new SignInEvent(SignInEventTypes.MfaFailed, SignInSteps.Enrollment, SignInMethods.Totp, "wrongCode", appUserId), ct)
+                .ConfigureAwait(false);
             throw new ValidationException("Code", "That code did not match. Check the time on your device and try the current code.");
         }
 
         var codes = Enumerable.Range(0, 10).Select(_ => NewRecoveryCode()).ToList();
         await data.SaveMfaEnrollmentAsync(appUserId, protector.Protect(secretBase32), codes.Select(hasher.Hash).ToList(), ct)
+            .ConfigureAwait(false);
+        await events.RecordAsync(new SignInEvent(SignInEventTypes.MfaEnrolled, SignInSteps.Enrollment, SignInMethods.Totp, AppUserId: appUserId), ct)
             .ConfigureAwait(false);
         await data.RecordSignInResultAsync(appUserId, true, MaxFailedAttempts, LockoutMinutes, clientAddress, ct).ConfigureAwait(false);
         return codes;
@@ -95,22 +107,43 @@ public sealed class AccountService(IAccountData data, IPasswordHasher hasher, IS
         var user = await data.GetUserForSignInAsync(userName, ct).ConfigureAwait(false);
         if (user?.MfaSecretProtected is null || !user.IsActive)
         {
+            await events.RecordAsync(new SignInEvent(SignInEventTypes.MfaFailed, SignInSteps.SecondFactor, Reason: "accountUnavailable",
+                AppUserId: user?.AppUserId), ct).ConfigureAwait(false);
             return false;
         }
 
         if (user.LockoutEndUtc is DateTime until && until > DateTime.UtcNow)
         {
+            await events.RecordAsync(new SignInEvent(SignInEventTypes.AttemptWhileLocked, SignInSteps.SecondFactor, AppUserId: user.AppUserId), ct)
+                .ConfigureAwait(false);
             return false;
         }
 
         byte[] secret = Totp.FromBase32(protector.Unprotect(user.MfaSecretProtected));
         bool ok = Totp.Verify(secret, code, DateTimeOffset.UtcNow);
+        string method = SignInMethods.Totp;
         if (!ok && code.Trim().Length > 6)
         {
+            method = SignInMethods.RecoveryCode;
             ok = await TryRecoveryCodeAsync(user.AppUserId, code.Trim(), ct).ConfigureAwait(false);
         }
 
         await data.RecordSignInResultAsync(user.AppUserId, ok, MaxFailedAttempts, LockoutMinutes, clientAddress, ct).ConfigureAwait(false);
+        if (ok)
+        {
+            await events.RecordAsync(new SignInEvent(SignInEventTypes.MfaSucceeded, SignInSteps.SecondFactor, method, AppUserId: user.AppUserId), ct)
+                .ConfigureAwait(false);
+            if (method == SignInMethods.RecoveryCode)
+            {
+                await events.RecordAsync(new SignInEvent(SignInEventTypes.RecoveryCodeUsed, SignInSteps.SecondFactor, method, AppUserId: user.AppUserId), ct)
+                    .ConfigureAwait(false);
+            }
+        }
+        else
+        {
+            await RecordFailureAsync(user, SignInEventTypes.MfaFailed, SignInSteps.SecondFactor, method, "wrongCode", ct).ConfigureAwait(false);
+        }
+
         return ok;
     }
 
@@ -133,25 +166,46 @@ public sealed class AccountService(IAccountData data, IPasswordHasher hasher, IS
         }
 
         await data.RecordSignInResultAsync(user.AppUserId, false, MaxFailedAttempts, LockoutMinutes, clientAddress, ct).ConfigureAwait(false);
+        await RecordFailureAsync(user, SignInEventTypes.MfaFailed, SignInSteps.Account, SignInMethods.Totp, "stepUp", ct).ConfigureAwait(false);
         return false;
+    }
+
+    /// <summary>
+    /// A failure that counted toward the lockout, recorded after <see cref="IAccountData.RecordSignInResultAsync"/>; when it
+    /// was the one that locked the account, accountLocked follows.
+    /// </summary>
+    public async Task RecordFailureAsync(SignInUserRow user, string type, string step, string? method, string? reason, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(user);
+        await events.RecordAsync(new SignInEvent(type, step, method, reason, user.AppUserId), ct).ConfigureAwait(false);
+        if (user.FailedSignInCount + 1 >= MaxFailedAttempts)
+        {
+            await events.RecordAsync(new SignInEvent(SignInEventTypes.AccountLocked, step, method, $"after{MaxFailedAttempts}Failures", user.AppUserId), ct)
+                .ConfigureAwait(false);
+        }
     }
 
     /// <summary>
     /// The second factor on its own, for a password reset (#190): a current authenticator code, or an unused recovery code,
     /// which is then used up. Nothing is recorded here; the caller counts a failure against the link and the lockout.
     /// </summary>
-    public async Task<bool> CheckSecondFactorAsync(SignInUserRow user, string? code, CancellationToken ct = default)
+    /// <returns>The method that matched (totp or recoveryCode), or null.</returns>
+    public async Task<string?> CheckSecondFactorAsync(SignInUserRow user, string? code, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(user);
         string typed = (code ?? string.Empty).Trim();
         if (user.MfaSecretProtected is null || typed.Length == 0)
         {
-            return false;
+            return null;
         }
 
         byte[] secret = Totp.FromBase32(protector.Unprotect(user.MfaSecretProtected));
-        return Totp.Verify(secret, typed, DateTimeOffset.UtcNow)
-               || (typed.Length > 6 && await TryRecoveryCodeAsync(user.AppUserId, typed, ct).ConfigureAwait(false));
+        if (Totp.Verify(secret, typed, DateTimeOffset.UtcNow))
+        {
+            return SignInMethods.Totp;
+        }
+
+        return typed.Length > 6 && await TryRecoveryCodeAsync(user.AppUserId, typed, ct).ConfigureAwait(false) ? SignInMethods.RecoveryCode : null;
     }
 
     /// <summary>Whether a password is the account's current one.</summary>
@@ -182,6 +236,9 @@ public sealed class AccountService(IAccountData data, IPasswordHasher hasher, IS
     }
 
     public Task SignOutAsync(Guid scopeKey, CancellationToken ct = default) => data.RevokeSessionScopeAsync(scopeKey, ct);
+
+    /// <summary>Why a session check failed: expired, revoked or a changed security stamp (#191).</summary>
+    public Task<SessionScopeStateRow?> SessionStateAsync(Guid scopeKey, CancellationToken ct = default) => data.GetSessionScopeStateAsync(scopeKey, ct);
 
     /// <summary>NIST SP 800-63B-4 password rules: a minimum length and a breached-password check; no composition rules.</summary>
     public void ValidateNewPassword(string? password, int minLength, string field = "Password")

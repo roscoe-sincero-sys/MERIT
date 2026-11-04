@@ -62,7 +62,7 @@ public sealed record PasswordResetResult(PasswordResetOutcome Outcome, int Remai
 /// stamp and ends the account's sessions. Passwords, tokens, links and addresses never reach the log.
 /// </summary>
 public sealed partial class PasswordService(IAccountData data, AccountService accounts, IEmailSender email, IOneTimeCodeHasher hasher,
-                                            IOptions<PasswordResetOptions> options, ILogger<PasswordService> logger)
+                                            IOptions<PasswordResetOptions> options, ISignInEvents events, ILogger<PasswordService> logger)
 {
     private const string Purpose = "passwordReset";
 
@@ -85,6 +85,12 @@ public sealed partial class PasswordService(IAccountData data, AccountService ac
         if (user is null || !user.IsActive || !user.MfaEnabled || !email.IsConfigured)
         {
             LogNotEligible(logger, correlationId);
+            // Asking for resets of names that don't exist is a pattern worth seeing (#191); the name is hashed and encrypted.
+            await events.RecordAsync(user is null
+                ? new SignInEvent(SignInEventTypes.UnknownUser, SignInSteps.PasswordReset, AttemptedUserName: userName, ClientAddress: clientAddress,
+                    TraceId: correlationId)
+                : new SignInEvent(SignInEventTypes.PasswordResetRequested, SignInSteps.PasswordReset, Reason: "notAvailable", AppUserId: user.AppUserId,
+                    ClientAddress: clientAddress, TraceId: correlationId), ct).ConfigureAwait(false);
             return;
         }
 
@@ -97,6 +103,8 @@ public sealed partial class PasswordService(IAccountData data, AccountService ac
         LogIssue(logger, created.Outcome, user.AppUserId, reference, correlationId);
         if (created.Outcome != "created" || created.Email is null)
         {
+            await events.RecordAsync(new SignInEvent(SignInEventTypes.PasswordResetRequested, SignInSteps.PasswordReset, Reason: created.Outcome,
+                AppUserId: user.AppUserId, ClientAddress: clientAddress, TraceId: correlationId), ct).ConfigureAwait(false);
             return;
         }
 
@@ -135,6 +143,10 @@ public sealed partial class PasswordService(IAccountData data, AccountService ac
         {
             LogNotSent(logger, user.AppUserId, reference, sent.Failure, sent.SmtpReplyCode, sent.Attempts, correlationId);
         }
+
+        await events.RecordAsync(new SignInEvent(SignInEventTypes.PasswordResetRequested, SignInSteps.PasswordReset,
+            Reason: sent.Submitted ? "linkSent" : "notSent:" + Camel(sent.Failure), AppUserId: user.AppUserId, ClientAddress: clientAddress,
+            TraceId: correlationId), ct).ConfigureAwait(false);
     }
 
     /// <summary>What a reset link may do now. Only a valid link names the account.</summary>
@@ -181,10 +193,13 @@ public sealed partial class PasswordService(IAccountData data, AccountService ac
 
         ValidateNew(user, newPassword, confirmPassword, link.PasswordMinLength);
         byte[] verifier = Verifier(passwordResetId, token!);
-        if (!await accounts.CheckSecondFactorAsync(user, code, ct).ConfigureAwait(false))
+        string? method = await accounts.CheckSecondFactorAsync(user, code, ct).ConfigureAwait(false);
+        if (method is null)
         {
             await data.RecordSignInResultAsync(user.AppUserId, false, AccountService.MaxFailedAttempts, AccountService.LockoutMinutes, clientAddress, ct)
                 .ConfigureAwait(false);
+            await accounts.RecordFailureAsync(user, SignInEventTypes.MfaFailed, SignInSteps.PasswordReset,
+                (code ?? string.Empty).Trim().Length > 6 ? SignInMethods.RecoveryCode : SignInMethods.Totp, "wrongCode", ct).ConfigureAwait(false);
             int left = await data.RecordPasswordResetFailureAsync(passwordResetId, verifier, ct).ConfigureAwait(false);
             LogWrongCode(logger, user.AppUserId, left);
             return new PasswordResetResult(left > 0 ? PasswordResetOutcome.WrongCode : PasswordResetOutcome.LinkClosed, left);
@@ -198,6 +213,16 @@ public sealed partial class PasswordService(IAccountData data, AccountService ac
         }
 
         LogReset(logger, user.AppUserId);
+        if (method == SignInMethods.RecoveryCode)
+        {
+            await events.RecordAsync(new SignInEvent(SignInEventTypes.RecoveryCodeUsed, SignInSteps.PasswordReset, method, AppUserId: user.AppUserId), ct)
+                .ConfigureAwait(false);
+        }
+
+        await events.RecordAsync(new SignInEvent(SignInEventTypes.PasswordResetCompleted, SignInSteps.PasswordReset, method, AppUserId: user.AppUserId), ct)
+            .ConfigureAwait(false);
+        await events.RecordAsync(new SignInEvent(SignInEventTypes.SessionRevoked, SignInSteps.Session, Reason: "passwordReset", AppUserId: user.AppUserId), ct)
+            .ConfigureAwait(false);
         return new PasswordResetResult(PasswordResetOutcome.Reset, AppUserId: reset);
     }
 
@@ -218,6 +243,7 @@ public sealed partial class PasswordService(IAccountData data, AccountService ac
         {
             await data.RecordSignInResultAsync(user.AppUserId, false, AccountService.MaxFailedAttempts, AccountService.LockoutMinutes, clientAddress, ct)
                 .ConfigureAwait(false);
+            await accounts.RecordFailureAsync(user, SignInEventTypes.PasswordFailed, SignInSteps.Account, null, "changePassword", ct).ConfigureAwait(false);
             throw new ValidationException("CurrentPassword", "That is not your current password.");
         }
 
@@ -228,6 +254,7 @@ public sealed partial class PasswordService(IAccountData data, AccountService ac
 
         await data.ChangeMyPasswordAsync(accounts.HashPassword(newPassword!), clientAddress, ct).ConfigureAwait(false);
         LogChanged(logger, user.AppUserId, "self");
+        await RecordChangedAsync(user.AppUserId, "self", ct).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -242,6 +269,7 @@ public sealed partial class PasswordService(IAccountData data, AccountService ac
         ValidateNew(user, newPassword, confirmPassword, policy.PasswordMinLength);
         await data.ChangeMyPasswordAsync(accounts.HashPassword(newPassword!), clientAddress, ct).ConfigureAwait(false);
         LogChanged(logger, user.AppUserId, "required");
+        await RecordChangedAsync(user.AppUserId, "required", ct).ConfigureAwait(false);
     }
 
     public Task<MyPasswordPolicyRow> MyPolicyAsync(CancellationToken ct = default) => data.GetMyPasswordPolicyAsync(ct);
@@ -279,6 +307,14 @@ public sealed partial class PasswordService(IAccountData data, AccountService ac
         v.When(newPassword != confirmPassword, "ConfirmPassword", "The two passwords don't match.");
         v.When(accounts.IsCurrentPassword(user, newPassword), "NewPassword", "Choose a password you are not using now.");
         v.ThrowIfInvalid();
+    }
+
+    private async Task RecordChangedAsync(Guid appUserId, string how, CancellationToken ct)
+    {
+        await events.RecordAsync(new SignInEvent(SignInEventTypes.PasswordChanged, SignInSteps.Account, Reason: how, AppUserId: appUserId), ct)
+            .ConfigureAwait(false);
+        await events.RecordAsync(new SignInEvent(SignInEventTypes.SessionRevoked, SignInSteps.Session, Reason: "passwordChange", AppUserId: appUserId), ct)
+            .ConfigureAwait(false);
     }
 
     private byte[] Verifier(Guid passwordResetId, string token) => hasher.Hash(passwordResetId, Purpose, token);

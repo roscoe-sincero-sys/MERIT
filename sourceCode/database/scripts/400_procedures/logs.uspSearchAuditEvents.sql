@@ -102,7 +102,9 @@ BEGIN
          WHERE e.rootTenantId = auth.udfSessionRootTenantId ()
            AND (@appUserId IS NULL OR e.appUserId = @appUserId)
            AND (@entityId IS NULL OR e.entityId = @entityId)
-           AND (@eventAction IS NULL OR e.eventAction = @eventAction)
+           AND (@eventAction IS NULL OR e.eventAction = @eventAction
+                -- "signInEvents": every sign-in and account-security action at once (#191).
+                OR (@eventAction = 'signInEvents' AND e.eventAction IN ('signIn', 'signInFailed', 'signOut', 'mfaEnrolled', 'mfaEmailEnabled', 'mfaEmailDisabled', 'mfaMethodChanged', 'mfaCodeSent', 'mfaCodeNotSent', 'mfaCodeRefused', 'mfaCodeLocked', 'passwordChanged', 'passwordResetRequested', 'passwordResetCompleted', 'passwordSetByAdmin')))
            AND (@entityType IS NULL OR e.entityType = @entityType OR (@entityType = 'report' AND e.entityType LIKE 'report:%'))
            AND (@fromUtc IS NULL OR e.eventUtc >= @fromUtc)
            AND (@toUtc IS NULL OR e.eventUtc < @toUtc)

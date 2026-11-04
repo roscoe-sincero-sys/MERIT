@@ -16,7 +16,8 @@ namespace Merit.Web.Controllers;
 /// manage. Every switch creates a new database session scope and ends the old one.
 /// </summary>
 [Route("account")]
-public sealed class ProfilesController(ProfileService profiles, AdminService admin, SessionRenewal sessions, ICurrentSession session)
+public sealed class ProfilesController(ProfileService profiles, AdminService admin, SessionRenewal sessions, ICurrentSession session,
+                                       ISignInEvents signInEvents)
     : Controller
 {
     [HttpGet("profiles")]
@@ -90,11 +91,32 @@ public sealed class ProfilesController(ProfileService profiles, AdminService adm
     /// <summary>An administrator sees MERIT with another person's access, limited to what the administrator manages.</summary>
     [HttpPost("view-as/{userId:guid}")]
     [Authorize(Policy = Permissions.TenantAdminister)]
-    public Task<IActionResult> ViewAs(Guid userId, CancellationToken ct) => NewScopeAsync(null, userId, null, "/", ct);
+    public async Task<IActionResult> ViewAs(Guid userId, CancellationToken ct)
+    {
+        var result = await NewScopeAsync(null, userId, null, "/", ct);
+        if (result is LocalRedirectResult)
+        {
+            await signInEvents.RecordAsync(new SignInEvent(SignInEventTypes.ViewAsStarted, SignInSteps.Session, AppUserId: userId,
+                ActorUserId: session.UserId), ct);
+        }
+
+        return result;
+    }
 
     [HttpPost("view-as/end")]
     [Authorize(Policy = Permissions.SignedIn)]
-    public Task<IActionResult> EndViewAs(CancellationToken ct) => NewScopeAsync(null, null, null, "/account/profiles", ct);
+    public async Task<IActionResult> EndViewAs(CancellationToken ct)
+    {
+        Guid? viewed = session.ViewAsUserId;
+        Guid? me = session.UserId;
+        var result = await NewScopeAsync(null, null, null, "/account/profiles", ct);
+        if (viewed is not null && result is LocalRedirectResult)
+        {
+            await signInEvents.RecordAsync(new SignInEvent(SignInEventTypes.ViewAsEnded, SignInSteps.Session, AppUserId: viewed, ActorUserId: me), ct);
+        }
+
+        return result;
+    }
 
     private async Task<IActionResult> NewScopeAsync(Guid? userProfileId, Guid? viewAsUserId, Guid? actingTenantId, string next, CancellationToken ct)
     {

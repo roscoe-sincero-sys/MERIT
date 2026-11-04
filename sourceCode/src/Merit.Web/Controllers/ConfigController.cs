@@ -165,6 +165,7 @@ public sealed class AdminController(IClock clock, AdminService admin, AuditServi
                 IsActive = u.User.IsActive, MfaEnabled = u.User.MfaEnabled, LockoutEndUtc = u.User.LockoutEndUtc, Assignments = u.Assignments, HomeTenantId = u.User.HomeTenantId,
                 HomeTenantName = u.User.HomeTenantName, CanManageAccount = u.User.CanManageAccount,
                 RequirePasswordChange = u.User.PasswordChangeRequired, PasswordChangedUtc = u.User.PasswordChangedUtc,
+                SignInHistory = await admin.SignInHistoryAsync(uid, 50, ct),
                 CanViewAs = !session.IsPlatformAdmin && u.User.HomeTenantType != "platform" && u.User.AppUserId != session.UserId,
             };
         }
