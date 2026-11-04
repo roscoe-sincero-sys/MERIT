@@ -1,5 +1,61 @@
 [
  {
+  "name": "auth.uspChangeMyPassword",
+  "kind": "write",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": null,
+  "params": [
+   {
+    "name": "passwordHash",
+    "type": "NVARCHAR (500)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "clientAddress",
+    "type": "VARCHAR (45)",
+    "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
+  "name": "auth.uspCompletePasswordReset",
+  "kind": "write",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": null,
+  "params": [
+   {
+    "name": "passwordResetId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "tokenVerifier",
+    "type": "VARBINARY (32)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "passwordHash",
+    "type": "NVARCHAR (500)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "clientAddress",
+    "type": "VARCHAR (45)",
+    "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
   "name": "auth.uspCreateEmailChallenge",
   "kind": "write",
   "grants": [
@@ -51,6 +107,88 @@
    },
    {
     "name": "lifetimeSeconds",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "maxAttempts",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "cooldownSeconds",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "windowMinutes",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "maxPerUser",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "maxPerAddress",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
+  "name": "auth.uspCreatePasswordReset",
+  "kind": "write",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": null,
+  "params": [
+   {
+    "name": "passwordResetId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "appUserId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "tokenVerifier",
+    "type": "VARBINARY (32)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "supportReference",
+    "type": "VARCHAR (16)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "correlationId",
+    "type": "VARCHAR (64)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "clientAddress",
+    "type": "VARCHAR (45)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "lifetimeMinutes",
     "type": "INT",
     "hasDefault": true,
     "isOutput": false
@@ -183,6 +321,57 @@
     "type": "BIT",
     "hasDefault": false,
     "isOutput": true
+   }
+  ]
+ },
+ {
+  "name": "auth.uspGetMyPasswordPolicy",
+  "kind": "read",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": null,
+  "params": []
+ },
+ {
+  "name": "auth.uspGetPasswordPolicy",
+  "kind": "read",
+  "grants": [],
+  "permission": null,
+  "params": [
+   {
+    "name": "appUserId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "passwordMinLength",
+    "type": "INT",
+    "hasDefault": false,
+    "isOutput": true
+   }
+  ]
+ },
+ {
+  "name": "auth.uspGetPasswordReset",
+  "kind": "read",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": null,
+  "params": [
+   {
+    "name": "passwordResetId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "tokenVerifier",
+    "type": "VARBINARY (32)",
+    "hasDefault": false,
+    "isOutput": false
    }
   ]
  },
@@ -334,6 +523,68 @@
     "name": "smtpReplyCode",
     "type": "INT",
     "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
+  "name": "auth.uspRecordPasswordResetDelivery",
+  "kind": "write",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": null,
+  "params": [
+   {
+    "name": "passwordResetId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "submitted",
+    "type": "BIT",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "deliveryAttempts",
+    "type": "INT",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "failureKind",
+    "type": "VARCHAR (30)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "smtpReplyCode",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
+  "name": "auth.uspRecordPasswordResetFailure",
+  "kind": "write",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": null,
+  "params": [
+   {
+    "name": "passwordResetId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "tokenVerifier",
+    "type": "VARBINARY (32)",
+    "hasDefault": false,
     "isOutput": false
    }
   ]
@@ -548,6 +799,12 @@
    {
     "name": "homeTenantId",
     "type": "UNIQUEIDENTIFIER",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "passwordChangeRequired",
+    "type": "BIT",
     "hasDefault": true,
     "isOutput": false
    }

@@ -229,6 +229,7 @@ th .merit-sort:hover, th .merit-sort:focus { color: var(--merit-primary); }
 .merit-signin__alt { margin: 1.25rem 0; padding: 1rem; border: 1px solid #dfe1e2; border-radius: .25rem; background: #f0f0f0; }
 .merit-signin__alt h2, .merit-signin__or { margin: 0 0 .5rem; font-size: 1.1rem; color: #1b1b1b; }
 .merit-signin__or { margin-top: 1.5rem; }
+.merit-signin__forgot { margin: .5rem 0 0; font-size: .9rem; }
 .merit-resend { margin-top: 1.25rem; }
 .merit-resend [aria-disabled="true"] { opacity: .6; cursor: not-allowed; }
 .merit-busy-status { display: flex; align-items: center; gap: .5rem; margin: .75rem 0 0; }

@@ -74,6 +74,52 @@ public sealed class AccountData(Db db) : IAccountData
     public Task SaveMyMfaMethodsAsync(bool emailCodesOn, string preferredMethod, CancellationToken ct = default)
         => db.ExecuteAsync("auth.uspSaveMyMfaMethods", new { emailCodesOn, preferredMethod }, ct);
 
+    public async Task<PasswordResetCreatedRow> CreatePasswordResetAsync(PasswordResetRequest request, CancellationToken ct = default)
+        => await db.QuerySingleAsync<PasswordResetCreatedRow>("auth.uspCreatePasswordReset", new
+        {
+            passwordResetId = request.PasswordResetId,
+            appUserId = request.AppUserId,
+            tokenVerifier = request.TokenVerifier,
+            supportReference = request.SupportReference,
+            correlationId = request.CorrelationId,
+            clientAddress = request.ClientAddress,
+            lifetimeMinutes = request.LifetimeMinutes,
+            maxAttempts = request.MaxAttempts,
+            cooldownSeconds = request.CooldownSeconds,
+            windowMinutes = request.WindowMinutes,
+            maxPerUser = request.MaxPerUser,
+            maxPerAddress = request.MaxPerAddress,
+        }, ct).ConfigureAwait(false) ?? new PasswordResetCreatedRow();
+
+    public Task RecordPasswordResetDeliveryAsync(Guid passwordResetId, bool submitted, int deliveryAttempts, string? failureKind, int? smtpReplyCode,
+                                                 CancellationToken ct = default)
+        => db.ExecuteAsync("auth.uspRecordPasswordResetDelivery", new { passwordResetId, submitted, deliveryAttempts, failureKind, smtpReplyCode }, ct);
+
+    public async Task<PasswordResetRow> GetPasswordResetAsync(Guid passwordResetId, byte[] tokenVerifier, CancellationToken ct = default)
+        => await db.QuerySingleAsync<PasswordResetRow>("auth.uspGetPasswordReset", new { passwordResetId, tokenVerifier }, ct).ConfigureAwait(false)
+           ?? new PasswordResetRow();
+
+    public async Task<int> RecordPasswordResetFailureAsync(Guid passwordResetId, byte[] tokenVerifier, CancellationToken ct = default)
+        => await db.QuerySingleAsync<int>("auth.uspRecordPasswordResetFailure", new { passwordResetId, tokenVerifier }, ct).ConfigureAwait(false);
+
+    public async Task<Guid?> CompletePasswordResetAsync(Guid passwordResetId, byte[] tokenVerifier, string passwordHash, string? clientAddress,
+                                                  CancellationToken ct = default)
+        => (await db.QuerySingleAsync<ResetOutcome>("auth.uspCompletePasswordReset", new { passwordResetId, tokenVerifier, passwordHash, clientAddress }, ct)
+            .ConfigureAwait(false))?.AppUserId;
+
+    public Task ChangeMyPasswordAsync(string passwordHash, string? clientAddress, CancellationToken ct = default)
+        => db.ExecuteAsync("auth.uspChangeMyPassword", new { passwordHash, clientAddress }, ct);
+
+    public async Task<MyPasswordPolicyRow> GetMyPasswordPolicyAsync(CancellationToken ct = default)
+        => await db.QuerySingleAsync<MyPasswordPolicyRow>("auth.uspGetMyPasswordPolicy", null, ct).ConfigureAwait(false) ?? new MyPasswordPolicyRow();
+
+    private sealed class ResetOutcome
+    {
+        public string Outcome { get; init; } = "invalid";
+
+        public Guid? AppUserId { get; init; }
+    }
+
     public Task<IReadOnlyList<UserListRow>> ListUsersAsync(CancellationToken ct = default)
         => db.QueryAsync<UserListRow>("auth.uspListUsers", null, ct);
 
@@ -86,8 +132,8 @@ public sealed class AccountData(Db db) : IAccountData
         }, ct);
 
     public Task SaveUserAsync(Guid appUserId, string userName, string displayName, string? email, bool isActive, string? passwordHash,
-                              Guid? homeTenantId, CancellationToken ct = default)
-        => db.ExecuteAsync("auth.uspSaveUser", new { appUserId, userName, displayName, email, isActive, passwordHash, homeTenantId }, ct);
+                              Guid? homeTenantId, bool? passwordChangeRequired = null, CancellationToken ct = default)
+        => db.ExecuteAsync("auth.uspSaveUser", new { appUserId, userName, displayName, email, isActive, passwordHash, homeTenantId, passwordChangeRequired }, ct);
 
     public Task SaveUserAssignmentAsync(Guid userAssignmentId, Guid appUserId, Guid roleId, Guid tenantId, bool includeDescendants,
                                         string accessLevel, DateOnly startDate, DateOnly? endDate, CancellationToken ct = default)

@@ -252,6 +252,7 @@ BEGIN
              , @viewAsUserId                  AS viewAsUserId
              , v.displayName                  AS viewAsDisplayName
              , @isPlatformAdmin               AS isPlatformAdmin
+             , u.passwordChangeRequired
           FROM auth.appUser AS u
           LEFT JOIN auth.tenant  AS r ON r.tenantId = @root
           LEFT JOIN auth.tenant  AS t ON t.tenantId = @acting

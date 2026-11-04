@@ -80,7 +80,8 @@ async function mailpitCode(page: Page, to: string, after: number): Promise<strin
       // Turning email codes on: NIST's position first, then the authenticator, then a code to the address.
       await expect(page.getByText('NIST SP 800-63B-4 does not accept email')).toBeVisible();
       await expectAccessible(page, 'sign-in methods');
-      await page.getByLabel('Six-digit code from your authenticator app').fill(totp(secret));
+      // Sign-in methods also has a password-change form with its own authenticator field (#190).
+    await page.locator('#AuthenticatorCode').fill(totp(secret));
       let sentAt = Date.now();
       await page.getByRole('button', { name: /^Send a code to o\*\*\*@example\.test$/ }).click();
       await expect(page.getByRole('heading', { name: 'Confirm your email address' })).toBeVisible();

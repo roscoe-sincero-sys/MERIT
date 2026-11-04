@@ -1484,6 +1484,17 @@
       "started": "2026-11-03",
       "finished": "2026-11-03",
       "notes": "Both fix options applied (independent): the test identifies the scope the renewal ended among open sign-in scopes; directly created scopes (10-minute and HL7 one-hour) are revoked at the end of each test. Full suite 94/94; option 2 alone also 94/94; 0 short-lived scopes left open after a run"
+    },
+    {
+      "id": "T212",
+      "phase": "12 Quality",
+      "task": "Password self-service: change password, forgotten-password reset by email with the second factor, administrator-required change",
+      "ref": "Issue #190",
+      "where": "procs_password.py (8 procs), tableDefinitions.py (auth.passwordReset, 2 appUser columns), procs_access.py, 161_logs.auditEvent.sql; PasswordService, AccountService; AccountController, AccountMailQueue, PasswordSelfService.cs; Forgot/Reset/RequiredPassword views, Sign-in methods, admin user form; PasswordSelfServiceTests, PublicBaseUrlTests, password-self-service.spec.ts; docs/password-self-service.md",
+      "status": "Done",
+      "started": "2026-11-03",
+      "finished": "2026-11-03",
+      "notes": "Reset needs the emailed link and an authenticator or recovery code; same answer for every user name (background queue); HMAC token, 20 min, single use, 5 code attempts, cooldown and limits; links from Merit:PublicBaseUrl only; sessions revoked on every change; audit passwordChanged/passwordResetSent/passwordReset/passwordSetByAdmin; required change enforced through the session cookie"
     }
   ]
 }

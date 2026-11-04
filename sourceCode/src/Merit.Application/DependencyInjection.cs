@@ -30,6 +30,8 @@ public static class DependencyInjection
         services.TryAddSingleton<IEmailSender, DisabledEmailSender>();
         services.TryAddSingleton<IOneTimeCodeHasher>(_ => new HmacOneTimeCodeHasher(System.Security.Cryptography.RandomNumberGenerator.GetBytes(HmacOneTimeCodeHasher.MinimumKeyBytes)));
         services.AddScoped<EmailCodeService>();
+        services.AddOptions<PasswordResetOptions>();
+        services.AddScoped<PasswordService>();
         services.AddScoped<AuditService>();
         services.AddScoped<SearchService>();
         services.AddScoped<ClassificationService>();

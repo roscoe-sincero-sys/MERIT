@@ -107,6 +107,52 @@ public sealed class SessionScopeSummaryRow
     public string? ViewAsDisplayName { get; init; }
 
     public bool IsPlatformAdmin { get; init; }
+
+    /// <summary>The person must choose a new password before anything else (an administrator asked for it, #190).</summary>
+    public bool PasswordChangeRequired { get; init; }
+}
+
+/// <summary>auth.uspCreatePasswordReset: created, cooldown, limit or notAvailable; the address only when created.</summary>
+public sealed class PasswordResetCreatedRow
+{
+    public string Outcome { get; init; } = "notAvailable";
+
+    public string? Email { get; init; }
+
+    public DateTime? ExpiresUtc { get; init; }
+}
+
+/// <summary>What auth.uspCreatePasswordReset needs: the new link and the limits it enforces.</summary>
+public sealed record PasswordResetRequest(Guid PasswordResetId, Guid AppUserId, byte[] TokenVerifier, string SupportReference, string? CorrelationId,
+                                          string? ClientAddress, int LifetimeMinutes, int MaxAttempts, int CooldownSeconds, int WindowMinutes,
+                                          int MaxPerUser, int MaxPerAddress);
+
+/// <summary>auth.uspGetPasswordReset: the link's status, and the account only when the link is valid.</summary>
+public sealed class PasswordResetRow
+{
+    public string Status { get; init; } = "none";
+
+    public Guid? AppUserId { get; init; }
+
+    public string? UserName { get; init; }
+
+    public bool MfaEnabled { get; init; }
+
+    public DateTime? LockoutEndUtc { get; init; }
+
+    public int PasswordMinLength { get; init; } = 8;
+
+    public int RemainingAttempts { get; init; }
+}
+
+/// <summary>auth.uspGetMyPasswordPolicy: the signed-in user's password rule.</summary>
+public sealed class MyPasswordPolicyRow
+{
+    public int PasswordMinLength { get; init; } = 8;
+
+    public DateTime? PasswordChangedUtc { get; init; }
+
+    public bool PasswordChangeRequired { get; init; }
 }
 
 public sealed class TenantRow
@@ -171,6 +217,10 @@ public sealed class UserListRow
 
     /// <summary>1 when the caller administers this person's home tenant and so may change the account itself.</summary>
     public bool CanManageAccount { get; init; }
+
+    public bool PasswordChangeRequired { get; init; }
+
+    public DateTime? PasswordChangedUtc { get; init; }
 }
 
 public sealed class UserAssignmentRow

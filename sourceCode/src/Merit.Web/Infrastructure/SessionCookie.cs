@@ -28,6 +28,11 @@ public static class SessionCookie
             new(MeritClaims.TimeZone, s.TimeZone),
             new(MeritClaims.IsPlatformAdmin, s.IsPlatformAdmin ? "1" : "0"),
         };
+        if (s.PasswordChangeRequired)
+        {
+            claims.Add(new Claim(MeritClaims.PasswordChangeRequired, "1"));
+        }
+
         if (s.UserProfileId is Guid profile)
         {
             claims.Add(new Claim(MeritClaims.ProfileId, profile.ToString()));

@@ -19,6 +19,35 @@
     <p>Required for every MERIT account, and it cannot be turned off. If you lose your device, sign in with one of your recovery codes and ask your MERIT administrator to reset MFA.</p>
 </section>
 
+<section class="merit-methods" aria-labelledby="password-heading">
+    <h2 id="password-heading">Password</h2>
+    <p>@(Model.PasswordChangedUtc is DateTime changed ? $"Last changed {Options.Date(changed)}." : "")
+        Changing it signs out your other MERIT sessions. To make sure it's you, enter your current password and a code from your authenticator app.</p>
+    <partial name="_ErrorSummary" model='new ErrorSummaryModel(["CurrentPassword", "NewPassword", "ConfirmPassword", "PasswordAuthenticatorCode"], SummaryId: "password-errors")' />
+    <form class="usa-form" method="post" action="/account/security/password">
+        @Html.AntiForgeryToken()
+        <div class="usa-form-group">
+            <label class="usa-label" for="CurrentPassword">Current password</label>
+            <input class="usa-input" id="CurrentPassword" name="CurrentPassword" type="password" autocomplete="current-password" required />
+        </div>
+        <div class="usa-form-group">
+            <label class="usa-label" for="NewPassword">New password</label>
+            <div class="usa-hint" id="new-password-hint">At least @Model.PasswordMinLength characters. Long passphrases are good; no special characters are required. Passwords found in breach lists are refused.</div>
+            <input class="usa-input" id="NewPassword" name="NewPassword" type="password" autocomplete="new-password" aria-describedby="new-password-hint" required />
+        </div>
+        <div class="usa-form-group">
+            <label class="usa-label" for="ConfirmPassword">New password again</label>
+            <input class="usa-input" id="ConfirmPassword" name="ConfirmPassword" type="password" autocomplete="new-password" required />
+        </div>
+        <div class="usa-form-group">
+            <label class="usa-label" for="PasswordAuthenticatorCode">Six-digit code from your authenticator app</label>
+            <input class="usa-input usa-input--medium" id="PasswordAuthenticatorCode" name="PasswordAuthenticatorCode" type="text" autocomplete="one-time-code"
+                   inputmode="numeric" maxlength="11" spellcheck="false" required />
+        </div>
+        <button class="usa-button" type="submit">Change password</button>
+    </form>
+</section>
+
 <section class="merit-methods" aria-labelledby="email-heading">
     <h2 id="email-heading">Email codes @if (email.TurnedOn) { <span class="usa-tag merit-tag--on">On</span> } else { <span class="usa-tag">Off</span> }</h2>
     @if (email.TurnedOn && email.Allowed)

@@ -93,6 +93,8 @@ public sealed class EndpointInventoryTests
     private static readonly string[] AllowedAnonymous =
     [
         "AccountController.SignIn", "AccountController.Denied", "HomeController.Error", "HomeController.Status",
+        // Forgotten password (#190): the request page, its fixed answer, and the page a reset link opens.
+        "AccountController.ForgotPassword", "AccountController.ForgotPasswordSent", "AccountController.ResetPassword",
     ];
 
     private static IEnumerable<(Type Controller, MethodInfo Action)> Actions()

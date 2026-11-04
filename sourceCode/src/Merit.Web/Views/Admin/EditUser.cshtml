@@ -35,7 +35,15 @@
                 <label class="usa-label" for="NewPassword">@(Model.AppUserId is null ? "Initial password" : "New password (leave blank to keep)")</label>
                 <div class="usa-hint">At least 8 characters; no composition rules; checked against breached-password lists (NIST SP 800-63B-4).</div>
                 <input class="usa-input" id="NewPassword" name="NewPassword" type="password" autocomplete="new-password" />
+                @if (Model.PasswordChangedUtc is DateTime changed)
+                {
+                    <div class="usa-hint">Password last changed @Options.Date(changed).</div>
+                }
             </div>
+            @* So the administrator never knows the password the person keeps (#190). *@
+            <div class="usa-checkbox"><input class="usa-checkbox__input" id="RequirePasswordChange" type="checkbox" name="RequirePasswordChange" value="true" checked="@(Model.RequirePasswordChange)" aria-describedby="require-change-hint" /><label class="usa-checkbox__label" for="RequirePasswordChange">Ask them to choose a new password at their next sign-in</label></div>
+            <div class="usa-hint" id="require-change-hint">Use this when you set a password for someone. After their password and second factor, MERIT asks for a new password before anything else.</div>
+            <input type="hidden" name="RequirePasswordChange" value="false" />
             <div class="usa-checkbox"><input class="usa-checkbox__input" id="IsActive" type="checkbox" name="IsActive" value="true" checked="@(Model.IsActive)" /><label class="usa-checkbox__label" for="IsActive">Active (clear to deactivate; the account and its history are kept)</label></div>
             <input type="hidden" name="IsActive" value="false" />
             @if (Model.AppUserId is null)

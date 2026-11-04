@@ -36,6 +36,11 @@ services.AddSingleton<QrCodes>();
 services.AddSingleton<StepUp>();
 // Outgoing mail for email one-time codes: Disabled unless Email:Provider is Smtp (docs/email-codes.md).
 services.AddMeritEmail(builder.Configuration, builder.Environment);
+// Password self-service (#190): reset links and notices are sent off the request, from this queue.
+services.Configure<PasswordResetOptions>(builder.Configuration.GetSection(PasswordResetOptions.Section));
+services.AddSingleton<ResetLinkCookie>();
+services.AddSingleton<AccountMailQueue>();
+services.AddHostedService<AccountMailService>();
 services.AddScoped<Merit.Web.Mapping.PersonPageBuilder>();
 
 // Data protection keys live where every web copy can read them, so any copy accepts any session cookie.
@@ -229,6 +234,7 @@ app.Use(async (http, next) =>
 });
 app.UseMiddleware<SecurityHeadersMiddleware>();
 app.UseMiddleware<RecoveryCodesGateMiddleware>();   // unacknowledged recovery codes come first (issue #156)
+app.UseMiddleware<PasswordChangeGateMiddleware>();  // then a new password an administrator asked for (issue #190)
 app.UseRateLimiter();    // after the security headers, so the "too many attempts" page carries its CSP nonce
 app.UseAuthorization();
 

@@ -22,6 +22,9 @@ public sealed partial class EndpointTests(MeritFixture fixture, ITestOutputHelpe
     {
         "GET Account.SignIn", "POST Account.SignIn", "GET Account.Denied", "GET Home.Error",
         "GET Home.Status", "POST Home.Status", "PUT Home.Status", "PATCH Home.Status", "DELETE Home.Status",
+        // Forgotten password (#190): asking for a link and using one happen before anyone is signed in.
+        "GET Account.ForgotPassword", "POST Account.ForgotPassword", "GET Account.ForgotPasswordSent", "GET Account.ResetPassword",
+        "POST Account.ResetPassword",
     };
 
     private IReadOnlyList<RoutedAction> Actions()

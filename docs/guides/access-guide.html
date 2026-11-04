@@ -374,6 +374,12 @@
     <li>Nobody resets their own second factor: ask another administrator.</li>
     <li>An MFA reset, or a change to the person's email address, also turns off email codes.</li>
   </ul>
+  <h3>Passwords</h3>
+  <ul>
+    <li><b>Change your password:</b> select <b>Sign-in methods</b> in the header. Enter your current password, the new one twice, and a code from your authenticator app. Your other MERIT sessions are signed out.</li>
+    <li><b>Forgot your password?</b> Use the link on the sign-in page. If your account has an email address, MERIT sends a link that works once, for 20 minutes. You also need a code from your authenticator app or one of your recovery codes; a reset never skips that step.</li>
+    <li><b>Setting a password for someone:</b> on the person's page, type a new password and tick <b>Ask them to choose a new password at their next sign-in</b>. They choose their own right after signing in, so only they know it. Every password change and reset is recorded in the audit log.</li>
+  </ul>
   <h3>Email codes (optional)</h3>
   <p>Every account signs in with an authenticator app. Where your jurisdiction allows it, a person who is not an administrator can also get a one-time code by email at sign-in. NIST SP 800-63B-4 does not accept email for out-of-band authentication, so email codes are off unless an administrator with configuration rights turns on <b>Email codes enabled</b> under <b>Settings</b> and ticks the confirmation.</p>
   <ul>
