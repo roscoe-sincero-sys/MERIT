@@ -80,7 +80,7 @@ BEGIN
         -- =========================================================================================
 
         DECLARE @now DATETIME2 (3) = SYSUTCDATETIME ();
-        DECLARE @user UNIQUEIDENTIFIER, @status VARCHAR (20), @minLength INT = 8;
+        DECLARE @user UNIQUEIDENTIFIER, @status VARCHAR (20), @minLength INT = 15;
 
         SELECT @user   = r.appUserId
              , @status = CASE WHEN r.consumedUtc IS NOT NULL THEN 'used'

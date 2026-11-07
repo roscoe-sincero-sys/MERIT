@@ -42,7 +42,7 @@ public enum PasswordResetLinkStatus
     AccountLocked,
 }
 
-public sealed record PasswordResetLink(PasswordResetLinkStatus Status, string? UserName = null, int PasswordMinLength = 8, int RemainingAttempts = 0);
+public sealed record PasswordResetLink(PasswordResetLinkStatus Status, string? UserName = null, int PasswordMinLength = PasswordPolicy.MinimumLength, int RemainingAttempts = 0);
 
 public enum PasswordResetOutcome
 {
@@ -302,9 +302,12 @@ public sealed partial class PasswordService(IAccountData data, AccountService ac
     /// <summary>Password rules: the jurisdiction's minimum length, the breached-password list, a match, and not the current one.</summary>
     private void ValidateNew(SignInUserRow user, string? newPassword, string? confirmPassword, int minLength)
     {
-        accounts.ValidateNewPassword(newPassword, minLength, "NewPassword");
+        accounts.ValidateNewPassword(newPassword, minLength, "NewPassword", user.UserName);
         var v = new Validator();
-        v.When(newPassword != confirmPassword, "ConfirmPassword", "The two passwords don't match.");
+        string? confirmed;
+        try { confirmed = confirmPassword is null ? null : PasswordPolicy.Normalize(confirmPassword); }
+        catch (ArgumentException) { throw new ValidationException("ConfirmPassword", "Use valid Unicode characters in the password."); }
+        v.When(PasswordPolicy.Normalize(newPassword!) != confirmed, "ConfirmPassword", "The two passwords don't match.");
         v.When(accounts.IsCurrentPassword(user, newPassword), "NewPassword", "Choose a password you are not using now.");
         v.ThrowIfInvalid();
     }

@@ -1,7 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import { existsSync, openSync, readFileSync, readSync, closeSync } from 'node:fs';
 import { MAX_LINE, parseVtt } from './captions.ts';
-import { DEMO_PASSWORD, run, tool } from './config.ts';
+import { DEMO_PASSWORD, LOGIN_DEMO_PASSWORD, run, tool } from './config.ts';
 
 /**
  * Checks a built video against what it promises: 1080p H.264 at 30 fps that streams (+faststart), narration audio at a
@@ -66,6 +66,7 @@ export function loudness(file: string): number {
 
 const SENSITIVE: { rule: string; pattern: RegExp }[] = [
   { rule: 'demo password', pattern: new RegExp(DEMO_PASSWORD.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')) },
+  { rule: 'training login password', pattern: new RegExp(LOGIN_DEMO_PASSWORD.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')) },
   { rule: 'six-digit code beside a code label', pattern: /\b(code|otp|passcode)\b[^\n]{0,40}\b\d{6}\b/i },
   { rule: 'authenticator secret', pattern: /\b(?:[A-Z2-7]{4}\s?){8,}\b/ },
   { rule: 'key or token', pattern: /\b(?:sk|pk|api|key|token|secret)[-_][A-Za-z0-9]{20,}\b/i },

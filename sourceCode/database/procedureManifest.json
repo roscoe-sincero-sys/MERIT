@@ -289,6 +289,28 @@
   ]
  },
  {
+  "name": "auth.uspGetAdminPasswordPolicy",
+  "kind": "read",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": "tenant.administer",
+  "params": [
+   {
+    "name": "appUserId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "homeTenantId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
   "name": "auth.uspGetEmailCodeOption",
   "kind": "read",
   "grants": [
@@ -342,7 +364,7 @@
    {
     "name": "appUserId",
     "type": "UNIQUEIDENTIFIER",
-    "hasDefault": false,
+    "hasDefault": true,
     "isOutput": false
    },
    {
@@ -350,6 +372,12 @@
     "type": "INT",
     "hasDefault": false,
     "isOutput": true
+   },
+   {
+    "name": "homeTenantId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": true,
+    "isOutput": false
    }
   ]
  },
@@ -895,6 +923,40 @@
    {
     "name": "appUserId",
     "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   }
+  ]
+ },
+ {
+  "name": "auth.uspUpgradePasswordHash",
+  "kind": "write",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": null,
+  "params": [
+   {
+    "name": "appUserId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "expectedSecurityStamp",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "expectedPasswordHash",
+    "type": "NVARCHAR (500)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "passwordHash",
+    "type": "NVARCHAR (500)",
     "hasDefault": false,
     "isOutput": false
    }

@@ -13,7 +13,7 @@ CreateDate:   2026-10-24
 ========================================================================================================================
 Description:
 
-The minimum password length in force for a user's data root (passwordMinLength, at least 8). Runs as its owner, because a reset page has no session yet and row-level security hides the setting. Granted to no role; reached only through the password procedures, which pass the user they are working on.
+The effective password minimum for a user's or selected home tenant's data root (15 to 128). Runs as its owner, because a reset page has no session yet and row-level security hides the setting. Granted to no role; reached only through the password procedures, which pass the user they are working on.
 
 ========================================================================================================================
 Requirements and Key Dependencies:
@@ -45,8 +45,9 @@ Description:	Initial version.
 
 ***********************************************************************************************************************/
 CREATE OR ALTER PROCEDURE auth.uspGetPasswordPolicy
-      @appUserId         UNIQUEIDENTIFIER
+      @appUserId         UNIQUEIDENTIFIER = NULL
       , @passwordMinLength INT OUTPUT
+      , @homeTenantId      UNIQUEIDENTIFIER = NULL
 WITH EXECUTE AS OWNER
 AS
 BEGIN
@@ -78,8 +79,11 @@ BEGIN
         -- ===== The procedure's own work starts here. Everything above and below is boilerplate. ==
         -- =========================================================================================
 
-        DECLARE @root UNIQUEIDENTIFIER = (SELECT rootTenantId FROM auth.appUser WHERE appUserId = @appUserId AND isDeleted = 0);
+        DECLARE @root UNIQUEIDENTIFIER = CASE WHEN @homeTenantId IS NOT NULL
+            THEN (SELECT rootTenantId FROM auth.tenant WHERE tenantId = @homeTenantId AND isDeleted = 0)
+            ELSE (SELECT rootTenantId FROM auth.appUser WHERE appUserId = @appUserId AND isDeleted = 0) END;
         DECLARE @today DATE = CAST (SYSUTCDATETIME () AS DATE);
+        SET @passwordMinLength = NULL;
 
         SELECT TOP (1) @passwordMinLength = TRY_CAST (s.settingValue AS INT)
           FROM config.jurisdictionSetting AS s
@@ -87,7 +91,8 @@ BEGIN
            AND s.effectiveFrom <= @today AND (s.effectiveTo IS NULL OR s.effectiveTo >= @today)
          ORDER BY s.effectiveFrom DESC;
 
-        SET @passwordMinLength = CASE WHEN @passwordMinLength IS NULL OR @passwordMinLength < 8 THEN 8 ELSE @passwordMinLength END;
+        SET @passwordMinLength = CASE WHEN @passwordMinLength IS NULL OR @passwordMinLength < 15 THEN 15
+                                     WHEN @passwordMinLength > 128 THEN 128 ELSE @passwordMinLength END;
 
         -- =========================================================================================
         -- ===== End of the procedure's own work. ===================================================
@@ -126,5 +131,5 @@ EXEC util.uspSetObjectDescription
       @SchemaName  = N'auth'
     , @ObjectType  = N'PROCEDURE'
     , @ObjectName  = N'uspGetPasswordPolicy'
-    , @Description = N'The minimum password length in force for a user''s data root (passwordMinLength, at least 8). Runs as its owner, because a reset page has no session yet and row-level security hides the setting. Granted to no role; reached only through the password procedures, which pass the user they are working on.';
+    , @Description = N'The effective password minimum for a user''s or selected home tenant''s data root (15 to 128). Runs as its owner, because a reset page has no session yet and row-level security hides the setting. Granted to no role; reached only through the password procedures, which pass the user they are working on.';
 GO

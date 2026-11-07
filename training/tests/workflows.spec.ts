@@ -18,6 +18,8 @@ test.beforeAll(async ({ request }) => {
 
 for (const { workflow } of catalog) {
   test(`${workflow.role}/${workflow.feature}/${workflow.id} still works`, async ({ browser }) => {
+    test.skip(workflow.anonymous === true && !process.env.MERIT_TRAINING_URL,
+      'Login tutorials need npm run app:login and an explicit MERIT_TRAINING_URL (normally https://localhost:7343).');
     const run = await perform(workflow, { mode: 'dry', browser });
     expect(run.steps).toHaveLength(workflow.scenes.reduce((n, s) => n + s.steps.length, 0));
   });

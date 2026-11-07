@@ -15,16 +15,20 @@ PROCS = [
     {
         "schema": "auth", "name": "uspGetPasswordPolicy", "kind": "read", "grants": [], "ticket": "T211",
         "execute_as_owner": True,
-        "desc": "The minimum password length in force for a user's data root (passwordMinLength, at least 8). Runs as its "
+        "desc": "The effective password minimum for a user's or selected home tenant's data root (15 to 128). Runs as its "
                 "owner, because a reset page has no session yet and row-level security hides the setting. Granted to "
                 "no role; reached only through the password procedures, which pass the user they are working on.",
-        "params": """@appUserId         UNIQUEIDENTIFIER
-, @passwordMinLength INT OUTPUT""",
+        "params": """@appUserId         UNIQUEIDENTIFIER = NULL
+, @passwordMinLength INT OUTPUT
+, @homeTenantId      UNIQUEIDENTIFIER = NULL""",
         "key": "CONCAT (N'appUserId=', @appUserId)",
         "example": "DECLARE @n INT; exec auth.uspGetPasswordPolicy @appUserId = '...', @passwordMinLength = @n OUTPUT",
         "body": """
-DECLARE @root UNIQUEIDENTIFIER = (SELECT rootTenantId FROM auth.appUser WHERE appUserId = @appUserId AND isDeleted = 0);
+DECLARE @root UNIQUEIDENTIFIER = CASE WHEN @homeTenantId IS NOT NULL
+    THEN (SELECT rootTenantId FROM auth.tenant WHERE tenantId = @homeTenantId AND isDeleted = 0)
+    ELSE (SELECT rootTenantId FROM auth.appUser WHERE appUserId = @appUserId AND isDeleted = 0) END;
 DECLARE @today DATE = CAST (SYSUTCDATETIME () AS DATE);
+SET @passwordMinLength = NULL;
 
 SELECT TOP (1) @passwordMinLength = TRY_CAST (s.settingValue AS INT)
   FROM config.jurisdictionSetting AS s
@@ -32,8 +36,63 @@ SELECT TOP (1) @passwordMinLength = TRY_CAST (s.settingValue AS INT)
    AND s.effectiveFrom <= @today AND (s.effectiveTo IS NULL OR s.effectiveTo >= @today)
  ORDER BY s.effectiveFrom DESC;
 
-SET @passwordMinLength = CASE WHEN @passwordMinLength IS NULL OR @passwordMinLength < 8 THEN 8 ELSE @passwordMinLength END;
+SET @passwordMinLength = CASE WHEN @passwordMinLength IS NULL OR @passwordMinLength < 15 THEN 15
+                             WHEN @passwordMinLength > 128 THEN 128 ELSE @passwordMinLength END;
 """,
+    },
+    {
+        "schema": "auth", "name": "uspGetAdminPasswordPolicy", "kind": "read", "grants": WEB, "ticket": "198",
+        "permission": "tenant.administer",
+        "desc": "The effective password minimum for an account's selected home tenant. Checks authority over both the "
+                "existing account and the selected tenant before the private owner-executed policy lookup; never uses "
+                "the administrator's own active root as a substitute for the account's policy.",
+        "params": """@appUserId    UNIQUEIDENTIFIER = NULL
+, @homeTenantId UNIQUEIDENTIFIER = NULL""",
+        "key": "CONCAT (N'appUserId=', @appUserId, N', homeTenantId=', @homeTenantId)",
+        "body": """
+DECLARE @admin TABLE (tenantId UNIQUEIDENTIFIER PRIMARY KEY);
+INSERT @admin SELECT tenantId FROM auth.tvfAdminTenants ();
+IF @appUserId IS NOT NULL AND NOT EXISTS
+    (SELECT 1 FROM auth.appUser AS u JOIN @admin AS a ON a.tenantId = u.homeTenantId WHERE u.appUserId = @appUserId AND u.isDeleted = 0)
+BEGIN
+    ;THROW 51403, N'Only an administrator of the account home tenant can check its password policy.', 1;
+END;
+SET @homeTenantId = COALESCE (@homeTenantId,
+    (SELECT homeTenantId FROM auth.appUser WHERE appUserId = @appUserId AND isDeleted = 0),
+    TRY_CAST (SESSION_CONTEXT (N'actingTenantId') AS UNIQUEIDENTIFIER));
+IF @homeTenantId IS NULL OR NOT EXISTS (SELECT 1 FROM @admin WHERE tenantId = @homeTenantId)
+BEGIN
+    ;THROW 51403, N'Choose a home tenant you administer.', 1;
+END;
+DECLARE @minimum INT = 15;
+EXEC auth.uspGetPasswordPolicy @appUserId = @appUserId, @passwordMinLength = @minimum OUTPUT, @homeTenantId = @homeTenantId;
+SELECT @minimum AS passwordMinLength;
+""",
+    },
+    {
+        "schema": "auth", "name": "uspUpgradePasswordHash", "kind": "write", "grants": WEB, "ticket": "198",
+        "desc": "Upgrades a password hash after the application verifies the original credential. A binary compare-and-swap "
+                "of the old hash and security stamp prevents a concurrent password reset, deactivation or MFA reset from "
+                "being overwritten. Does not change the password-change date, stamp, sessions or required-change flag. "
+                "Neither old nor new hash is logged. Returns whether the upgrade won.",
+        "params": """@appUserId             UNIQUEIDENTIFIER
+, @expectedSecurityStamp UNIQUEIDENTIFIER
+, @expectedPasswordHash  NVARCHAR (500)
+, @passwordHash          NVARCHAR (500)""",
+        "key": "CONCAT (N'appUserId=', @appUserId)",
+        "body": """
+IF @passwordHash IS NULL OR LEN (@passwordHash) < 30 OR @expectedPasswordHash IS NULL
+BEGIN
+    ;THROW 50000, N'Valid password hashes are required.', 1;
+END;
+UPDATE auth.appUser SET passwordHash = @passwordHash
+ WHERE appUserId = @appUserId AND securityStamp = @expectedSecurityStamp AND isActive = 1 AND isDeleted = 0
+   AND (lockoutEndUtc IS NULL OR lockoutEndUtc <= SYSUTCDATETIME ())
+   AND passwordHash COLLATE Latin1_General_100_BIN2 = @expectedPasswordHash COLLATE Latin1_General_100_BIN2;
+DECLARE @updated BIT = CASE WHEN @@ROWCOUNT = 1 THEN 1 ELSE 0 END;
+SELECT @updated AS upgraded;
+""",
+        "comments": "N'Credential hash upgrade checked.'",
     },
     {
         "schema": "auth", "name": "uspCreatePasswordReset", "kind": "write", "grants": WEB, "ticket": "T211",
@@ -165,7 +224,7 @@ SET @Comments = CASE WHEN @submitted = 1 THEN N'Reset link submitted.' ELSE N'Re
                  "Attempts count wrong second-factor codes.",
         "body": """
 DECLARE @now DATETIME2 (3) = SYSUTCDATETIME ();
-DECLARE @user UNIQUEIDENTIFIER, @status VARCHAR (20), @minLength INT = 8;
+DECLARE @user UNIQUEIDENTIFIER, @status VARCHAR (20), @minLength INT = 15;
 
 SELECT @user   = r.appUserId
      , @status = CASE WHEN r.consumedUtc IS NOT NULL THEN 'used'
@@ -305,7 +364,7 @@ SET @Comments = N'Password changed.';
         "key": "N'own password policy'",
         "body": """
 DECLARE @appUserId UNIQUEIDENTIFIER = auth.udfSessionUserId ();
-DECLARE @minLength INT = 8;
+DECLARE @minLength INT = 15;
 
 IF @appUserId IS NOT NULL
 BEGIN

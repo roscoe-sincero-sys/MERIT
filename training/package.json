@@ -12,7 +12,9 @@
     "setup:voice": "node scripts/setup-voice.ts",
     "db:deploy": "powershell -NoProfile -ExecutionPolicy Bypass -File ../sourceCode/database/Deploy-MeritDatabase.ps1 -ServerInstance localhost\\PORTAL -DatabaseName MERIT_TRAINING -IncludeDemoData",
     "app": "node scripts/app.ts",
+    "app:login": "node scripts/login-app.ts",
     "videos": "node scripts/build.ts",
+    "videos:login": "node scripts/build-login.ts",
     "test": "playwright test",
     "typecheck": "tsc -p ."
   },

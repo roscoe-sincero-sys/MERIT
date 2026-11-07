@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using Merit.Application.Data;
 using Merit.Application.Services;
+using Merit.Application.Security;
 
 namespace Merit.Web.Models;
 
@@ -147,7 +148,7 @@ public sealed class ResetPasswordModel
 
     public string? UserName { get; set; }
 
-    public int PasswordMinLength { get; set; } = 8;
+    public int PasswordMinLength { get; set; } = PasswordPolicy.MinimumLength;
 
     public int RemainingAttempts { get; set; }
 
@@ -173,13 +174,13 @@ public sealed class RequiredPasswordModel
 
     public string? ReturnUrl { get; set; }
 
-    public int PasswordMinLength { get; set; } = 8;
+    public int PasswordMinLength { get; set; } = PasswordPolicy.MinimumLength;
 }
 
 /// <summary>The signed-in person's sign-in methods: the authenticator app (always on) and, where allowed, email codes.</summary>
 public sealed class SignInMethodsModel
 {
-    public int PasswordMinLength { get; set; } = 8;
+    public int PasswordMinLength { get; set; } = PasswordPolicy.MinimumLength;
 
     public DateTime? PasswordChangedUtc { get; set; }
 
@@ -861,6 +862,8 @@ public sealed record UsersModel(IReadOnlyList<UserListRow> Users);
 
 public sealed class UserFormModel
 {
+    public int PasswordMinLength { get; set; } = PasswordPolicy.MinimumLength;
+
     public Guid? AppUserId { get; set; }
 
     [Required(ErrorMessage = "User name is required.")]

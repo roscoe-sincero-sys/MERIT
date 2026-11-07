@@ -21,6 +21,8 @@ export const DATABASE = process.env.MERIT_TRAINING_DATABASE ?? 'MERIT_TRAINING';
 export const CHANNEL = process.env.MERIT_TRAINING_CHANNEL ?? 'msedge';
 export const VOICE = process.env.MERIT_TRAINING_VOICE ?? 'en_US-kristin-medium';
 export const DEMO_PASSWORD = 'MeritDemo!2026';
+/** Strong initial credential for the isolated login tutorials; the older demo data remains a legacy-compatibility fixture. */
+export const LOGIN_DEMO_PASSWORD = 'Merit Training Demo Passphrase 2026';
 
 /** The picture: 1080p at 30 frames a second, one CSS pixel to one video pixel. */
 export const VIDEO = { width: 1920, height: 1080, fps: 30 } as const;

@@ -196,12 +196,14 @@ public sealed partial class PasswordSelfServiceTests(MeritFixture fixture)
         Assert.Contains("That is not your current password.", await ChangeAsync("Not-The-Password-9", NewPassword, NewPassword, account.TotpCode()), StringComparison.Ordinal);
         Assert.Equal(1, await account.ScalarAsync<int>("SELECT failedSignInCount FROM auth.appUser WHERE appUserId = @id"));
         Assert.Contains("That code did not match", await ChangeAsync(MeritFixture.Password, NewPassword, NewPassword, "000000"), StringComparison.Ordinal);
-        Assert.Contains("Choose a password you are not using now.", await ChangeAsync(MeritFixture.Password, MeritFixture.Password, MeritFixture.Password, account.TotpCode()), StringComparison.Ordinal);
+        // A legacy 13-character credential remains valid for sign-in, but is too short to choose again.
+        Assert.Contains("Use at least 15 characters.", await ChangeAsync(MeritFixture.Password, MeritFixture.Password, MeritFixture.Password, account.TotpCode()), StringComparison.Ordinal);
         Assert.Contains("breached passwords", await ChangeAsync(MeritFixture.Password, "12345678", "12345678", account.TotpCode()), StringComparison.Ordinal);
         await account.ScalarAsync<int>("UPDATE auth.appUser SET failedSignInCount = 0 WHERE appUserId = @id; SELECT 0");
 
         string changed = await ChangeAsync(MeritFixture.Password, NewPassword, NewPassword, account.TotpCode());
         Assert.Contains("Your password was changed. Your other MERIT sessions were signed out.", changed, StringComparison.Ordinal);
+        Assert.Contains("Choose a password you are not using now.", await ChangeAsync(NewPassword, NewPassword, NewPassword, account.TotpCode()), StringComparison.Ordinal);
         Assert.Equal(HttpStatusCode.OK, (await client.NoRedirect.GetAsync("/api/v1/me")).StatusCode);   // this browser carries on
         Assert.Equal(1, await account.ScalarAsync<int>($"SELECT COUNT (*) FROM auth.sessionScope WHERE sessionScopeId = '{elsewhereScope}' AND revokedUtc IS NOT NULL"));
         Assert.Equal(1, await account.ScalarAsync<int>("SELECT COUNT (*) FROM logs.auditEvent WHERE appUserId = @id AND eventAction = 'passwordChanged'"));

@@ -95,6 +95,7 @@ public sealed class CrossTenantProcedureTests(MeritFixture fixture, ITestOutputH
         // Password self-service (#190): the caller's own account, or a reset link before any session.
         "auth.uspCreatePasswordReset", "auth.uspRecordPasswordResetDelivery", "auth.uspGetPasswordReset", "auth.uspRecordPasswordResetFailure",
         "auth.uspCompletePasswordReset", "auth.uspChangeMyPassword", "auth.uspGetMyPasswordPolicy",
+        "auth.uspUpgradePasswordHash", // Credential plumbing: covered by PasswordPolicyTests' compare-and-swap cases.
         // Sign-in event log plumbing (#191): written by the web application and read for one session; no tenant rows.
         "logs.uspRecordSignInEvent", "auth.uspGetSessionScopeState",
     };

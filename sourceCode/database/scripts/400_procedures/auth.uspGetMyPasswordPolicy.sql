@@ -77,7 +77,7 @@ BEGIN
         -- =========================================================================================
 
         DECLARE @appUserId UNIQUEIDENTIFIER = auth.udfSessionUserId ();
-        DECLARE @minLength INT = 8;
+        DECLARE @minLength INT = 15;
 
         IF @appUserId IS NOT NULL
         BEGIN

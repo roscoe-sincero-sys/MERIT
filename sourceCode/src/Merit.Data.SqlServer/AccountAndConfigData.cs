@@ -9,6 +9,13 @@ public sealed class AccountData(Db db) : IAccountData
     public Task<SignInUserRow?> GetUserForSignInAsync(string userName, CancellationToken ct = default)
         => db.QuerySingleAsync<SignInUserRow>("auth.uspGetUserForSignIn", new { userName }, ct);
 
+    public Task<bool> UpgradePasswordHashAsync(Guid appUserId, Guid expectedSecurityStamp, string expectedPasswordHash, string passwordHash, CancellationToken ct = default)
+        => db.QuerySingleAsync<bool>("auth.uspUpgradePasswordHash", new { appUserId, expectedSecurityStamp, expectedPasswordHash, passwordHash }, ct);
+
+    public async Task<MyPasswordPolicyRow> GetAdminPasswordPolicyAsync(Guid? appUserId, Guid? homeTenantId, CancellationToken ct = default)
+        => await db.QuerySingleAsync<MyPasswordPolicyRow>("auth.uspGetAdminPasswordPolicy", new { appUserId, homeTenantId }, ct).ConfigureAwait(false)
+           ?? new MyPasswordPolicyRow();
+
     public Task RecordSignInResultAsync(Guid? appUserId, bool succeeded, int maxFailedAttempts, int lockoutMinutes, string? clientAddress,
                                         CancellationToken ct = default)
         => db.ExecuteAsync("auth.uspRecordSignInResult", new { appUserId, succeeded, maxFailedAttempts, lockoutMinutes, clientAddress }, ct);

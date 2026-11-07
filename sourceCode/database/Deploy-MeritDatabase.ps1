@@ -81,20 +81,52 @@ function ConvertTo-PlainText([securestring] $Secure) {
     finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
 }
 
-function Get-IdentityV3Hash([securestring] $Secure) {
+function Get-IdentityV3Hash {
+    param([securestring] $Secure, [string] $BlocklistDirectory = (Join-Path $PSScriptRoot '..\security'))
     # ASP.NET Core Identity password hash, format V3: 0x01, PRF (2 = HMAC-SHA512), iteration count, salt length, salt,
-    # 32-byte subkey; all integers big-endian. Matches Merit.Web's PasswordHasher defaults.
+    # 32-byte subkey; all integers big-endian. The prefix marks NFC normalization, matching Merit.Web.
     $salt = New-Object byte[] 16
-    [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($salt)
+    $platformRng = [Security.Cryptography.RandomNumberGenerator]::Create()
+    try { $platformRng.GetBytes($salt) } finally { $platformRng.Dispose() }
     $plain = ConvertTo-PlainText $Secure
+    $kdf = $null
     try {
-        $kdf = New-Object Security.Cryptography.Rfc2898DeriveBytes($plain, $salt, 100000, [Security.Cryptography.HashAlgorithmName]::SHA512)
+        $plain = $plain.Normalize([Text.NormalizationForm]::FormC)
+        $platformCodePoints = 0
+        for ($platformIndex = 0; $platformIndex -lt $plain.Length; $platformIndex++) {
+            if ([char]::IsHighSurrogate($plain[$platformIndex])) { $platformIndex++ }
+            $platformCodePoints++
+        }
+        if ([string]::IsNullOrWhiteSpace($plain) -or $platformCodePoints -lt 15 -or $platformCodePoints -gt 128) {
+            throw 'The platform administrator password must contain 15 to 128 Unicode characters.'
+        }
+        $platformCandidate = $plain.Trim()
+        $platformBlocked = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+        foreach ($platformCorpus in @('common-passwords.txt', 'merit-passwords.txt')) {
+            $platformBlocklist = Join-Path $BlocklistDirectory $platformCorpus
+            if (-not (Test-Path -LiteralPath $platformBlocklist)) { throw 'Package security/ password blocklists with the database deployment scripts.' }
+            foreach ($platformEntry in [IO.File]::ReadAllLines($platformBlocklist, [Text.Encoding]::UTF8)) {
+                if (-not [string]::IsNullOrWhiteSpace($platformEntry)) { [void]$platformBlocked.Add($platformEntry.Normalize([Text.NormalizationForm]::FormC).Trim()) }
+            }
+        }
+        if ($platformBlocked.Contains($platformCandidate)) { throw 'Choose a platform administrator password that is not on the common-password blocklist.' }
+        $platformSuffixCharacters = '0123456789!@#$%^&*()_+-=[]{};:'',.<>/?\|`~"'
+        foreach ($platformContext in @($PlatformAdminUserName, 'MERIT')) {
+            if ($platformCandidate.StartsWith($platformContext, [StringComparison]::OrdinalIgnoreCase)) {
+                $platformTrivial = $true
+                foreach ($platformCharacter in $platformCandidate.Substring($platformContext.Length).ToCharArray()) {
+                    if ($platformSuffixCharacters.IndexOf($platformCharacter) -lt 0) { $platformTrivial = $false; break }
+                }
+                if ($platformTrivial) { throw 'Choose a platform administrator password that is not based on the account or service name.' }
+            }
+        }
+        $kdf = New-Object Security.Cryptography.Rfc2898DeriveBytes($plain, $salt, 220000, [Security.Cryptography.HashAlgorithmName]::SHA512)
         $sub = $kdf.GetBytes(32)
     }
-    finally { $plain = $null }
+    finally { $plain = $null; if ($null -ne $kdf) { $kdf.Dispose() } }
     $be = { param([int] $v) $b = [BitConverter]::GetBytes($v); [Array]::Reverse($b); , $b }
-    $blob = [byte[]](@(1) + (& $be 2) + (& $be 100000) + (& $be 16) + $salt + $sub)
-    return [Convert]::ToBase64String($blob)
+    $blob = [byte[]](@(1) + (& $be 2) + (& $be 220000) + (& $be 16) + $salt + $sub)
+    return 'merit-nfc-v1$' + [Convert]::ToBase64String($blob)
 }
 
 # ----------------------------------------------------------------------------------------------- sqlcmd

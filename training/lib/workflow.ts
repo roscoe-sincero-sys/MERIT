@@ -1,4 +1,5 @@
 import type { Stage } from './stage.ts';
+import type { Page } from '@playwright/test';
 
 /**
  * A training video is a script, not a recording: scenes of steps, each with the line the narrator says (also the
@@ -61,6 +62,10 @@ export interface Workflow {
   user: string;
   /** The page open when recording starts. */
   start: string;
+  /** Login tutorials start without a session, so enrollment is never performed before the camera starts. */
+  anonymous?: boolean;
+  /** Install workflow-specific browser safeguards before the first navigation or captured frame. */
+  setup?: (page: Page) => Promise<void>;
   /** Puts the training data back to the same starting point, so every build of the video is the same. */
   prepare?: () => void | Promise<void>;
   scenes: Scene[];

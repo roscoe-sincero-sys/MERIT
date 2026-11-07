@@ -72,7 +72,7 @@ export async function perform(workflow: Workflow, options: PerformOptions): Prom
   const workDir = options.workDir ?? join(PATHS.work, workflow.id);
   const framesDir = join(workDir, 'frames');
   try {
-    const storageState = await ensureSession(browser, workflow.user);
+    const storageState = workflow.anonymous ? undefined : await ensureSession(browser, workflow.user);
     const context = await browser.newContext({
       baseURL: BASE_URL, ignoreHTTPSErrors: true, storageState,
       viewport: VIEWPORT, deviceScaleFactor: DEVICE_SCALE,
@@ -82,6 +82,7 @@ export async function perform(workflow: Workflow, options: PerformOptions): Prom
     });
     if (recording) await context.addInitScript(overlayScript);
     const page = await context.newPage();
+    await workflow.setup?.(page);
     // A step whose element never appears fails in seconds, naming the step.
     page.setDefaultTimeout(10_000);
     const stage = new Stage(page, options.mode);
