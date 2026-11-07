@@ -43,6 +43,13 @@ public static class SignInRateLimits
         o.AddPolicy(Password, http => Partition(http, PasswordSetting, DefaultPerMinute));
         o.AddPolicy(Code, http => Partition(http, CodeSetting, DefaultPerMinute));
         o.AddPolicy(EmailCode, http => Partition(http, EmailCodeSetting, DefaultEmailCodesPerMinute));
+        o.AddPolicy("screenUsage", http => RateLimitPartition.GetFixedWindowLimiter(
+            http.User.FindFirst(MeritClaims.UserId)?.Value ?? ClientKey(http),
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = Math.Clamp(http.RequestServices.GetRequiredService<IConfiguration>().GetValue("ScreenVisit:RequestsPerMinute", 120), 1, 600),
+                Window = TimeSpan.FromMinutes(1), QueueLimit = 0,
+            }));
         o.OnRejected = RejectAsync;
     }
 
@@ -68,6 +75,12 @@ public static class SignInRateLimits
         var http = context.HttpContext;
         // Refusals are part of the sign-in record (#191): the policy that refused, from this address.
         string? policy = http.GetEndpoint()?.Metadata.GetMetadata<EnableRateLimitingAttribute>()?.PolicyName;
+        if (policy == "screenUsage")
+        {
+            http.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+            http.Response.Headers.RetryAfter = "60";
+            return; // Usage loss must not render an alarming sign-in failure or flood the security log.
+        }
         await http.RequestServices.GetRequiredService<Merit.Application.Security.ISignInEvents>().RecordAsync(
             new Merit.Application.Security.SignInEvent(Merit.Application.Security.SignInEventTypes.RateLimited,
                 Merit.Application.Security.SignInSteps.Request, Reason: policy), ct).ConfigureAwait(false);

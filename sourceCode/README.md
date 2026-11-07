@@ -4,6 +4,9 @@ MERIT is a web application for heavy-metal exposure surveillance. It handles lab
 case classification, investigations, work queues and registry extracts. It is built from the documents in
 `docs/requirements`.
 
+See [screen usage and workflow reports](../docs/screen-usage.md) for the storage decision, collection scope,
+supervisor permissions, retention settings and deployment requirements for issue #227.
+
 | Folder | Contents |
 | --- | --- |
 | `Merit.sln` | The solution to open in Visual Studio 2022. It includes the `Merit.slnLaunch` profile "Web + Worker". |

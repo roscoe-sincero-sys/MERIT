@@ -1,0 +1,30 @@
+@model Merit.Web.Controllers.UsageSessionPage
+@using Merit.Web.Infrastructure
+@{
+    ViewData["Title"] = "Usage session";
+    int total = Model.Report.Visits.FirstOrDefault()?.TotalCount ?? 0;
+}
+<p><a href="/admin/usage?days=@Model.Days">Back to usage</a></p>
+<h1>Usage session</h1>
+<p>Session reference: <code>@Model.Reference</code>. This is a reporting reference, not a sign-in credential.</p>
+<p>Only visits in your current scope and the last @Model.Days days appear. Timestamps below are UTC, with milliseconds to preserve ordering. Tabs can interleave; follow the predecessor when comparing a workflow.</p>
+@if (Model.Report.Events.Count > 0) {
+    <h2>Sign-in and session end</h2>
+    <ul>@foreach (var e in Model.Report.Events) { <li>@e.EventUtc.ToString("yyyy-MM-dd HH:mm:ss.fff") UTC — @Options.Humanize(e.EventType) @Options.Humanize(e.Reason)</li> }</ul>
+}
+else { <p>No retained sign-in/end events were observed for this sequence. Browser closure alone does not prove sign-out.</p> }
+<h2>Recorded screens</h2>
+@if (Model.Report.Visits.Count == 0) { <p>No visits on this page in your current period and scope.</p> }
+else {
+    <p>@total visits; page @Model.Page of @((total + 99) / 100). <a href="/admin/usage/sessions/@Model.Reference/page.csv?days=@Model.Days&amp;page=@Model.Page">Download this page CSV</a></p>
+    <div class="merit-table-wrap" tabindex="0" role="region" aria-label="Ordered screen visits; scroll for more columns"><table class="usa-table usa-table--borderless"><thead><tr><th scope="col">When UTC</th><th scope="col">Screen</th><th scope="col">Navigation hint</th><th scope="col">Context</th><th scope="col">Visible time</th></tr></thead><tbody>
+    @foreach (var v in Model.Report.Visits) {
+        <tr><td>@v.EventUtc.ToString("yyyy-MM-dd HH:mm:ss.fff")</td><td>@ScreenCatalog.Name(v.ScreenCode)<div class="merit-meta">@ScreenCatalog.Route(v.ScreenCode)</div><details><summary>Visit links</summary><div>Visit: @v.ScreenVisitId</div><div>Predecessor: @v.PreviousVisitId</div><div>Tab: @v.TabId</div></details></td>
+            <td>@Options.Humanize(v.NavigationType)</td><td>@Options.Humanize(v.RoleCodes)<div>@(v.ProfileId is null ? "Master profile" : "Custom profile")@(v.ViewAsUserId is null ? "" : " · Viewing as another user")</div></td>
+            <td>@(v.DurationMs is int ms ? $"{ms / 1000.0:0.0} seconds" : "Unknown")</td></tr>
+    }</tbody></table></div>
+}
+<nav aria-label="Session pages">
+    @if (Model.Page > 1) { <a class="usa-button usa-button--outline" href="?days=@Model.Days&amp;page=@(Model.Page - 1)">Previous page</a> }
+    @if (Model.Page * 100 < total) { <a class="usa-button usa-button--outline" href="?days=@Model.Days&amp;page=@(Model.Page + 1)">Next page</a> }
+</nav>

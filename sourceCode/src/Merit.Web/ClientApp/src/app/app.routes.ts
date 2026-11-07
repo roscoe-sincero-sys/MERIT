@@ -3,7 +3,12 @@ import { NotPermittedPage, requires } from './shared/not-permitted.page';
 
 /** A screen behind its permissions; without them the same address shows "Not permitted" (issue #161). */
 function guarded(route: Route, ...permissions: string[]): Route[] {
-  return [{ ...route, canMatch: [requires(...permissions)] }, { path: route.path, component: NotPermittedPage, title: 'Not permitted - MERIT' }];
+  const codes: Record<string, string> = {
+    queues: 'queues', held: 'held', results: 'results', 'people/:personId/timeline': 'timeline',
+    'match-review': 'match', map: 'map', clusters: 'clusters', 'clusters/:clusterId': 'cluster', reports: 'reports',
+  };
+  return [{ ...route, data: { ...route.data, usageScreen: codes[route.path ?? ''] }, canMatch: [requires(...permissions)] },
+    { path: route.path, component: NotPermittedPage, title: 'Not permitted - MERIT' }];
 }
 
 // One route component per screen; each feature is a lazy-loaded chunk with its own bundle budget (angular.json).

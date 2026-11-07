@@ -51,7 +51,7 @@ public sealed class RecoveryCodesPending(IDataProtectionProvider protection)
 /// <summary>Sends a signed-in person back to their unacknowledged recovery codes before anything else (issue #156).</summary>
 public sealed class RecoveryCodesGateMiddleware(RequestDelegate next)
 {
-    private static readonly string[] Allowed = [RecoveryCodesPending.StepPath, "/account/signout", "/lib", "/css", "/js", "/favicon.svg", "/home/status", "/home/error"];
+    private static readonly string[] Allowed = [RecoveryCodesPending.StepPath, "/account/signout", "/api/v1/usage/visits", "/api/v1/usage/duration", "/lib", "/css", "/js", "/favicon.svg", "/home/status", "/home/error"];
 
     public async Task InvokeAsync(HttpContext http, RecoveryCodesPending pending)
     {

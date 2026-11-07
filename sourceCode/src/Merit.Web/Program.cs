@@ -20,6 +20,8 @@ var services = builder.Services;
 services.AddHttpContextAccessor();
 services.AddScoped<ICurrentSession, WebCurrentSession>();
 services.AddScoped<SessionRenewal>();
+services.AddScoped<ScreenUsageRecorder>();
+services.AddScoped<ScreenVisitFilter>();
 services.AddScoped<CspNonce>();
 services.AddMeritApplication();
 services.AddMeritSqlServer(o =>
@@ -177,6 +179,7 @@ services.AddControllersWithViews(o =>
 {
     o.Filters.Add<MeritExceptionFilter>();
     o.Filters.Add(new AutoValidateAntiforgeryTokenAttribute());
+    o.Filters.Add<ScreenVisitFilter>();
 });
 services.AddProblemDetails();
 services.AddOpenApi("v1", o => o.ShouldInclude = d => d.RelativePath?.StartsWith("api/", StringComparison.OrdinalIgnoreCase) == true);

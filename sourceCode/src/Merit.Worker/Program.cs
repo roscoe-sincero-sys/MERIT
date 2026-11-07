@@ -26,6 +26,7 @@ builder.Services.AddHostedService<JobWorker>();
 builder.Services.AddHostedService<ClusterScheduler>();
 // Sign-in events lose their personal data after SignInLog:RetentionDays (#191).
 builder.Services.AddHostedService<SignInLogPurger>();
+builder.Services.AddHostedService<ScreenVisitPurger>();
 builder.Services.AddHealthChecks().AddCheck<QueueHealthCheck>("queues");
 
 var app = builder.Build();

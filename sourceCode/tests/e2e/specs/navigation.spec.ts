@@ -5,8 +5,8 @@ const widths = [1440, 1280, 1024, 768, 640, 390, 320];
 const tags = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
 
 // Supervisor and admin hold audit.view, so Administration lists the Audit log for them (issue #160). Admin, with
-// tenant.administer, also gets Sign-in activity (issue #191).
-for (const [user, count] of [['cmbalt', 11], ['supervisor', 16], ['admin', 19]] as const) {
+// tenant.administer, also gets Sign-in activity (issue #191). Supervisor/admin get Usage (#227).
+for (const [user, count] of [['cmbalt', 11], ['supervisor', 17], ['admin', 20]] as const) {
   test(`${user}: destinations, target sizes and reflow across seven widths`, async ({ asUser }) => {
     test.setTimeout(120000);
     const page = await asUser(user);

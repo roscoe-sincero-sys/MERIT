@@ -31,6 +31,7 @@
             (Text: "Reporters", Url: "/reporters", Visible: CurrentSession.Has(Permissions.PersonView)),
             (Text: "Extracts", Url: "/extracts", Visible: CurrentSession.Has(Permissions.ExtractRun)) }),
         (Label: "Administration", Links: new[] {
+            (Text: "Usage", Url: "/admin/usage", Visible: CurrentSession.Has(Permissions.UsageView)),
             (Text: CurrentSession.Has(Permissions.ConfigEdit) ? "Configuration" : "Reference levels", Url: "/config/thresholds", Visible: !CurrentSession.IsPlatformAdmin),
             (Text: "Users", Url: "/admin/users", Visible: CurrentSession.Has(Permissions.TenantAdminister)),
             (Text: "Tenants", Url: "/admin/tenants", Visible: CurrentSession.Has(Permissions.TenantCreate)),

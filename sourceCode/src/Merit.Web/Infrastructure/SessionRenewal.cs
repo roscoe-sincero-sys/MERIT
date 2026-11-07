@@ -1,5 +1,6 @@
 using Merit.Application.Security;
 using Merit.Application.Services;
+using Merit.Application.Data;
 
 namespace Merit.Web.Infrastructure;
 
@@ -7,7 +8,8 @@ namespace Merit.Web.Infrastructure;
 /// Starting and renewing the database session scope behind the session cookie, in one place (issue #21). A renewal creates
 /// the new scope first, then ends the old one and rewrites the cookie, so a failure leaves the current session working.
 /// </summary>
-public sealed class SessionRenewal(AccountService accounts, ICurrentSession session, IConfiguration configuration, ISignInEvents events)
+public sealed class SessionRenewal(AccountService accounts, ICurrentSession session, IConfiguration configuration, ISignInEvents events,
+                                   ScreenUsageRecorder usage)
 {
     public const string LifetimeSetting = "Session:LifetimeHours";
 
@@ -31,6 +33,8 @@ public sealed class SessionRenewal(AccountService accounts, ICurrentSession sess
             .ConfigureAwait(false);
         if (session.ScopeKey is Guid old)
         {
+            // A profile/view/working-tenant change replaces access, not the logical signed-in visit.
+            await usage.ContinueAsync(scope.Scope.Summary.SessionScopeId, ct).ConfigureAwait(false);
             await accounts.SignOutAsync(old, ct).ConfigureAwait(false);
         }
 

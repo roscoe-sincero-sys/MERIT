@@ -98,6 +98,8 @@ public sealed class CrossTenantProcedureTests(MeritFixture fixture, ITestOutputH
         "auth.uspUpgradePasswordHash", // Credential plumbing: covered by PasswordPolicyTests' compare-and-swap cases.
         // Sign-in event log plumbing (#191): written by the web application and read for one session; no tenant rows.
         "logs.uspRecordSignInEvent", "auth.uspGetSessionScopeState",
+        // Own-session usage plumbing; ownership/continuation tested by ScreenUsageTests.
+        "logs.uspRecordScreenVisit", "logs.uspSetScreenDuration", "auth.uspContinueUsageSession",
     };
 
     private static IReadOnlyList<ManifestProc> WebProcedures()

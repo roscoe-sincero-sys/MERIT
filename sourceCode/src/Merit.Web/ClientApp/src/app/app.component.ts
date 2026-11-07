@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, inject } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { NavigationEnd, Router, RouterOutlet } from '@angular/router';
+import { NavigationEnd, NavigationStart, Router, RouterOutlet } from '@angular/router';
 
 /** The shared header and navigation come from the Razor host view; Angular draws only the main region. */
 @Component({
@@ -15,10 +15,12 @@ export class AppComponent {
   private readonly destroy = inject(DestroyRef);
   private observer: MutationObserver | null = null;
   private path = '';
+  private back = false;
 
   constructor() {
     this.destroy.onDestroy(() => this.observer?.disconnect());
     this.router.events.pipe(takeUntilDestroyed(this.destroy)).subscribe(event => {
+      if (event instanceof NavigationStart) this.back = event.navigationTrigger === 'popstate';
       if (!(event instanceof NavigationEnd)) return;
       const path = '/app' + event.urlAfterRedirects.split('?')[0].split('#')[0];
       // A link is current for its own path and for the prefixes the host view gives it (issue #160).
@@ -28,6 +30,10 @@ export class AppComponent {
         link.setAttribute('aria-current', prefixes.some(under) ? 'page' : 'false');
       });
       if (path === this.path) return;
+      let screen = this.router.routerState.snapshot.root;
+      while (screen.firstChild) screen = screen.firstChild;
+      const code = screen.data['usageScreen'];
+      if (typeof code === 'string') document.dispatchEvent(new CustomEvent('merit:usageScreen', { detail: { code, back: this.back } }));
       document.dispatchEvent(new Event('merit:navigation'));
       this.path = path;
       this.observer?.disconnect();
