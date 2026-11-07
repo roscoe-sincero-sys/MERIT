@@ -1,0 +1,482 @@
+{
+  "id": "multi-place-profiles",
+  "title": "Profiles: combining places and access levels",
+  "summary": "Use the second and third grant rows to combine places, mix access levels, control child jurisdictions, and choose where new records belong.",
+  "role": "allUsers",
+  "feature": "profiles",
+  "user": "r3staff",
+  "source": "training/workflows/all-users/profiles/multi-place-profiles.workflow.ts",
+  "fingerprint": "e2dffb2a84f20ad2",
+  "appVersion": "be42f6d 2026-11-06",
+  "built": "2026-11-07",
+  "engine": "piper",
+  "voice": "en_US-kristin-medium",
+  "narrated": true,
+  "duration": 233833,
+  "introMs": 15253,
+  "outroMs": 24306,
+  "scenes": [
+    "More than one grant in a profile",
+    "Two places, without child jurisdictions",
+    "Three places with different access levels",
+    "Layered access across region, state and county",
+    "Switching profiles and setting Working in"
+  ],
+  "steps": [
+    {
+      "scene": 0,
+      "say": "A profile can hold more than one place. Select the profile box in the header to open My profiles.",
+      "start": 16141,
+      "end": 23863,
+      "actions": [
+        "Selects “Profile Master profile Switch ▾ : switch profile or jurisdiction”"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 0,
+      "say": "Choose Create a profile to see how the three grant rows work together.",
+      "start": 23863,
+      "end": 29175,
+      "actions": [
+        "Selects “Create a profile”"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 0,
+      "say": "Under Grants, MERIT gives you three rows of Place, Role, Access, and Include everything under this place.",
+      "start": 29176,
+      "end": 37370,
+      "actions": [],
+      "onScreen": [
+        "Grants · Each grant is a role, a place, and how much you can do there. Leave a row's place empty to skip it. · Place · (none) · EPA Region 3 · Delaware · District of Columbia · Maryland · Pennsylvania · Virginia · West Virginia · Harford County Health Department · Role · Supervisor · Access · Read only · Read and write (no delete) · Full (read, write and delete) · Include everything under this pla"
+      ],
+      "highlights": [
+        {
+          "at": 30027,
+          "rect": {
+            "x": 144,
+            "y": -26.671875,
+            "width": 480,
+            "height": 831.390625
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 1,
+      "say": "First, make a profile for state-level work in Maryland and Delaware, and add a short description.",
+      "start": 37370,
+      "end": 49282,
+      "actions": [
+        "Types “Maryland state and Delaware” in Name",
+        "Types “State-level cases along the Maryland and Delaware border” in Description (optional)"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 1,
+      "say": "In the first row, choose Maryland for Place, Supervisor for Role, and Read and write without delete for Access.",
+      "start": 49282,
+      "end": 58323,
+      "actions": [
+        "Chooses “Maryland” for Place",
+        "Chooses “Supervisor” for Role",
+        "Chooses “Read and write (no delete)” for Access"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 1,
+      "say": "Clear Include everything under this place on Maryland, so county agencies like Harford County are left out.",
+      "start": 58324,
+      "end": 66581,
+      "actions": [
+        "Selects “Include everything under this place”"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 1,
+      "say": "In the second row, choose Delaware, keep Supervisor and Read and write without delete, and keep everything under it.",
+      "start": 66581,
+      "end": 74961,
+      "actions": [
+        "Chooses “Delaware” for Place",
+        "Chooses “Supervisor” for Role",
+        "Chooses “Read and write (no delete)” for Access"
+      ],
+      "onScreen": [
+        "Include everything under this place"
+      ],
+      "highlights": [
+        {
+          "at": 72305,
+          "rect": {
+            "x": 392,
+            "y": 582.390625,
+            "width": 232,
+            "height": 44.0625
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 1,
+      "say": "Leave the third Place on none to skip it, then choose Save profile.",
+      "start": 74961,
+      "end": 80266,
+      "actions": [
+        "Selects “Save profile”"
+      ],
+      "onScreen": [
+        "(none) · EPA Region 3 · Delaware · District of Columbia · Maryland · Pennsylvania · Virginia · West Virginia · Harford County Health Department"
+      ],
+      "highlights": [
+        {
+          "at": 75130,
+          "rect": {
+            "x": 144,
+            "y": 705.484375,
+            "width": 232,
+            "height": 40
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 2,
+      "say": "Next, create a tri-state profile that uses all three Place rows, each with its own access level.",
+      "start": 80266,
+      "end": 95759,
+      "actions": [
+        "Selects “Create a profile”",
+        "Types “West Virginia, Virginia and Pennsylvania” in Name",
+        "Types “Full in West Virginia, write in Virginia, read only in Pennsylvania” in Description (optional)"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 2,
+      "say": "In the first row, choose West Virginia, keep the Supervisor role, and set Access to Full.",
+      "start": 95759,
+      "end": 103086,
+      "actions": [
+        "Chooses “West Virginia” for Place",
+        "Chooses “Supervisor” for Role",
+        "Chooses “Full (read, write and delete)” for Access"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 2,
+      "say": "In the second row, choose Virginia, Supervisor, and Read and write without delete.",
+      "start": 103086,
+      "end": 110616,
+      "actions": [
+        "Chooses “Virginia” for Place",
+        "Chooses “Supervisor” for Role",
+        "Chooses “Read and write (no delete)” for Access"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 2,
+      "say": "In the third row, choose Pennsylvania, Supervisor, and Read only, so you can check neighbouring cases without changing them.",
+      "start": 110616,
+      "end": 119181,
+      "actions": [
+        "Chooses “Pennsylvania” for Place",
+        "Chooses “Supervisor” for Role",
+        "Chooses “Read only” for Access"
+      ],
+      "onScreen": [
+        "Include everything under this place"
+      ],
+      "highlights": [
+        {
+          "at": 118033,
+          "rect": {
+            "x": 392,
+            "y": 520.453125,
+            "width": 232,
+            "height": 44.0625
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 2,
+      "say": "Save the three-state profile.",
+      "start": 119181,
+      "end": 122245,
+      "actions": [
+        "Selects “Save profile”"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 3,
+      "say": "Third, use all three rows to read the whole region, write in Maryland, and have full access in Harford County.",
+      "start": 122245,
+      "end": 131004,
+      "actions": [
+        "Selects “Create a profile”",
+        "Types “Region read, Maryland write, Harford full” in Name"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 3,
+      "say": "Set the first row to EPA Region 3 with Read only access, keeping everything under it.",
+      "start": 131004,
+      "end": 138393,
+      "actions": [
+        "Chooses “EPA Region 3” for Place",
+        "Chooses “Supervisor” for Role",
+        "Chooses “Read only” for Access"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 3,
+      "say": "Set the second row to Maryland with Read and write without delete, and clear Include everything under this place.",
+      "start": 138393,
+      "end": 147001,
+      "actions": [
+        "Chooses “Maryland” for Place",
+        "Chooses “Supervisor” for Role",
+        "Chooses “Read and write (no delete)” for Access",
+        "Selects “Include everything under this place”"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 3,
+      "say": "Set the third row to Harford County Health Department with Full access, and save.",
+      "start": 147001,
+      "end": 155707,
+      "actions": [
+        "Chooses “Harford County Health Department” for Place",
+        "Chooses “Supervisor” for Role",
+        "Chooses “Full (read, write and delete)” for Access",
+        "Selects “Save profile”"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 3,
+      "say": "My profiles lists each profile and every grant row inside it, including whether child places are included.",
+      "start": 155707,
+      "end": 164552,
+      "actions": [],
+      "onScreen": [
+        "Profile What it gives you · Actions · Master profile Master · Everything you have been given. Managed by your administrator. · Supervisor at EPA Region 3 and everything under it · Full (read, write and delete) · In use · Maryland state and Delaware · State-level cases along the Maryland and Delaware border · Supervisor at Delaware and everything under it · Read and write (no delete) · Supervisor a"
+      ],
+      "highlights": [
+        {
+          "at": 156331,
+          "rect": {
+            "x": 144,
+            "y": 181.3125,
+            "width": 1248,
+            "height": 415.9375
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 4,
+      "say": "Switch to Maryland state and Delaware. Work queues shows the two state tasks, while Harford County stays out.",
+      "start": 164552,
+      "end": 173603,
+      "actions": [
+        "Selects “Use Maryland state and Delaware”",
+        "Selects “Work queues”"
+      ],
+      "onScreen": [
+        "Select all on this page · Task · ⇅ · Queue · ⇅ · Person Case Due · ▲ · Assigned · Select row 1 · Delaware: follow up an elevated child result in Kent County Action level follow-up · Select row 2 · Maryland: confirm a venous result from Cecil County Action level follow-up"
+      ],
+      "highlights": [
+        {
+          "at": 164574,
+          "rect": {
+            "x": 144,
+            "y": 303.125,
+            "width": 1248,
+            "height": 81.671875
+          }
+        },
+        {
+          "at": 169040,
+          "rect": {
+            "x": 456,
+            "y": 558.125,
+            "width": 936,
+            "height": 152.6875
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 4,
+      "say": "Switch to West Virginia, Virginia and Pennsylvania, and Work queues shows the three tasks from those states.",
+      "start": 173603,
+      "end": 182400,
+      "actions": [
+        "Selects “Profile Maryland state and Delaware Switch ▾ : switch profile or jurisdiction”",
+        "Selects “Use West Virginia, Virginia and Pennsylvania”"
+      ],
+      "onScreen": [
+        "Select all on this page · Task · ⇅ · Queue · ⇅ · Person Case Due · ▲ · Assigned · Select row 1 · Pennsylvania: contact a Philadelphia family Action level follow-up · Select row 2 · West Virginia: follow up a Jefferson County result Action level follow-up · Select row 3 · Virginia: review a Richmond child care result Action level follow-up"
+      ],
+      "highlights": [
+        {
+          "at": 176930,
+          "rect": {
+            "x": 144,
+            "y": 342.625,
+            "width": 1248,
+            "height": 93.265625
+          }
+        },
+        {
+          "at": 179276,
+          "rect": {
+            "x": 456,
+            "y": 558.125,
+            "width": 936,
+            "height": 136.265625
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 4,
+      "say": "Switch to the layered profile. All eight regional tasks appear, and Intake stays in the menu because Maryland and Harford allow writing.",
+      "start": 182400,
+      "end": 193499,
+      "actions": [
+        "Selects “Profile West Virginia, Virginia and Pennsylvania Switch ▾ : switch profile or ju”",
+        "Selects “Use Region read, Maryland write, Harford full”"
+      ],
+      "onScreen": [
+        "Select all on this page · Task · ⇅ · Queue · ⇅ · Person Case Due · ▲ · Assigned · Select row 1 · Delaware: follow up an elevated child result in Kent County Action level follow-up · Select row 2 · Pennsylvania: contact a Philadelphia family Action level follow-up · Select row 3 · Harford County: schedule a home visit in Bel Air Action level follow-up · Select row 4 · Maryland: confirm a venous res",
+        "Home · Work queues · People · Intake · Surveillance · Registry & reports · Administration"
+      ],
+      "highlights": [
+        {
+          "at": 185332,
+          "rect": {
+            "x": 144,
+            "y": 329.765625,
+            "width": 1248,
+            "height": 118.6875
+          }
+        },
+        {
+          "at": 188359,
+          "rect": {
+            "x": 456,
+            "y": 180.125,
+            "width": 936,
+            "height": 511.75
+          }
+        },
+        {
+          "at": 189869,
+          "rect": {
+            "x": 144,
+            "y": 107.1875,
+            "width": 1248,
+            "height": 44
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 4,
+      "say": "When a profile covers several places, use Working in on My profiles to pick where new records belong.",
+      "start": 193499,
+      "end": 203012,
+      "actions": [
+        "Selects “Profile Region read, Maryland write, Harford full Switch ▾ : switch profile or j”",
+        "Chooses “Harford County Health Department” for Tenant",
+        "Selects “Work here”"
+      ],
+      "onScreen": [
+        "Sky Region · Harford County Health Department"
+      ],
+      "highlights": [
+        {
+          "at": 201723,
+          "rect": {
+            "x": 839,
+            "y": 37.03125,
+            "width": 168.828125,
+            "height": 33.125
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 4,
+      "say": "Choose Use beside Master profile whenever you want to return to your full access.",
+      "start": 203012,
+      "end": 208821,
+      "actions": [
+        "Selects “Profile Region read, Maryland write, Harford full Switch ▾ : switch profile or j”",
+        "Selects “Use Master profile”"
+      ],
+      "onScreen": [],
+      "highlights": [
+        {
+          "at": 205669,
+          "rect": {
+            "x": 144,
+            "y": 575.8125,
+            "width": 1248,
+            "height": 83.28125
+          }
+        }
+      ],
+      "zooms": []
+    }
+  ]
+}
