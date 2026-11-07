@@ -117,12 +117,17 @@ public sealed class SignInEventTests(MeritFixture fixture)
             await PasswordAsync(client, account.Name, "Wrong-password-" + i);
         }
 
+        var previousAttempts = (await EventsAsync(account.Id)).Select(e => e.AttemptId).ToHashSet();
         await PasswordAsync(client, account.Name, MeritFixture.Password);   // locked now, even with the right password
-        var types = (await EventsAsync(account.Id)).Select(e => e.Type).ToArray();
+        var events = await EventsAsync(account.Id);
+        var types = events.Select(e => e.Type).ToArray();
         Assert.Equal(5, types.Count(t => t == "passwordFailed"));
         Assert.Equal(1, types.Count(t => t == "accountLocked"));
-        Assert.Equal("attemptWhileLocked", types.Last());
-        Assert.NotNull((await EventsAsync(account.Id)).Last(e => e.Type == "accountLocked").LockoutEndUtc);
+        // Separate requests can share a millisecond too; identify the new attempt instead of relying on row order.
+        var lockedAttempt = Assert.Single(events, e => !previousAttempts.Contains(e.AttemptId));
+        Assert.Equal("attemptWhileLocked", lockedAttempt.Type);
+        Assert.NotNull(lockedAttempt.AttemptId);
+        Assert.NotNull(events.Single(e => e.Type == "accountLocked").LockoutEndUtc);
 
         using var other = Client(host, "203.0.113.21");
         await PasswordAsync(other, inactive.Name, MeritFixture.Password);
