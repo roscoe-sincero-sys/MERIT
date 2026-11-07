@@ -41,6 +41,7 @@ USING (VALUES
     ('config.edit',               N'Change thresholds, analytes and jurisdiction settings', 'write'),
     ('registry.edit',             N'Add, change and import laboratories, facilities and providers (CLIA and NPI)', 'write'),
     ('audit.view',                N'Search the audit log', 'admin'),
+    ('usage.view',                N'Review scoped workforce screen usage and export usage reports', 'admin'),
     ('tenant.administer',         N'Manage users, their master profiles and child tenants at the tenants they administer', 'admin'),
     ('tenant.create',             N'Add tenants under the tenants you administer', 'admin'),
     ('platform.administer',       N'Platform administration: create data roots and manage every account (no access to records)', 'admin'),

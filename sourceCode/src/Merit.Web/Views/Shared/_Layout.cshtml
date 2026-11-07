@@ -13,6 +13,10 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    @if (ViewData["ScreenVisitId"] is Guid visitId)
+    {
+        <meta name="merit-screen-visit" content="@visitId" data-screen-code="@ViewData["ScreenCode"]" />
+    }
     @* Angular owns history inside its host; htmx must not replace its running document during Back/Forward. *@
     <meta name="htmx-config" content='{"extensions":"hx-csp","defaultTimeout":60000,"history":@(ViewData["AngularHost"] is true ? "false" : "\"reload\"")}' />
     <title>@(ViewData["Title"] is string t ? t + " - " : string.Empty)MERIT</title>
@@ -103,6 +107,10 @@
     <script src="~/lib/htmx-4.0.0/htmx.min.js" asp-append-version="true" merit-nonce></script>
     <script src="~/lib/htmx-4.0.0/hx-csp.min.js" asp-append-version="true" merit-nonce></script>
     <script src="~/js/merit.js" asp-append-version="true" merit-nonce></script>
+    @if (signedIn && Configuration.GetValue("ScreenVisit:Enabled", true))
+    {
+        <script src="~/js/screen-usage.js" asp-append-version="true" merit-nonce></script>
+    }
     @await RenderSectionAsync("Scripts", required: false)
 </body>
 </html>

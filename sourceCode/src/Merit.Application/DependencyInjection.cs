@@ -37,6 +37,7 @@ public static class DependencyInjection
         services.TryAddSingleton<IAttemptedNameProtection, UnavailableNameProtection>();
         services.AddScoped<SignInLogService>();
         services.AddScoped<AuditService>();
+        services.AddScoped<ScreenUsageService>();
         services.AddScoped<SearchService>();
         services.AddScoped<ClassificationService>();
         services.AddScoped<PlaceService>();

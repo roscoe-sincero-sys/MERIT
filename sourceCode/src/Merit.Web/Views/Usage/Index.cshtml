@@ -1,0 +1,67 @@
+@model Merit.Web.Controllers.UsagePage
+@using Merit.Web.Infrastructure
+@{
+    ViewData["Title"] = "Usage";
+    var totals = Model.Report.Screens.Where(s => s.RoleCode is null).OrderByDescending(s => s.Visits).ToList();
+}
+<h1>Usage</h1>
+<p>Which screens staff open and the paths they take. Only visits within your current agency and access scope are shown.</p>
+<form class="usa-form" method="get">
+    <label class="usa-label" for="usage-days">Period</label>
+    <select class="usa-select" id="usage-days" name="days">
+        @foreach (var days in new[] { 1, 7, 30, 90 }) { <option value="@days" selected="@(Model.Days == days)">Last @days days</option> }
+    </select>
+    <button class="usa-button" type="submit">Show usage</button>
+    <a class="usa-button usa-button--outline" href="/admin/usage/summary.csv?days=@Model.Days">Download summary CSV</a>
+</form>
+<p class="usa-hint">Usage is best effort. Visible time is optional, browser-reported focused time capped at 30 minutes per visit. It is not proof of attention, productivity, clinical work or notification. Missing time means unknown.</p>
+<section class="merit-section" aria-labelledby="usage-screens">
+    <h2 id="usage-screens">Visits by screen</h2>
+    @if (totals.Count == 0) { <p>No recorded visits in this period and scope.</p> }
+    else {
+    <div class="merit-table-wrap" tabindex="0" role="region" aria-label="Screen visits; scroll for more columns">
+        <table class="usa-table usa-table--borderless"><thead><tr><th scope="col">Screen</th><th scope="col">Visits</th><th scope="col">Sessions</th><th scope="col">Timed visits</th><th scope="col">Average visible time</th></tr></thead><tbody>
+        @foreach (var row in totals) {
+            <tr><th scope="row">@ScreenCatalog.Name(row.ScreenCode)</th><td>@row.Visits</td><td>@row.Sessions</td><td>@row.TimedVisits</td><td>@(row.AverageVisibleMs is double ms ? $"{ms / 1000:0.0} seconds" : "Unknown")</td></tr>
+        }</tbody></table>
+    </div>
+    <details><summary>Visits by active-profile role</summary>
+        <p>A visit can appear under several roles. These role counts are not additive. Roles describe the active profile at its working tenant, not a claim about which role caused an action.</p>
+        <div class="merit-table-wrap" tabindex="0" role="region" aria-label="Role visits; scroll for more columns"><table class="usa-table usa-table--borderless"><thead><tr><th scope="col">Role</th><th scope="col">Screen</th><th scope="col">Visits</th></tr></thead><tbody>
+        @foreach (var row in Model.Report.Screens.Where(s => s.RoleCode is not null).OrderBy(s => s.RoleCode).ThenBy(s => s.ScreenCode)) {
+            <tr><th scope="row">@Options.Humanize(row.RoleCode)</th><td>@ScreenCatalog.Name(row.ScreenCode)</td><td>@row.Visits</td></tr>
+        }</tbody></table></div>
+    </details>
+    }
+</section>
+<section class="merit-section" aria-labelledby="usage-paths">
+    <h2 id="usage-paths">Five most common paths into Enter a result</h2>
+    <p>Up to three preceding screens in the same recorded tab chain. A missing, expired or out-of-scope predecessor starts a new path; query and filter changes are not separate screens.</p>
+    @if (!Model.Report.Paths.Any(p => p.Kind == "intoResult")) { <p>No recorded paths into result entry.</p> }
+    else { <ol>@foreach (var path in Model.Report.Paths.Where(p => p.Kind == "intoResult")) { <li>@ScreenCatalog.PathName(path.PathCodes) — @path.Occurrences visits in @path.Sessions sessions</li> }</ol> }
+    <h3>Back-and-forth paths</h3>
+    <p>These can reveal useful review patterns; they are not necessarily mistakes.</p>
+    @if (!Model.Report.Paths.Any(p => p.Kind == "loop")) { <p>No recorded back-and-forth paths.</p> }
+    else { <ul>@foreach (var path in Model.Report.Paths.Where(p => p.Kind == "loop")) { <li>@ScreenCatalog.PathName(path.PathCodes) — @path.Occurrences occurrences</li> }</ul> }
+    <h3>Observed search-to-saved flow</h3>
+    <p>Search → person → enter result → saved: @Model.Report.Flow.Completions recorded sequences.
+        Average elapsed time: @(Model.Report.Flow.AverageElapsedSeconds is double seconds ? $"{seconds:0.0} seconds" : "Unknown").</p>
+    <p class="usa-hint">This strict four-state sequence includes pauses and may omit flows with extra screens or missing beacons. It is navigation elapsed time, not a clinical completion or staff-performance measure.</p>
+</section>
+<section class="merit-section" aria-labelledby="usage-sessions">
+    <h2 id="usage-sessions">Recent sessions</h2>
+    <p>Showing the latest @Model.Report.Sessions.Count of @(Model.Report.Sessions.FirstOrDefault()?.TotalCount ?? 0) sessions in this period. Aggregate counts above cover the full period.</p>
+    @if (Model.Report.Sessions.Count == 0) { <p>No sessions to show.</p> }
+    else {
+    <div class="merit-table-wrap" tabindex="0" role="region" aria-label="Recent sessions; scroll for more columns"><table class="usa-table usa-table--borderless"><thead><tr><th scope="col">User</th><th scope="col">First recorded visit</th><th scope="col">Last recorded visit</th><th scope="col">Visits</th><th scope="col">Sequence</th></tr></thead><tbody>
+    @foreach (var s in Model.Report.Sessions) {
+        <tr><th scope="row">@s.DisplayName</th><td>@Options.Date(s.FirstUtc)</td><td>@Options.Date(s.LastUtc)</td><td>@s.Visits</td><td><a href="/admin/usage/sessions/@s.SessionReference?days=@Model.Days">View session <span class="usa-sr-only">@s.SessionReference</span></a></td></tr>
+    }</tbody></table></div>
+    }
+    <form class="usa-form" method="get" action="/admin/usage/lookup">
+        <label class="usa-label" for="usage-reference">Open a session reference</label>
+        <input class="usa-input" id="usage-reference" name="reference" required />
+        <input type="hidden" name="days" value="@Model.Days" />
+        <button class="usa-button usa-button--outline" type="submit">Open session</button>
+    </form>
+</section>

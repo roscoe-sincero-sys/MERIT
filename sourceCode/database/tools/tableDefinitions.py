@@ -1606,4 +1606,34 @@ TABLES = [
                     {"name": "IX_logs_signInEvent_clientAddress_eventUtc", "cols": "clientAddress, eventUtc"},
                     {"name": "IX_logs_signInEvent_attemptedNameHash_eventUtc", "cols": "attemptedNameHash, eventUtc"}],
     },
+    {
+        "schema": "logs", "name": "screenVisit", "rls": None, "tenantKey": False,
+        "desc": "Retainable first-party screen usage (#227), separate from the immutable audit ledger. Only allowlisted "
+                "screen codes, workforce/session context and optional visible duration; never raw URLs, resource ids, "
+                "queries, form values or addresses. Procedures authorize every read/write. Retention anonymizes and "
+                "soft-deletes; this is best-effort usage measurement, not proof of data access or task completion.",
+        "cols": [
+            c("screenVisitId", UUID, "Idempotency key for this visit, never an authentication credential.", null=False),
+            c("eventUtc", "DATETIME2 (3)", "Server receipt time, not a client-supplied timestamp.", null=False, default="SYSUTCDATETIME ()"),
+            c("rootTenantId", UUID, "Data root at the time of this visit.", null=False),
+            c("actingTenantId", UUID, "Working tenant at the time of this visit."),
+            c("appUserId", UUID, "Actual signed-in actor, cleared at retention."),
+            c("sessionReference", UUID, "Non-secret logical sign-in reference, never the scope key; cleared at retention."),
+            c("profileId", UUID, "Active profile id only, not its free-text name."),
+            c("viewAsUserId", UUID, "Whose access the actor is viewing, if applicable."),
+            c("roleCodes", "VARCHAR (MAX)", "Snapshot of active-profile role codes at the working tenant, not role names."),
+            c("screenCode", "VARCHAR (60)", "Allowlisted application screen/outcome code, mapped to a static name/route by the server.", null=False),
+            c("navigationType", "VARCHAR (12)", "Coarse navigation hint; client-reported, never a raw referrer.", null=False,
+              default="'server'", check="navigationType IN ('server', 'direct', 'menu', 'link', 'search', 'back', 'reload', 'redirect', 'router')"),
+            c("tabId", UUID, "Random browser-tab correlation id; cleared at retention."),
+            c("previousVisitId", UUID, "Validated predecessor within the same actor/session/tab, not an arbitrary referrer."),
+            c("durationMs", "INT", "Optional cumulative visible/focused time, client-reported and capped; missing is unknown.",
+              check="durationMs IS NULL OR durationMs BETWEEN 0 AND 1800000"),
+        ],
+        "fks": [],
+        "indexes": [
+            {"name": "IX_logs_screenVisit_rootTenantId_eventUtc", "cols": "rootTenantId, eventUtc"},
+            {"name": "IX_logs_screenVisit_sessionReference_eventUtc", "cols": "sessionReference, eventUtc"},
+        ],
+    },
 ]

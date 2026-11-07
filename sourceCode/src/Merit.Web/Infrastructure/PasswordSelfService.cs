@@ -76,7 +76,7 @@ public sealed class PasswordChangeGateMiddleware(RequestDelegate next)
 
     private static readonly string[] Allowed =
     [
-        StepPath, "/account/signout", "/account/recovery", "/lib", "/css", "/js", "/favicon.svg", "/home/status", "/home/error",
+        StepPath, "/account/signout", "/account/recovery", "/api/v1/usage/visits", "/api/v1/usage/duration", "/lib", "/css", "/js", "/favicon.svg", "/home/status", "/home/error",
     ];
 
     public async Task InvokeAsync(HttpContext http)

@@ -56,6 +56,22 @@
   ]
  },
  {
+  "name": "auth.uspContinueUsageSession",
+  "kind": "write",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": null,
+  "params": [
+   {
+    "name": "newSessionScopeId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   }
+  ]
+ },
+ {
   "name": "auth.uspCreateEmailChallenge",
   "kind": "write",
   "grants": [
@@ -5938,6 +5954,50 @@
   ]
  },
  {
+  "name": "logs.uspGetScreenSession",
+  "kind": "read",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": "usage.view",
+  "params": [
+   {
+    "name": "sessionReference",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "days",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "pageNumber",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
+  "name": "logs.uspGetScreenUsage",
+  "kind": "read",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": "usage.view",
+  "params": [
+   {
+    "name": "days",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
   "name": "logs.uspGetSignInActivity",
   "kind": "read",
   "grants": [
@@ -6025,6 +6085,22 @@
   ]
  },
  {
+  "name": "logs.uspPurgeScreenVisits",
+  "kind": "write",
+  "grants": [
+   "meritWorkerRole"
+  ],
+  "permission": null,
+  "params": [
+   {
+    "name": "retentionDays",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
   "name": "logs.uspPurgeSignInEvents",
   "kind": "write",
   "grants": [
@@ -6076,6 +6152,46 @@
    {
     "name": "clientAddress",
     "type": "VARCHAR (45)",
+    "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
+  "name": "logs.uspRecordScreenVisit",
+  "kind": "write",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": null,
+  "params": [
+   {
+    "name": "screenVisitId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "screenCode",
+    "type": "VARCHAR (60)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "tabId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "previousVisitId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "navigationType",
+    "type": "VARCHAR (12)",
     "hasDefault": true,
     "isOutput": false
    }
@@ -6229,6 +6345,28 @@
     "name": "pageSize",
     "type": "INT",
     "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
+  "name": "logs.uspSetScreenDuration",
+  "kind": "write",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": null,
+  "params": [
+   {
+    "name": "screenVisitId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "durationMs",
+    "type": "INT",
+    "hasDefault": false,
     "isOutput": false
    }
   ]
