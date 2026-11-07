@@ -2963,7 +2963,20 @@
    "meritWebRole"
   ],
   "permission": null,
-  "params": []
+  "params": [
+   {
+    "name": "requiredPermission",
+    "type": "VARCHAR (60)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "owningTenantId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": true,
+    "isOutput": false
+   }
+  ]
  },
  {
   "name": "dbo.uspListCaseOwners",

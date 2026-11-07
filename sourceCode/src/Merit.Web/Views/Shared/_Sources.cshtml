@@ -1,12 +1,14 @@
 @model SourcesModel
 <section class="merit-section" id="section-sources" aria-labelledby="sources-heading">
-    <h2 id="sources-heading">
-        Exposure sources
+    <div class="merit-section__head">
+        <h2 id="sources-heading">Exposure sources</h2>
+        <div class="merit-section__actions">
         @if (Model.CanEdit)
         {
             <button class="usa-button usa-button--outline usa-button--small" type="button" hx-get="/people/@Model.PersonId/sources/add" hx-target="#sources-form" hx-swap="innerHTML">Add source</button>
         }
-    </h2>
+        </div>
+    </div>
     <div id="sources-form"></div>
     @if (Model.Rows.Count == 0)
     {

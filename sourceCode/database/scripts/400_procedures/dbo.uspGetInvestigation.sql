@@ -91,7 +91,7 @@ BEGIN
         SELECT i.investigationId, i.investigationNumber, i.investigationType, i.locationId, i.organizationId,
                i.worksiteLocationId, i.exposureSourceId, i.investigationStatus, i.assignedToUserId, u.displayName AS assignedToName,
                i.requestedDate, i.scheduledDate, i.completedDate, i.findings, i.regulatoryAction, i.referralDate,
-               i.referralOutcome, i.rowVersion, t.tenantName AS owningTenantName,
+               i.referralOutcome, i.rowVersion, i.owningTenantId, t.tenantName AS owningTenantName,
                l.addressLine1, l.unit, l.city, l.state, l.zip5, l.yearBuilt, o.organizationName,
                w.addressLine1 AS worksiteAddress, w.city AS worksiteCity, es.sourceType, es.sourceDescription
           FROM dbo.investigation AS i

@@ -108,6 +108,14 @@ BEGIN
             ;THROW 51422, N'Use Close case to close a case, so a closure reason is recorded.', 1;
         END;
 
+        IF @assignedToUserId IS NOT NULL
+           AND NOT EXISTS (SELECT 1 FROM dbo.exposureCase WHERE exposureCaseId = @exposureCaseId AND assignedToUserId = @assignedToUserId)
+           AND NOT EXISTS (SELECT 1 FROM dbo.exposureCase AS c
+                            JOIN auth.tvfAssignableUserTenants ('case.edit') AS e ON e.tenantId = c.owningTenantId AND e.appUserId = @assignedToUserId
+                           WHERE c.exposureCaseId = @exposureCaseId)
+        BEGIN
+            ;THROW 51422, N'Choose a worker who can view and edit this case in its owning agency. No changes were saved.', 1;
+        END;
         UPDATE dbo.exposureCase
            SET assignedToUserId = @assignedToUserId, exposureCategory = @exposureCategory, caseStatus = @caseStatus
          WHERE exposureCaseId = @exposureCaseId AND isDeleted = 0 AND caseStatus <> 'closed' AND rowVersion = @rowVersion;

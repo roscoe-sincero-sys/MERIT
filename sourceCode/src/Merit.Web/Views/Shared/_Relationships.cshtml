@@ -1,13 +1,15 @@
 @model RelationshipsModel
 <section class="merit-section" id="section-relationships" aria-labelledby="relationships-heading">
-    <h2 id="relationships-heading">
-        Relationships
+    <div class="merit-section__head">
+        <h2 id="relationships-heading">Relationships</h2>
+        <div class="merit-section__actions">
         @if (Model.CanEdit)
         {
             <button class="usa-button usa-button--outline usa-button--small" type="button"
                     hx-get="/people/@Model.PersonId/relationships/add" hx-target="#relationships-form" hx-swap="innerHTML">Add relationship</button>
         }
-    </h2>
+        </div>
+    </div>
     <div id="relationships-form"></div>
     @if (Model.Rows.Count == 0)
     {

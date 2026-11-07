@@ -112,6 +112,30 @@ BEGIN
         INSERT @ids SELECT DISTINCT TRY_CAST ([value] AS UNIQUEIDENTIFIER) FROM OPENJSON (@workTaskIdsJson)
                      WHERE TRY_CAST ([value] AS UNIQUEIDENTIFIER) IS NOT NULL;
 
+        IF @action IN ('assign', 'assignToMe')
+        BEGIN
+            DECLARE @worker UNIQUEIDENTIFIER = CASE WHEN @action = 'assignToMe' THEN @me ELSE @assignToUserId END;
+            DECLARE @ineligible INT = (SELECT COUNT (*) FROM @ids AS ids LEFT JOIN dbo.workTask AS w ON w.workTaskId = ids.workTaskId AND w.isDeleted = 0
+                        WHERE w.workTaskId IS NULL OR w.taskStatus <> 'open' OR NOT EXISTS
+                            (SELECT 1 FROM auth.tvfAssignableUserTenants ('task.edit') AS e
+                              WHERE e.appUserId = @worker AND e.tenantId = w.owningTenantId
+                                AND (w.personId IS NULL OR EXISTS (SELECT 1 FROM dbo.person AS p
+                                     JOIN auth.tvfUserGrantPermissions (@worker) AS pg ON pg.permissionCode = 'person.view'
+                                     WHERE p.personId = w.personId AND p.isDeleted = 0
+                                       AND (p.owningTenantId = pg.tenantId OR EXISTS (SELECT 1 FROM dbo.personAccess AS pa
+                                            WHERE pa.personId = p.personId AND pa.tenantId = pg.tenantId AND pa.isDeleted = 0))))
+                                AND (w.exposureCaseId IS NULL OR EXISTS
+                                    (SELECT 1 FROM dbo.exposureCase AS c
+                                      JOIN auth.tvfUserGrantPermissions (@worker) AS g ON g.tenantId = c.owningTenantId AND g.permissionCode = 'case.view'
+                                     WHERE c.exposureCaseId = w.exposureCaseId AND c.isDeleted = 0))));
+            IF @ineligible > 0
+            BEGIN
+                DECLARE @assignmentError NVARCHAR (2048) = CONCAT (N'No tasks were assigned. ', @ineligible, N' of ',
+                    (SELECT COUNT (*) FROM @ids), N' selected tasks are unavailable, closed, or outside this worker''s permitted scope. Choose another worker or a smaller selection.');
+                ;THROW 51422, @assignmentError, 1;
+            END;
+        END;
+
         UPDATE w
            SET assignedToUserId  = CASE @action WHEN 'assignToMe' THEN @me WHEN 'assign' THEN @assignToUserId
                                                 ELSE w.assignedToUserId END

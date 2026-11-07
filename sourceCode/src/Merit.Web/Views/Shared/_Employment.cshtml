@@ -1,12 +1,14 @@
 @model EmploymentModel
 <section class="merit-section" id="section-employment" aria-labelledby="employment-heading">
-    <h2 id="employment-heading">
-        Employment
+    <div class="merit-section__head">
+        <h2 id="employment-heading">Employment</h2>
+        <div class="merit-section__actions">
         @if (Model.CanEdit)
         {
             <button class="usa-button usa-button--outline usa-button--small" type="button" hx-get="/people/@Model.PersonId/employment/add" hx-target="#employment-form" hx-swap="innerHTML">Add job</button>
         }
-    </h2>
+        </div>
+    </div>
     <div id="employment-form"></div>
     @if (Model.Rows.Count == 0)
     {

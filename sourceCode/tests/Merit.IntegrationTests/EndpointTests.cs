@@ -71,6 +71,8 @@ public sealed partial class EndpointTests(MeritFixture fixture, ITestOutputHelpe
             url = url.Replace(segment, value, StringComparison.Ordinal);
         }
 
+        // A lookup requires a reference; exercise the empty-session redirect instead of an invalid blank request.
+        if (url == "/admin/usage/lookup") url += "?reference=00000000-0000-0000-0000-000000000001";
         return url;
     }
 

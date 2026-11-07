@@ -1,12 +1,14 @@
 @model PregnancyModel
 <section class="merit-section" id="section-pregnancy" aria-labelledby="pregnancy-heading">
-    <h2 id="pregnancy-heading">
-        Pregnancy
+    <div class="merit-section__head">
+        <h2 id="pregnancy-heading">Pregnancy</h2>
+        <div class="merit-section__actions">
         @if (Model.CanEdit)
         {
             <button class="usa-button usa-button--outline usa-button--small" type="button" hx-get="/people/@Model.PersonId/pregnancies/add" hx-target="#pregnancy-form" hx-swap="innerHTML">Add episode</button>
         }
-    </h2>
+        </div>
+    </div>
     <div id="pregnancy-form"></div>
     @if (Model.IsMale)
     {

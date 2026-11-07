@@ -20,12 +20,42 @@ else if (Model.Message is not null)
         HL7 laboratory result message, version 2.3.1 or 2.5.1. MERIT keeps the original file and processes it in the
         background: each row is checked, matched to a person, then loaded or held for review. A message in a layout MERIT
         cannot read pauses the batch with the reason. <a class="usa-link" href="/help/guides/operations-guide.html" target="_blank" rel="noopener">How importing works<span class="usa-sr-only"> (opens in a new tab)</span></a></p>
+    @if (Model.Profiles.Count == 0)
+    {
+        <div class="usa-alert usa-alert--info"><div class="usa-alert__body">
+            <h3 class="usa-alert__heading">No laboratory import formats are configured for this agency</h3>
+            <p class="usa-alert__text">Contact your MERIT administrator to set up the laboratory sender and its file layout. Include the laboratory name and the type of file you receive. Upload becomes available after setup.</p>
+            <p>If you work for more than one agency, <a href="/account/profiles">check your working agency in My profiles</a>.</p>
+        </div></div>
+    }
+    else
+    {
     <form class="usa-form merit-form--wide" method="post" action="/intake/upload" enctype="multipart/form-data" data-upload-busy>
         @Html.AntiForgeryToken()
         <div class="usa-form-group"><label class="usa-label" for="intakeProfileId">Sender and intake profile</label>
             <select class="usa-select merit-select--wide" id="intakeProfileId" name="intakeProfileId">
                 @foreach (var p in Model.Profiles) { <option value="@p.IntakeProfileId">@Options.IntakeProfile(p.SenderName, p.ProfileName, p.FileType)</option> }
             </select></div>
+        <div aria-live="polite" id="intake-format-help">
+        <h3>Selected format requirements</h3>
+        @foreach (var p in Model.Profiles)
+        {
+            <div data-intake-format="@p.IntakeProfileId">
+                <p><strong>@Options.IntakeProfile(p.SenderName, p.ProfileName, p.FileType)</strong> — format version @p.ProfileVersion.</p>
+                @if (p.FileType == "hl7") {
+                    <p class="usa-hint">Use the laboratory's HL7 result-message file (version 2.3.1 or 2.5.1), not an Excel workbook or a spreadsheet export. Ask your administrator for a laboratory-specific sample if needed.</p>
+                } else {
+                    <p class="usa-hint">Use a @(p.FileType == "tsv" ? "tab-separated" : p.FileType == "pipe" ? "pipe-separated" : "comma-separated") text file, not an Excel workbook. Header row: @p.HeaderRow. Date formats: @(p.DateFormats ?? "ask your administrator for this format's date requirements").</p>
+                    @if (!string.IsNullOrWhiteSpace(p.HeaderSignature)) {
+                        <details><summary>Expected header and download</summary><code class="merit-intake-header">@p.HeaderSignature</code>
+                            <p><a href="/intake/profiles/@p.IntakeProfileId/header.txt">Download this format's header</a>. This contains the header only; use laboratory-supplied rows and the configured value codes.</p></details>
+                    } else {
+                        <p class="usa-hint">No header sample is configured. Ask your MERIT administrator for the laboratory's file layout before uploading.</p>
+                    }
+                }
+            </div>
+        }
+        </div>
         <div class="usa-form-group"><label class="usa-label" for="file">File</label><input class="usa-file-input" id="file" name="file" type="file" accept=".csv,.txt,.tsv,.hl7" required /></div>
         @if (Model.DuplicateOf is not null)
         {
@@ -36,6 +66,7 @@ else if (Model.Message is not null)
         }
         <button class="usa-button" type="submit">Upload</button>
     </form>
+    }
 </section>
 <section class="merit-section" aria-labelledby="batches-heading">
     <h2 id="batches-heading">Recent batches</h2>

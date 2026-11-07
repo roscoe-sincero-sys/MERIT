@@ -5,17 +5,17 @@
     var past = Model.Rows.Where(r => r.EndDate is not null && r.EndDate < today).ToList();
 }
 <section class="merit-section" id="section-places" aria-labelledby="places-heading">
-    <h2 id="places-heading">
-        Places
+    <div class="merit-section__head">
+        <h2 id="places-heading">Places</h2>
+        <div class="merit-section__actions">
         @if (Model.CanEdit)
         {
-            <span class="merit-section__actions">
                 <button class="usa-button usa-button--outline usa-button--small" type="button" hx-get="/people/@Model.PersonId/places/add?role=residence" hx-target="#places-form" hx-swap="innerHTML">Add residence</button>
                 <button class="usa-button usa-button--outline usa-button--small" type="button" hx-get="/people/@Model.PersonId/places/add?role=childCare" hx-target="#places-form" hx-swap="innerHTML">Add child care or school</button>
                 <button class="usa-button usa-button--outline usa-button--small" type="button" hx-get="/people/@Model.PersonId/places/add?role=relativeHome" hx-target="#places-form" hx-swap="innerHTML">Add other place</button>
-            </span>
         }
-    </h2>
+        </div>
+    </div>
     <div id="places-form"></div>
     @if (Model.Rows.Count == 0)
     {

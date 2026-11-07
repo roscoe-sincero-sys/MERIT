@@ -1,9 +1,11 @@
 @model ResultsSectionModel
 <section class="merit-section" id="section-results" aria-labelledby="results-heading">
-    <h2 id="results-heading">
-        Results
+    <div class="merit-section__head">
+        <h2 id="results-heading">Results</h2>
+        <div class="merit-section__actions">
         @if (Model.CanEnter) { <a class="usa-button usa-button--outline usa-button--small" href="/people/@Model.PersonId/results/new">Enter a result</a> }
-    </h2>
+        </div>
+    </div>
     @if (Model.AnalyteOptions.Count > 2)
     {
         <form class="usa-form" hx-get="/people/@Model.PersonId/results" hx-target="#section-results" hx-swap="outerHTML" hx-trigger="change">

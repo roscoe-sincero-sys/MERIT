@@ -190,6 +190,7 @@ const PLACEHOLDER_NAME = /^(baby( (boy|girl))?|boy|girl|infant|newborn|unknown|u
   host: { '(keydown)': 'onKey($event)' },
   template: `
     <h1 tabindex="-1" #heading>Person matching review</h1>
+    @if (!store.queueLoaded() || store.total() > 0 || store.review() !== null) {
     <p class="merit-meta" id="shortcut-help">{{ display.count(store.total(), 'record') }} waiting. Shortcuts: 1&ndash;5 choose a candidate, S same person, D different person,
       N not sure, C new person, H history, J next, K previous.
       @if (singleKeys()) { Press the key alone; press S, D, N or C twice to decide. Alt+Shift with the key also works. } @else { Hold Alt+Shift with the key. }</p>
@@ -197,6 +198,7 @@ const PLACEHOLDER_NAME = /^(baby( (boy|girl))?|boy|girl|infant|newborn|unknown|u
       <input class="usa-checkbox__input" id="single-keys" type="checkbox" [checked]="singleKeys()" (change)="toggleSingleKeys()" aria-describedby="shortcut-help" />
       <label class="usa-checkbox__label" for="single-keys">Single-key shortcuts (a decision key is pressed twice)</label>
     </div>
+    }
     <div class="usa-sr-only" role="status" aria-live="polite">{{ store.message() }} {{ store.announcement() }}</div>
     @if (store.error(); as e) { <div class="usa-alert usa-alert--error usa-alert--slim" role="alert"><div class="usa-alert__body"><p class="usa-alert__text">{{ e }}</p></div></div> }
     @if (store.message(); as m) { <div class="usa-alert usa-alert--success usa-alert--slim"><div class="usa-alert__body"><p class="usa-alert__text">{{ m }}</p></div></div> }
@@ -207,7 +209,6 @@ const PLACEHOLDER_NAME = /^(baby( (boy|girl))?|boy|girl|infant|newborn|unknown|u
           <input class="usa-checkbox__input" id="escalated" type="checkbox" [checked]="store.escalatedOnly()" [disabled]="store.busy()" (change)="toggleEscalated()" />
           <label class="usa-checkbox__label" for="escalated">Show only records sent to a supervisor</label>
         </div>
-        @if (store.queueLoaded() && store.queue().length === 0) { <p class="merit-empty">Nothing to review.</p> }
         <merit-pager label="Match records" [page]="store.page()" [size]="store.pageSize()" [total]="store.total()" [busy]="store.busy() || store.loading()" (change)="goPage($event)" />
         <ol class="queue">
           @for (q of store.queue(); track q.stagingRowId) {
@@ -264,8 +265,13 @@ const PLACEHOLDER_NAME = /^(baby( (boy|girl))?|boy|girl|infant|newborn|unknown|u
             }
           </div>
           @if (store.showHistory() && store.candidate(); as c) { <merit-candidate-history [candidate]="c" /> }
-        } @else if (store.loading() || (store.queue().length > 0 && !store.error())) {
-          <p class="merit-indicator">Loading the record&hellip;</p>
+        } @else {
+          <h2 id="record-heading">Record review</h2>
+          @if (store.loading() || (store.queue().length > 0 && !store.error())) {
+            <p class="merit-indicator">Loading the record&hellip;</p>
+          } @else if (store.queueLoaded() && store.queue().length === 0 && !store.error()) {
+            <p class="merit-empty">Nothing to review. No waiting records remain in this view.</p>
+          }
         }
       </section>
     </div>
@@ -523,7 +529,8 @@ export class MatchReviewPage implements OnInit {
           this.store.reviewLoading.set(false);
           this.store.currentId.set(null);
           this.heading()?.nativeElement.focus();
-        this.store.review.set(null);
+          this.store.review.set(null);
+          this.store.announcement.set('Nothing to review. No waiting records remain in this view.');
         }
         if (openFirst) this.heading()?.nativeElement.focus();
       },

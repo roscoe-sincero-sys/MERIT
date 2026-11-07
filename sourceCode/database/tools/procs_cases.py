@@ -313,6 +313,14 @@ BEGIN
     ;THROW 51422, N'Use Close case to close a case, so a closure reason is recorded.', 1;
 END;
 
+IF @assignedToUserId IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM dbo.exposureCase WHERE exposureCaseId = @exposureCaseId AND assignedToUserId = @assignedToUserId)
+   AND NOT EXISTS (SELECT 1 FROM dbo.exposureCase AS c
+                    JOIN auth.tvfAssignableUserTenants ('case.edit') AS e ON e.tenantId = c.owningTenantId AND e.appUserId = @assignedToUserId
+                   WHERE c.exposureCaseId = @exposureCaseId)
+BEGIN
+    ;THROW 51422, N'Choose a worker who can view and edit this case in its owning agency. No changes were saved.', 1;
+END;
 UPDATE dbo.exposureCase
    SET assignedToUserId = @assignedToUserId, exposureCategory = @exposureCategory, caseStatus = @caseStatus
  WHERE exposureCaseId = @exposureCaseId AND isDeleted = 0 AND caseStatus <> 'closed' AND rowVersion = @rowVersion;
@@ -431,18 +439,19 @@ SET @Comments = N'Case closed.';
     },
     {
         "schema": "dbo", "name": "uspListAssignableUsers", "kind": "read", "grants": WEB, "ticket": "T080",
-        "desc": "Active users assigned anywhere in the caller's tenant set, for assignment drop-downs.",
-        "params": "",
+        "desc": "Workers able to read and edit the requested work in the caller's tenant set; optionally one record owner.",
+        "params": "@requiredPermission VARCHAR (60) = 'case.edit'\n, @owningTenantId UNIQUEIDENTIFIER = NULL",
         "key": "NULL",
         "body": """
 DECLARE @scope UNIQUEIDENTIFIER = TRY_CAST (SESSION_CONTEXT (N'scopeKey') AS UNIQUEIDENTIFIER);
 
 SELECT DISTINCT u.appUserId, u.displayName
-  FROM auth.appUser AS u
-  JOIN auth.userAssignment AS ua ON ua.appUserId = u.appUserId AND ua.isDeleted = 0
-                                AND (ua.endDate IS NULL OR ua.endDate >= auth.udfSessionToday ())
-  JOIN auth.sessionScopeTenant AS st ON st.tenantId = ua.tenantId AND st.sessionScopeId = @scope
- WHERE u.isActive = 1 AND u.isDeleted = 0
+  FROM auth.tvfAssignableUserTenants (@requiredPermission) AS e
+  JOIN auth.appUser AS u ON u.appUserId = e.appUserId
+  JOIN auth.sessionScopeTenant AS st ON st.tenantId = e.tenantId AND st.sessionScopeId = @scope AND st.isDeleted = 0
+  JOIN auth.sessionScope AS ss ON ss.sessionScopeId = st.sessionScopeId AND ss.appUserId = auth.udfSessionUserId ()
+                              AND ss.revokedUtc IS NULL AND ss.expiresUtc > SYSUTCDATETIME ()
+ WHERE (@owningTenantId IS NULL OR e.tenantId = @owningTenantId)
  ORDER BY u.displayName;
 """,
     },
@@ -657,7 +666,7 @@ SET @Comments = CONCAT (@@ROWCOUNT, N' link(s) added.');
 SELECT i.investigationId, i.investigationNumber, i.investigationType, i.locationId, i.organizationId,
        i.worksiteLocationId, i.exposureSourceId, i.investigationStatus, i.assignedToUserId, u.displayName AS assignedToName,
        i.requestedDate, i.scheduledDate, i.completedDate, i.findings, i.regulatoryAction, i.referralDate,
-       i.referralOutcome, i.rowVersion, t.tenantName AS owningTenantName,
+       i.referralOutcome, i.rowVersion, i.owningTenantId, t.tenantName AS owningTenantName,
        l.addressLine1, l.unit, l.city, l.state, l.zip5, l.yearBuilt, o.organizationName,
        w.addressLine1 AS worksiteAddress, w.city AS worksiteCity, es.sourceType, es.sourceDescription
   FROM dbo.investigation AS i
@@ -704,6 +713,14 @@ SELECT es.environmentalSampleId, es.sampleType, es.roomOrComponent, es.surface, 
         "key": "CONCAT (N'investigationId=', @investigationId, N', status=', @investigationStatus)",
         "validate": INV_VISIBLE,
         "body": f"""
+IF @assignedToUserId IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM dbo.investigation WHERE investigationId = @investigationId AND assignedToUserId = @assignedToUserId)
+   AND NOT EXISTS (SELECT 1 FROM dbo.investigation AS i
+                    JOIN auth.tvfAssignableUserTenants ('investigation.edit') AS e ON e.tenantId = i.owningTenantId AND e.appUserId = @assignedToUserId
+                   WHERE i.investigationId = @investigationId)
+BEGIN
+    ;THROW 51422, N'Choose a worker who can view and edit this investigation in its owning agency. No changes were saved.', 1;
+END;
 UPDATE dbo.investigation
    SET investigationStatus = @investigationStatus, assignedToUserId = @assignedToUserId, scheduledDate = @scheduledDate,
        completedDate = @completedDate, findings = @findings, regulatoryAction = @regulatoryAction,

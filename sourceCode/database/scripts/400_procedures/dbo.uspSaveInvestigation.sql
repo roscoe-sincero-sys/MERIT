@@ -108,6 +108,14 @@ BEGIN
         -- ===== The procedure's own work starts here. Everything above and below is boilerplate. ==
         -- =========================================================================================
 
+        IF @assignedToUserId IS NOT NULL
+           AND NOT EXISTS (SELECT 1 FROM dbo.investigation WHERE investigationId = @investigationId AND assignedToUserId = @assignedToUserId)
+           AND NOT EXISTS (SELECT 1 FROM dbo.investigation AS i
+                            JOIN auth.tvfAssignableUserTenants ('investigation.edit') AS e ON e.tenantId = i.owningTenantId AND e.appUserId = @assignedToUserId
+                           WHERE i.investigationId = @investigationId)
+        BEGIN
+            ;THROW 51422, N'Choose a worker who can view and edit this investigation in its owning agency. No changes were saved.', 1;
+        END;
         UPDATE dbo.investigation
            SET investigationStatus = @investigationStatus, assignedToUserId = @assignedToUserId, scheduledDate = @scheduledDate,
                completedDate = @completedDate, findings = @findings, regulatoryAction = @regulatoryAction,

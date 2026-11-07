@@ -7,7 +7,7 @@
     <partial name="_ErrorSummary" model='new ErrorSummaryModel(["AnalyteId", "ResultStatus", "AnalyteSpecimenId", "Unit", "SampleType", "Speciation",
         "Creatinine", "ValueText", "CollectedDate", "AnalyzedDate", "ReportedDate", "LabOrganizationId"],
         new Dictionary<string, string> { ["LabOrganizationId"] = "LabOrganizationId-text" })' />
-    <form class="usa-form usa-form--large" method="post" action="/people/@Model.PersonId/results" novalidate
+    <form id="manual-result-form" data-unsaved-work data-unsaved-dirty="@(!state.IsValid)" class="usa-form usa-form--large" method="post" action="/people/@Model.PersonId/results" novalidate
           hx-post="/people/@Model.PersonId/results" hx-target="#result-entry" hx-swap="innerHTML"
           hx-status:422="target:#result-form swap:outerHTML">
         @Html.AntiForgeryToken()

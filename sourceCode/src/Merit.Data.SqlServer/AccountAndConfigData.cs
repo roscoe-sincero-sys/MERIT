@@ -228,8 +228,8 @@ public sealed class AccountData(Db db) : IAccountData
     public Task<IReadOnlyList<TenantListRow>> ListTenantsAsync(CancellationToken ct = default)
         => db.QueryAsync<TenantListRow>("auth.uspListTenants", null, ct);
 
-    public Task<IReadOnlyList<AssignableUserRow>> ListAssignableUsersAsync(CancellationToken ct = default)
-        => db.QueryAsync<AssignableUserRow>("dbo.uspListAssignableUsers", null, ct);
+    public Task<IReadOnlyList<AssignableUserRow>> ListAssignableUsersAsync(CancellationToken ct = default, string requiredPermission = "case.edit", Guid? owningTenantId = null)
+        => db.QueryAsync<AssignableUserRow>("dbo.uspListAssignableUsers", new { requiredPermission, owningTenantId }, ct);
 
     public async Task<Guid> CreateRootTenantAsync(TenantCreate t, CancellationToken ct = default)
         => await db.QuerySingleAsync<Guid>("config.uspCreateRootTenant", new

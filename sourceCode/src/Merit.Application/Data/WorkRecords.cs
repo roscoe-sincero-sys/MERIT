@@ -227,6 +227,8 @@ public sealed class QueueDepthRow
 
 public sealed class IntakeProfileListRow
 {
+    public int HeaderRow { get; init; }
+    public string? DateFormats { get; init; }
     public Guid IntakeProfileId { get; init; }
 
     public string ProfileName { get; init; } = string.Empty;

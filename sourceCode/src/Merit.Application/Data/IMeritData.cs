@@ -102,7 +102,7 @@ public interface IAccountData
 
     Task<IReadOnlyList<TenantListRow>> ListTenantsAsync(CancellationToken ct = default);
 
-    Task<IReadOnlyList<AssignableUserRow>> ListAssignableUsersAsync(CancellationToken ct = default);
+    Task<IReadOnlyList<AssignableUserRow>> ListAssignableUsersAsync(CancellationToken ct = default, string requiredPermission = "case.edit", Guid? owningTenantId = null);
 
     /// <summary>A region, state, tribe or stand-alone jurisdiction; the database checks who may create it.</summary>
     Task<Guid> CreateRootTenantAsync(TenantCreate tenant, CancellationToken ct = default);
