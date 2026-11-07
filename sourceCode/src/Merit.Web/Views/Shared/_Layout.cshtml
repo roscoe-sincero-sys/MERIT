@@ -104,9 +104,19 @@
 
     <footer class="merit-footer">MERIT &middot; Synthetic demonstration data only &middot; Every view, change and export of a person, result or case is audited.</footer>
 
+    <dialog id="unsaved-work-dialog" class="merit-dialog" aria-labelledby="unsaved-work-heading" aria-describedby="unsaved-work-description">
+        <h2 id="unsaved-work-heading">Leave without saving?</h2>
+        <p id="unsaved-work-description">This page has unsaved changes. Leaving will discard them. Choose Stay to review and save your work.</p>
+        <div class="merit-section__actions">
+            <button type="button" class="usa-button" data-unsaved-stay autofocus>Stay</button>
+            <button type="button" class="usa-button usa-button--outline" data-unsaved-leave>Leave without saving</button>
+        </div>
+    </dialog>
+
     <script src="~/lib/htmx-4.0.0/htmx.min.js" asp-append-version="true" merit-nonce></script>
     <script src="~/lib/htmx-4.0.0/hx-csp.min.js" asp-append-version="true" merit-nonce></script>
     <script src="~/js/merit.js" asp-append-version="true" merit-nonce></script>
+    <script src="~/js/unsaved-work.js" asp-append-version="true" merit-nonce></script>
     @if (signedIn && Configuration.GetValue("ScreenVisit:Enabled", true))
     {
         <script src="~/js/screen-usage.js" asp-append-version="true" merit-nonce></script>

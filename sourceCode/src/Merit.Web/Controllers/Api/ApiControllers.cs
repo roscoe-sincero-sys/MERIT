@@ -61,7 +61,7 @@ public sealed class QueuesController(QueueService queues, CaseService cases, ICu
     [HttpGet("users/assignable")]
     [Authorize(Policy = Permissions.TaskView)]
     public async Task<IReadOnlyList<AssignableUserDto>> AssignableUsers(CancellationToken ct)
-        => (await cases.AssignableUsersAsync(ct)).Select(u => new AssignableUserDto(u.AppUserId, u.DisplayName)).ToList();
+        => (await cases.AssignableUsersAsync(ct, Permissions.TaskEdit)).Select(u => new AssignableUserDto(u.AppUserId, u.DisplayName)).ToList();
 }
 
 /// <summary>The words for stored codes and file fields (issues #37 and #38), so the client shows the same names as the pages.</summary>

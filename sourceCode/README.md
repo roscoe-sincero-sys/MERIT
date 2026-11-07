@@ -7,6 +7,9 @@ case classification, investigations, work queues and registry extracts. It is bu
 See [screen usage and workflow reports](../docs/screen-usage.md) for the storage decision, collection scope,
 supervisor permissions, retention settings and deployment requirements for issue #227.
 
+See [workflow and accessibility fixes](../docs/ux-workflow-fixes.md) for unsaved-work protection, assignment eligibility,
+intake setup recovery and the mobile/accessibility changes for issues #209, #211, #212, #222, #223, #226 and #228.
+
 | Folder | Contents |
 | --- | --- |
 | `Merit.sln` | The solution to open in Visual Studio 2022. It includes the `Merit.slnLaunch` profile "Web + Worker". |

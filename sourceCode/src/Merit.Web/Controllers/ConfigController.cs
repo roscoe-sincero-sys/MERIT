@@ -358,6 +358,11 @@ public sealed class AdminController(IClock clock, AdminService admin, AuditServi
 [Route("intake")]
 public sealed class IntakeController(IntakeService intake) : Controller
 {
+    [HttpGet("profiles/{id:guid}/header.txt")]
+    [Authorize(Policy = Permissions.IntakeUpload)]
+    public async Task<IActionResult> Header(Guid id, CancellationToken ct)
+        => File(System.Text.Encoding.UTF8.GetBytes(await intake.HeaderAsync(id, ct)), "text/plain", "laboratory-import-header.txt");
+
     [HttpGet("")]
     [Authorize(Policy = Permissions.IntakeUpload)]
     public async Task<IActionResult> Index(CancellationToken ct)

@@ -567,6 +567,7 @@ public sealed class OpenInvestigationRow
 
 public sealed class InvestigationRow
 {
+    public Guid OwningTenantId { get; init; }
     public Guid InvestigationId { get; init; }
 
     public string InvestigationNumber { get; init; } = string.Empty;

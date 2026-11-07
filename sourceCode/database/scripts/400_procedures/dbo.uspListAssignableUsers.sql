@@ -13,7 +13,7 @@ CreateDate:   2026-10-24
 ========================================================================================================================
 Description:
 
-Active users assigned anywhere in the caller's tenant set, for assignment drop-downs.
+Workers able to read and edit the requested work in the caller's tenant set; optionally one record owner.
 
 ========================================================================================================================
 Requirements and Key Dependencies:
@@ -45,7 +45,8 @@ Description:	Initial version.
 
 ***********************************************************************************************************************/
 CREATE OR ALTER PROCEDURE dbo.uspListAssignableUsers
-
+      @requiredPermission VARCHAR (60) = 'case.edit'
+      , @owningTenantId UNIQUEIDENTIFIER = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -79,11 +80,12 @@ BEGIN
         DECLARE @scope UNIQUEIDENTIFIER = TRY_CAST (SESSION_CONTEXT (N'scopeKey') AS UNIQUEIDENTIFIER);
 
         SELECT DISTINCT u.appUserId, u.displayName
-          FROM auth.appUser AS u
-          JOIN auth.userAssignment AS ua ON ua.appUserId = u.appUserId AND ua.isDeleted = 0
-                                        AND (ua.endDate IS NULL OR ua.endDate >= auth.udfSessionToday ())
-          JOIN auth.sessionScopeTenant AS st ON st.tenantId = ua.tenantId AND st.sessionScopeId = @scope
-         WHERE u.isActive = 1 AND u.isDeleted = 0
+          FROM auth.tvfAssignableUserTenants (@requiredPermission) AS e
+          JOIN auth.appUser AS u ON u.appUserId = e.appUserId
+          JOIN auth.sessionScopeTenant AS st ON st.tenantId = e.tenantId AND st.sessionScopeId = @scope AND st.isDeleted = 0
+          JOIN auth.sessionScope AS ss ON ss.sessionScopeId = st.sessionScopeId AND ss.appUserId = auth.udfSessionUserId ()
+                                      AND ss.revokedUtc IS NULL AND ss.expiresUtc > SYSUTCDATETIME ()
+         WHERE (@owningTenantId IS NULL OR e.tenantId = @owningTenantId)
          ORDER BY u.displayName;
 
         -- =========================================================================================
@@ -123,7 +125,7 @@ EXEC util.uspSetObjectDescription
       @SchemaName  = N'dbo'
     , @ObjectType  = N'PROCEDURE'
     , @ObjectName  = N'uspListAssignableUsers'
-    , @Description = N'Active users assigned anywhere in the caller''s tenant set, for assignment drop-downs.';
+    , @Description = N'Workers able to read and edit the requested work in the caller''s tenant set; optionally one record owner.';
 GO
 
 IF DATABASE_PRINCIPAL_ID (N'meritWebRole') IS NOT NULL

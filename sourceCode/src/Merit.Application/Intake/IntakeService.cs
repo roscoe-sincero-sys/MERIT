@@ -33,6 +33,8 @@ public sealed class IntakeService(IIntakeData intake, IWorkData work, Services.A
         session.Require(Permissions.IntakeUpload);
         var profile = await intake.GetProfileAsync(intakeProfileId, ct).ConfigureAwait(false)
                       ?? throw new ValidationException("IntakeProfileId", "Choose the sender's intake profile.");
+        if (!profile.IsActive)
+            throw new ValidationException("IntakeProfileId", "This import format is no longer available. Reload Intake and choose an available sender and format.");
         var v = new Validator();
         v.When(string.IsNullOrWhiteSpace(content), "File", "The file is empty.");
         v.When(Encoding.UTF8.GetByteCount(content) > MaxFileBytes, "File", "The file is larger than 20 MB; split it or send it through the secure file drop.");
@@ -54,6 +56,15 @@ public sealed class IntakeService(IIntakeData intake, IWorkData work, Services.A
 
     /// <summary>The file's fingerprint: SHA-256 of its UTF-8 bytes, upper-case hex.</summary>
     public static string ContentHash(string content) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(content)));
+
+    public async Task<string> HeaderAsync(Guid id, CancellationToken ct = default)
+    {
+        session.Require(Permissions.IntakeUpload);
+        var profile = await intake.GetProfileAsync(id, ct).ConfigureAwait(false);
+        if (profile is null || !profile.IsActive || profile.FileType == "hl7" || string.IsNullOrWhiteSpace(profile.HeaderSignature))
+            throw new NotFoundException();
+        return profile.HeaderSignature + Environment.NewLine;
+    }
 
     public async Task<IReadOnlyList<IntakeBatchRow>> BatchesAsync(CancellationToken ct = default)
     {

@@ -40,8 +40,8 @@ public sealed class CaseService(IClock clock, ICaseData cases, IWorkData work, I
         return await cases.ListCaseOwnersAsync(ct).ConfigureAwait(false);
     }
 
-    public Task<IReadOnlyList<AssignableUserRow>> AssignableUsersAsync(CancellationToken ct = default)
-        => accounts.ListAssignableUsersAsync(ct);
+    public Task<IReadOnlyList<AssignableUserRow>> AssignableUsersAsync(CancellationToken ct = default, string requiredPermission = Permissions.CaseEdit, Guid? owningTenantId = null)
+        => accounts.ListAssignableUsersAsync(ct, requiredPermission, owningTenantId);
 
     public async Task UpdateAsync(Guid exposureCaseId, Guid? assignedToUserId, string exposureCategory, string caseStatus,
                                   byte[] rowVersion, CancellationToken ct = default)

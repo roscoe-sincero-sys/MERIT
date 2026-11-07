@@ -48,6 +48,16 @@ main.merit-main { max-width: 80rem; margin: 0 auto; padding: 1rem 1rem 3rem; }
 .merit-section { border: 1px solid var(--merit-line); border-radius: .25rem; padding: 1rem; margin-top: 1.25rem; }
 .merit-section > h2 { margin-top: 0; font-size: 1.25rem; display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
 .merit-section__actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+.merit-section__head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: .75rem; margin-bottom: 1rem; }
+.merit-section__head > h2 { margin: 0; font-size: 1.25rem; }
+.merit-section__head .usa-button { margin: 0; }
+.merit-person-search .usa-button { width: auto; min-width: 5.5rem; flex-shrink: 0; }
+.merit-intake-header { display: block; white-space: pre-wrap; overflow-wrap: anywhere; }
+@media (max-width: 40em) {
+    .merit-config-nav .usa-button-group { flex-direction: column; gap: .25rem; }
+    .merit-config-nav .usa-button-group__item { width: 100%; }
+    .merit-config-nav .usa-button { width: 100%; border-radius: .25rem; }
+}
 .merit-empty { color: var(--merit-muted); font-style: italic; }
 .merit-meta { color: var(--merit-muted); font-size: .9rem; }
 .merit-grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr)); gap: 1rem; }

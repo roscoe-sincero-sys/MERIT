@@ -767,3 +767,14 @@ document.addEventListener('input', event => {
     const count = rows.filter(row => !row.hidden).length;
     document.querySelector('[data-user-count]').textContent = `${count} of ${rows.length} users shown.${count === 0 ? ' No users match.' : ''}`;
 });
+
+// Keep the selected sender's actual format instructions next to its chooser. Without JavaScript all formats remain readable.
+(() => {
+    const chooser = document.getElementById('intakeProfileId');
+    if (!chooser) return;
+    const showFormat = () => document.querySelectorAll('[data-intake-format]').forEach(node => {
+        node.hidden = node.dataset.intakeFormat !== chooser.value;
+    });
+    chooser.addEventListener('change', showFormat);
+    showFormat();
+})();

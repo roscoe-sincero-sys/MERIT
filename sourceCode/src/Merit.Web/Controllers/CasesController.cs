@@ -195,9 +195,11 @@ public sealed class CasesController(IClock clock, CaseService cases, PersonServi
         var detail = await cases.GetAsync(id, ct);
         var refData = await reference.GetAsync(ct);
         var users = new[] { new SelectOption(string.Empty, "- Unassigned -", detail.Case.AssignedToUserId is null) }
-            .Concat((await cases.AssignableUsersAsync(ct)).Select(u =>
+            .Concat((await cases.AssignableUsersAsync(ct, owningTenantId: detail.Case.OwningTenantId)).Select(u =>
                 new SelectOption(u.AppUserId.ToString(), u.DisplayName, u.AppUserId == detail.Case.AssignedToUserId)))
             .ToList();
+        if (detail.Case.AssignedToUserId is Guid previous && !users.Any(u => u.Value == previous.ToString()))
+            users.Add(new SelectOption(previous.ToString(), $"{detail.Case.AssignedToName ?? "Previous worker"} (existing assignee; no longer eligible for reassignment)", true));
         var contacts = new List<SelectOption> { new("", "None / internal work"), new(detail.Case.PersonId.ToString(), "Patient") };
         bool hasTargets = false;
         if (session.Has(Permissions.PersonView))
@@ -223,7 +225,7 @@ public sealed class InvestigationsController(InvestigationService investigations
     {
         var result = await investigations.ListAsync(filter.ToQuery(), ct);
         filter.Page = result.Page;
-        var users = (await cases.AssignableUsersAsync(ct)).Select(u => new SelectOption(u.AppUserId.ToString(), u.DisplayName)).ToList();
+        var users = (await cases.AssignableUsersAsync(ct, Permissions.InvestigationEdit)).Select(u => new SelectOption(u.AppUserId.ToString(), u.DisplayName)).ToList();
         return this.PageOrPartial("Index", "_InvestigationList", new InvestigationListModel(result.Rows, filter.OpenOnly, result.Page, result.Total, filter, users));
     }
 
@@ -353,9 +355,11 @@ public sealed class InvestigationsController(InvestigationService investigations
         var detail = await investigations.GetAsync(id, ct);
         var refData = await reference.GetAsync(ct);
         var users = new[] { new SelectOption(string.Empty, "- Unassigned -", detail.Investigation.AssignedToUserId is null) }
-            .Concat((await cases.AssignableUsersAsync(ct)).Select(u =>
+            .Concat((await cases.AssignableUsersAsync(ct, Permissions.InvestigationEdit, detail.Investigation.OwningTenantId)).Select(u =>
                 new SelectOption(u.AppUserId.ToString(), u.DisplayName, u.AppUserId == detail.Investigation.AssignedToUserId)))
             .ToList();
+        if (detail.Investigation.AssignedToUserId is Guid previous && !users.Any(u => u.Value == previous.ToString()))
+            users.Add(new SelectOption(previous.ToString(), $"{detail.Investigation.AssignedToName ?? "Previous worker"} (existing assignee; no longer eligible for reassignment)", true));
         return new InvestigationPageModel(detail, users, Options.Fixed(detail.Investigation.InvestigationStatus, Options.InvestigationStatuses),
             refData.Choices("regulatoryAction", detail.Investigation.RegulatoryAction, includeBlank: true),
             refData.Choices("environmentalSampleType", "dustWipe"), session.Has(Permissions.InvestigationEdit), SampleUnits: await investigations.SampleUnitsAsync(ct));

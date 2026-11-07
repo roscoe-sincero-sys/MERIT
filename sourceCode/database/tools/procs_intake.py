@@ -26,7 +26,7 @@ PROCS = [
         "key": "NULL",
         "body": """
 SELECT p.intakeProfileId, p.profileName, p.profileVersion, p.fileType, p.senderOrganizationId,
-       o.organizationName AS senderName, p.headerSignature
+       o.organizationName AS senderName, p.headerSignature, p.headerRow, p.dateFormats
   FROM dbo.intakeProfile AS p
   JOIN dbo.organization AS o ON o.organizationId = p.senderOrganizationId
  WHERE p.isDeleted = 0 AND p.isActive = 1
