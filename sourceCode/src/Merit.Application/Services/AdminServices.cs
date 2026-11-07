@@ -99,6 +99,13 @@ public sealed class ConfigService(IConfigData config, IReferenceDataProvider ref
             value = normalized;
         }
 
+        if (key == "passwordMinLength")
+        {
+            bool valid = int.TryParse(value, out int minimum)
+                         && minimum >= PasswordPolicy.MinimumLength && minimum <= PasswordPolicy.MaximumLength;
+            v.When(!valid, "SettingValue", $"Enter a whole number from {PasswordPolicy.MinimumLength} to {PasswordPolicy.MaximumLength}.");
+        }
+
         v.ThrowIfInvalid();
         await config.SaveSettingAsync(key, value!.Trim(), effectiveFrom, ct).ConfigureAwait(false);
         settings.Invalidate();
@@ -126,9 +133,15 @@ public sealed record UserInput(Guid? AppUserId, string? UserName, string? Displa
                                Guid? HomeTenantId = null, bool? RequirePasswordChange = null);
 
 /// <summary>User administration: accounts, profile assignments at tenant nodes, MFA resets.</summary>
-public sealed class AdminService(IClock clock, IAccountData accounts, AccountService accountService, ISettingsProvider settings, ICurrentSession session,
+public sealed class AdminService(IClock clock, IAccountData accounts, AccountService accountService, ICurrentSession session,
                                  ISignInEvents events)
 {
+    public Task<MyPasswordPolicyRow> PasswordPolicyAsync(Guid? appUserId, Guid? homeTenantId, CancellationToken ct = default)
+    {
+        session.Require(Permissions.TenantAdminister);
+        return accounts.GetAdminPasswordPolicyAsync(appUserId, homeTenantId, ct);
+    }
+
     public async Task<IReadOnlyList<UserListRow>> UsersAsync(CancellationToken ct = default)
     {
         session.Require(Permissions.TenantAdminister);
@@ -152,8 +165,8 @@ public sealed class AdminService(IClock clock, IAccountData accounts, AccountSer
         string? hash = null;
         if (!string.IsNullOrWhiteSpace(input.NewPassword))
         {
-            var config = await settings.GetAsync(ct).ConfigureAwait(false);
-            accountService.ValidateNewPassword(input.NewPassword, config.PasswordMinLength);
+            var policy = await PasswordPolicyAsync(input.AppUserId, input.HomeTenantId, ct).ConfigureAwait(false);
+            accountService.ValidateNewPassword(input.NewPassword, policy.PasswordMinLength, "NewPassword", input.UserName);
             hash = accountService.HashPassword(input.NewPassword);
         }
 

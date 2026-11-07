@@ -140,7 +140,7 @@ public sealed class PasswordResetRow
 
     public DateTime? LockoutEndUtc { get; init; }
 
-    public int PasswordMinLength { get; init; } = 8;
+    public int PasswordMinLength { get; init; } = Merit.Application.Security.PasswordPolicy.MinimumLength;
 
     public int RemainingAttempts { get; init; }
 }
@@ -148,7 +148,7 @@ public sealed class PasswordResetRow
 /// <summary>auth.uspGetMyPasswordPolicy: the signed-in user's password rule.</summary>
 public sealed class MyPasswordPolicyRow
 {
-    public int PasswordMinLength { get; init; } = 8;
+    public int PasswordMinLength { get; init; } = Merit.Application.Security.PasswordPolicy.MinimumLength;
 
     public DateTime? PasswordChangedUtc { get; init; }
 

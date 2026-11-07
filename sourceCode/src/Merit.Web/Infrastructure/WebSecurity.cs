@@ -87,23 +87,34 @@ public sealed class WebCurrentSession(IHttpContextAccessor accessor) : ICurrentS
 /// <summary>ASP.NET Core Identity's password hasher (PBKDF2, V3 format), without the rest of Identity.</summary>
 public sealed class IdentityPasswordHasher : IPasswordHasher
 {
-    private readonly PasswordHasher<object> inner = new();
+    public const int IterationCount = 220_000;
+    public const string FormatPrefix = "merit-nfc-v1$";
+    private readonly PasswordHasher<object> inner = new(Microsoft.Extensions.Options.Options.Create(new PasswordHasherOptions
+    {
+        CompatibilityMode = PasswordHasherCompatibilityMode.IdentityV3,
+        IterationCount = IterationCount,
+    }));
     private static readonly object User = new();
 
-    public string Hash(string password) => inner.HashPassword(User, password);
+    public string Hash(string password) => FormatPrefix + inner.HashPassword(User, PasswordPolicy.Normalize(password));
 
     public PasswordCheck Verify(string hash, string password)
     {
         try
         {
-            return inner.VerifyHashedPassword(User, hash, password) switch
+            bool normalized = hash.StartsWith(FormatPrefix, StringComparison.Ordinal);
+            // Unmarked credentials retain their original byte representation until a successful verification upgrades them.
+            string canonical = PasswordPolicy.Normalize(password);
+            string candidate = normalized ? canonical : password;
+            if (candidate.Length > PasswordPolicy.MaximumLength * 2) return PasswordCheck.Failed;
+            return inner.VerifyHashedPassword(User, normalized ? hash[FormatPrefix.Length..] : hash, candidate) switch
             {
-                PasswordVerificationResult.Success => PasswordCheck.Success,
+                PasswordVerificationResult.Success => normalized ? PasswordCheck.Success : PasswordCheck.SuccessRehashNeeded,
                 PasswordVerificationResult.SuccessRehashNeeded => PasswordCheck.SuccessRehashNeeded,
                 _ => PasswordCheck.Failed,
             };
         }
-        catch (FormatException)
+        catch (Exception ex) when (ex is FormatException or ArgumentException)
         {
             return PasswordCheck.Failed;
         }
@@ -126,16 +137,21 @@ public sealed class DataProtectionSecretProtector(IDataProtectionProvider provid
 /// </summary>
 public sealed class CommonBreachedPasswordList : IBreachedPasswordList
 {
-    private static readonly HashSet<string> Common = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "password", "password1", "password123", "123456", "12345678", "123456789", "1234567890", "qwerty", "qwerty123",
-        "abc123", "111111", "123123", "letmein", "welcome", "welcome1", "monkey", "dragon", "football", "baseball",
-        "iloveyou", "admin", "admin123", "administrator", "passw0rd", "p@ssw0rd", "p@ssword", "changeme", "sunshine",
-        "princess", "trustno1", "master", "superman", "batman", "starwars", "whatever", "freedom", "shadow", "michael",
-        "jennifer", "hunter2", "summer2024", "winter2024", "spring2025", "fall2025", "summer2025", "winter2025",
-        "summer2026", "winter2026", "maryland", "maryland1", "baltimore", "health123", "merit", "merit123", "lead1234",
-        "qwertyuiop", "1q2w3e4r", "zaq12wsx", "asdfghjkl", "000000", "654321", "987654321", "11111111", "88888888",
-    };
+    private static readonly HashSet<string> Common = new(StringComparer.OrdinalIgnoreCase);
 
-    public bool IsBreached(string password) => Common.Contains(password.Trim());
+    static CommonBreachedPasswordList()
+    {
+        foreach (string name in new[] { "common-passwords.txt", "merit-passwords.txt" })
+        {
+            using var stream = typeof(CommonBreachedPasswordList).Assembly.GetManifestResourceStream($"Merit.Web.Security.{name}")
+                               ?? throw new InvalidOperationException("A bundled password blocklist is missing.");
+            using var reader = new StreamReader(stream);
+            while (reader.ReadLine() is { } line)
+            {
+                if (!string.IsNullOrWhiteSpace(line)) Common.Add(PasswordPolicy.Normalize(line.Trim()));
+            }
+        }
+    }
+
+    public bool IsBreached(string password) => Common.Contains(PasswordPolicy.Normalize(password).Trim());
 }

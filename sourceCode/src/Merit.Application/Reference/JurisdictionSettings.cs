@@ -43,7 +43,7 @@ public sealed class JurisdictionSettings
 
     public int? ClusterMinCount => Int("clusterMinCount");
 
-    public int PasswordMinLength => Int("passwordMinLength") ?? 8;
+    public int PasswordMinLength => PasswordPolicy.EffectiveMinimum(Int("passwordMinLength") ?? PasswordPolicy.MinimumLength);
 
     public int SessionTimeoutMinutes => Int("sessionTimeoutMinutes") ?? 20;
 

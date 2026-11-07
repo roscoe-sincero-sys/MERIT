@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import { DATABASE, DEMO_PASSWORD } from './config.ts';
+import { DATABASE, DEMO_PASSWORD, LOGIN_DEMO_PASSWORD } from './config.ts';
 import { sqlValues } from './sql.ts';
 
 /**
@@ -28,6 +28,7 @@ export interface Finding { rule: string; sample: string }
 
 const RULES: { rule: string; pattern: RegExp }[] = [
   { rule: 'demo password', pattern: new RegExp(DEMO_PASSWORD.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')) },
+  { rule: 'training login password', pattern: new RegExp(LOGIN_DEMO_PASSWORD.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')) },
   { rule: 'one-time code beside a code label', pattern: /\b(code|otp|passcode|verification)\b[^\n]{0,40}\b\d{6}\b/i },
   { rule: 'authenticator secret (base32)', pattern: /\b(?:[A-Z2-7]{4}\s?){8,}\b/ },
   { rule: 'JSON web token', pattern: /\beyJ[\w-]{10,}\.[\w-]{10,}\./ },

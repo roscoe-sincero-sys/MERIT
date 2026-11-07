@@ -1,0 +1,444 @@
+{
+  "id": "making-profiles",
+  "title": "Profiles: the right access for the work in hand",
+  "summary": "See your master profile, make smaller profiles for a region, a state and a county, and switch between them.",
+  "role": "allUsers",
+  "feature": "profiles",
+  "user": "r3staff",
+  "source": "training/workflows/all-users/profiles/making-profiles.workflow.ts",
+  "fingerprint": "5a1fc83f2577ad86",
+  "appVersion": "be42f6d 2026-11-06",
+  "built": "2026-11-07",
+  "engine": "piper",
+  "voice": "en_US-kristin-medium",
+  "narrated": true,
+  "duration": 180617,
+  "introMs": 11109,
+  "outroMs": 17631,
+  "scenes": [
+    "Your master profile",
+    "Every state, read only",
+    "All of Maryland",
+    "Harford County only",
+    "Switching profiles"
+  ],
+  "steps": [
+    {
+      "scene": 0,
+      "say": "Sky works for EPA Region 3. The profile box in the header shows the profile in use: right now, the master profile.",
+      "start": 11987,
+      "end": 20919,
+      "actions": [],
+      "onScreen": [
+        "Profile · Master profile · Switch ▾ · : switch profile or jurisdiction"
+      ],
+      "highlights": [
+        {
+          "at": 12603,
+          "rect": {
+            "x": 1182.359375,
+            "y": 26.859375,
+            "width": 104.5,
+            "height": 53.46875
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 0,
+      "say": "Work queues shows tasks from every state in the region, from Delaware to West Virginia.",
+      "start": 20919,
+      "end": 27649,
+      "actions": [
+        "Selects “Work queues”"
+      ],
+      "onScreen": [
+        "Select all on this page · Task · ⇅ · Queue · ⇅ · Person Case Due · ▲ · Assigned · Select row 1 · Delaware: follow up an elevated child result in Kent County Action level follow-up · Select row 2 · Pennsylvania: contact a Philadelphia family Action level follow-up · Select row 3 · Harford County: schedule a home visit in Bel Air Action level follow-up · Select row 4 · Maryland: confirm a venous res"
+      ],
+      "highlights": [
+        {
+          "at": 23621,
+          "rect": {
+            "x": 456,
+            "y": 180.125,
+            "width": 936,
+            "height": 511.75
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 0,
+      "say": "Select the profile box to open My profiles.",
+      "start": 27649,
+      "end": 31651,
+      "actions": [
+        "Selects “Profile Master profile Switch ▾ : switch profile or jurisdiction”"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 0,
+      "say": "The master profile is everything your administrator gave you: Supervisor at EPA Region 3 and everything under it.",
+      "start": 31651,
+      "end": 39822,
+      "actions": [],
+      "onScreen": [
+        "Master profile Master · Everything you have been given. Managed by your administrator. · Supervisor at EPA Region 3 and everything under it · Full (read, write and delete) · In use"
+      ],
+      "highlights": [
+        {
+          "at": 31673,
+          "rect": {
+            "x": 144,
+            "y": 575.8125,
+            "width": 1248,
+            "height": 61.25
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 0,
+      "say": "A profile is a smaller copy of it, like a day key cut from a master key. It can open fewer doors, never more.",
+      "start": 39822,
+      "end": 48486,
+      "actions": [],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 1,
+      "say": "First, a profile that sees every state in the region but cannot change anything, for reviews and screen sharing.",
+      "start": 48486,
+      "end": 58248,
+      "actions": [
+        "Selects “Create a profile”",
+        "Types “Region 3, all states (read only)” in Name"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 1,
+      "say": "Each grant is a place, a role and an access level. Choose EPA Region 3, and keep everything under it.",
+      "start": 58248,
+      "end": 67617,
+      "actions": [
+        "Chooses “EPA Region 3” for Place"
+      ],
+      "onScreen": [
+        "Include everything under this place"
+      ],
+      "highlights": [
+        {
+          "at": 61243,
+          "rect": {
+            "x": 392,
+            "y": 366.328125,
+            "width": 232,
+            "height": 44.0625
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 1,
+      "say": "Set the access to read only.",
+      "start": 67617,
+      "end": 70487,
+      "actions": [
+        "Chooses “Read only” for Access"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 1,
+      "say": "Beside the form is your master profile, the most a profile can have. MERIT refuses to save one that goes beyond it.",
+      "start": 70487,
+      "end": 79489,
+      "actions": [],
+      "onScreen": [
+        "Your master profile · This is the most you can have. A profile can be smaller, never bigger: MERIT refuses to save one that goes beyond it. · Supervisor at EPA Region 3 and everything under it · Full (read, write and delete)"
+      ],
+      "highlights": [
+        {
+          "at": 71035,
+          "rect": {
+            "x": 776,
+            "y": -199.75,
+            "width": 616,
+            "height": 1177.75
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 1,
+      "say": "Save the profile.",
+      "start": 79489,
+      "end": 82482,
+      "actions": [
+        "Selects “Save profile”"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 2,
+      "say": "Next, a profile for all of Maryland.",
+      "start": 82483,
+      "end": 87624,
+      "actions": [
+        "Selects “Create a profile”",
+        "Types “Maryland only” in Name"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 2,
+      "say": "Choose Maryland as the place. Everything under it, including Harford County, comes with it.",
+      "start": 87624,
+      "end": 95630,
+      "actions": [
+        "Chooses “Maryland” for Place"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 2,
+      "say": "Read and write without delete lets you work normally while protecting records from being deleted.",
+      "start": 95631,
+      "end": 102432,
+      "actions": [
+        "Chooses “Read and write (no delete)” for Access",
+        "Selects “Save profile”"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 3,
+      "say": "Last, a profile for a day of Harford County work.",
+      "start": 102432,
+      "end": 108612,
+      "actions": [
+        "Selects “Create a profile”",
+        "Types “Harford County only” in Name"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 3,
+      "say": "Choose the Harford County Health Department, with full access, and save.",
+      "start": 108612,
+      "end": 118140,
+      "actions": [
+        "Chooses “Harford County Health Department” for Place",
+        "Chooses “Full (read, write and delete)” for Access",
+        "Selects “Save profile”"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 3,
+      "say": "My profiles now lists the master profile and the three new ones, each with what it gives you.",
+      "start": 118140,
+      "end": 124879,
+      "actions": [],
+      "onScreen": [
+        "Profile What it gives you · Actions · Master profile Master · Everything you have been given. Managed by your administrator. · Supervisor at EPA Region 3 and everything under it · Full (read, write and delete) · In use · Harford County only · Supervisor at Harford County Health Department and everything under it · Full (read, write and delete) · Use · Harford County only · Change · Harford County "
+      ],
+      "highlights": [
+        {
+          "at": 118881,
+          "rect": {
+            "x": 144,
+            "y": 205.3125,
+            "width": 1248,
+            "height": 367.328125
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 4,
+      "say": "To switch, choose Use beside a profile. MERIT changes straight away, without signing out.",
+      "start": 124880,
+      "end": 132579,
+      "actions": [
+        "Selects “Use Maryland only”"
+      ],
+      "onScreen": [],
+      "highlights": [
+        {
+          "at": 125012,
+          "rect": {
+            "x": 144,
+            "y": 408.796875,
+            "width": 1248,
+            "height": 81.671875
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 4,
+      "say": "The header now shows Maryland only, and Work queues lists just the Maryland tasks, Harford County included.",
+      "start": 132580,
+      "end": 141246,
+      "actions": [
+        "Selects “Work queues”"
+      ],
+      "onScreen": [
+        "Profile · Maryland only · Switch ▾ · : switch profile or jurisdiction",
+        "Select all on this page · Task · ⇅ · Queue · ⇅ · Person Case Due · ▲ · Assigned · Select row 1 · Harford County: schedule a home visit in Bel Air Action level follow-up · Select row 2 · Maryland: confirm a venous result from Cecil County Action level follow-up"
+      ],
+      "highlights": [
+        {
+          "at": 133419,
+          "rect": {
+            "x": 1179.890625,
+            "y": 26.859375,
+            "width": 106.96875,
+            "height": 53.46875
+          }
+        },
+        {
+          "at": 136276,
+          "rect": {
+            "x": 456,
+            "y": 558.125,
+            "width": 936,
+            "height": 101.84375
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 4,
+      "say": "Switch to Harford County only, and only the Harford County task is left.",
+      "start": 141246,
+      "end": 147853,
+      "actions": [
+        "Selects “Profile Maryland only Switch ▾ : switch profile or jurisdiction”",
+        "Selects “Use Harford County only”"
+      ],
+      "onScreen": [
+        "Select all on this page · Task · ⇅ · Queue · ⇅ · Person Case Due · ▲ · Assigned · Select row 1 · Harford County: schedule a home visit in Bel Air Action level follow-up"
+      ],
+      "highlights": [
+        {
+          "at": 143920,
+          "rect": {
+            "x": 144,
+            "y": 659.09375,
+            "width": 1248,
+            "height": 81.671875
+          }
+        },
+        {
+          "at": 146472,
+          "rect": {
+            "x": 456,
+            "y": 558.125,
+            "width": 936,
+            "height": 67.421875
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 4,
+      "say": "With the read-only regional profile, every state is back. Intake, which adds records, is gone from the menu.",
+      "start": 147853,
+      "end": 156432,
+      "actions": [
+        "Selects “Profile Harford County only Switch ▾ : switch profile or jurisdiction”",
+        "Selects “Use Region 3, all states (read only)”"
+      ],
+      "onScreen": [
+        "Task · ⇅ · Queue · ⇅ · Person Case Due · ▲ · Assigned · Delaware: follow up an elevated child result in Kent County Action level follow-up · Pennsylvania: contact a Philadelphia family Action level follow-up · Harford County: schedule a home visit in Bel Air Action level follow-up · Maryland: confirm a venous result from Cecil County Action level follow-up · Region 3: prepare the quarterly summary",
+        "Home · Work queues · People · Surveillance · Registry & reports · Administration"
+      ],
+      "highlights": [
+        {
+          "at": 150988,
+          "rect": {
+            "x": 144,
+            "y": 347.609375,
+            "width": 1248,
+            "height": 81.671875
+          }
+        },
+        {
+          "at": 153836,
+          "rect": {
+            "x": 456,
+            "y": 386.03125,
+            "width": 936,
+            "height": 306.40625
+          }
+        },
+        {
+          "at": 155040,
+          "rect": {
+            "x": 144,
+            "y": 107.1875,
+            "width": 1248,
+            "height": 44
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 4,
+      "say": "You can go back to your master profile at any time: choose Use beside Master profile.",
+      "start": 156432,
+      "end": 162278,
+      "actions": [
+        "Selects “Profile Region 3, all states (read only) Switch ▾ : switch profile or jurisdicti”",
+        "Selects “Use Master profile”"
+      ],
+      "onScreen": [],
+      "highlights": [
+        {
+          "at": 158912,
+          "rect": {
+            "x": 144,
+            "y": 575.8125,
+            "width": 1248,
+            "height": 83.28125
+          }
+        }
+      ],
+      "zooms": []
+    }
+  ]
+}

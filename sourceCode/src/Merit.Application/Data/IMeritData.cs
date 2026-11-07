@@ -8,6 +8,12 @@ public interface IAccountData
 {
     Task<SignInUserRow?> GetUserForSignInAsync(string userName, CancellationToken ct = default);
 
+    /// <summary>Compare-and-swap a verified legacy hash without changing the security stamp or password-change dates.</summary>
+    Task<bool> UpgradePasswordHashAsync(Guid appUserId, Guid expectedSecurityStamp, string expectedPasswordHash, string passwordHash, CancellationToken ct = default);
+
+    /// <summary>The effective policy of an account's selected home tenant, limited to tenants the caller administers.</summary>
+    Task<MyPasswordPolicyRow> GetAdminPasswordPolicyAsync(Guid? appUserId, Guid? homeTenantId, CancellationToken ct = default);
+
     Task RecordSignInResultAsync(Guid? appUserId, bool succeeded, int maxFailedAttempts, int lockoutMinutes, string? clientAddress, CancellationToken ct = default);
 
     /// <summary>Resolves a session from the master profile, one of the user's profiles, or (view as) another user's access.</summary>

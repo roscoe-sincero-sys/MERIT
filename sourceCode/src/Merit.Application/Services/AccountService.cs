@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Runtime.CompilerServices;
 using Merit.Application.Data;
 using Merit.Application.Errors;
 using Merit.Application.Security;
@@ -22,8 +23,8 @@ public sealed record MfaEnrollmentStart(string SecretBase32, string Provisioning
 public sealed record SignedInSession(SessionScopeResult Scope);
 
 /// <summary>
-/// Built-in accounts with required multi-factor authentication (NIST SP 800-63B-4 defaults): a password of at least 8
-/// characters checked against known breached passwords, no composition rules, no forced rotation; then an
+/// Built-in accounts with required multi-factor authentication: new passwords have at least 15 Unicode code points,
+/// are checked against common/compromised values, and have no composition rules or forced rotation; then an
 /// authenticator app (TOTP) code. MFA cannot be turned off. Sign-in only establishes who the user is; the session scope
 /// created afterwards decides what they can see and do.
 /// </summary>
@@ -39,8 +40,8 @@ public sealed class AccountService(IAccountData data, IPasswordHasher hasher, IS
         var user = await data.GetUserForSignInAsync(userName.Trim(), ct).ConfigureAwait(false);
         if (user is null || !user.IsActive)
         {
-            // Same work and the same answer whether or not the account exists.
-            hasher.Verify(DummyHash.Value, password);
+            // Use a valid cached hash so missing accounts do not skip password-hashing work.
+            hasher.Verify(DummyHash.For(hasher), password);
             await data.RecordSignInResultAsync(null, false, MaxFailedAttempts, LockoutMinutes, clientAddress, ct).ConfigureAwait(false);
             await events.RecordAsync(user is null
                 ? new SignInEvent(SignInEventTypes.UnknownUser, SignInSteps.Password, AttemptedUserName: userName)
@@ -55,13 +56,29 @@ public sealed class AccountService(IAccountData data, IPasswordHasher hasher, IS
             return new SignInStep(SignInStatus.LockedOut, LockedUntilUtc: until);
         }
 
-        if (hasher.Verify(user.PasswordHash, password) == PasswordCheck.Failed)
+        var check = hasher.Verify(user.PasswordHash, password);
+        if (check == PasswordCheck.Failed)
         {
             await data.RecordSignInResultAsync(user.AppUserId, false, MaxFailedAttempts, LockoutMinutes, clientAddress, ct).ConfigureAwait(false);
             await RecordFailureAsync(user, SignInEventTypes.PasswordFailed, SignInSteps.Password, null, "wrongPassword", ct).ConfigureAwait(false);
             return user.FailedSignInCount + 1 >= MaxFailedAttempts
                 ? new SignInStep(SignInStatus.LockedOut, LockedUntilUtc: DateTime.UtcNow.AddMinutes(LockoutMinutes))
                 : new SignInStep(SignInStatus.Failed);
+        }
+
+        if (check == PasswordCheck.SuccessRehashNeeded
+            && !await data.UpgradePasswordHashAsync(user.AppUserId, user.SecurityStamp, user.PasswordHash, hasher.Hash(password), ct).ConfigureAwait(false))
+        {
+            // Another sign-in may have upgraded the same hash. A reset/deactivation must still win.
+            var current = await data.GetUserForSignInAsync(user.UserName, ct).ConfigureAwait(false);
+            if (current is null || !current.IsActive || current.SecurityStamp != user.SecurityStamp
+                || current.LockoutEndUtc > DateTime.UtcNow || hasher.Verify(current.PasswordHash, password) == PasswordCheck.Failed)
+            {
+                await events.RecordAsync(new SignInEvent(SignInEventTypes.PasswordFailed, SignInSteps.Password,
+                    Reason: "credentialsChangedDuringVerification", AppUserId: user.AppUserId), ct).ConfigureAwait(false);
+                return new SignInStep(SignInStatus.Failed);
+            }
+            user = current;
         }
 
         await events.RecordAsync(new SignInEvent(SignInEventTypes.PasswordSucceeded, SignInSteps.Password, AppUserId: user.AppUserId), ct)
@@ -241,15 +258,22 @@ public sealed class AccountService(IAccountData data, IPasswordHasher hasher, IS
     public Task<SessionScopeStateRow?> SessionStateAsync(Guid scopeKey, CancellationToken ct = default) => data.GetSessionScopeStateAsync(scopeKey, ct);
 
     /// <summary>NIST SP 800-63B-4 password rules: a minimum length and a breached-password check; no composition rules.</summary>
-    public void ValidateNewPassword(string? password, int minLength, string field = "Password")
+    public void ValidateNewPassword(string? password, int minLength, string field = "Password", string? userName = null)
     {
         var v = new Validator();
         v.Required(field, password, "Password");
         if (password is not null)
         {
-            v.When(password.Length < minLength, field, $"Use at least {minLength} characters.");
-            v.When(password.Length > 128, field, "Use 128 characters or fewer.");
-            v.When(breached.IsBreached(password), field, "That password appears in lists of breached passwords. Choose another.");
+            string normalized;
+            try { normalized = PasswordPolicy.Normalize(password); }
+            catch (ArgumentException) { throw new ValidationException(field, "Use valid Unicode characters in the password."); }
+            int effective = PasswordPolicy.EffectiveMinimum(minLength);
+            int length = PasswordPolicy.Length(normalized);
+            v.When(length < effective, field, $"Use at least {effective} characters.");
+            v.When(length > PasswordPolicy.MaximumLength, field, $"Use {PasswordPolicy.MaximumLength} characters or fewer.");
+            v.When(breached.IsBreached(normalized), field, "That password appears in lists of breached passwords. Choose another.");
+            v.When(PasswordPolicy.IsExpected(normalized, userName), field,
+                "Choose a password that is not your user name or MERIT with a simple number or symbol added.");
         }
 
         v.ThrowIfInvalid();
@@ -287,7 +311,10 @@ public sealed class AccountService(IAccountData data, IPasswordHasher hasher, IS
     private static class DummyHash
     {
         // Verified against a throwaway hash so a missing account costs the same time as a wrong password.
-        public static readonly string Value = "AQAAAAIAAYagAAAAEDummyDummyDummyDummyDummyDummyDummyDummyDummyDummyDummyDu==";
+        public static readonly ConditionalWeakTable<IPasswordHasher, Lazy<string>> Values = new();
+
+        public static string For(IPasswordHasher hasher)
+            => Values.GetValue(hasher, h => new Lazy<string>(() => h.Hash(Convert.ToHexString(RandomNumberGenerator.GetBytes(32))))).Value;
     }
 
     /// <summary>A fresh id for a new account.</summary>

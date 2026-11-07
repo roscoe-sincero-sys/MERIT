@@ -1,0 +1,199 @@
+1
+00:00:00,300 --> 00:00:03,420
+Profiles: the right access
+for the work in hand.
+
+2
+00:00:03,420 --> 00:00:07,319
+See your master profile, make
+smaller profiles for a region,
+
+3
+00:00:07,319 --> 00:00:10,709
+a state and a county,
+and switch between them.
+
+4
+00:00:12,287 --> 00:00:14,255
+Sky works for EPA Region 3.
+
+5
+00:00:14,255 --> 00:00:19,065
+The profile box in the header shows
+the profile in use: right now,
+
+6
+00:00:19,065 --> 00:00:20,850
+the master profile.
+
+7
+00:00:21,219 --> 00:00:25,039
+Work queues shows tasks from
+every state in the region,
+
+8
+00:00:25,039 --> 00:00:27,593
+from Delaware to West Virginia.
+
+9
+00:00:27,949 --> 00:00:31,594
+Select the profile box
+to open My profiles.
+
+10
+00:00:31,951 --> 00:00:35,989
+The master profile is everything
+your administrator gave you:
+
+11
+00:00:35,989 --> 00:00:39,764
+Supervisor at EPA Region
+3 and everything under it.
+
+12
+00:00:40,122 --> 00:00:45,393
+A profile is a smaller copy of it,
+like a day key cut from a master key.
+
+13
+00:00:45,393 --> 00:00:48,429
+It can open fewer doors, never more.
+
+14
+00:00:48,786 --> 00:00:55,275
+First, a profile that sees every state
+in the region but cannot change anything,
+
+15
+00:00:55,275 --> 00:00:58,190
+for reviews and screen sharing.
+
+16
+00:00:58,548 --> 00:01:02,856
+Each grant is a place, a
+role and an access level.
+
+17
+00:01:02,856 --> 00:01:07,563
+Choose EPA Region 3, and
+keep everything under it.
+
+18
+00:01:07,917 --> 00:01:10,425
+Set the access to read only.
+
+19
+00:01:10,787 --> 00:01:15,704
+Beside the form is your master
+profile, the most a profile can have.
+
+20
+00:01:15,704 --> 00:01:19,431
+MERIT refuses to save
+one that goes beyond it.
+
+21
+00:01:19,789 --> 00:01:21,774
+Save the profile.
+
+22
+00:01:22,783 --> 00:01:26,637
+Next, a profile for all of Maryland.
+
+23
+00:01:27,924 --> 00:01:30,251
+Choose Maryland as the place.
+
+24
+00:01:30,251 --> 00:01:35,546
+Everything under it, including
+Harford County, comes with it.
+
+25
+00:01:35,931 --> 00:01:40,527
+Read and write without delete lets you
+work normally while protecting records
+
+26
+00:01:40,527 --> 00:01:42,061
+from being deleted.
+
+27
+00:01:42,732 --> 00:01:47,329
+Last, a profile for a day
+of Harford County work.
+
+28
+00:01:48,912 --> 00:01:54,322
+Choose the Harford County Health
+Department, with full access, and save.
+
+29
+00:01:58,440 --> 00:02:02,588
+My profiles now lists the master
+profile and the three new ones,
+
+30
+00:02:02,588 --> 00:02:04,802
+each with what it gives you.
+
+31
+00:02:05,180 --> 00:02:08,242
+To switch, choose Use beside a profile.
+
+32
+00:02:08,242 --> 00:02:12,489
+MERIT changes straight
+away, without signing out.
+
+33
+00:02:12,880 --> 00:02:18,992
+The header now shows Maryland only, and
+Work queues lists just the Maryland tasks,
+
+34
+00:02:18,992 --> 00:02:21,181
+Harford County included.
+
+35
+00:02:21,546 --> 00:02:27,200
+Switch to Harford County only, and
+only the Harford County task is left.
+
+36
+00:02:28,153 --> 00:02:32,167
+With the read-only regional
+profile, every state is back.
+
+37
+00:02:32,167 --> 00:02:36,089
+Intake, which adds records,
+is gone from the menu.
+
+38
+00:02:36,732 --> 00:02:39,732
+You can go back to your
+master profile at any time:
+
+39
+00:02:39,732 --> 00:02:42,072
+choose Use beside Master profile.
+
+40
+00:02:43,386 --> 00:02:48,618
+In this video you saw that the master
+profile holds everything you were given,
+
+41
+00:02:48,618 --> 00:02:53,314
+made profiles for every Region 3
+state read only, for all of Maryland,
+
+42
+00:02:53,314 --> 00:02:58,412
+and for Harford County, and switched
+between them and saw Work queues follow
+
+43
+00:02:58,412 --> 00:02:59,812
+the profile.

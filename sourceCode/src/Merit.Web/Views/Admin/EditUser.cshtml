@@ -33,7 +33,7 @@
                 </select></div>
             <div class="usa-form-group">
                 <label class="usa-label" for="NewPassword">@(Model.AppUserId is null ? "Initial password" : "New password (leave blank to keep)")</label>
-                <div class="usa-hint">At least 8 characters; no composition rules; checked against breached-password lists (NIST SP 800-63B-4).</div>
+                <div class="usa-hint"><partial name="_PasswordRules" model="Model.PasswordMinLength" /></div>
                 <input class="usa-input" id="NewPassword" name="NewPassword" type="password" autocomplete="new-password" />
                 @if (Model.PasswordChangedUtc is DateTime changed)
                 {

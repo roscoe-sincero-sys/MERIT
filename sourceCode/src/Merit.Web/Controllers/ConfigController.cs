@@ -342,7 +342,13 @@ public sealed class AdminController(IClock clock, AdminService admin, AuditServi
     {
         form.Roles = (await admin.RolesAsync(ct))
             .Select(r => new SelectOption(r.RoleId.ToString(), $"{r.RoleName} ({r.RootTenantName})")).ToList();
-        form.Tenants = (await admin.TenantsAsync(ct))
+        var tenants = await admin.TenantsAsync(ct);
+        if (form.AppUserId is null) form.HomeTenantId ??= tenants.FirstOrDefault(t => t.CanAdminister)?.TenantId;
+        if (form.CanManageAccount)
+        {
+            form.PasswordMinLength = (await admin.PasswordPolicyAsync(form.AppUserId, form.HomeTenantId, ct)).PasswordMinLength;
+        }
+        form.Tenants = tenants
             .Select(t => new SelectOption(t.TenantId.ToString(), new string(' ', t.Depth * 3) + t.TenantName)).ToList();
         return form;
     }

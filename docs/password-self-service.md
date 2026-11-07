@@ -10,7 +10,7 @@ People can change their own password, and reset a forgotten one by email. A rese
 | "Choose a new password at next sign-in" | a checkbox on the same page | the person's own password and second factor at sign-in |
 
 ## Security
-- **Password rules (NIST SP 800-63B-4):** the jurisdiction's `passwordMinLength` (at least 8), a check against breached-password lists, no composition rules, and not the password in use now.
+- **Password rules:** the jurisdiction's `passwordMinLength`, with a MERIT floor of **15** and maximum of **128 Unicode code points after NFC normalization**. All password creation/change paths use the same policy. The full password is screened against the bundled common-password blocklists and account/service-name derivatives; no composition rules or periodic expiration are imposed, and the current password cannot be chosen again. See [the password-policy review](password-policy-review.md) for standards context, legacy compatibility and hash upgrades.
 - **The second factor is always needed.** The emailed link only proves the mailbox. The reset page also asks for an authenticator code or a recovery code, and a recovery code is used up. An account that has never set up an authenticator gets no link; its administrator resets it instead.
 - **No enumeration.** "Forgot your password?" shows the same page for every user name. The lookup and the email happen off the request, in a background queue, so the response time doesn't vary either.
 - **Reset links:**

@@ -1,0 +1,241 @@
+{
+  "id": "login-everyday",
+  "title": "Everyday sign-in and signing out",
+  "summary": "Use your password and authenticator, correct common mistakes, switch users, and return after a session ends.",
+  "role": "allUsers",
+  "feature": "signIn",
+  "user": "loginreturn",
+  "source": "training/workflows/all-users/sign-in/login-everyday.workflow.ts",
+  "fingerprint": "b85cd4d28feef24f",
+  "appVersion": "be42f6d 2026-11-06",
+  "built": "2026-11-07",
+  "engine": "piper",
+  "voice": "en_US-kristin-medium",
+  "narrated": true,
+  "duration": 137696,
+  "introMs": 12351,
+  "outroMs": 13834,
+  "scenes": [
+    "Password first",
+    "Verify with your authenticator",
+    "End your session and return safely"
+  ],
+  "steps": [
+    {
+      "scene": 0,
+      "say": "Enter your MERIT user name and password. Check the user name if you share a workstation; each person uses their own account.",
+      "start": 13229,
+      "end": 21957,
+      "actions": [
+        "Types “loginreturn” in User name",
+        "Types into Password (hidden)",
+        "Selects “Continue”"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 0,
+      "say": "A wrong user name or password gives the same message. Check typing and Caps Lock. If you cannot remember the password, use Forgot your password.",
+      "start": 21957,
+      "end": 32969,
+      "actions": [],
+      "onScreen": [
+        "The user name or password is not right."
+      ],
+      "highlights": [
+        {
+          "at": 21981,
+          "rect": {
+            "x": 361,
+            "y": 224.71875,
+            "width": 382,
+            "height": 41.421875
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 0,
+      "say": "Correct the password and choose Continue. A correct password takes you to the verification step, not directly into MERIT.",
+      "start": 32969,
+      "end": 42154,
+      "actions": [
+        "Types “loginreturn” in User name",
+        "Types into Password (hidden)",
+        "Selects “Continue”"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 0,
+      "say": "Wrong person? Choose Sign in as a different user to return to the password screen, then start with the right account.",
+      "start": 42155,
+      "end": 50980,
+      "actions": [
+        "Selects “Sign in as a different user”"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 1,
+      "say": "Sign in again. Open the MERIT entry in your authenticator app and use its current six-digit code. The app works without receiving a text message.",
+      "start": 50980,
+      "end": 62071,
+      "actions": [
+        "Types “loginreturn” in User name",
+        "Types into Password (hidden)",
+        "Selects “Continue”"
+      ],
+      "onScreen": [
+        "Fields marked with an asterisk (*) are required. · Six-digit code from your authenticator app * · Or enter one of your ten-character recovery codes. · Verify and sign in"
+      ],
+      "highlights": [
+        {
+          "at": 60196,
+          "rect": {
+            "x": 561,
+            "y": 225.671875,
+            "width": 414,
+            "height": 201.34375
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 1,
+      "say": "A mistyped or old code is rejected. Wait for the next code, check your phone time, and use the entry for this MERIT account.",
+      "start": 62071,
+      "end": 71667,
+      "actions": [
+        "Types into Six-digit code from your authenticator app (hidden)",
+        "Selects “Verify and sign in”"
+      ],
+      "onScreen": [
+        "That code did not work. Enter the current code from your authenticator app, or choose Can't access your authenticator? for help."
+      ],
+      "highlights": [
+        {
+          "at": 65390,
+          "rect": {
+            "x": 561,
+            "y": 224.71875,
+            "width": 414,
+            "height": 92.265625
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 1,
+      "say": "Enter the current code and choose Verify and sign in. MERIT returns you to the page you requested, when your access permits it.",
+      "start": 71668,
+      "end": 81491,
+      "actions": [
+        "Types into Six-digit code from your authenticator app (hidden)",
+        "Selects “Verify and sign in”"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 2,
+      "say": "Check your name and active profile in the header. The profile determines which records and tools are available after sign-in.",
+      "start": 81491,
+      "end": 89810,
+      "actions": [],
+      "onScreen": [
+        "MERIT · Metals Exposure Registry and Investigation Tracking · Home · Work queues · People · Intake · Surveillance · Registry & reports · Administration · Search people, cases and accession numbers · Search · Robin Return · MERIT Sign-in Training (demo) · Profile · Master profile · Switch ▾ · : switch profile or jurisdiction · User guide · (opens in a new tab) · Sign-in methods · Sign out"
+      ],
+      "highlights": [
+        {
+          "at": 82219,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 1536,
+            "height": 163.1875
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 2,
+      "say": "Choose Sign out when you finish, especially on a shared computer. MERIT returns to the sign-in page and ends this session.",
+      "start": 89810,
+      "end": 98947,
+      "actions": [
+        "Selects “Sign out”"
+      ],
+      "onScreen": [
+        ""
+      ],
+      "highlights": [
+        {
+          "at": 92687,
+          "rect": {
+            "x": 361,
+            "y": 301.734375,
+            "width": 382,
+            "height": 40
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 2,
+      "say": "If your session expires or an administrator ends it, sign in again. You still need your password and second factor.",
+      "start": 98947,
+      "end": 111192,
+      "actions": [
+        "Types “loginreturn” in User name",
+        "Types into Password (hidden)",
+        "Selects “Continue”",
+        "Types into Six-digit code from your authenticator app (hidden)",
+        "Selects “Verify and sign in”"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 2,
+      "say": "Use the normal two steps to return. If sign-in succeeds but you lack the access you need, check your profile or ask your administrator.",
+      "start": 111192,
+      "end": 123158,
+      "actions": [
+        "Types “loginreturn” in User name",
+        "Types into Password (hidden)",
+        "Selects “Continue”",
+        "Types into Six-digit code from your authenticator app (hidden)",
+        "Selects “Verify and sign in”"
+      ],
+      "onScreen": [
+        "Profile · Master profile · Switch ▾ · : switch profile or jurisdiction"
+      ],
+      "highlights": [
+        {
+          "at": 122193,
+          "rect": {
+            "x": 1182.359375,
+            "y": 26.859375,
+            "width": 104.5,
+            "height": 53.46875
+          }
+        }
+      ],
+      "zooms": []
+    }
+  ]
+}

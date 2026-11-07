@@ -1,6 +1,7 @@
 # .NET build output
 bin/
 obj/
+/sourceCode/.artifacts/
 *.user
 *.suo
 .vs/

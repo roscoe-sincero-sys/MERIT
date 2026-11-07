@@ -38,10 +38,19 @@ Status: **built** has a script in `workflows/`. **Planned** is proposed, in roug
 
 | Role | Video | Feature | Account | Suitability | Status |
 |---|---|---|---|---|---|
-| All users | Signing in, setting up an authenticator, saving recovery codes | signIn | a fresh synthetic account | High. Every user does it once. Codes are masked; the QR code and secret are never shown. | Planned |
+| All users | **First sign-in: set up your authenticator** | signIn | `loginfirst` | High. Initial sign-in, QR/manual setup and recovery acknowledgement. | **Built** |
+| All users | **Everyday sign-in and signing out** | signIn | `loginreturn` | High. Password and code errors, switching user, return page and ended sessions. | **Built** |
+| All users | **Lost authenticator: recovery and MFA reset** | signIn | `loginrecovery` | High. One-use recovery and re-enrollment after a reset. | **Built** |
+| All users | **Email codes: enable, choose and turn off** | signIn | `loginemail` | High. Eligibility, verification, preference and sign-in. | **Built** |
+| All users | **Email sign-in: missing, old and rejected codes** | signIn | `loginmailhelp` | High. Resend, expiry, attempts, delivery failure and fallback. | **Built** |
+| All users | **Forgotten password: reset and sign in** | signIn | `loginforgot` | High. Private link, second factor, validation and return to sign-in. | **Built** |
+| All users | **Password reset: links and support options** | signIn | `loginresethelp` | High. Link states, recovery code, locked account and unavailable email. | **Built** |
+| All users | **Change your password and temporary passwords** | signIn | `loginpassword` | High. Signed-in change, policy errors and required change. | **Built** |
+| All users | **Cannot sign in: locks, disabled accounts and timeouts** | signIn | `loginblocked` | High. Account and network limits, disabled account and expired sign-in. | **Built** |
 | All users | **Profiles: the right access for the work in hand** (EPA Region 3 staff: every state read only, all of Maryland, Harford County only) | profiles | `r3staff` | High. Every user benefits; uses the Region 3 scenario. | **Built** |
+| All users | **Profiles: combining places and access levels** (second and third grant rows, excluding child jurisdictions, tri-state and layered access, Working in) | profiles | `r3staff` | High. Expands on profiles with multi-grant and Working in examples. | **Built** |
+| All users | **Profiles: choosing roles for your work** (assigned roles, Role versus Access, intake and case profiles, read-only review, combining roles) | profiles | `rolesdemo` | High. Shows how switching roles changes available tools at the same place. | **Built** |
 | All users | Finding your way: menu and search | navigation | `cmboth` | High | Planned |
-| All users | Changing your password; a forgotten password | signIn | `cmbalt` | Medium. The reset link is read from Mailpit off camera. | Planned |
 | Intake clerk | **Entering a result from a paper report** | peopleAndResults | `intake` | High. Done daily; covers search first, the form, the lookup and the outcome. | **Built** (proof of concept) |
 | Intake clerk | Uploading a lab file and reading the batch | intake | `intake` | High. Uses `samples/chesapeake_lab_sample.csv`. Needs the worker. | Planned |
 | Intake clerk | Clearing held records | intake | `intake` | High | Planned |
@@ -57,7 +66,7 @@ Status: **built** has a script in `workflows/`. **Planned** is proposed, in roug
 | Supervisor | Requesting and submitting a CBLS or ABLES extract | extracts | `supervisor` | High. Quarterly and easy to get wrong. | Planned |
 | Epidemiologist | Reports without names | surveillance | `epi` | Medium | Planned |
 | Administrator | Adding a user and giving access | access | `admin` | High | Planned |
-| Administrator | Unlocking, resetting MFA, requiring a new password | access | `admin` | High | Planned |
+| Administrator | **Administrator: help someone sign in again** | signIn | `loginadmin` | High. Verified support, unlock, MFA reset and temporary passwords. | **Built** |
 | Administrator | Reading sign-in activity | security | `admin` | Medium | Planned |
 | Administrator | Importing the NPI/CLIA registry | registry | `admin` | Medium. Uses `registry_npi_clia_sample.csv`. | Planned |
 | User administrator | Managing accounts in one county | access | `cityadmin` | Medium | Planned |
@@ -70,5 +79,14 @@ District of Columbia, Maryland, Pennsylvania, Virginia and West Virginia under i
 under that Maryland, the `r3staff` account (Sky Region, Supervisor at the region and everything under it) and one
 labelled task per place.
 
+The roles video uses a separate synthetic account, `rolesdemo` (Riley Roles), with Intake clerk and Case manager
+assigned at Maryland Lead and Metals Program (demo) and everything under it. Its workflow creates the account and
+assignments through application procedures, resets only its own extra profiles, and demonstrates four profiles without
+changing the Region 3 account. The Role choices come from the master profile; Access limits the chosen role's
+permissions, and multiple grants add their permissions together.
+
 Each planned video needs its own `prepare()` reset. Workflows that create users, tenants or batches need a reset in
 [lib/data.ts](../lib/data.ts) for that kind of record, following `resetTrainingResults`.
+
+See the [login series and use-case matrix](login-series.md) for the viewing order, complete coverage, isolated local
+mail setup, rebuild commands, and the distinction between live browser actions and narrated phone/support steps.

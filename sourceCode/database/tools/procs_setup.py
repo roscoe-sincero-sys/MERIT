@@ -124,7 +124,7 @@ INSERT @settings VALUES
   ('adultCaseOwnerTenantCode', N'', N'Tenant code that owns adult cases (case ownership rule); empty = the root tenant.'),
   ('clusterWindowDays', N'NOTSET', N'Time window for cluster detection rules. Must be set at install.'),
   ('clusterMinCount', N'NOTSET', N'Minimum number of cases for a cluster. Must be set at install.'),
-  ('passwordMinLength', N'8', N'Minimum password length; NIST permits 8 because every account has a second factor.'),
+  ('passwordMinLength', N'15', N'Minimum new-password length in Unicode code points: 15 to 128; longer passphrases are encouraged.'),
   ('sessionTimeoutMinutes', N'20', N'Sessions time out after this many minutes of inactivity.');
 
 INSERT config.jurisdictionSetting (jurisdictionSettingId, rootTenantId, settingKey, settingValue, effectiveFrom,

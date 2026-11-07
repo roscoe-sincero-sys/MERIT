@@ -1,0 +1,276 @@
+{
+  "id": "enter-paper-result",
+  "title": "Entering a result from a paper report",
+  "summary": "Search for the person first, enter a faxed lab result on their record, and read what MERIT did with it.",
+  "role": "intakeClerk",
+  "feature": "peopleAndResults",
+  "user": "intake",
+  "source": "training/workflows/intake-clerk/people-and-results/enter-paper-result.workflow.ts",
+  "fingerprint": "506454b85aef45dc",
+  "appVersion": "be42f6d 2026-11-06",
+  "built": "2026-11-07",
+  "engine": "piper",
+  "voice": "en_US-kristin-medium",
+  "narrated": true,
+  "duration": 123682,
+  "introMs": 10888,
+  "outroMs": 15494,
+  "scenes": [
+    "Search first",
+    "Open the result form",
+    "Enter what the report says",
+    "Save and read the outcome"
+  ],
+  "steps": [
+    {
+      "scene": 0,
+      "say": "A faxed lab report has arrived for a child named Leo Rivera. Before entering anything, search for him, so the result joins his existing record.",
+      "start": 11752,
+      "end": 22875,
+      "actions": [
+        "Selects “People”"
+      ],
+      "onScreen": [
+        "People"
+      ],
+      "highlights": [
+        {
+          "at": 11801,
+          "rect": {
+            "x": 327.109375,
+            "y": 107.1875,
+            "width": 62.1875,
+            "height": 44
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 0,
+      "say": "Type the last name, then the first name. Adding the date of birth from the report narrows the search to one person.",
+      "start": 22875,
+      "end": 31255,
+      "actions": [
+        "Types “Rivera Leo 2021-02-02” in Search",
+        "Selects “Search”"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 0,
+      "say": "One match, with the same name and date of birth. Open his record.",
+      "start": 31255,
+      "end": 37031,
+      "actions": [
+        "Selects “Rivera, Leo”"
+      ],
+      "onScreen": [
+        "Rivera, Leo Feb 2, 2021 Male Baltimore City Name"
+      ],
+      "highlights": [
+        {
+          "at": 31288,
+          "rect": {
+            "x": 144,
+            "y": 506.171875,
+            "width": 1248,
+            "height": 42.421875
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 1,
+      "say": "The person page shows who he is and his history. Choose Enter a result.",
+      "start": 37032,
+      "end": 42895,
+      "actions": [
+        "Selects “Enter a result”"
+      ],
+      "onScreen": [
+        "Leo Rivera · Enter a result · Edit identity · Child Born Feb 2, 2021 (age 5) · Male · County: Baltimore City · Preferred language: Spanish · Aliases, race and ethnicity, contact methods"
+      ],
+      "highlights": [
+        {
+          "at": 37043,
+          "rect": {
+            "x": 144,
+            "y": 199.1875,
+            "width": 1248,
+            "height": 217.75
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 2,
+      "say": "Choose the analyte first. The specimen and unit choices follow it.",
+      "start": 42895,
+      "end": 48656,
+      "actions": [
+        "Chooses “Lead” for Analyte"
+      ],
+      "onScreen": [],
+      "highlights": [
+        {
+          "at": 45224,
+          "rect": {
+            "x": 144,
+            "y": 447.78125,
+            "width": 480,
+            "height": 186.09375
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 2,
+      "say": "The report says the blood was drawn from a vein, so set the sample type to venous.",
+      "start": 48656,
+      "end": 55002,
+      "actions": [
+        "Chooses “Venous” for Sample type"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 2,
+      "say": "Type the value exactly as reported: 4.2 µg/dL.",
+      "start": 55002,
+      "end": 60312,
+      "actions": [
+        "Types “4.2” in Result value"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 2,
+      "say": "Enter the date the blood was collected, which is required, and the date the lab reported it.",
+      "start": 60312,
+      "end": 67250,
+      "actions": [
+        "Types “2026-10-28” in Collected",
+        "Types “2026-10-30” in Reported"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 2,
+      "say": "Add the test method, the lab's accession number, and the reason for the test.",
+      "start": 67250,
+      "end": 73365,
+      "actions": [
+        "Chooses “ICP-MS” for Test method",
+        "Types “TRN-26-0481” in Accession number",
+        "Chooses “Screening” for Reason for test"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 2,
+      "say": "For the laboratory, type part of its name, then choose it from the list.",
+      "start": 73365,
+      "end": 79547,
+      "actions": [
+        "Types “Chesa” in Laboratory",
+        "Selects “Chesapeake Reference Laboratory 100 Research Drive, Columbia, CLIA 21D0712345”"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 3,
+      "say": "Check the entries against the paper report, then choose Save result.",
+      "start": 79548,
+      "end": 84932,
+      "actions": [
+        "Selects “Save result”"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 3,
+      "say": "MERIT confirms the result, with the value converted to its standard unit and the population it counts toward.",
+      "start": 84932,
+      "end": 92619,
+      "actions": [],
+      "onScreen": [
+        "Result saved · Lead 4.2 ug/dL → canonical 4.2000 ug/dL · population Child"
+      ],
+      "highlights": [],
+      "zooms": [
+        {
+          "at": 84946,
+          "rect": {
+            "x": 144,
+            "y": 251.203125,
+            "width": 1248,
+            "height": 86.4375
+          },
+          "scale": 1.15
+        }
+      ]
+    },
+    {
+      "scene": 3,
+      "say": "Below it, MERIT lists each level the result was compared with, and whether a case was opened or updated.",
+      "start": 92619,
+      "end": 100855,
+      "actions": [],
+      "onScreen": [
+        "Thresholds and case outcome · Opened confirmed case PB-2026-000022, owned by Maryland Lead and Metals Program (demo). · Level Type Value This result · Case Case 3.5 ug/dL At or above · Reportable Reportable 0 ug/dL At or above · Child: one venous result at or above the level, by a confirming method. · Tasks created: Investigate 1214 W Lombard Street 2F, Baltimore, MD; Investigate 27 Oak Avenue, To"
+      ],
+      "highlights": [
+        {
+          "at": 92638,
+          "rect": {
+            "x": 144,
+            "y": 353.640625,
+            "width": 1248,
+            "height": 342.6875
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 3,
+      "say": "From here, enter another result from the same report, or go back to his record.",
+      "start": 100855,
+      "end": 107478,
+      "actions": [],
+      "onScreen": [
+        "Open the case Enter another result Back to the person"
+      ],
+      "highlights": [
+        {
+          "at": 100870,
+          "rect": {
+            "x": 144,
+            "y": 712.328125,
+            "width": 1248,
+            "height": 39.25
+          }
+        }
+      ],
+      "zooms": []
+    }
+  ]
+}

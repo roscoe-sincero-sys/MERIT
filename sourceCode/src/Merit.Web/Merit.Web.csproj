@@ -26,6 +26,12 @@
     <PackageReference Include="MailKit" />
   </ItemGroup>
 
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\security\common-passwords.txt" LogicalName="Merit.Web.Security.common-passwords.txt" />
+    <EmbeddedResource Include="..\..\security\merit-passwords.txt" LogicalName="Merit.Web.Security.merit-passwords.txt" />
+    <None Include="..\..\security\SecLists-LICENSE.txt" Link="Security\SecLists-LICENSE.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
   <!-- The user guides and their images, served under /help (issue #148); docs/guides is their single source. -->
   <ItemGroup>
     <None Include="..\..\..\docs\guides\*.html" LinkBase="Help\guides" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />

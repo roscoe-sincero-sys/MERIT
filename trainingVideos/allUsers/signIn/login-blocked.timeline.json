@@ -1,0 +1,198 @@
+{
+  "id": "login-blocked",
+  "title": "Cannot sign in: locks, disabled accounts and timeouts",
+  "summary": "Distinguish an account lock from network throttling, and know when to restart or contact your administrator.",
+  "role": "allUsers",
+  "feature": "signIn",
+  "user": "loginblocked",
+  "source": "training/workflows/all-users/sign-in/login-blocked.workflow.ts",
+  "fingerprint": "6f00cedf2e1f03a0",
+  "appVersion": "be42f6d 2026-11-06",
+  "built": "2026-11-07",
+  "engine": "piper",
+  "voice": "en_US-kristin-medium",
+  "narrated": true,
+  "duration": 125588,
+  "introMs": 11968,
+  "outroMs": 12569,
+  "scenes": [
+    "Account locked after failed attempts",
+    "Disabled accounts and expired sign-in steps",
+    "Too many attempts from the network"
+  ],
+  "steps": [
+    {
+      "scene": 0,
+      "say": "Repeated wrong passwords or verification codes can lock an account. Stop guessing and read the message MERIT gives you.",
+      "start": 12855,
+      "end": 21921,
+      "actions": [
+        "Types “loginblocked” in User name",
+        "Types into Password (hidden)",
+        "Selects “Continue”"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 0,
+      "say": "The account is locked for fifteen minutes. Wait until it unlocks or ask an administrator to unlock it after verifying your identity.",
+      "start": 21921,
+      "end": 30605,
+      "actions": [],
+      "onScreen": [
+        "Too many failed attempts. The account is locked for 15 minutes; an administrator can unlock it."
+      ],
+      "highlights": [
+        {
+          "at": 21955,
+          "rect": {
+            "x": 361,
+            "y": 224.71875,
+            "width": 382,
+            "height": 92.265625
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 0,
+      "say": "Even a correct password does not bypass the lock. A password-reset link also does not bypass it.",
+      "start": 30605,
+      "end": 38492,
+      "actions": [
+        "Types “loginblocked” in User name",
+        "Types into Password (hidden)",
+        "Selects “Continue”"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 0,
+      "say": "After the wait or a confirmed unlock, start again with the correct password and authenticator.",
+      "start": 38492,
+      "end": 49662,
+      "actions": [
+        "Types “loginblocked” in User name",
+        "Types into Password (hidden)",
+        "Selects “Continue”",
+        "Types into Six-digit code from your authenticator app (hidden)",
+        "Selects “Verify and sign in”"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 1,
+      "say": "A disabled or unknown account gets a general sign-in error. If the details are correct but access still fails, contact your administrator.",
+      "start": 49662,
+      "end": 59887,
+      "actions": [
+        "Types “loginblocked” in User name",
+        "Types into Password (hidden)",
+        "Selects “Continue”"
+      ],
+      "onScreen": [
+        "The user name or password is not right."
+      ],
+      "highlights": [
+        {
+          "at": 58234,
+          "rect": {
+            "x": 361,
+            "y": 224.71875,
+            "width": 382,
+            "height": 41.421875
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 1,
+      "say": "A sign-in verification page can expire. If MERIT sends you back to sign in, enter your password again and use a fresh code.",
+      "start": 59888,
+      "end": 71020,
+      "actions": [
+        "Types “loginblocked” in User name",
+        "Types into Password (hidden)",
+        "Selects “Continue”"
+      ],
+      "onScreen": [
+        "Sign in to MERIT · Fields marked with an asterisk (*) are required. · User name * · Password * · Forgot your password? · Continue · After your password you will be asked for a code from your authenticator app. Multi-factor authentication is required for every account. · One registry for metals exposure · Laboratory results for lead, arsenic, mercury and cadmium, matched to one record per person. ·"
+      ],
+      "highlights": [
+        {
+          "at": 70038,
+          "rect": {
+            "x": 128,
+            "y": 63.53125,
+            "width": 1280,
+            "height": 697.890625
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 2,
+      "say": "Too many attempts from one network is a separate limit. This training instance demonstrates that message without affecting other users.",
+      "start": 71020,
+      "end": 88016,
+      "actions": [
+        "Types “loginunknown” in User name",
+        "Types into Password (hidden)",
+        "Selects “Continue”",
+        "Types “loginunknown” in User name",
+        "Types into Password (hidden)",
+        "Selects “Continue”"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 2,
+      "say": "Wait for the number of seconds shown, then use Back to sign in. Repeated retries do not remove either a network limit or an account lock.",
+      "start": 88017,
+      "end": 98157,
+      "actions": [],
+      "onScreen": [
+        "Too many attempts · Too many sign-in attempts came from your network in the last minute. Wait 60 seconds, then try again. · Back to sign in · Repeated wrong passwords or codes also lock the account for a while. If you are locked out, ask your administrator."
+      ],
+      "highlights": [
+        {
+          "at": 88564,
+          "rect": {
+            "x": 128,
+            "y": 63.53125,
+            "width": 1280,
+            "height": 547.828125
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 2,
+      "say": "If the problem continues, tell support which message you see and your user name. Do not send your password, setup key, recovery codes or verification codes.",
+      "start": 98157,
+      "end": 112317,
+      "actions": [
+        "Types “loginblocked” in User name",
+        "Types into Password (hidden)",
+        "Selects “Continue”",
+        "Types into Six-digit code from your authenticator app (hidden)",
+        "Selects “Verify and sign in”"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    }
+  ]
+}
