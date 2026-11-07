@@ -6,13 +6,13 @@
   "feature": "signIn",
   "user": "loginresethelp",
   "source": "training/workflows/all-users/sign-in/login-reset-help.workflow.ts",
-  "fingerprint": "f9e483d91ece7115",
+  "fingerprint": "8a4b935f578606bf",
   "appVersion": "be42f6d 2026-11-06",
   "built": "2026-11-07",
   "engine": "piper",
   "voice": "en_US-kristin-medium",
   "narrated": true,
-  "duration": 161754,
+  "duration": 154623,
   "introMs": 12792,
   "outroMs": 13138,
   "scenes": [
@@ -24,8 +24,8 @@
     {
       "scene": 0,
       "say": "Reset links are private and short lived. This example shows the messages you may see when a link cannot be used.",
-      "start": 13668,
-      "end": 22285,
+      "start": 13688,
+      "end": 22300,
       "actions": [
         "Types “loginresethelp” in User name",
         "Selects “Email me a reset link”"
@@ -37,15 +37,15 @@
     {
       "scene": 0,
       "say": "If a link has expired, choose Ask for a new link. Do not keep retrying the expired email.",
-      "start": 22285,
-      "end": 30109,
+      "start": 22300,
+      "end": 30128,
       "actions": [],
       "onScreen": [
         "This link has expired. Links work for a short time; ask for a new one."
       ],
       "highlights": [
         {
-          "at": 23343,
+          "at": 23157,
           "rect": {
             "x": 561,
             "y": 224.71875,
@@ -59,8 +59,8 @@
     {
       "scene": 0,
       "say": "A newer reset request replaces the previous link. Use the newest email, even if older messages arrive later.",
-      "start": 30110,
-      "end": 38515,
+      "start": 30128,
+      "end": 38531,
       "actions": [
         "Types “loginresethelp” in User name",
         "Selects “Email me a reset link”"
@@ -72,8 +72,8 @@
     {
       "scene": 0,
       "say": "An invalid or incomplete link also cannot be used. Open the complete link from the newest email, or request another.",
-      "start": 38515,
-      "end": 47288,
+      "start": 38532,
+      "end": 47308,
       "actions": [],
       "onScreen": [],
       "highlights": [],
@@ -82,8 +82,8 @@
     {
       "scene": 1,
       "say": "A locked account must wait or be unlocked by an administrator. A password-reset link does not bypass an account lock.",
-      "start": 47288,
-      "end": 55350,
+      "start": 47308,
+      "end": 55354,
       "actions": [],
       "onScreen": [],
       "highlights": [],
@@ -92,8 +92,8 @@
     {
       "scene": 1,
       "say": "An account that has never enrolled an authenticator cannot reset its password by email. Ask the administrator to verify your identity and help.",
-      "start": 55350,
-      "end": 64915,
+      "start": 55354,
+      "end": 64913,
       "actions": [],
       "onScreen": [],
       "highlights": [],
@@ -102,8 +102,8 @@
     {
       "scene": 1,
       "say": "Too many wrong verification codes close the link. Ask for a new link or contact your administrator instead of continuing to guess.",
-      "start": 64915,
-      "end": 81297,
+      "start": 64914,
+      "end": 78231,
       "actions": [
         "Types into Code from your authenticator app, or a recovery code (hidden)",
         "Types into New password (hidden)",
@@ -117,8 +117,8 @@
     {
       "scene": 1,
       "say": "If the app is missing but you have an unused recovery code, a fresh reset link can use it as the second factor. The code is then used up.",
-      "start": 81297,
-      "end": 103807,
+      "start": 78231,
+      "end": 96775,
       "actions": [
         "Types “loginresethelp” in User name",
         "Selects “Email me a reset link”",
@@ -134,15 +134,15 @@
     {
       "scene": 2,
       "say": "Some MERIT installations cannot email reset links. Their reset page tells you to contact an administrator after confirming who you are.",
-      "start": 103807,
-      "end": 113108,
+      "start": 96775,
+      "end": 106087,
       "actions": [],
       "onScreen": [
         "Reset your password · MERIT can't email reset links here. Contact your MERIT administrator: after confirming who you are, they can set a new password for you. · Lost your authenticator app as well? Contact your MERIT administrator to verify your identity and reset both. · Back to sign in"
       ],
       "highlights": [
         {
-          "at": 105296,
+          "at": 97948,
           "rect": {
             "x": 128,
             "y": 63.53125,
@@ -156,8 +156,8 @@
     {
       "scene": 2,
       "say": "If you have lost both the password and the authenticator, and have no recovery codes, contact your administrator to verify your identity and reset both.",
-      "start": 113108,
-      "end": 124051,
+      "start": 106088,
+      "end": 117043,
       "actions": [],
       "onScreen": [],
       "highlights": [],
@@ -166,8 +166,8 @@
     {
       "scene": 2,
       "say": "Email never arrives? Check the user name and junk folder, then use your agency support channel. The Check your email page does not prove that an account exists.",
-      "start": 124051,
-      "end": 135896,
+      "start": 117043,
+      "end": 128876,
       "actions": [],
       "onScreen": [],
       "highlights": [],
@@ -176,8 +176,8 @@
     {
       "scene": 2,
       "say": "After a successful reset, return to the normal sign-in process. Your authenticator still works unless an administrator has reset MFA.",
-      "start": 135896,
-      "end": 147915,
+      "start": 128876,
+      "end": 140777,
       "actions": [
         "Types “loginresethelp” in User name",
         "Types into Password (hidden)",

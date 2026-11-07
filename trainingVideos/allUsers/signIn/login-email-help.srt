@@ -14,142 +14,142 @@ and switch methods when
 email cannot be delivered.
 
 4
-00:00:14,689 --> 00:00:17,596
+00:00:14,698 --> 00:00:17,605
 After your password,
 choose Email me a code.
 
 5
-00:00:17,596 --> 00:00:22,555
+00:00:17,605 --> 00:00:22,564
 A sent message appears with the
 masked address and the code lifetime.
 
 6
-00:00:26,027 --> 00:00:28,303
+00:00:25,214 --> 00:00:27,490
 Email can take a minute or two.
 
 7
-00:00:28,303 --> 00:00:31,901
+00:00:27,490 --> 00:00:31,088
 Check junk or spam, and
 check the masked address.
 
 8
-00:00:31,901 --> 00:00:35,385
+00:00:31,088 --> 00:00:34,572
 Never send a verification code to support.
 
 9
-00:00:35,739 --> 00:00:41,353
+00:00:34,940 --> 00:00:40,554
 If you mistype a code, MERIT explains the
 error and shows how many attempts remain.
 
 10
-00:00:41,353 --> 00:00:44,255
+00:00:40,554 --> 00:00:43,456
 Read the message before trying again.
 
 11
-00:00:44,616 --> 00:00:47,086
+00:00:43,817 --> 00:00:46,287
 An expired code cannot sign you in.
 
 12
-00:00:47,086 --> 00:00:52,802
+00:00:46,287 --> 00:00:52,003
 Choose Send a new code after the resend
 countdown; repeated clicks will not speed
 
 13
-00:00:52,802 --> 00:00:54,107
+00:00:52,003 --> 00:00:53,308
 up delivery.
 
 14
-00:00:54,407 --> 00:00:59,616
+00:00:53,608 --> 00:00:58,817
 Wait until Send a new code is
 available, then ask for another message.
 
 15
-00:00:59,616 --> 00:01:02,993
+00:00:58,817 --> 00:01:02,194
 Use only the code from the newest email.
 
 16
-00:01:03,355 --> 00:01:06,530
+00:01:02,549 --> 00:01:05,724
 Requesting another code
 replaces the previous one.
 
 17
-00:01:06,530 --> 00:01:10,931
+00:01:05,724 --> 00:01:10,125
 This example requests a newer
 message after the next countdown.
 
 18
-00:01:27,411 --> 00:01:31,276
+00:01:26,863 --> 00:01:30,728
 An older email no longer works
 after a newer code is sent.
 
 19
-00:01:31,276 --> 00:01:35,741
+00:01:30,728 --> 00:01:35,193
 Use the newest message even if
 the older email arrives later.
 
 20
-00:01:36,107 --> 00:01:39,238
+00:01:35,549 --> 00:01:38,680
 Too many wrong entries
 can also close a code.
 
 21
-00:01:39,238 --> 00:01:44,716
+00:01:38,680 --> 00:01:44,158
 Instead of continuing to guess, get
 a new code or use your authenticator.
 
 22
-00:01:45,069 --> 00:01:49,871
+00:01:44,519 --> 00:01:49,321
 Use your authenticator app instead
 returns to the other verification method.
 
 23
-00:01:49,871 --> 00:01:53,051
+00:01:49,321 --> 00:01:52,501
 Enter its current code
 to finish signing in.
 
 24
-00:01:53,410 --> 00:01:58,640
+00:01:52,864 --> 00:01:58,094
 If MERIT cannot send the email, it shows
 a delivery error and support reference.
 
 25
-00:01:58,640 --> 00:02:03,354
+00:01:58,094 --> 00:02:02,808
 Keep that reference when contacting
 support, rather than any code.
 
 26
-00:02:07,618 --> 00:02:11,316
+00:02:05,702 --> 00:02:09,400
 Choose Try sending again
 after a delivery failure.
 
 27
-00:02:11,316 --> 00:02:17,632
+00:02:09,400 --> 00:02:15,716
 If email remains unavailable, use your
 authenticator or an unused recovery code.
 
 28
-00:02:17,990 --> 00:02:21,123
+00:02:16,071 --> 00:02:19,204
 An agency can withdraw email-code access.
 
 29
-00:02:21,123 --> 00:02:27,618
+00:02:19,204 --> 00:02:25,699
 In that case, the email option disappears;
 your authenticator remains the way to sign
 
 30
-00:02:27,618 --> 00:02:29,018
+00:02:25,699 --> 00:02:27,099
 in.
 
 31
-00:02:34,080 --> 00:02:38,394
+00:02:31,644 --> 00:02:35,958
 In this video you recognized
 wrong, expired and replaced codes,
 
 32
-00:02:38,394 --> 00:02:44,147
+00:02:35,958 --> 00:02:41,711
 requested a new code after the countdown,
 and recovered from delivery failures using
 
 33
-00:02:44,147 --> 00:02:45,574
+00:02:41,711 --> 00:02:43,138
 another method.

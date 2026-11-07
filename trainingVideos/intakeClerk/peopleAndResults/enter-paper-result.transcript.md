@@ -61,14 +61,14 @@ Search for the person first, enter a faxed lab result on their record, and read 
 - *On screen:* Result saved · Lead 4.2 ug/dL → canonical 4.2000 ug/dL · population Child
 
 **[1:33]** Below it, MERIT lists each level the result was compared with, and whether a case was opened or updated.
-- *On screen:* Thresholds and case outcome · Opened confirmed case PB-2026-000022, owned by Maryland Lead and Metals Program (demo). · Level Type Value This result · Case Case 3.5 ug/dL At or above · Reportable Reportable 0 ug/dL At or above · Child: one venous result at or above the level, by a confirming method. · Tasks created: Investigate 1214 W Lombard Street 2F, Baltimore, MD; Investigate 27 Oak Avenue, To
+- *On screen:* Thresholds and case outcome · Opened confirmed case PB-2026-000024, owned by Maryland Lead and Metals Program (demo). · Level Type Value This result · Case Case 3.5 ug/dL At or above · Reportable Reportable 0 ug/dL At or above · Child: one venous result at or above the level, by a confirming method. · Tasks created: Investigate 1214 W Lombard Street 2F, Baltimore, MD; Investigate 27 Oak Avenue, To
 
 **[1:41]** From here, enter another result from the same report, or go back to his record.
 - *On screen:* Open the case Enter another result Back to the person
 
 ## Recap
 
-**[1:47]** In this video you searched by name and date of birth before entering anything, entered the result on the existing person record, and read the standardized value, the levels it was compared with and the case outcome.
+**[1:48]** In this video you searched by name and date of birth before entering anything, entered the result on the existing person record, and read the standardized value, the levels it was compared with and the case outcome.
 
 - Searched by name and date of birth before entering anything
 - Entered the result on the existing person record

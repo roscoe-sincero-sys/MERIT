@@ -5,6 +5,7 @@ import { chunk, cues, MAX_LINE, parseVtt, toSrt, toVtt, wrap } from '../lib/capt
 import { loadCatalog } from '../lib/catalog.ts';
 import { PATHS } from '../lib/config.ts';
 import { readingSeconds, speakable, wavSeconds } from '../lib/narration.ts';
+import { matchesExpectedText, normalizeText, Stage } from '../lib/stage.ts';
 import { FEATURES, ROLES } from '../lib/workflow.ts';
 
 test.describe('captions', () => {
@@ -92,5 +93,64 @@ test.describe('catalog', () => {
         }
       }
     }
+  });
+});
+
+test.describe('expectText literal and pattern matching', () => {
+  test('matches literal profile names containing regex metacharacters without false positives', () => {
+    const specialNames = [
+      'Region 3, all states (read only)',
+      'County \\East',
+      'Trailing\\',
+      'State.v1',
+      'Read [only]',
+      'A+B*C?^$|(test){1,2}',
+      '((([[[...\\\\+++***???^^^$$$|||',
+      'Québec — Montérégie (échelon #1)',
+    ];
+
+    for (const name of specialNames) {
+      const alertText = `  Profile\n  "${name}"   saved. `;
+      const headerText = `Active profile:\n${name}`;
+      expect(matchesExpectedText(alertText, `Profile "${name}" saved`), `alert matches ${name}`).toBe(true);
+      expect(matchesExpectedText(headerText, name), `header matches ${name}`).toBe(true);
+    }
+
+    // Literal dot must not match arbitrary characters like a regex wildcard would.
+    expect(matchesExpectedText('Profile "StateXv1" saved.', 'Profile "State.v1" saved')).toBe(false);
+    expect(matchesExpectedText('Active profile: StateXv1', 'State.v1')).toBe(false);
+  });
+
+  test('supports exact literal matching, whitespace normalization, and RegExp patterns', () => {
+    expect(normalizeText('  Profile   "Maryland\n\tonly"   saved  ')).toBe('Profile "Maryland only" saved');
+    expect(matchesExpectedText('  Master   profile ', 'Master profile', { exact: true })).toBe(true);
+    expect(matchesExpectedText('Active profile: Master profile', 'Master profile', { exact: true })).toBe(false);
+    expect(matchesExpectedText('Active profile: Master profile', 'Master profile')).toBe(true);
+    expect(matchesExpectedText('8 rows', /^8 rows?$/)).toBe(true);
+    expect(matchesExpectedText('1 row', /^1 rows?$/)).toBe(true);
+    expect(matchesExpectedText('18 rows', /^8 rows?$/)).toBe(false);
+  });
+
+  test('Stage.expectText waits for literal text and rejects near-miss metacharacter matches', async ({ page }) => {
+    await page.setContent(`
+      <main>
+        <div class="usa-alert">Profile "StateXv1" saved.</div>
+        <a class="merit-profile-switch">County \\East [read.only] (v1+2)</a>
+      </main>
+    `);
+    const s = new Stage(page, 'dry');
+    await s.expectText(page.locator('.merit-profile-switch'), 'County \\East [read.only] (v1+2)');
+    await s.expectText(page.locator('.merit-profile-switch'), 'County \\East [read.only] (v1+2)', { exact: true });
+
+    await expect(
+      s.expectText(page.locator('main .usa-alert'), 'Profile "State.v1" saved', 250),
+    ).rejects.toThrow('Expected "Profile \\"State.v1\\" saved" in "Profile "StateXv1" saved."');
+
+    setTimeout(() => {
+      page.locator('main .usa-alert').evaluate(el => {
+        el.textContent = 'Profile   "State.v1"\n saved.';
+      }).catch(() => undefined);
+    }, 80);
+    await s.expectText(page.locator('main .usa-alert'), 'Profile "State.v1" saved', { timeout: 1500 });
   });
 });

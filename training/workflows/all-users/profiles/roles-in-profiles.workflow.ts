@@ -54,12 +54,12 @@ async function grant(s: Stage, row: number, role: string, access: string): Promi
 
 async function save(s: Stage, name: string): Promise<void> {
   await s.click(s.page.getByRole('button', { name: 'Save profile' }));
-  await s.expectText(s.page.locator('main .usa-alert').first(), new RegExp(`Profile "${name}" saved`));
+  await s.expectText(s.page.locator('main .usa-alert').first(), `Profile "${name}" saved`);
 }
 
 async function use(s: Stage, name: string): Promise<void> {
   await s.click(s.page.getByRole('button', { name: `Use ${name}`, exact: true }));
-  await s.expectText(profileBox(s), new RegExp(name));
+  await s.expectText(profileBox(s), name);
   await s.highlight(profileBox(s));
 }
 

@@ -1,6 +1,6 @@
 # Forgotten password: reset and sign in
 
-**Role:** All users · **Feature:** Signing in and your account · **Length:** 2:17
+**Role:** All users · **Feature:** Signing in and your account · **Length:** 2:14
 
 Request a reset link, verify your identity, choose a new password, and sign in again.
 
@@ -33,13 +33,13 @@ Request a reset link, verify your identity, choose a new password, and sign in a
 - *Action:* Types into New password again (hidden)
 - *Action:* Selects “Reset password”
 
-**[1:17]** Choose a long passphrase that meets the minimum shown. Enter the same new password twice. MERIT also rejects known breached passwords.
+**[1:16]** Choose a long passphrase that meets the minimum shown. Enter the same new password twice. MERIT also rejects known breached passwords.
 - *Action:* Types into Code from your authenticator app, or a recovery code (hidden)
 - *Action:* Types into New password (hidden)
 - *Action:* Types into New password again (hidden)
 - *Action:* Selects “Reset password”
 
-**[1:29]** Correct the fields, enter a current code, and choose Reset password. MERIT confirms the reset and signs out other sessions on this account.
+**[1:28]** Correct the fields, enter a current code, and choose Reset password. MERIT confirms the reset and signs out other sessions on this account.
 - *Action:* Types into Code from your authenticator app, or a recovery code (hidden)
 - *Action:* Types into New password (hidden)
 - *Action:* Types into New password again (hidden)
@@ -47,10 +47,10 @@ Request a reset link, verify your identity, choose a new password, and sign in a
 
 ## 3. Return with the new password
 
-**[1:42]** A reset link cannot be used again. If you did not make the reset, contact your MERIT administrator.
+**[1:40]** A reset link cannot be used again. If you did not make the reset, contact your MERIT administrator.
 - *On screen:* This link was already used. If you didn't reset your password, contact your MERIT administrator.
 
-**[1:50]** Go back to sign in. Use your new password, then the normal authenticator step. Resetting a password does not remove MFA.
+**[1:48]** Go back to sign in. Use your new password, then the normal authenticator step. Resetting a password does not remove MFA.
 - *Action:* Selects “Back to sign in”
 - *Action:* Types “loginforgot” in User name
 - *Action:* Types into Password (hidden)
@@ -60,7 +60,7 @@ Request a reset link, verify your identity, choose a new password, and sign in a
 
 ## Recap
 
-**[2:03]** In this video you requested and opened a private reset link, verified identity and corrected password errors, and signed in with the new password and second factor.
+**[2:00]** In this video you requested and opened a private reset link, verified identity and corrected password errors, and signed in with the new password and second factor.
 
 - Requested and opened a private reset link
 - Verified identity and corrected password errors

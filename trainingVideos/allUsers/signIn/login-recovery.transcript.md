@@ -1,6 +1,6 @@
 # Lost authenticator: recovery and MFA reset
 
-**Role:** All users · **Feature:** Signing in and your account · **Length:** 2:16
+**Role:** All users · **Feature:** Signing in and your account · **Length:** 2:12
 
 Use a saved recovery code, understand one-use codes, and enroll again after an administrator resets MFA.
 
@@ -15,7 +15,7 @@ Use a saved recovery code, understand one-use codes, and enroll again after an a
 - *Action:* Types into Password (hidden)
 - *Action:* Selects “Continue”
 
-**[0:22]** Choose Can't access your authenticator? to see recovery options. An enabled email-code option may also be available on the previous screen.
+**[0:21]** Choose Can't access your authenticator? to see recovery options. An enabled email-code option may also be available on the previous screen.
 - *Action:* Selects “Can't access your authenticator?”
 
 **[0:32]** Enter an unused recovery code saved during setup. It has ten characters; the hyphen is optional. Never share a recovery code.
@@ -36,21 +36,21 @@ Use a saved recovery code, understand one-use codes, and enroll again after an a
 
 ## 2. No authenticator and no recovery codes
 
-**[1:13]** Contact your agency's MERIT administrator or help desk through your usual support channel. Give your user name and explain what you lost.
+**[1:09]** Contact your agency's MERIT administrator or help desk through your usual support channel. Give your user name and explain what you lost.
 - *On screen:* No recovery codes available? · Contact your agency's MERIT administrator or help desk through your usual agency support channel. Give them your MERIT user name and explain that the authenticator entry is missing. · Ask them to verify your identity and reset MFA for your account. If you are an administrator, ask another administrator to help. Platform administrators should contact another platform 
 
-**[1:22]** Ask them to verify your identity and reset MFA. Administrators need another administrator; platform administrators need another platform administrator.
+**[1:18]** Ask them to verify your identity and reset MFA. Administrators need another administrator; platform administrators need another platform administrator.
 
-**[1:33]** An MFA reset ends active sessions and invalidates old authenticator and recovery codes. Wait for your administrator to confirm it before restarting.
+**[1:29]** An MFA reset ends active sessions and invalidates old authenticator and recovery codes. Wait for your administrator to confirm it before restarting.
 - *On screen:* Sign in again after an MFA reset
 
-**[1:44]** After the confirmed reset, choose Sign in again after an MFA reset and enter your password. MERIT asks you to set up a new authenticator entry.
+**[1:39]** After the confirmed reset, choose Sign in again after an MFA reset and enter your password. MERIT asks you to set up a new authenticator entry.
 - *Action:* Selects “Sign in again after an MFA reset”
 - *Action:* Types “loginrecovery” in User name
 - *Action:* Types into Password (hidden)
 - *Action:* Selects “Continue”
 
-**[1:54]** Add the new MERIT entry to your app, verify its current code, and save the new recovery codes. Use the new entry for future sign-ins.
+**[1:50]** Add the new MERIT entry to your app, verify its current code, and save the new recovery codes. Use the new entry for future sign-ins.
 - *Action:* Types into Code from the app (hidden)
 - *Action:* Selects “Turn on and sign in”
 - *Action:* Selects “I have saved these codes”
@@ -58,7 +58,7 @@ Use a saved recovery code, understand one-use codes, and enroll again after an a
 
 ## Recap
 
-**[2:04]** In this video you used a one-use recovery code, identified the support path when no codes remain, and enrolled again after a confirmed MFA reset.
+**[2:00]** In this video you used a one-use recovery code, identified the support path when no codes remain, and enrolled again after a confirmed MFA reset.
 
 - Used a one-use recovery code
 - Identified the support path when no codes remain

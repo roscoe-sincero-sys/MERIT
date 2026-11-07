@@ -6,13 +6,13 @@
   "feature": "signIn",
   "user": "loginemail",
   "source": "training/workflows/all-users/sign-in/login-email-setup.workflow.ts",
-  "fingerprint": "1c74206dcaee3cf8",
+  "fingerprint": "1eeca5b092ef5c17",
   "appVersion": "be42f6d 2026-11-06",
   "built": "2026-11-07",
   "engine": "piper",
   "voice": "en_US-kristin-medium",
   "narrated": true,
-  "duration": 144621,
+  "duration": 138939,
   "introMs": 11863,
   "outroMs": 13393,
   "scenes": [
@@ -24,8 +24,8 @@
     {
       "scene": 0,
       "say": "First sign in with your password and authenticator. Open Sign-in methods from the header.",
-      "start": 12753,
-      "end": 26547,
+      "start": 12755,
+      "end": 25877,
       "actions": [
         "Types “loginemail” in User name",
         "Types into Password (hidden)",
@@ -41,15 +41,15 @@
     {
       "scene": 0,
       "say": "Your agency decides whether email codes are allowed. They need an email address on your account and are never available to administrators.",
-      "start": 26547,
-      "end": 35793,
+      "start": 25877,
+      "end": 35120,
       "actions": [],
       "onScreen": [
         "Email codes · OFF · Email codes are less secure than your authenticator app: anyone who can read your email could use them. NIST SP 800-63B-4 does not accept email as an out-of-band authenticator. Your agency allows them as an extra option; your authenticator app stays on either way. · To turn them on, enter a current code from your authenticator app. We will then send a code to l***@merit.example"
       ],
       "highlights": [
         {
-          "at": 27695,
+          "at": 26886,
           "rect": {
             "x": 144,
             "y": 332.390625,
@@ -63,15 +63,15 @@
     {
       "scene": 0,
       "say": "Read the warning before enabling email codes. Anyone who can read your email could use them. Your authenticator stays required and available.",
-      "start": 35793,
-      "end": 46519,
+      "start": 35120,
+      "end": 45830,
       "actions": [],
       "onScreen": [
         "Email codes are less secure than your authenticator app: anyone who can read your email could use them. NIST SP 800-63B-4 does not accept email as an out-of-band authenticator. Your agency allows them as an extra option; your authenticator app stays on either way."
       ],
       "highlights": [
         {
-          "at": 35883,
+          "at": 35131,
           "rect": {
             "x": 144,
             "y": 379.890625,
@@ -85,8 +85,8 @@
     {
       "scene": 1,
       "say": "Enter a current authenticator code to start. Confirm that the masked address is yours; ask your administrator to correct it if needed.",
-      "start": 46519,
-      "end": 56088,
+      "start": 45830,
+      "end": 55398,
       "actions": [
         "Types into Six-digit code from your authenticator app (hidden)",
         "Selects “Send a code to l***@merit.example”"
@@ -98,8 +98,8 @@
     {
       "scene": 1,
       "say": "Read the newest email, enter its verification code, and choose Confirm and turn on email codes. This proves access to the address.",
-      "start": 56088,
-      "end": 66032,
+      "start": 55398,
+      "end": 65338,
       "actions": [
         "Types into Six-digit code from the email (hidden)",
         "Selects “Confirm and turn on email codes”"
@@ -111,8 +111,8 @@
     {
       "scene": 1,
       "say": "Under At sign-in, offer first, choose An email code and save your choice. This changes the first option, not the need for a second factor.",
-      "start": 66032,
-      "end": 77481,
+      "start": 65338,
+      "end": 76777,
       "actions": [
         "Selects “An email code”",
         "Selects “Save choice”"
@@ -124,8 +124,8 @@
     {
       "scene": 2,
       "say": "Sign out and enter your password again. Get a code by email is now offered first, while your authenticator remains an alternative.",
-      "start": 77481,
-      "end": 92015,
+      "start": 76777,
+      "end": 88734,
       "actions": [
         "Selects “Sign out”",
         "Types “loginemail” in User name",
@@ -137,7 +137,7 @@
       ],
       "highlights": [
         {
-          "at": 91021,
+          "at": 87755,
           "rect": {
             "x": 128,
             "y": 7.53125,
@@ -151,8 +151,8 @@
     {
       "scene": 2,
       "say": "Choose Email me a code. Enter the code from the newest email, then Verify and sign in. Codes work once and expire after the time shown.",
-      "start": 92016,
-      "end": 102862,
+      "start": 88734,
+      "end": 99585,
       "actions": [
         "Selects “Email me a code”",
         "Types into Six-digit code from the email (hidden)",
@@ -165,8 +165,8 @@
     {
       "scene": 2,
       "say": "To prefer your authenticator again, open Sign-in methods, choose My authenticator app, and save your choice.",
-      "start": 102862,
-      "end": 111806,
+      "start": 99585,
+      "end": 108530,
       "actions": [
         "Selects “Sign-in methods”",
         "Selects “My authenticator app”",
@@ -179,8 +179,8 @@
     {
       "scene": 2,
       "say": "Turn off email codes removes that option. Your authenticator still works. Sign in once more to check that the email option is gone.",
-      "start": 111806,
-      "end": 130524,
+      "start": 108530,
+      "end": 124836,
       "actions": [
         "Selects “Turn off email codes”",
         "Selects “Sign out”",

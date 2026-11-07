@@ -68,17 +68,24 @@ export class Stage {
     if (options.describe) this.screen(await describe(target));
   }
 
-  /** Fails the step unless the target's text matches. */
-  async expectText(target: Locator, pattern: RegExp, timeout = 10_000): Promise<void> {
+  /** Fails the step unless the target's text matches the expected literal string or pattern. */
+  async expectText(
+    target: Locator,
+    expected: string | RegExp,
+    optionsOrTimeout: number | { exact?: boolean; timeout?: number } = 10_000,
+  ): Promise<void> {
+    const options = typeof optionsOrTimeout === 'number' ? { timeout: optionsOrTimeout } : optionsOrTimeout;
+    const timeout = options.timeout ?? 10_000;
     await target.waitFor({ state: 'visible', timeout });
     const deadline = Date.now() + timeout;
     let text = '';
     while (Date.now() < deadline) {
-      text = (await target.innerText()).replace(/\s+/g, ' ').trim();
-      if (pattern.test(text)) return;
+      text = normalizeText(await target.innerText());
+      if (matchesExpectedText(text, expected, { exact: options.exact })) return;
       await this.page.waitForTimeout(100);
     }
-    throw new Error(`Expected ${pattern} in "${text.slice(0, 160)}"`);
+    const label = typeof expected === 'string' ? JSON.stringify(expected) : String(expected);
+    throw new Error(`Expected ${label} in "${text.slice(0, 160)}"`);
   }
 
   async scrollTo(target: Locator, position: 'center' | 'top' = 'center'): Promise<void> {
@@ -270,6 +277,25 @@ export class Stage {
 
 function ease(t: number): number {
   return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+}
+
+/** Collapses runs of whitespace and trims leading/trailing whitespace. */
+export function normalizeText(text: string): string {
+  return text.replace(/\s+/g, ' ').trim();
+}
+
+/** Checks whether normalized element text matches a literal string (substring or exact) or a RegExp pattern. */
+export function matchesExpectedText(
+  actual: string,
+  expected: string | RegExp,
+  options?: { exact?: boolean },
+): boolean {
+  const normActual = normalizeText(actual);
+  if (typeof expected === 'string') {
+    const normExpected = normalizeText(expected);
+    return options?.exact ? normActual === normExpected : normActual.includes(normExpected);
+  }
+  return expected.test(normActual);
 }
 
 /** The accessible name of a control, near enough for a transcript. */
