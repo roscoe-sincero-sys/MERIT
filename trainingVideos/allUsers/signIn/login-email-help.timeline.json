@@ -1,0 +1,259 @@
+{
+  "id": "login-email-help",
+  "title": "Email sign-in: missing, old and rejected codes",
+  "summary": "Recover from wrong or expired email codes, use the newest message, and switch methods when email cannot be delivered.",
+  "role": "allUsers",
+  "feature": "signIn",
+  "user": "loginmailhelp",
+  "source": "training/workflows/all-users/sign-in/login-email-help.workflow.ts",
+  "fingerprint": "4356c326f75ca9be",
+  "appVersion": "be42f6d 2026-11-06",
+  "built": "2026-11-07",
+  "engine": "piper",
+  "voice": "en_US-kristin-medium",
+  "narrated": true,
+  "duration": 166574,
+  "introMs": 13512,
+  "outroMs": 12894,
+  "scenes": [
+    "Wrong or missing email",
+    "Expired, replaced and exhausted codes",
+    "Delivery problems and fallback options"
+  ],
+  "steps": [
+    {
+      "scene": 0,
+      "say": "After your password, choose Email me a code. A sent message appears with the masked address and the code lifetime.",
+      "start": 14389,
+      "end": 25726,
+      "actions": [
+        "Types “loginmailhelp” in User name",
+        "Types into Password (hidden)",
+        "Selects “Continue”",
+        "Selects “Email me a code”"
+      ],
+      "onScreen": [
+        "We sent a six-digit code to l***@merit.example. It expires in 5 minutes."
+      ],
+      "highlights": [
+        {
+          "at": 24748,
+          "rect": {
+            "x": 561,
+            "y": 224.71875,
+            "width": 414,
+            "height": 66.84375
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 0,
+      "say": "Email can take a minute or two. Check junk or spam, and check the masked address. Never send a verification code to support.",
+      "start": 25727,
+      "end": 35439,
+      "actions": [],
+      "onScreen": [
+        "You can ask for a new code in 29 seconds."
+      ],
+      "highlights": [
+        {
+          "at": 25787,
+          "rect": {
+            "x": 561,
+            "y": 657.234375,
+            "width": 414,
+            "height": 22.03125
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 0,
+      "say": "If you mistype a code, MERIT explains the error and shows how many attempts remain. Read the message before trying again.",
+      "start": 35439,
+      "end": 44316,
+      "actions": [
+        "Types into Six-digit code from the email (hidden)",
+        "Selects “Verify and sign in”"
+      ],
+      "onScreen": [
+        "Some fields need attention · That code did not match. You can try 4 more times before you need a new code."
+      ],
+      "highlights": [
+        {
+          "at": 39067,
+          "rect": {
+            "x": 561,
+            "y": 295.890625,
+            "width": 414,
+            "height": 128.8125
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 1,
+      "say": "An expired code cannot sign you in. Choose Send a new code after the resend countdown; repeated clicks will not speed up delivery.",
+      "start": 44316,
+      "end": 54107,
+      "actions": [
+        "Types into Six-digit code from the email (hidden)",
+        "Selects “Verify and sign in”"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 1,
+      "say": "Wait until Send a new code is available, then ask for another message. Use only the code from the newest email.",
+      "start": 54107,
+      "end": 63055,
+      "actions": [
+        "Selects “Send a new code”"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 1,
+      "say": "Requesting another code replaces the previous one. This example requests a newer message after the next countdown.",
+      "start": 63055,
+      "end": 87111,
+      "actions": [
+        "Selects “Send a new code”"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 1,
+      "say": "An older email no longer works after a newer code is sent. Use the newest message even if the older email arrives later.",
+      "start": 87111,
+      "end": 95807,
+      "actions": [
+        "Types into Six-digit code from the email (hidden)",
+        "Selects “Verify and sign in”"
+      ],
+      "onScreen": [
+        "Some fields need attention · That code was replaced by a newer one. Enter the code from the newest email, or send a new code."
+      ],
+      "highlights": [
+        {
+          "at": 90294,
+          "rect": {
+            "x": 561,
+            "y": 295.890625,
+            "width": 414,
+            "height": 154.234375
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 1,
+      "say": "Too many wrong entries can also close a code. Instead of continuing to guess, get a new code or use your authenticator.",
+      "start": 95807,
+      "end": 104768,
+      "actions": [
+        "Types into Six-digit code from the email (hidden)",
+        "Selects “Verify and sign in”"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 1,
+      "say": "Use your authenticator app instead returns to the other verification method. Enter its current code to finish signing in.",
+      "start": 104769,
+      "end": 113110,
+      "actions": [
+        "Selects “Use your authenticator app instead”",
+        "Types into Six-digit code from your authenticator app (hidden)",
+        "Selects “Verify and sign in”"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 2,
+      "say": "If MERIT cannot send the email, it shows a delivery error and support reference. Keep that reference when contacting support, rather than any code.",
+      "start": 113110,
+      "end": 127318,
+      "actions": [
+        "Selects “Sign out”",
+        "Types “loginmailhelp” in User name",
+        "Types into Password (hidden)",
+        "Selects “Continue”",
+        "Selects “Email me a code”"
+      ],
+      "onScreen": [
+        "We couldn't send your verification code. Please try again. If the problem continues, contact support. · Support reference: EM-5NH8PPAZ"
+      ],
+      "highlights": [
+        {
+          "at": 126332,
+          "rect": {
+            "x": 561,
+            "y": 224.71875,
+            "width": 414,
+            "height": 117.6875
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 2,
+      "say": "Choose Try sending again after a delivery failure. If email remains unavailable, use your authenticator or an unused recovery code.",
+      "start": 127318,
+      "end": 137690,
+      "actions": [
+        "Selects “Try sending again”",
+        "Types into Six-digit code from the email (hidden)",
+        "Selects “Verify and sign in”"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 2,
+      "say": "An agency can withdraw email-code access. In that case, the email option disappears; your authenticator remains the way to sign in.",
+      "start": 137690,
+      "end": 152972,
+      "actions": [
+        "Selects “Sign out”",
+        "Types “loginmailhelp” in User name",
+        "Types into Password (hidden)",
+        "Selects “Continue”",
+        "Types into Six-digit code from your authenticator app (hidden)",
+        "Selects “Verify and sign in”"
+      ],
+      "onScreen": [
+        "Enter your verification code · Fields marked with an asterisk (*) are required. · Six-digit code from your authenticator app * · Or enter one of your ten-character recovery codes. · Verify and sign in · Can't access your authenticator? · Sign in as a different user"
+      ],
+      "highlights": [
+        {
+          "at": 149269,
+          "rect": {
+            "x": 128,
+            "y": 63.53125,
+            "width": 1280,
+            "height": 581.265625
+          }
+        }
+      ],
+      "zooms": []
+    }
+  ]
+}

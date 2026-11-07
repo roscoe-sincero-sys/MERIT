@@ -1,0 +1,118 @@
+1
+00:00:00,300 --> 00:00:03,945
+Cannot sign in: locks,
+disabled accounts and timeouts.
+
+2
+00:00:03,945 --> 00:00:09,345
+Distinguish an account lock from network
+throttling, and know when to restart or
+
+3
+00:00:09,345 --> 00:00:11,568
+contact your administrator.
+
+4
+00:00:13,155 --> 00:00:17,513
+Repeated wrong passwords or
+verification codes can lock an account.
+
+5
+00:00:17,513 --> 00:00:21,230
+Stop guessing and read the
+message MERIT gives you.
+
+6
+00:00:22,221 --> 00:00:24,783
+The account is locked for fifteen minutes.
+
+7
+00:00:24,783 --> 00:00:29,297
+Wait until it unlocks or ask an
+administrator to unlock it after verifying
+
+8
+00:00:29,297 --> 00:00:30,605
+your identity.
+
+9
+00:00:30,905 --> 00:00:34,151
+Even a correct password
+does not bypass the lock.
+
+10
+00:00:34,151 --> 00:00:37,598
+A password-reset link
+also does not bypass it.
+
+11
+00:00:38,792 --> 00:00:43,699
+After the wait or a confirmed unlock,
+start again with the correct password and
+
+12
+00:00:43,699 --> 00:00:45,099
+authenticator.
+
+13
+00:00:49,962 --> 00:00:53,932
+A disabled or unknown account
+gets a general sign-in error.
+
+14
+00:00:53,932 --> 00:00:59,581
+If the details are correct but access
+still fails, contact your administrator.
+
+15
+00:01:00,188 --> 00:01:03,005
+A sign-in verification page can expire.
+
+16
+00:01:03,005 --> 00:01:09,401
+If MERIT sends you back to sign in, enter
+your password again and use a fresh code.
+
+17
+00:01:11,320 --> 00:01:14,956
+Too many attempts from one
+network is a separate limit.
+
+18
+00:01:14,956 --> 00:01:20,579
+This training instance demonstrates that
+message without affecting other users.
+
+19
+00:01:28,317 --> 00:01:32,658
+Wait for the number of seconds
+shown, then use Back to sign in.
+
+20
+00:01:32,658 --> 00:01:38,087
+Repeated retries do not remove either
+a network limit or an account lock.
+
+21
+00:01:38,457 --> 00:01:44,108
+If the problem continues, tell support
+which message you see and your user name.
+
+22
+00:01:44,108 --> 00:01:49,806
+Do not send your password, setup key,
+recovery codes or verification codes.
+
+23
+00:01:53,419 --> 00:01:58,064
+In this video you recognized account
+locks and network throttling,
+
+24
+00:01:58,064 --> 00:02:03,202
+restarted an expired verification
+step, and identified when to contact an
+
+25
+00:02:03,202 --> 00:02:04,602
+administrator.

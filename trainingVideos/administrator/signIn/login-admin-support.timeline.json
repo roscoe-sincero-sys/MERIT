@@ -1,0 +1,183 @@
+{
+  "id": "login-admin-support",
+  "title": "Administrator: help someone sign in again",
+  "summary": "Unlock an account, reset a lost authenticator, and require a private password after confirming the person's identity.",
+  "role": "administrator",
+  "feature": "signIn",
+  "user": "loginadmin",
+  "source": "training/workflows/administrator/sign-in/login-admin-support.workflow.ts",
+  "fingerprint": "0f66533be0413777",
+  "appVersion": "be42f6d 2026-11-06",
+  "built": "2026-11-07",
+  "engine": "piper",
+  "voice": "en_US-kristin-medium",
+  "narrated": true,
+  "duration": 128144,
+  "introMs": 12513,
+  "outroMs": 12325,
+  "scenes": [
+    "Verify the person and find their account",
+    "Unlock or reset MFA",
+    "Set a temporary password when needed"
+  ],
+  "steps": [
+    {
+      "scene": 0,
+      "say": "Use your agency's identity-verification procedure before changing sign-in security. Confirm the person through a trusted channel, not a message containing a code.",
+      "start": 13400,
+      "end": 24904,
+      "actions": [
+        "Types “loginadmin” in User name",
+        "Types into Password (hidden)",
+        "Selects “Continue”",
+        "Types into Six-digit code from your authenticator app (hidden)",
+        "Selects “Verify and sign in”"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 0,
+      "say": "Administrator accounts use an authenticator or recovery code. Email verification is never available to administrators.",
+      "start": 24905,
+      "end": 33586,
+      "actions": [
+        "Selects “Sign-in methods”"
+      ],
+      "onScreen": [
+        "Email codes · OFF · Email codes are not available for your account. Your agency decides whether they can be used, they need an email address on your account, and they are never available to administrators."
+      ],
+      "highlights": [
+        {
+          "at": 28417,
+          "rect": {
+            "x": 144,
+            "y": 659.390625,
+            "width": 736,
+            "height": 84.28125
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 0,
+      "say": "Open Administration, then Users. Filter by the person's name or user name and open the correct account. You can manage only accounts within your authority.",
+      "start": 33587,
+      "end": 43848,
+      "actions": [
+        "Selects “Administration”",
+        "Selects “Users”",
+        "Types “loginsupport” in Filter listed users",
+        "Selects “Taylor”"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 1,
+      "say": "For a locked account, choose Unlock account after verifying the person. This clears the lock; it does not change their password or authenticator.",
+      "start": 43849,
+      "end": 53756,
+      "actions": [
+        "Selects “Unlock account”"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 1,
+      "say": "For a lost authenticator, choose Reset MFA after verifying the person. The confirmation explains that active sessions and old codes will stop working.",
+      "start": 53756,
+      "end": 64771,
+      "actions": [
+        "Selects “Reset MFA after verifying the person”"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 1,
+      "say": "Tell the person to sign in again with their password, add the new MERIT authenticator entry, and save the new recovery codes.",
+      "start": 64771,
+      "end": 74298,
+      "actions": [],
+      "onScreen": [
+        "Not yet enrolled; the person enrolls at next sign-in."
+      ],
+      "highlights": [
+        {
+          "at": 66136,
+          "rect": {
+            "x": 776,
+            "y": 379.59375,
+            "width": 616,
+            "height": 18.390625
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 2,
+      "say": "If a password reset is also needed, enter a new temporary password and select Ask them to choose a new password at their next sign-in.",
+      "start": 74298,
+      "end": 83877,
+      "actions": [
+        "Types into New password (leave blank to keep) (hidden)",
+        "Selects “Ask them to choose a new password at their next sign-in”"
+      ],
+      "onScreen": [
+        "Ask them to choose a new password at their next sign-in"
+      ],
+      "highlights": [
+        {
+          "at": 79709,
+          "rect": {
+            "x": 144,
+            "y": 282.15625,
+            "width": 320,
+            "height": 44.0625
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 2,
+      "say": "Save the account. Share the temporary password only through your approved secure channel. Never request the person's authenticator or recovery codes.",
+      "start": 83877,
+      "end": 94900,
+      "actions": [
+        "Selects “Save”"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 2,
+      "say": "The person completes MFA and chooses a password only they know. If both password and authenticator were lost, they must complete both reset paths.",
+      "start": 94900,
+      "end": 105369,
+      "actions": [],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 2,
+      "say": "Another administrator must help an administrator who cannot sign in. A platform administrator should contact another platform administrator.",
+      "start": 105369,
+      "end": 115115,
+      "actions": [],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    }
+  ]
+}
