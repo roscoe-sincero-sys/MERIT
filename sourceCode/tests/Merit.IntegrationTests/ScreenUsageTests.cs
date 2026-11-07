@@ -139,7 +139,12 @@ public sealed class ScreenUsageTests(MeritFixture fixture)
     [SqlFact]
     public async Task UsageIsNotAvailableToOrdinaryStaffOrOutsideTheReadersScope()
     {
-        var intake = await fixture.SignedInAsync("intake");
+        // FirstSignInTests owns the seeded intake account's enrollment; use independent state here.
+        await using var ordinary = await UserAsync("usageordinary", role: "intakeClerk");
+        using var intake = fixture.Anonymous();
+        await ordinary.SignInAsync(intake, MeritFixture.Password);
+        using var allowed = await intake.NoRedirect.GetAsync("/intake");
+        Assert.Equal(HttpStatusCode.OK, allowed.StatusCode);
         using var denied = await intake.NoRedirect.GetAsync("/admin/usage");
         Assert.True(denied.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.Redirect);
 
@@ -259,16 +264,16 @@ public sealed class ScreenUsageTests(MeritFixture fixture)
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
-    private async Task<SyntheticAccount> UserAsync(string prefix, Guid? tenant = null)
+    private async Task<SyntheticAccount> UserAsync(string prefix, Guid? tenant = null, string role = "supervisor")
     {
         var account = await SyntheticAccount.CreateAsync(fixture.Factory, prefix);
         await account.ScalarAsync<int>("""
             INSERT auth.userAssignment (userAssignmentId, appUserId, roleId, tenantId, includeDescendants, accessLevel, startDate)
             SELECT NEWID (), @id, r.roleId, COALESCE (@tenant, u.homeTenantId), 1, 'full', '2026-01-01'
-              FROM auth.appUser AS u JOIN auth.role AS r ON r.rootTenantId = u.rootTenantId AND r.roleCode = 'supervisor' AND r.isDeleted = 0
+              FROM auth.appUser AS u JOIN auth.role AS r ON r.rootTenantId = u.rootTenantId AND r.roleCode = @role AND r.isDeleted = 0
              WHERE u.appUserId = @id;
             SELECT 0;
-            """, ("@tenant", (object?)tenant ?? DBNull.Value));
+            """, ("@tenant", (object?)tenant ?? DBNull.Value), ("@role", role));
         return account;
     }
 
