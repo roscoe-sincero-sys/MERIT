@@ -1,0 +1,484 @@
+{
+  "id": "roles-in-profiles",
+  "title": "Profiles: choosing roles for your work",
+  "summary": "Choose roles, compare them with access levels, and switch between intake, case work and review profiles.",
+  "role": "allUsers",
+  "feature": "profiles",
+  "user": "rolesdemo",
+  "source": "training/workflows/all-users/profiles/roles-in-profiles.workflow.ts",
+  "fingerprint": "ec06a0edb6d3919c",
+  "appVersion": "be42f6d 2026-11-06",
+  "built": "2026-11-07",
+  "engine": "piper",
+  "voice": "en_US-kristin-medium",
+  "narrated": true,
+  "duration": 241283,
+  "introMs": 11248,
+  "outroMs": 14333,
+  "scenes": [
+    "Roles come from your master profile",
+    "Same place and access, different roles",
+    "Keep a role, reduce its access",
+    "Combine roles when the work needs both"
+  ],
+  "steps": [
+    {
+      "scene": 0,
+      "say": "Riley handles both intake and case work in Maryland. Open My profiles using the profile box in the header.",
+      "start": 12125,
+      "end": 19917,
+      "actions": [
+        "Selects “Profile Master profile Switch ▾ : switch profile or jurisdiction”"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 0,
+      "say": "The administrator assigned two roles: Intake clerk and Case manager. Both are in Riley's master profile, at Maryland and everything under it.",
+      "start": 19917,
+      "end": 30188,
+      "actions": [],
+      "onScreen": [
+        "Master profile Master · Everything you have been given. Managed by your administrator. · Case manager at Maryland Lead and Metals Program (demo) and everything under it · Full (read, write and delete) · Intake clerk at Maryland Lead and Metals Program (demo) and everything under it · Full (read, write and delete) · In use"
+      ],
+      "highlights": [
+        {
+          "at": 19940,
+          "rect": {
+            "x": 144,
+            "y": 575.8125,
+            "width": 1248,
+            "height": 118.6875
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 0,
+      "say": "A role supplies permissions for particular duties. A profile chooses which of your assigned roles to use, and where to use them.",
+      "start": 30188,
+      "end": 39422,
+      "actions": [
+        "Selects “Create a profile”",
+        "Types “Maryland intake duties” in Name"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 0,
+      "say": "Place sets where a grant applies. Role sets the permitted tasks. Access limits those permissions to reading, writing, or full access.",
+      "start": 39422,
+      "end": 50735,
+      "actions": [],
+      "onScreen": [
+        "Place · (none) · Maryland Lead and Metals Program (demo) · Baltimore City Health Department · Baltimore County Department of Health · Occupational Health Program · Prince George's County Health Department · Role · Case manager · Intake clerk · Access · Read only · Read and write (no delete) · Full (read, write and delete) · Include everything under this place"
+      ],
+      "highlights": [
+        {
+          "at": 40030,
+          "rect": {
+            "x": 144,
+            "y": 286.328125,
+            "width": 480,
+            "height": 205.0625
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 0,
+      "say": "The Role list comes from your master profile. If a needed role is missing, ask your administrator; creating a profile cannot assign it to you.",
+      "start": 50735,
+      "end": 60908,
+      "actions": [
+        "Chooses “Intake clerk” for Role"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 1,
+      "say": "For intake duties, choose Maryland, Intake clerk, and Full access. Keep everything under this place selected.",
+      "start": 60908,
+      "end": 70069,
+      "actions": [
+        "Chooses “Maryland Lead and Metals Program (demo)” for Place",
+        "Chooses “Intake clerk” for Role",
+        "Chooses “Full (read, write and delete)” for Access"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 1,
+      "say": "Full access still stays within the role's permissions. It does not make an Intake clerk a supervisor or an administrator. Save the profile.",
+      "start": 70069,
+      "end": 80047,
+      "actions": [
+        "Selects “Save profile”"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 1,
+      "say": "Create a second profile for case duties, using the same Maryland place and Full access, but choose Case manager for Role.",
+      "start": 80047,
+      "end": 93136,
+      "actions": [
+        "Selects “Create a profile”",
+        "Types “Maryland case duties” in Name",
+        "Chooses “Maryland Lead and Metals Program (demo)” for Place",
+        "Chooses “Case manager” for Role",
+        "Chooses “Full (read, write and delete)” for Access"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 1,
+      "say": "Case manager includes case editing and investigation work. Intake clerk includes file upload and held-record work. Save the case profile.",
+      "start": 93136,
+      "end": 103767,
+      "actions": [
+        "Selects “Save profile”"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 1,
+      "say": "Choose Use beside Maryland intake duties. The header confirms the active profile; no sign-out is needed.",
+      "start": 103767,
+      "end": 112738,
+      "actions": [
+        "Selects “Use Maryland intake duties”"
+      ],
+      "onScreen": [
+        "Profile · Maryland intake duties · Switch ▾ · : switch profile or jurisdiction"
+      ],
+      "highlights": [
+        {
+          "at": 106928,
+          "rect": {
+            "x": 1128.171875,
+            "y": 26.859375,
+            "width": 158.6875,
+            "height": 53.46875
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 1,
+      "say": "The Intake menu is available for uploading files and handling held records.",
+      "start": 112739,
+      "end": 118643,
+      "actions": [
+        "Selects “Intake”"
+      ],
+      "onScreen": [
+        "Home · Work queues · People · Intake · Surveillance · Registry & reports · Administration",
+        "Home · Work queues · People · Intake · Intake · Held records · Match review · Surveillance · Registry & reports · Administration"
+      ],
+      "highlights": [
+        {
+          "at": 112758,
+          "rect": {
+            "x": 144,
+            "y": 107.1875,
+            "width": 1248,
+            "height": 44
+          }
+        },
+        {
+          "at": 114360,
+          "rect": {
+            "x": 144,
+            "y": 107.1875,
+            "width": 1248,
+            "height": 44
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 1,
+      "say": "Switch to Maryland case duties. The place and access level stay the same, but the Intake menu disappears because Case manager lacks those intake permissions.",
+      "start": 118643,
+      "end": 130248,
+      "actions": [
+        "Selects “Use Maryland case duties”"
+      ],
+      "onScreen": [
+        "Profile · Maryland case duties · Switch ▾ · : switch profile or jurisdiction",
+        "Home · Work queues · People · Surveillance · Registry & reports · Administration"
+      ],
+      "highlights": [
+        {
+          "at": 121153,
+          "rect": {
+            "x": 1139.46875,
+            "y": 26.859375,
+            "width": 147.390625,
+            "height": 53.46875
+          }
+        },
+        {
+          "at": 121639,
+          "rect": {
+            "x": 144,
+            "y": 107.1875,
+            "width": 1248,
+            "height": 44
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 2,
+      "say": "For a review session, create Maryland case review. Keep Case manager and the same place, but choose Read only.",
+      "start": 130248,
+      "end": 143151,
+      "actions": [
+        "Selects “Create a profile”",
+        "Types “Maryland case review” in Name",
+        "Chooses “Maryland Lead and Metals Program (demo)” for Place",
+        "Chooses “Case manager” for Role",
+        "Chooses “Read only” for Access"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 2,
+      "say": "Read only removes writing permissions from that role. It is useful when checking records without making changes. Save and use this profile.",
+      "start": 143151,
+      "end": 152939,
+      "actions": [
+        "Selects “Save profile”",
+        "Selects “Use Maryland case review”"
+      ],
+      "onScreen": [
+        "Profile · Maryland case review · Switch ▾ · : switch profile or jurisdiction"
+      ],
+      "highlights": [
+        {
+          "at": 148938,
+          "rect": {
+            "x": 1136.390625,
+            "y": 26.859375,
+            "width": 150.46875,
+            "height": 53.46875
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 2,
+      "say": "People and Work queues remain available for review. The role is still Case manager; Access is what limits it to reading.",
+      "start": 152939,
+      "end": 161691,
+      "actions": [
+        "Selects “Work queues”"
+      ],
+      "onScreen": [
+        "Home · Work queues · People · Surveillance · Registry & reports · Administration",
+        "Work queues · Hide queues · All queues · Cross-link tasks (3) · Investigation requests (2) · Prenatal provider notifications (1) · Newborn testing (1) · All queues · Queue counts show open tasks. · Status · Open · Done · Dismissed · Assigned to me · Urgent only · Overdue only · 7 rows · Columns · Skip table to pagination · Task · ⇅ · Queue · ⇅ · Person Case Due · ▲ · Assigned · Notify the prenatal"
+      ],
+      "highlights": [
+        {
+          "at": 152997,
+          "rect": {
+            "x": 144,
+            "y": 107.1875,
+            "width": 1248,
+            "height": 44
+          }
+        },
+        {
+          "at": 156302,
+          "rect": {
+            "x": 128,
+            "y": -134.8125,
+            "width": 1280,
+            "height": 1047.09375
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 3,
+      "say": "A profile can combine roles too. Return to My profiles and create Maryland intake and cases.",
+      "start": 161691,
+      "end": 171518,
+      "actions": [
+        "Selects “Profile Maryland case review Switch ▾ : switch profile or jurisdiction”",
+        "Selects “Create a profile”",
+        "Types “Maryland intake and cases” in Name"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 3,
+      "say": "In the first row, choose Maryland and Intake clerk, with Read and write without delete.",
+      "start": 171518,
+      "end": 178939,
+      "actions": [
+        "Chooses “Maryland Lead and Metals Program (demo)” for Place",
+        "Chooses “Intake clerk” for Role",
+        "Chooses “Read and write (no delete)” for Access"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 3,
+      "say": "In the second row, choose the same Maryland place, but Case manager, also with Read and write without delete.",
+      "start": 178939,
+      "end": 188642,
+      "actions": [
+        "Chooses “Maryland Lead and Metals Program (demo)” for Place",
+        "Chooses “Case manager” for Role",
+        "Chooses “Read and write (no delete)” for Access"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 3,
+      "say": "The grants add together. Both sets of permissions apply; a read-only grant would not cancel writing allowed by another grant at the same place.",
+      "start": 188642,
+      "end": 198602,
+      "actions": [],
+      "onScreen": [
+        "Grants · Each grant is a role, a place, and how much you can do there. Leave a row's place empty to skip it. · Place · (none) · Maryland Lead and Metals Program (demo) · Baltimore City Health Department · Baltimore County Department of Health · Occupational Health Program · Prince George's County Health Department · Role · Case manager · Intake clerk · Access · Read only · Read and write (no delet"
+      ],
+      "highlights": [
+        {
+          "at": 189104,
+          "rect": {
+            "x": 144,
+            "y": -26.671875,
+            "width": 480,
+            "height": 831.390625
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 3,
+      "say": "Every grant must fit within your master profile. Check the master summary, then save the combined profile.",
+      "start": 198602,
+      "end": 206888,
+      "actions": [
+        "Selects “Save profile”"
+      ],
+      "onScreen": [
+        "Your master profile · This is the most you can have. A profile can be smaller, never bigger: MERIT refuses to save one that goes beyond it. · Case manager at Maryland Lead and Metals Program (demo) and everything under it · Full (read, write and delete) · Intake clerk at Maryland Lead and Metals Program (demo) and everything under it · Full (read, write and delete)"
+      ],
+      "highlights": [
+        {
+          "at": 199101,
+          "rect": {
+            "x": 776,
+            "y": -199.75,
+            "width": 616,
+            "height": 1177.75
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 3,
+      "say": "Use the combined profile. Intake is available again, alongside case work, because this profile includes both roles.",
+      "start": 206888,
+      "end": 216897,
+      "actions": [
+        "Selects “Use Maryland intake and cases”"
+      ],
+      "onScreen": [
+        "Profile · Maryland intake and cases · Switch ▾ · : switch profile or jurisdiction",
+        "Home · Work queues · People · Intake · Surveillance · Registry & reports · Administration",
+        "Maryland intake and cases · Case manager at Maryland Lead and Metals Program (demo) and everything under it · Read and write (no delete) · Intake clerk at Maryland Lead and Metals Program (demo) and everything under it · Read and write (no delete) · In use Change · Maryland intake and cases"
+      ],
+      "highlights": [
+        {
+          "at": 210093,
+          "rect": {
+            "x": 1107.78125,
+            "y": 26.859375,
+            "width": 179.078125,
+            "height": 53.46875
+          }
+        },
+        {
+          "at": 210568,
+          "rect": {
+            "x": 144,
+            "y": 107.1875,
+            "width": 1248,
+            "height": 44
+          }
+        },
+        {
+          "at": 211697,
+          "rect": {
+            "x": 144,
+            "y": 329.453125,
+            "width": 1248,
+            "height": 118.6875
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 3,
+      "say": "Choose the profile that fits today's duties, and check its name in the header. Use Master profile to return to everything you were assigned.",
+      "start": 216897,
+      "end": 226238,
+      "actions": [
+        "Selects “Use Master profile”"
+      ],
+      "onScreen": [
+        "Profile · Master profile · Switch ▾ · : switch profile or jurisdiction"
+      ],
+      "highlights": [
+        {
+          "at": 218907,
+          "rect": {
+            "x": 1182.359375,
+            "y": 26.859375,
+            "width": 104.5,
+            "height": 53.46875
+          }
+        }
+      ],
+      "zooms": []
+    }
+  ]
+}
