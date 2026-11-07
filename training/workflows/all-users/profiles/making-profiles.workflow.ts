@@ -30,14 +30,14 @@ async function createProfile(s: Stage, name: string): Promise<void> {
 
 async function save(s: Stage, name: string): Promise<void> {
   await s.click(s.page.getByRole('button', { name: 'Save profile' }));
-  await s.expectText(s.page.locator('main .usa-alert').first(), new RegExp(`Profile "${name.replace(/[()]/g, '\\$&')}" saved`));
+  await s.expectText(s.page.locator('main .usa-alert').first(), `Profile "${name}" saved`);
 }
 
 async function use(s: Stage, name: string): Promise<void> {
   const row = s.page.locator('main tbody tr', { hasText: name });
   await s.highlight(row, { describe: false });
   await s.click(row.getByRole('button', { name: `Use ${name}` }));
-  await s.expectText(profileBox(s), new RegExp(name.replace(/[()]/g, '\\$&')));
+  await s.expectText(profileBox(s), name);
 }
 
 async function queues(s: Stage, count: number): Promise<void> {
@@ -155,7 +155,7 @@ export default defineWorkflow({
         {
           say: 'My profiles now lists the master profile and the three new ones, each with what it gives you.',
           run: async s => {
-            await s.expectText(s.page.locator('main tbody'), new RegExp(HARFORD));
+            await s.expectText(s.page.locator('main tbody'), HARFORD);
             await s.highlight(s.page.locator('main table'));
           },
           hold: 900,

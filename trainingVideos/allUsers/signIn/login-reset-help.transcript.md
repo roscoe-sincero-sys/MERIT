@@ -1,6 +1,6 @@
 # Password reset: links and support options
 
-**Role:** All users · **Feature:** Signing in and your account · **Length:** 2:42
+**Role:** All users · **Feature:** Signing in and your account · **Length:** 2:35
 
 Handle expired, replaced or closed links, locked accounts, unavailable email, and a missing authenticator.
 
@@ -35,7 +35,7 @@ Handle expired, replaced or closed links, locked accounts, unavailable email, an
 - *Action:* Types into New password again (hidden)
 - *Action:* Selects “Reset password”
 
-**[1:21]** If the app is missing but you have an unused recovery code, a fresh reset link can use it as the second factor. The code is then used up.
+**[1:18]** If the app is missing but you have an unused recovery code, a fresh reset link can use it as the second factor. The code is then used up.
 - *Action:* Types “loginresethelp” in User name
 - *Action:* Selects “Email me a reset link”
 - *Action:* Types into Code from your authenticator app, or a recovery code (hidden)
@@ -45,14 +45,14 @@ Handle expired, replaced or closed links, locked accounts, unavailable email, an
 
 ## 3. When email or both factors are unavailable
 
-**[1:44]** Some MERIT installations cannot email reset links. Their reset page tells you to contact an administrator after confirming who you are.
+**[1:37]** Some MERIT installations cannot email reset links. Their reset page tells you to contact an administrator after confirming who you are.
 - *On screen:* Reset your password · MERIT can't email reset links here. Contact your MERIT administrator: after confirming who you are, they can set a new password for you. · Lost your authenticator app as well? Contact your MERIT administrator to verify your identity and reset both. · Back to sign in
 
-**[1:53]** If you have lost both the password and the authenticator, and have no recovery codes, contact your administrator to verify your identity and reset both.
+**[1:46]** If you have lost both the password and the authenticator, and have no recovery codes, contact your administrator to verify your identity and reset both.
 
-**[2:04]** Email never arrives? Check the user name and junk folder, then use your agency support channel. The Check your email page does not prove that an account exists.
+**[1:57]** Email never arrives? Check the user name and junk folder, then use your agency support channel. The Check your email page does not prove that an account exists.
 
-**[2:16]** After a successful reset, return to the normal sign-in process. Your authenticator still works unless an administrator has reset MFA.
+**[2:09]** After a successful reset, return to the normal sign-in process. Your authenticator still works unless an administrator has reset MFA.
 - *Action:* Types “loginresethelp” in User name
 - *Action:* Types into Password (hidden)
 - *Action:* Selects “Continue”
@@ -61,7 +61,7 @@ Handle expired, replaced or closed links, locked accounts, unavailable email, an
 
 ## Recap
 
-**[2:28]** In this video you recognized unusable links and account restrictions, reset a password using an unused recovery code, and identified when administrator assistance is required.
+**[2:21]** In this video you recognized unusable links and account restrictions, reset a password using an unused recovery code, and identified when administrator assistance is required.
 
 - Recognized unusable links and account restrictions
 - Reset a password using an unused recovery code

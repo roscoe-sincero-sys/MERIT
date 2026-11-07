@@ -6,13 +6,13 @@
   "feature": "signIn",
   "user": "loginblocked",
   "source": "training/workflows/all-users/sign-in/login-blocked.workflow.ts",
-  "fingerprint": "6f00cedf2e1f03a0",
+  "fingerprint": "54a267e4f635ff99",
   "appVersion": "be42f6d 2026-11-06",
   "built": "2026-11-07",
   "engine": "piper",
   "voice": "en_US-kristin-medium",
   "narrated": true,
-  "duration": 125588,
+  "duration": 121011,
   "introMs": 11968,
   "outroMs": 12569,
   "scenes": [
@@ -24,8 +24,8 @@
     {
       "scene": 0,
       "say": "Repeated wrong passwords or verification codes can lock an account. Stop guessing and read the message MERIT gives you.",
-      "start": 12855,
-      "end": 21921,
+      "start": 12859,
+      "end": 21933,
       "actions": [
         "Types “loginblocked” in User name",
         "Types into Password (hidden)",
@@ -38,15 +38,15 @@
     {
       "scene": 0,
       "say": "The account is locked for fifteen minutes. Wait until it unlocks or ask an administrator to unlock it after verifying your identity.",
-      "start": 21921,
-      "end": 30605,
+      "start": 21933,
+      "end": 30625,
       "actions": [],
       "onScreen": [
         "Too many failed attempts. The account is locked for 15 minutes; an administrator can unlock it."
       ],
       "highlights": [
         {
-          "at": 21955,
+          "at": 21963,
           "rect": {
             "x": 361,
             "y": 224.71875,
@@ -60,8 +60,8 @@
     {
       "scene": 0,
       "say": "Even a correct password does not bypass the lock. A password-reset link also does not bypass it.",
-      "start": 30605,
-      "end": 38492,
+      "start": 30626,
+      "end": 38687,
       "actions": [
         "Types “loginblocked” in User name",
         "Types into Password (hidden)",
@@ -74,8 +74,8 @@
     {
       "scene": 0,
       "say": "After the wait or a confirmed unlock, start again with the correct password and authenticator.",
-      "start": 38492,
-      "end": 49662,
+      "start": 38687,
+      "end": 49828,
       "actions": [
         "Types “loginblocked” in User name",
         "Types into Password (hidden)",
@@ -90,8 +90,8 @@
     {
       "scene": 1,
       "say": "A disabled or unknown account gets a general sign-in error. If the details are correct but access still fails, contact your administrator.",
-      "start": 49662,
-      "end": 59887,
+      "start": 49828,
+      "end": 59802,
       "actions": [
         "Types “loginblocked” in User name",
         "Types into Password (hidden)",
@@ -102,7 +102,7 @@
       ],
       "highlights": [
         {
-          "at": 58234,
+          "at": 58409,
           "rect": {
             "x": 361,
             "y": 224.71875,
@@ -116,8 +116,8 @@
     {
       "scene": 1,
       "say": "A sign-in verification page can expire. If MERIT sends you back to sign in, enter your password again and use a fresh code.",
-      "start": 59888,
-      "end": 71020,
+      "start": 59802,
+      "end": 69583,
       "actions": [
         "Types “loginblocked” in User name",
         "Types into Password (hidden)",
@@ -128,7 +128,7 @@
       ],
       "highlights": [
         {
-          "at": 70038,
+          "at": 68611,
           "rect": {
             "x": 128,
             "y": 63.53125,
@@ -142,8 +142,8 @@
     {
       "scene": 2,
       "say": "Too many attempts from one network is a separate limit. This training instance demonstrates that message without affecting other users.",
-      "start": 71020,
-      "end": 88016,
+      "start": 69583,
+      "end": 85890,
       "actions": [
         "Types “loginunknown” in User name",
         "Types into Password (hidden)",
@@ -159,15 +159,15 @@
     {
       "scene": 2,
       "say": "Wait for the number of seconds shown, then use Back to sign in. Repeated retries do not remove either a network limit or an account lock.",
-      "start": 88017,
-      "end": 98157,
+      "start": 85890,
+      "end": 96023,
       "actions": [],
       "onScreen": [
         "Too many attempts · Too many sign-in attempts came from your network in the last minute. Wait 60 seconds, then try again. · Back to sign in · Repeated wrong passwords or codes also lock the account for a while. If you are locked out, ask your administrator."
       ],
       "highlights": [
         {
-          "at": 88564,
+          "at": 86385,
           "rect": {
             "x": 128,
             "y": 63.53125,
@@ -181,8 +181,8 @@
     {
       "scene": 2,
       "say": "If the problem continues, tell support which message you see and your user name. Do not send your password, setup key, recovery codes or verification codes.",
-      "start": 98157,
-      "end": 112317,
+      "start": 96023,
+      "end": 107736,
       "actions": [
         "Types “loginblocked” in User name",
         "Types into Password (hidden)",

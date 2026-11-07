@@ -6,13 +6,13 @@
   "feature": "signIn",
   "user": "loginadmin",
   "source": "training/workflows/administrator/sign-in/login-admin-support.workflow.ts",
-  "fingerprint": "0f66533be0413777",
+  "fingerprint": "a9669c8e643af39a",
   "appVersion": "be42f6d 2026-11-06",
   "built": "2026-11-07",
   "engine": "piper",
   "voice": "en_US-kristin-medium",
   "narrated": true,
-  "duration": 128144,
+  "duration": 128156,
   "introMs": 12513,
   "outroMs": 12325,
   "scenes": [
@@ -24,8 +24,8 @@
     {
       "scene": 0,
       "say": "Use your agency's identity-verification procedure before changing sign-in security. Confirm the person through a trusted channel, not a message containing a code.",
-      "start": 13400,
-      "end": 24904,
+      "start": 13403,
+      "end": 24911,
       "actions": [
         "Types “loginadmin” in User name",
         "Types into Password (hidden)",
@@ -40,8 +40,8 @@
     {
       "scene": 0,
       "say": "Administrator accounts use an authenticator or recovery code. Email verification is never available to administrators.",
-      "start": 24905,
-      "end": 33586,
+      "start": 24911,
+      "end": 33594,
       "actions": [
         "Selects “Sign-in methods”"
       ],
@@ -50,7 +50,7 @@
       ],
       "highlights": [
         {
-          "at": 28417,
+          "at": 28227,
           "rect": {
             "x": 144,
             "y": 659.390625,
@@ -64,8 +64,8 @@
     {
       "scene": 0,
       "say": "Open Administration, then Users. Filter by the person's name or user name and open the correct account. You can manage only accounts within your authority.",
-      "start": 33587,
-      "end": 43848,
+      "start": 33595,
+      "end": 43863,
       "actions": [
         "Selects “Administration”",
         "Selects “Users”",
@@ -79,8 +79,8 @@
     {
       "scene": 1,
       "say": "For a locked account, choose Unlock account after verifying the person. This clears the lock; it does not change their password or authenticator.",
-      "start": 43849,
-      "end": 53756,
+      "start": 43863,
+      "end": 53777,
       "actions": [
         "Selects “Unlock account”"
       ],
@@ -91,8 +91,8 @@
     {
       "scene": 1,
       "say": "For a lost authenticator, choose Reset MFA after verifying the person. The confirmation explains that active sessions and old codes will stop working.",
-      "start": 53756,
-      "end": 64771,
+      "start": 53777,
+      "end": 64791,
       "actions": [
         "Selects “Reset MFA after verifying the person”"
       ],
@@ -103,15 +103,15 @@
     {
       "scene": 1,
       "say": "Tell the person to sign in again with their password, add the new MERIT authenticator entry, and save the new recovery codes.",
-      "start": 64771,
-      "end": 74298,
+      "start": 64791,
+      "end": 74312,
       "actions": [],
       "onScreen": [
         "Not yet enrolled; the person enrolls at next sign-in."
       ],
       "highlights": [
         {
-          "at": 66136,
+          "at": 65655,
           "rect": {
             "x": 776,
             "y": 379.59375,
@@ -125,8 +125,8 @@
     {
       "scene": 2,
       "say": "If a password reset is also needed, enter a new temporary password and select Ask them to choose a new password at their next sign-in.",
-      "start": 74298,
-      "end": 83877,
+      "start": 74313,
+      "end": 83889,
       "actions": [
         "Types into New password (leave blank to keep) (hidden)",
         "Selects “Ask them to choose a new password at their next sign-in”"
@@ -136,7 +136,7 @@
       ],
       "highlights": [
         {
-          "at": 79709,
+          "at": 79721,
           "rect": {
             "x": 144,
             "y": 282.15625,
@@ -150,8 +150,8 @@
     {
       "scene": 2,
       "say": "Save the account. Share the temporary password only through your approved secure channel. Never request the person's authenticator or recovery codes.",
-      "start": 83877,
-      "end": 94900,
+      "start": 83889,
+      "end": 94918,
       "actions": [
         "Selects “Save”"
       ],
@@ -162,8 +162,8 @@
     {
       "scene": 2,
       "say": "The person completes MFA and chooses a password only they know. If both password and authenticator were lost, they must complete both reset paths.",
-      "start": 94900,
-      "end": 105369,
+      "start": 94918,
+      "end": 105381,
       "actions": [],
       "onScreen": [],
       "highlights": [],
@@ -172,8 +172,8 @@
     {
       "scene": 2,
       "say": "Another administrator must help an administrator who cannot sign in. A platform administrator should contact another platform administrator.",
-      "start": 105369,
-      "end": 115115,
+      "start": 105381,
+      "end": 115120,
       "actions": [],
       "onScreen": [],
       "highlights": [],

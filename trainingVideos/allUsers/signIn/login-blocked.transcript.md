@@ -1,6 +1,6 @@
 # Cannot sign in: locks, disabled accounts and timeouts
 
-**Role:** All users · **Feature:** Signing in and your account · **Length:** 2:06
+**Role:** All users · **Feature:** Signing in and your account · **Length:** 2:01
 
 Distinguish an account lock from network throttling, and know when to restart or contact your administrator.
 
@@ -23,7 +23,7 @@ Distinguish an account lock from network throttling, and know when to restart or
 - *Action:* Types into Password (hidden)
 - *Action:* Selects “Continue”
 
-**[0:38]** After the wait or a confirmed unlock, start again with the correct password and authenticator.
+**[0:39]** After the wait or a confirmed unlock, start again with the correct password and authenticator.
 - *Action:* Types “loginblocked” in User name
 - *Action:* Types into Password (hidden)
 - *Action:* Selects “Continue”
@@ -46,7 +46,7 @@ Distinguish an account lock from network throttling, and know when to restart or
 
 ## 3. Too many attempts from the network
 
-**[1:11]** Too many attempts from one network is a separate limit. This training instance demonstrates that message without affecting other users.
+**[1:10]** Too many attempts from one network is a separate limit. This training instance demonstrates that message without affecting other users.
 - *Action:* Types “loginunknown” in User name
 - *Action:* Types into Password (hidden)
 - *Action:* Selects “Continue”
@@ -54,10 +54,10 @@ Distinguish an account lock from network throttling, and know when to restart or
 - *Action:* Types into Password (hidden)
 - *Action:* Selects “Continue”
 
-**[1:28]** Wait for the number of seconds shown, then use Back to sign in. Repeated retries do not remove either a network limit or an account lock.
+**[1:26]** Wait for the number of seconds shown, then use Back to sign in. Repeated retries do not remove either a network limit or an account lock.
 - *On screen:* Too many attempts · Too many sign-in attempts came from your network in the last minute. Wait 60 seconds, then try again. · Back to sign in · Repeated wrong passwords or codes also lock the account for a while. If you are locked out, ask your administrator.
 
-**[1:38]** If the problem continues, tell support which message you see and your user name. Do not send your password, setup key, recovery codes or verification codes.
+**[1:36]** If the problem continues, tell support which message you see and your user name. Do not send your password, setup key, recovery codes or verification codes.
 - *Action:* Types “loginblocked” in User name
 - *Action:* Types into Password (hidden)
 - *Action:* Selects “Continue”
@@ -66,7 +66,7 @@ Distinguish an account lock from network throttling, and know when to restart or
 
 ## Recap
 
-**[1:52]** In this video you recognized account locks and network throttling, restarted an expired verification step, and identified when to contact an administrator.
+**[1:48]** In this video you recognized account locks and network throttling, restarted an expired verification step, and identified when to contact an administrator.
 
 - Recognized account locks and network throttling
 - Restarted an expired verification step

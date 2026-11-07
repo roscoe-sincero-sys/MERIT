@@ -1,6 +1,6 @@
 # Everyday sign-in and signing out
 
-**Role:** All users · **Feature:** Signing in and your account · **Length:** 2:18
+**Role:** All users · **Feature:** Signing in and your account · **Length:** 2:17
 
 Use your password and authenticator, correct common mistakes, switch users, and return after a session ends.
 

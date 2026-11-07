@@ -6,13 +6,13 @@
   "feature": "signIn",
   "user": "loginreturn",
   "source": "training/workflows/all-users/sign-in/login-everyday.workflow.ts",
-  "fingerprint": "b85cd4d28feef24f",
+  "fingerprint": "8181091a25b0386c",
   "appVersion": "be42f6d 2026-11-06",
   "built": "2026-11-07",
   "engine": "piper",
   "voice": "en_US-kristin-medium",
   "narrated": true,
-  "duration": 137696,
+  "duration": 137245,
   "introMs": 12351,
   "outroMs": 13834,
   "scenes": [
@@ -24,8 +24,8 @@
     {
       "scene": 0,
       "say": "Enter your MERIT user name and password. Check the user name if you share a workstation; each person uses their own account.",
-      "start": 13229,
-      "end": 21957,
+      "start": 13245,
+      "end": 21952,
       "actions": [
         "Types “loginreturn” in User name",
         "Types into Password (hidden)",
@@ -38,15 +38,15 @@
     {
       "scene": 0,
       "say": "A wrong user name or password gives the same message. Check typing and Caps Lock. If you cannot remember the password, use Forgot your password.",
-      "start": 21957,
-      "end": 32969,
+      "start": 21952,
+      "end": 32967,
       "actions": [],
       "onScreen": [
         "The user name or password is not right."
       ],
       "highlights": [
         {
-          "at": 21981,
+          "at": 21976,
           "rect": {
             "x": 361,
             "y": 224.71875,
@@ -60,8 +60,8 @@
     {
       "scene": 0,
       "say": "Correct the password and choose Continue. A correct password takes you to the verification step, not directly into MERIT.",
-      "start": 32969,
-      "end": 42154,
+      "start": 32967,
+      "end": 42158,
       "actions": [
         "Types “loginreturn” in User name",
         "Types into Password (hidden)",
@@ -74,8 +74,8 @@
     {
       "scene": 0,
       "say": "Wrong person? Choose Sign in as a different user to return to the password screen, then start with the right account.",
-      "start": 42155,
-      "end": 50980,
+      "start": 42158,
+      "end": 50978,
       "actions": [
         "Selects “Sign in as a different user”"
       ],
@@ -86,8 +86,8 @@
     {
       "scene": 1,
       "say": "Sign in again. Open the MERIT entry in your authenticator app and use its current six-digit code. The app works without receiving a text message.",
-      "start": 50980,
-      "end": 62071,
+      "start": 50978,
+      "end": 62073,
       "actions": [
         "Types “loginreturn” in User name",
         "Types into Password (hidden)",
@@ -98,7 +98,7 @@
       ],
       "highlights": [
         {
-          "at": 60196,
+          "at": 59199,
           "rect": {
             "x": 561,
             "y": 225.671875,
@@ -112,8 +112,8 @@
     {
       "scene": 1,
       "say": "A mistyped or old code is rejected. Wait for the next code, check your phone time, and use the entry for this MERIT account.",
-      "start": 62071,
-      "end": 71667,
+      "start": 62073,
+      "end": 71659,
       "actions": [
         "Types into Six-digit code from your authenticator app (hidden)",
         "Selects “Verify and sign in”"
@@ -123,7 +123,7 @@
       ],
       "highlights": [
         {
-          "at": 65390,
+          "at": 64731,
           "rect": {
             "x": 561,
             "y": 224.71875,
@@ -137,8 +137,8 @@
     {
       "scene": 1,
       "say": "Enter the current code and choose Verify and sign in. MERIT returns you to the page you requested, when your access permits it.",
-      "start": 71668,
-      "end": 81491,
+      "start": 71659,
+      "end": 81490,
       "actions": [
         "Types into Six-digit code from your authenticator app (hidden)",
         "Selects “Verify and sign in”"
@@ -150,15 +150,15 @@
     {
       "scene": 2,
       "say": "Check your name and active profile in the header. The profile determines which records and tools are available after sign-in.",
-      "start": 81491,
-      "end": 89810,
+      "start": 81490,
+      "end": 89803,
       "actions": [],
       "onScreen": [
         "MERIT · Metals Exposure Registry and Investigation Tracking · Home · Work queues · People · Intake · Surveillance · Registry & reports · Administration · Search people, cases and accession numbers · Search · Robin Return · MERIT Sign-in Training (demo) · Profile · Master profile · Switch ▾ · : switch profile or jurisdiction · User guide · (opens in a new tab) · Sign-in methods · Sign out"
       ],
       "highlights": [
         {
-          "at": 82219,
+          "at": 82042,
           "rect": {
             "x": 0,
             "y": 0,
@@ -172,8 +172,8 @@
     {
       "scene": 2,
       "say": "Choose Sign out when you finish, especially on a shared computer. MERIT returns to the sign-in page and ends this session.",
-      "start": 89810,
-      "end": 98947,
+      "start": 89803,
+      "end": 98938,
       "actions": [
         "Selects “Sign out”"
       ],
@@ -182,7 +182,7 @@
       ],
       "highlights": [
         {
-          "at": 92687,
+          "at": 92126,
           "rect": {
             "x": 361,
             "y": 301.734375,
@@ -196,8 +196,8 @@
     {
       "scene": 2,
       "say": "If your session expires or an administrator ends it, sign in again. You still need your password and second factor.",
-      "start": 98947,
-      "end": 111192,
+      "start": 98938,
+      "end": 110960,
       "actions": [
         "Types “loginreturn” in User name",
         "Types into Password (hidden)",
@@ -212,8 +212,8 @@
     {
       "scene": 2,
       "say": "Use the normal two steps to return. If sign-in succeeds but you lack the access you need, check your profile or ask your administrator.",
-      "start": 111192,
-      "end": 123158,
+      "start": 110960,
+      "end": 122702,
       "actions": [
         "Types “loginreturn” in User name",
         "Types into Password (hidden)",
@@ -226,7 +226,7 @@
       ],
       "highlights": [
         {
-          "at": 122193,
+          "at": 121721,
           "rect": {
             "x": 1182.359375,
             "y": 26.859375,

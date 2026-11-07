@@ -12,153 +12,153 @@ locked accounts, unavailable email,
 and a missing authenticator.
 
 4
-00:00:13,968 --> 00:00:16,801
+00:00:13,988 --> 00:00:16,821
 Reset links are private and short lived.
 
 5
-00:00:16,801 --> 00:00:22,229
+00:00:16,821 --> 00:00:22,249
 This example shows the messages you
 may see when a link cannot be used.
 
 6
-00:00:22,585 --> 00:00:26,522
+00:00:22,600 --> 00:00:26,537
 If a link has expired,
 choose Ask for a new link.
 
 7
-00:00:26,522 --> 00:00:30,056
+00:00:26,537 --> 00:00:30,071
 Do not keep retrying the expired email.
 
 8
-00:00:30,410 --> 00:00:33,909
+00:00:30,428 --> 00:00:33,927
 A newer reset request
 replaces the previous link.
 
 9
-00:00:33,909 --> 00:00:38,450
+00:00:33,927 --> 00:00:38,468
 Use the newest email, even if
 older messages arrive later.
 
 10
-00:00:38,815 --> 00:00:42,298
+00:00:38,832 --> 00:00:42,315
 An invalid or incomplete
 link also cannot be used.
 
 11
-00:00:42,298 --> 00:00:47,227
+00:00:42,315 --> 00:00:47,244
 Open the complete link from the
 newest email, or request another.
 
 12
-00:00:47,588 --> 00:00:51,485
+00:00:47,608 --> 00:00:51,505
 A locked account must wait or
 be unlocked by an administrator.
 
 13
-00:00:51,485 --> 00:00:55,280
+00:00:51,505 --> 00:00:55,300
 A password-reset link does
 not bypass an account lock.
 
 14
-00:00:55,650 --> 00:01:00,644
+00:00:55,654 --> 00:01:00,648
 An account that has never enrolled an
 authenticator cannot reset its password by
 
 15
-00:01:00,644 --> 00:01:01,644
+00:01:00,648 --> 00:01:01,648
 email.
 
 16
-00:01:01,644 --> 00:01:04,915
+00:01:01,648 --> 00:01:04,913
 Ask the administrator to
 verify your identity and help.
 
 17
-00:01:05,215 --> 00:01:08,362
+00:01:05,214 --> 00:01:08,361
 Too many wrong verification
 codes close the link.
 
 18
-00:01:08,362 --> 00:01:13,050
+00:01:08,361 --> 00:01:13,049
 Ask for a new link or contact your
 administrator instead of continuing to
 
 19
-00:01:13,050 --> 00:01:14,450
+00:01:13,049 --> 00:01:14,449
 guess.
 
 20
-00:01:21,597 --> 00:01:25,474
+00:01:18,531 --> 00:01:22,408
 If the app is missing but you
 have an unused recovery code,
 
 21
-00:01:25,474 --> 00:01:28,825
+00:01:22,408 --> 00:01:25,759
 a fresh reset link can use
 it as the second factor.
 
 22
-00:01:28,825 --> 00:01:30,868
+00:01:25,759 --> 00:01:27,802
 The code is then used up.
 
 23
-00:01:44,107 --> 00:01:47,320
+00:01:37,075 --> 00:01:40,288
 Some MERIT installations
 cannot email reset links.
 
 24
-00:01:47,320 --> 00:01:52,396
+00:01:40,288 --> 00:01:45,364
 Their reset page tells you to contact an
 administrator after confirming who you
 
 25
-00:01:52,396 --> 00:01:53,396
+00:01:45,364 --> 00:01:46,364
 are.
 
 26
-00:01:53,408 --> 00:01:59,143
+00:01:46,388 --> 00:01:52,123
 If you have lost both the password and the
 authenticator, and have no recovery codes,
 
 27
-00:01:59,143 --> 00:02:03,996
+00:01:52,123 --> 00:01:56,976
 contact your administrator to
 verify your identity and reset both.
 
 28
-00:02:04,351 --> 00:02:05,752
+00:01:57,343 --> 00:01:58,744
 Email never arrives?
 
 29
-00:02:05,752 --> 00:02:10,938
+00:01:58,744 --> 00:02:03,930
 Check the user name and junk folder,
 then use your agency support channel.
 
 30
-00:02:10,938 --> 00:02:15,822
+00:02:03,930 --> 00:02:08,814
 The Check your email page does
 not prove that an account exists.
 
 31
-00:02:16,196 --> 00:02:20,530
+00:02:09,176 --> 00:02:13,510
 After a successful reset, return
 to the normal sign-in process.
 
 32
-00:02:20,530 --> 00:02:25,676
+00:02:13,510 --> 00:02:18,656
 Your authenticator still works unless
 an administrator has reset MFA.
 
 33
-00:02:29,016 --> 00:02:33,538
+00:02:21,885 --> 00:02:26,407
 In this video you recognized unusable
 links and account restrictions,
 
 34
-00:02:33,538 --> 00:02:38,846
+00:02:26,407 --> 00:02:31,715
 reset a password using an unused recovery
 code, and identified when administrator
 
 35
-00:02:38,846 --> 00:02:40,754
+00:02:31,715 --> 00:02:33,623
 assistance is required.

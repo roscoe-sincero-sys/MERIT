@@ -6,13 +6,13 @@
   "feature": "profiles",
   "user": "r3staff",
   "source": "training/workflows/all-users/profiles/multi-place-profiles.workflow.ts",
-  "fingerprint": "e2dffb2a84f20ad2",
+  "fingerprint": "526f6c6179a7d22e",
   "appVersion": "be42f6d 2026-11-06",
   "built": "2026-11-07",
   "engine": "piper",
   "voice": "en_US-kristin-medium",
   "narrated": true,
-  "duration": 233833,
+  "duration": 230917,
   "introMs": 15253,
   "outroMs": 24306,
   "scenes": [
@@ -26,8 +26,8 @@
     {
       "scene": 0,
       "say": "A profile can hold more than one place. Select the profile box in the header to open My profiles.",
-      "start": 16141,
-      "end": 23863,
+      "start": 16140,
+      "end": 23873,
       "actions": [
         "Selects “Profile Master profile Switch ▾ : switch profile or jurisdiction”"
       ],
@@ -38,8 +38,8 @@
     {
       "scene": 0,
       "say": "Choose Create a profile to see how the three grant rows work together.",
-      "start": 23863,
-      "end": 29175,
+      "start": 23873,
+      "end": 29192,
       "actions": [
         "Selects “Create a profile”"
       ],
@@ -50,15 +50,15 @@
     {
       "scene": 0,
       "say": "Under Grants, MERIT gives you three rows of Place, Role, Access, and Include everything under this place.",
-      "start": 29176,
-      "end": 37370,
+      "start": 29192,
+      "end": 37386,
       "actions": [],
       "onScreen": [
         "Grants · Each grant is a role, a place, and how much you can do there. Leave a row's place empty to skip it. · Place · (none) · EPA Region 3 · Delaware · District of Columbia · Maryland · Pennsylvania · Virginia · West Virginia · Harford County Health Department · Role · Supervisor · Access · Read only · Read and write (no delete) · Full (read, write and delete) · Include everything under this pla"
       ],
       "highlights": [
         {
-          "at": 30027,
+          "at": 29912,
           "rect": {
             "x": 144,
             "y": -26.671875,
@@ -72,8 +72,8 @@
     {
       "scene": 1,
       "say": "First, make a profile for state-level work in Maryland and Delaware, and add a short description.",
-      "start": 37370,
-      "end": 49282,
+      "start": 37387,
+      "end": 48624,
       "actions": [
         "Types “Maryland state and Delaware” in Name",
         "Types “State-level cases along the Maryland and Delaware border” in Description (optional)"
@@ -85,8 +85,8 @@
     {
       "scene": 1,
       "say": "In the first row, choose Maryland for Place, Supervisor for Role, and Read and write without delete for Access.",
-      "start": 49282,
-      "end": 58323,
+      "start": 48625,
+      "end": 57661,
       "actions": [
         "Chooses “Maryland” for Place",
         "Chooses “Supervisor” for Role",
@@ -99,8 +99,8 @@
     {
       "scene": 1,
       "say": "Clear Include everything under this place on Maryland, so county agencies like Harford County are left out.",
-      "start": 58324,
-      "end": 66581,
+      "start": 57662,
+      "end": 65928,
       "actions": [
         "Selects “Include everything under this place”"
       ],
@@ -111,8 +111,8 @@
     {
       "scene": 1,
       "say": "In the second row, choose Delaware, keep Supervisor and Read and write without delete, and keep everything under it.",
-      "start": 66581,
-      "end": 74961,
+      "start": 65928,
+      "end": 74288,
       "actions": [
         "Chooses “Delaware” for Place",
         "Chooses “Supervisor” for Role",
@@ -123,7 +123,7 @@
       ],
       "highlights": [
         {
-          "at": 72305,
+          "at": 71678,
           "rect": {
             "x": 392,
             "y": 582.390625,
@@ -137,8 +137,8 @@
     {
       "scene": 1,
       "say": "Leave the third Place on none to skip it, then choose Save profile.",
-      "start": 74961,
-      "end": 80266,
+      "start": 74288,
+      "end": 79586,
       "actions": [
         "Selects “Save profile”"
       ],
@@ -147,7 +147,7 @@
       ],
       "highlights": [
         {
-          "at": 75130,
+          "at": 74303,
           "rect": {
             "x": 144,
             "y": 705.484375,
@@ -161,8 +161,8 @@
     {
       "scene": 2,
       "say": "Next, create a tri-state profile that uses all three Place rows, each with its own access level.",
-      "start": 80266,
-      "end": 95759,
+      "start": 79586,
+      "end": 94593,
       "actions": [
         "Selects “Create a profile”",
         "Types “West Virginia, Virginia and Pennsylvania” in Name",
@@ -175,8 +175,8 @@
     {
       "scene": 2,
       "say": "In the first row, choose West Virginia, keep the Supervisor role, and set Access to Full.",
-      "start": 95759,
-      "end": 103086,
+      "start": 94593,
+      "end": 101610,
       "actions": [
         "Chooses “West Virginia” for Place",
         "Chooses “Supervisor” for Role",
@@ -189,8 +189,8 @@
     {
       "scene": 2,
       "say": "In the second row, choose Virginia, Supervisor, and Read and write without delete.",
-      "start": 103086,
-      "end": 110616,
+      "start": 101611,
+      "end": 109136,
       "actions": [
         "Chooses “Virginia” for Place",
         "Chooses “Supervisor” for Role",
@@ -203,8 +203,8 @@
     {
       "scene": 2,
       "say": "In the third row, choose Pennsylvania, Supervisor, and Read only, so you can check neighbouring cases without changing them.",
-      "start": 110616,
-      "end": 119181,
+      "start": 109136,
+      "end": 117706,
       "actions": [
         "Chooses “Pennsylvania” for Place",
         "Chooses “Supervisor” for Role",
@@ -215,7 +215,7 @@
       ],
       "highlights": [
         {
-          "at": 118033,
+          "at": 115414,
           "rect": {
             "x": 392,
             "y": 520.453125,
@@ -229,8 +229,8 @@
     {
       "scene": 2,
       "say": "Save the three-state profile.",
-      "start": 119181,
-      "end": 122245,
+      "start": 117707,
+      "end": 120766,
       "actions": [
         "Selects “Save profile”"
       ],
@@ -241,8 +241,8 @@
     {
       "scene": 3,
       "say": "Third, use all three rows to read the whole region, write in Maryland, and have full access in Harford County.",
-      "start": 122245,
-      "end": 131004,
+      "start": 120766,
+      "end": 129537,
       "actions": [
         "Selects “Create a profile”",
         "Types “Region read, Maryland write, Harford full” in Name"
@@ -254,8 +254,8 @@
     {
       "scene": 3,
       "say": "Set the first row to EPA Region 3 with Read only access, keeping everything under it.",
-      "start": 131004,
-      "end": 138393,
+      "start": 129537,
+      "end": 136422,
       "actions": [
         "Chooses “EPA Region 3” for Place",
         "Chooses “Supervisor” for Role",
@@ -268,8 +268,8 @@
     {
       "scene": 3,
       "say": "Set the second row to Maryland with Read and write without delete, and clear Include everything under this place.",
-      "start": 138393,
-      "end": 147001,
+      "start": 136423,
+      "end": 145030,
       "actions": [
         "Chooses “Maryland” for Place",
         "Chooses “Supervisor” for Role",
@@ -283,8 +283,8 @@
     {
       "scene": 3,
       "say": "Set the third row to Harford County Health Department with Full access, and save.",
-      "start": 147001,
-      "end": 155707,
+      "start": 145030,
+      "end": 153432,
       "actions": [
         "Chooses “Harford County Health Department” for Place",
         "Chooses “Supervisor” for Role",
@@ -298,15 +298,15 @@
     {
       "scene": 3,
       "say": "My profiles lists each profile and every grant row inside it, including whether child places are included.",
-      "start": 155707,
-      "end": 164552,
+      "start": 153433,
+      "end": 162284,
       "actions": [],
       "onScreen": [
-        "Profile What it gives you · Actions · Master profile Master · Everything you have been given. Managed by your administrator. · Supervisor at EPA Region 3 and everything under it · Full (read, write and delete) · In use · Maryland state and Delaware · State-level cases along the Maryland and Delaware border · Supervisor at Delaware and everything under it · Read and write (no delete) · Supervisor a"
+        "Profile What it gives you · Actions · Master profile Master · Everything you have been given. Managed by your administrator. · Supervisor at EPA Region 3 and everything under it · Full (read, write and delete) · In use · Maryland state and Delaware · State-level cases along the Maryland and Delaware border · Supervisor at Maryland only · Read and write (no delete) · Supervisor at Delaware and ever"
       ],
       "highlights": [
         {
-          "at": 156331,
+          "at": 153990,
           "rect": {
             "x": 144,
             "y": 181.3125,
@@ -320,8 +320,8 @@
     {
       "scene": 4,
       "say": "Switch to Maryland state and Delaware. Work queues shows the two state tasks, while Harford County stays out.",
-      "start": 164552,
-      "end": 173603,
+      "start": 162284,
+      "end": 171333,
       "actions": [
         "Selects “Use Maryland state and Delaware”",
         "Selects “Work queues”"
@@ -331,7 +331,7 @@
       ],
       "highlights": [
         {
-          "at": 164574,
+          "at": 162312,
           "rect": {
             "x": 144,
             "y": 303.125,
@@ -340,7 +340,7 @@
           }
         },
         {
-          "at": 169040,
+          "at": 166700,
           "rect": {
             "x": 456,
             "y": 558.125,
@@ -354,8 +354,8 @@
     {
       "scene": 4,
       "say": "Switch to West Virginia, Virginia and Pennsylvania, and Work queues shows the three tasks from those states.",
-      "start": 173603,
-      "end": 182400,
+      "start": 171333,
+      "end": 180127,
       "actions": [
         "Selects “Profile Maryland state and Delaware Switch ▾ : switch profile or jurisdiction”",
         "Selects “Use West Virginia, Virginia and Pennsylvania”"
@@ -365,7 +365,7 @@
       ],
       "highlights": [
         {
-          "at": 176930,
+          "at": 174286,
           "rect": {
             "x": 144,
             "y": 342.625,
@@ -374,7 +374,7 @@
           }
         },
         {
-          "at": 179276,
+          "at": 176212,
           "rect": {
             "x": 456,
             "y": 558.125,
@@ -388,8 +388,8 @@
     {
       "scene": 4,
       "say": "Switch to the layered profile. All eight regional tasks appear, and Intake stays in the menu because Maryland and Harford allow writing.",
-      "start": 182400,
-      "end": 193499,
+      "start": 180127,
+      "end": 191227,
       "actions": [
         "Selects “Profile West Virginia, Virginia and Pennsylvania Switch ▾ : switch profile or ju”",
         "Selects “Use Region read, Maryland write, Harford full”"
@@ -400,7 +400,7 @@
       ],
       "highlights": [
         {
-          "at": 185332,
+          "at": 182729,
           "rect": {
             "x": 144,
             "y": 329.765625,
@@ -409,7 +409,7 @@
           }
         },
         {
-          "at": 188359,
+          "at": 185296,
           "rect": {
             "x": 456,
             "y": 180.125,
@@ -418,7 +418,7 @@
           }
         },
         {
-          "at": 189869,
+          "at": 186583,
           "rect": {
             "x": 144,
             "y": 107.1875,
@@ -432,8 +432,8 @@
     {
       "scene": 4,
       "say": "When a profile covers several places, use Working in on My profiles to pick where new records belong.",
-      "start": 193499,
-      "end": 203012,
+      "start": 191227,
+      "end": 200085,
       "actions": [
         "Selects “Profile Region read, Maryland write, Harford full Switch ▾ : switch profile or j”",
         "Chooses “Harford County Health Department” for Tenant",
@@ -444,7 +444,7 @@
       ],
       "highlights": [
         {
-          "at": 201723,
+          "at": 198812,
           "rect": {
             "x": 839,
             "y": 37.03125,
@@ -458,8 +458,8 @@
     {
       "scene": 4,
       "say": "Choose Use beside Master profile whenever you want to return to your full access.",
-      "start": 203012,
-      "end": 208821,
+      "start": 200085,
+      "end": 205907,
       "actions": [
         "Selects “Profile Region read, Maryland write, Harford full Switch ▾ : switch profile or j”",
         "Selects “Use Master profile”"
@@ -467,7 +467,7 @@
       "onScreen": [],
       "highlights": [
         {
-          "at": 205669,
+          "at": 202530,
           "rect": {
             "x": 144,
             "y": 575.8125,

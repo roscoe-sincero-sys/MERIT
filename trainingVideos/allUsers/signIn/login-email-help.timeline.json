@@ -6,13 +6,13 @@
   "feature": "signIn",
   "user": "loginmailhelp",
   "source": "training/workflows/all-users/sign-in/login-email-help.workflow.ts",
-  "fingerprint": "4356c326f75ca9be",
+  "fingerprint": "70214a9814f6665f",
   "appVersion": "be42f6d 2026-11-06",
   "built": "2026-11-07",
   "engine": "piper",
   "voice": "en_US-kristin-medium",
   "narrated": true,
-  "duration": 166574,
+  "duration": 164138,
   "introMs": 13512,
   "outroMs": 12894,
   "scenes": [
@@ -24,8 +24,8 @@
     {
       "scene": 0,
       "say": "After your password, choose Email me a code. A sent message appears with the masked address and the code lifetime.",
-      "start": 14389,
-      "end": 25726,
+      "start": 14398,
+      "end": 24914,
       "actions": [
         "Types “loginmailhelp” in User name",
         "Types into Password (hidden)",
@@ -37,7 +37,7 @@
       ],
       "highlights": [
         {
-          "at": 24748,
+          "at": 23937,
           "rect": {
             "x": 561,
             "y": 224.71875,
@@ -51,15 +51,15 @@
     {
       "scene": 0,
       "say": "Email can take a minute or two. Check junk or spam, and check the masked address. Never send a verification code to support.",
-      "start": 25727,
-      "end": 35439,
+      "start": 24914,
+      "end": 34640,
       "actions": [],
       "onScreen": [
         "You can ask for a new code in 29 seconds."
       ],
       "highlights": [
         {
-          "at": 25787,
+          "at": 24937,
           "rect": {
             "x": 561,
             "y": 657.234375,
@@ -73,8 +73,8 @@
     {
       "scene": 0,
       "say": "If you mistype a code, MERIT explains the error and shows how many attempts remain. Read the message before trying again.",
-      "start": 35439,
-      "end": 44316,
+      "start": 34640,
+      "end": 43516,
       "actions": [
         "Types into Six-digit code from the email (hidden)",
         "Selects “Verify and sign in”"
@@ -84,7 +84,7 @@
       ],
       "highlights": [
         {
-          "at": 39067,
+          "at": 37409,
           "rect": {
             "x": 561,
             "y": 295.890625,
@@ -98,8 +98,8 @@
     {
       "scene": 1,
       "say": "An expired code cannot sign you in. Choose Send a new code after the resend countdown; repeated clicks will not speed up delivery.",
-      "start": 44316,
-      "end": 54107,
+      "start": 43517,
+      "end": 53308,
       "actions": [
         "Types into Six-digit code from the email (hidden)",
         "Selects “Verify and sign in”"
@@ -111,8 +111,8 @@
     {
       "scene": 1,
       "say": "Wait until Send a new code is available, then ask for another message. Use only the code from the newest email.",
-      "start": 54107,
-      "end": 63055,
+      "start": 53308,
+      "end": 62249,
       "actions": [
         "Selects “Send a new code”"
       ],
@@ -123,8 +123,8 @@
     {
       "scene": 1,
       "say": "Requesting another code replaces the previous one. This example requests a newer message after the next countdown.",
-      "start": 63055,
-      "end": 87111,
+      "start": 62249,
+      "end": 86563,
       "actions": [
         "Selects “Send a new code”"
       ],
@@ -135,8 +135,8 @@
     {
       "scene": 1,
       "say": "An older email no longer works after a newer code is sent. Use the newest message even if the older email arrives later.",
-      "start": 87111,
-      "end": 95807,
+      "start": 86563,
+      "end": 95249,
       "actions": [
         "Types into Six-digit code from the email (hidden)",
         "Selects “Verify and sign in”"
@@ -146,7 +146,7 @@
       ],
       "highlights": [
         {
-          "at": 90294,
+          "at": 89243,
           "rect": {
             "x": 561,
             "y": 295.890625,
@@ -160,8 +160,8 @@
     {
       "scene": 1,
       "say": "Too many wrong entries can also close a code. Instead of continuing to guess, get a new code or use your authenticator.",
-      "start": 95807,
-      "end": 104768,
+      "start": 95249,
+      "end": 104219,
       "actions": [
         "Types into Six-digit code from the email (hidden)",
         "Selects “Verify and sign in”"
@@ -173,8 +173,8 @@
     {
       "scene": 1,
       "say": "Use your authenticator app instead returns to the other verification method. Enter its current code to finish signing in.",
-      "start": 104769,
-      "end": 113110,
+      "start": 104219,
+      "end": 112564,
       "actions": [
         "Selects “Use your authenticator app instead”",
         "Types into Six-digit code from your authenticator app (hidden)",
@@ -187,8 +187,8 @@
     {
       "scene": 2,
       "say": "If MERIT cannot send the email, it shows a delivery error and support reference. Keep that reference when contacting support, rather than any code.",
-      "start": 113110,
-      "end": 127318,
+      "start": 112564,
+      "end": 125402,
       "actions": [
         "Selects “Sign out”",
         "Types “loginmailhelp” in User name",
@@ -197,11 +197,11 @@
         "Selects “Email me a code”"
       ],
       "onScreen": [
-        "We couldn't send your verification code. Please try again. If the problem continues, contact support. · Support reference: EM-5NH8PPAZ"
+        "We couldn't send your verification code. Please try again. If the problem continues, contact support. · Support reference: EM-JLTM8C79"
       ],
       "highlights": [
         {
-          "at": 126332,
+          "at": 124426,
           "rect": {
             "x": 561,
             "y": 224.71875,
@@ -215,8 +215,8 @@
     {
       "scene": 2,
       "say": "Choose Try sending again after a delivery failure. If email remains unavailable, use your authenticator or an unused recovery code.",
-      "start": 127318,
-      "end": 137690,
+      "start": 125402,
+      "end": 135771,
       "actions": [
         "Selects “Try sending again”",
         "Types into Six-digit code from the email (hidden)",
@@ -229,8 +229,8 @@
     {
       "scene": 2,
       "say": "An agency can withdraw email-code access. In that case, the email option disappears; your authenticator remains the way to sign in.",
-      "start": 137690,
-      "end": 152972,
+      "start": 135771,
+      "end": 150530,
       "actions": [
         "Selects “Sign out”",
         "Types “loginmailhelp” in User name",
@@ -244,7 +244,7 @@
       ],
       "highlights": [
         {
-          "at": 149269,
+          "at": 146856,
           "rect": {
             "x": 128,
             "y": 63.53125,

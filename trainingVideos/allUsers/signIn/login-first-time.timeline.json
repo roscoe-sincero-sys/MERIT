@@ -6,13 +6,13 @@
   "feature": "signIn",
   "user": "loginfirst",
   "source": "training/workflows/all-users/sign-in/login-first-time.workflow.ts",
-  "fingerprint": "a1d37b40f2e22b0e",
+  "fingerprint": "1cb01c1009c9fa4e",
   "appVersion": "be42f6d 2026-11-06",
   "built": "2026-11-07",
   "engine": "piper",
   "voice": "en_US-kristin-medium",
   "narrated": true,
-  "duration": 129579,
+  "duration": 126752,
   "introMs": 10667,
   "outroMs": 11141,
   "scenes": [
@@ -24,15 +24,15 @@
     {
       "scene": 0,
       "say": "Use the MERIT address provided by your agency. Your administrator supplies your user name and initial password; there is no public account registration.",
-      "start": 11540,
-      "end": 21920,
+      "start": 11561,
+      "end": 21947,
       "actions": [],
       "onScreen": [
         "Fields marked with an asterisk (*) are required. · User name * · Password * · Forgot your password? · Continue"
       ],
       "highlights": [
         {
-          "at": 11633,
+          "at": 11588,
           "rect": {
             "x": 361,
             "y": 225.671875,
@@ -46,8 +46,8 @@
     {
       "scene": 0,
       "say": "Enter your user name and password, then choose Continue. Passwords and all security codes are hidden in this training video.",
-      "start": 21921,
-      "end": 31526,
+      "start": 21947,
+      "end": 30888,
       "actions": [
         "Types “loginfirst” in User name",
         "Types into Password (hidden)",
@@ -60,15 +60,15 @@
     {
       "scene": 1,
       "say": "Every account needs a second factor. In Microsoft Authenticator, add an Other account and scan the QR code. Another authenticator app can also scan it.",
-      "start": 31526,
-      "end": 42764,
+      "start": 30888,
+      "end": 42123,
       "actions": [],
       "onScreen": [
         "QR code hidden for training"
       ],
       "highlights": [
         {
-          "at": 31550,
+          "at": 30899,
           "rect": {
             "x": 144,
             "y": 313.78125,
@@ -82,15 +82,15 @@
     {
       "scene": 1,
       "say": "Cannot scan? Choose Other account and enter the account name and setup key manually. Choose Time based if asked. Keep the setup key private.",
-      "start": 42764,
-      "end": 53179,
+      "start": 42123,
+      "end": 52546,
       "actions": [],
       "onScreen": [
         "Account name · MERIT: loginfirst · Setup key (letters and numbers) · Setup key hidden for training"
       ],
       "highlights": [
         {
-          "at": 42860,
+          "at": 42136,
           "rect": {
             "x": 144,
             "y": 462.296875,
@@ -104,15 +104,15 @@
     {
       "scene": 1,
       "say": "Use the current verification code from the MERIT entry in your app. The setup key is not the code to enter here.",
-      "start": 53179,
-      "end": 60464,
+      "start": 52546,
+      "end": 59827,
       "actions": [],
       "onScreen": [
         "Fields marked with an asterisk (*) are required. · 2. Verify your MERIT account · Enter the current six-digit verification code shown for MERIT in your authenticator app. The setup key above is used only to add the account to your app. · Code from the app * · Turn on and sign in"
       ],
       "highlights": [
         {
-          "at": 53211,
+          "at": 52561,
           "rect": {
             "x": 776,
             "y": 193.59375,
@@ -126,8 +126,8 @@
     {
       "scene": 1,
       "say": "If a code fails, wait for a new one and check automatic date and time on your phone. Keep this page open; starting sign-in again creates a new setup key.",
-      "start": 60464,
-      "end": 72365,
+      "start": 59827,
+      "end": 71728,
       "actions": [
         "Types into Code from the app (hidden)",
         "Selects “Turn on and sign in”"
@@ -139,8 +139,8 @@
     {
       "scene": 1,
       "say": "Enter the current code and choose Turn on and sign in.",
-      "start": 72365,
-      "end": 78876,
+      "start": 71728,
+      "end": 76053,
       "actions": [
         "Types into Code from the app (hidden)",
         "Selects “Turn on and sign in”"
@@ -152,15 +152,15 @@
     {
       "scene": 2,
       "say": "Each recovery code works once if you lose your authenticator. Save them securely now; MERIT will not show them again after you continue.",
-      "start": 78876,
-      "end": 88371,
+      "start": 76053,
+      "end": 85539,
       "actions": [],
       "onScreen": [
         "Recovery code hidden for training · Recovery code hidden for training · Recovery code hidden for training · Recovery code hidden for training · Recovery code hidden for training · Recovery code hidden for training · Recovery code hidden for training · Recovery code hidden for training · Recovery code hidden for training · Recovery code hidden for training"
       ],
       "highlights": [
         {
-          "at": 78896,
+          "at": 76063,
           "rect": {
             "x": 144,
             "y": 232.625,
@@ -174,15 +174,15 @@
     {
       "scene": 2,
       "say": "Copy codes and Print codes are available. Store your own codes using your agency-approved method; do not share them or put them in a support message.",
-      "start": 88371,
-      "end": 98732,
+      "start": 85539,
+      "end": 95897,
       "actions": [],
       "onScreen": [
         "Copy codes Print codes"
       ],
       "highlights": [
         {
-          "at": 88395,
+          "at": 85554,
           "rect": {
             "x": 144,
             "y": 524.625,
@@ -196,8 +196,8 @@
     {
       "scene": 2,
       "say": "Continue to MERIT stays disabled until you confirm that the codes are saved. Leaving this page does not skip the requirement.",
-      "start": 98732,
-      "end": 108056,
+      "start": 95897,
+      "end": 105218,
       "actions": [],
       "onScreen": [],
       "highlights": [],
@@ -206,8 +206,8 @@
     {
       "scene": 2,
       "say": "After saving your codes, select I have saved these codes, then Continue to MERIT. Your account is ready for everyday sign-in.",
-      "start": 108056,
-      "end": 117737,
+      "start": 105218,
+      "end": 114902,
       "actions": [
         "Selects “I have saved these codes”",
         "Selects “Continue to MERIT”"
@@ -217,7 +217,7 @@
       ],
       "highlights": [
         {
-          "at": 111711,
+          "at": 108166,
           "rect": {
             "x": 0,
             "y": 0,

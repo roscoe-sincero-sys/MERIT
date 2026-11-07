@@ -1,6 +1,6 @@
 # Email sign-in: missing, old and rejected codes
 
-**Role:** All users · **Feature:** Signing in and your account · **Length:** 2:47
+**Role:** All users · **Feature:** Signing in and your account · **Length:** 2:44
 
 Recover from wrong or expired email codes, use the newest message, and switch methods when email cannot be delivered.
 
@@ -17,7 +17,7 @@ Recover from wrong or expired email codes, use the newest message, and switch me
 - *Action:* Selects “Email me a code”
 - *On screen:* We sent a six-digit code to l***@merit.example. It expires in 5 minutes.
 
-**[0:26]** Email can take a minute or two. Check junk or spam, and check the masked address. Never send a verification code to support.
+**[0:25]** Email can take a minute or two. Check junk or spam, and check the masked address. Never send a verification code to support.
 - *On screen:* You can ask for a new code in 29 seconds.
 
 **[0:35]** If you mistype a code, MERIT explains the error and shows how many attempts remain. Read the message before trying again.
@@ -31,10 +31,10 @@ Recover from wrong or expired email codes, use the newest message, and switch me
 - *Action:* Types into Six-digit code from the email (hidden)
 - *Action:* Selects “Verify and sign in”
 
-**[0:54]** Wait until Send a new code is available, then ask for another message. Use only the code from the newest email.
+**[0:53]** Wait until Send a new code is available, then ask for another message. Use only the code from the newest email.
 - *Action:* Selects “Send a new code”
 
-**[1:03]** Requesting another code replaces the previous one. This example requests a newer message after the next countdown.
+**[1:02]** Requesting another code replaces the previous one. This example requests a newer message after the next countdown.
 - *Action:* Selects “Send a new code”
 
 **[1:27]** An older email no longer works after a newer code is sent. Use the newest message even if the older email arrives later.
@@ -42,11 +42,11 @@ Recover from wrong or expired email codes, use the newest message, and switch me
 - *Action:* Selects “Verify and sign in”
 - *On screen:* Some fields need attention · That code was replaced by a newer one. Enter the code from the newest email, or send a new code.
 
-**[1:36]** Too many wrong entries can also close a code. Instead of continuing to guess, get a new code or use your authenticator.
+**[1:35]** Too many wrong entries can also close a code. Instead of continuing to guess, get a new code or use your authenticator.
 - *Action:* Types into Six-digit code from the email (hidden)
 - *Action:* Selects “Verify and sign in”
 
-**[1:45]** Use your authenticator app instead returns to the other verification method. Enter its current code to finish signing in.
+**[1:44]** Use your authenticator app instead returns to the other verification method. Enter its current code to finish signing in.
 - *Action:* Selects “Use your authenticator app instead”
 - *Action:* Types into Six-digit code from your authenticator app (hidden)
 - *Action:* Selects “Verify and sign in”
@@ -59,14 +59,14 @@ Recover from wrong or expired email codes, use the newest message, and switch me
 - *Action:* Types into Password (hidden)
 - *Action:* Selects “Continue”
 - *Action:* Selects “Email me a code”
-- *On screen:* We couldn't send your verification code. Please try again. If the problem continues, contact support. · Support reference: EM-5NH8PPAZ
+- *On screen:* We couldn't send your verification code. Please try again. If the problem continues, contact support. · Support reference: EM-JLTM8C79
 
-**[2:07]** Choose Try sending again after a delivery failure. If email remains unavailable, use your authenticator or an unused recovery code.
+**[2:05]** Choose Try sending again after a delivery failure. If email remains unavailable, use your authenticator or an unused recovery code.
 - *Action:* Selects “Try sending again”
 - *Action:* Types into Six-digit code from the email (hidden)
 - *Action:* Selects “Verify and sign in”
 
-**[2:18]** An agency can withdraw email-code access. In that case, the email option disappears; your authenticator remains the way to sign in.
+**[2:16]** An agency can withdraw email-code access. In that case, the email option disappears; your authenticator remains the way to sign in.
 - *Action:* Selects “Sign out”
 - *Action:* Types “loginmailhelp” in User name
 - *Action:* Types into Password (hidden)
@@ -77,7 +77,7 @@ Recover from wrong or expired email codes, use the newest message, and switch me
 
 ## Recap
 
-**[2:33]** In this video you recognized wrong, expired and replaced codes, requested a new code after the countdown, and recovered from delivery failures using another method.
+**[2:31]** In this video you recognized wrong, expired and replaced codes, requested a new code after the countdown, and recovered from delivery failures using another method.
 
 - Recognized wrong, expired and replaced codes
 - Requested a new code after the countdown

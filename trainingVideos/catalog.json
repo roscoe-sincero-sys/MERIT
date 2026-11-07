@@ -16,7 +16,7 @@
     "feature": "profiles",
     "built": "2026-11-07",
     "current": true,
-    "seconds": 181,
+    "seconds": 175,
     "files": "allUsers/profiles/making-profiles"
   },
   {
@@ -26,7 +26,7 @@
     "feature": "profiles",
     "built": "2026-11-07",
     "current": true,
-    "seconds": 234,
+    "seconds": 231,
     "files": "allUsers/profiles/multi-place-profiles"
   },
   {
@@ -36,7 +36,7 @@
     "feature": "profiles",
     "built": "2026-11-07",
     "current": true,
-    "seconds": 241,
+    "seconds": 238,
     "files": "allUsers/profiles/roles-in-profiles"
   },
   {
@@ -46,7 +46,7 @@
     "feature": "signIn",
     "built": "2026-11-07",
     "current": true,
-    "seconds": 126,
+    "seconds": 121,
     "files": "allUsers/signIn/login-blocked"
   },
   {
@@ -56,7 +56,7 @@
     "feature": "signIn",
     "built": "2026-11-07",
     "current": true,
-    "seconds": 167,
+    "seconds": 164,
     "files": "allUsers/signIn/login-email-help"
   },
   {
@@ -66,7 +66,7 @@
     "feature": "signIn",
     "built": "2026-11-07",
     "current": true,
-    "seconds": 145,
+    "seconds": 139,
     "files": "allUsers/signIn/login-email-setup"
   },
   {
@@ -76,7 +76,7 @@
     "feature": "signIn",
     "built": "2026-11-07",
     "current": true,
-    "seconds": 138,
+    "seconds": 137,
     "files": "allUsers/signIn/login-everyday"
   },
   {
@@ -86,7 +86,7 @@
     "feature": "signIn",
     "built": "2026-11-07",
     "current": true,
-    "seconds": 130,
+    "seconds": 127,
     "files": "allUsers/signIn/login-first-time"
   },
   {
@@ -96,7 +96,7 @@
     "feature": "signIn",
     "built": "2026-11-07",
     "current": true,
-    "seconds": 137,
+    "seconds": 134,
     "files": "allUsers/signIn/login-forgot-password"
   },
   {
@@ -106,7 +106,7 @@
     "feature": "signIn",
     "built": "2026-11-07",
     "current": true,
-    "seconds": 133,
+    "seconds": 130,
     "files": "allUsers/signIn/login-password-changes"
   },
   {
@@ -116,7 +116,7 @@
     "feature": "signIn",
     "built": "2026-11-07",
     "current": true,
-    "seconds": 136,
+    "seconds": 132,
     "files": "allUsers/signIn/login-recovery"
   },
   {
@@ -126,7 +126,7 @@
     "feature": "signIn",
     "built": "2026-11-07",
     "current": true,
-    "seconds": 162,
+    "seconds": 155,
     "files": "allUsers/signIn/login-reset-help"
   },
   {
