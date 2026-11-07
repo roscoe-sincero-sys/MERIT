@@ -4,7 +4,7 @@ Watch these in order, or choose the video that matches the problem. Every video 
 captions, a copy with captions drawn into the picture, a transcript, and scene chapters. All accounts are synthetic.
 No credentials, authenticator setup keys, QR payloads, recovery codes, private reset links, or entered codes are shown.
 
-The ten videos run about 22 minutes in total; individual videos are about two to three minutes each.
+The ten videos run about 23 minutes in total; individual videos are about two to three minutes each.
 
 | Order | Video | Use cases |
 |---|---|---|

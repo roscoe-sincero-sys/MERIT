@@ -1,0 +1,142 @@
+[
+  {
+    "id": "login-admin-support",
+    "title": "Administrator: help someone sign in again",
+    "role": "administrator",
+    "feature": "signIn",
+    "built": "2026-11-07",
+    "current": true,
+    "seconds": 128,
+    "files": "administrator/signIn/login-admin-support"
+  },
+  {
+    "id": "making-profiles",
+    "title": "Profiles: the right access for the work in hand",
+    "role": "allUsers",
+    "feature": "profiles",
+    "built": "2026-11-07",
+    "current": true,
+    "seconds": 181,
+    "files": "allUsers/profiles/making-profiles"
+  },
+  {
+    "id": "multi-place-profiles",
+    "title": "Profiles: combining places and access levels",
+    "role": "allUsers",
+    "feature": "profiles",
+    "built": "2026-11-07",
+    "current": true,
+    "seconds": 234,
+    "files": "allUsers/profiles/multi-place-profiles"
+  },
+  {
+    "id": "roles-in-profiles",
+    "title": "Profiles: choosing roles for your work",
+    "role": "allUsers",
+    "feature": "profiles",
+    "built": "2026-11-07",
+    "current": true,
+    "seconds": 241,
+    "files": "allUsers/profiles/roles-in-profiles"
+  },
+  {
+    "id": "login-blocked",
+    "title": "Cannot sign in: locks, disabled accounts and timeouts",
+    "role": "allUsers",
+    "feature": "signIn",
+    "built": "2026-11-07",
+    "current": true,
+    "seconds": 126,
+    "files": "allUsers/signIn/login-blocked"
+  },
+  {
+    "id": "login-email-help",
+    "title": "Email sign-in: missing, old and rejected codes",
+    "role": "allUsers",
+    "feature": "signIn",
+    "built": "2026-11-07",
+    "current": true,
+    "seconds": 167,
+    "files": "allUsers/signIn/login-email-help"
+  },
+  {
+    "id": "login-email-setup",
+    "title": "Email codes: enable, choose and turn off",
+    "role": "allUsers",
+    "feature": "signIn",
+    "built": "2026-11-07",
+    "current": true,
+    "seconds": 145,
+    "files": "allUsers/signIn/login-email-setup"
+  },
+  {
+    "id": "login-everyday",
+    "title": "Everyday sign-in and signing out",
+    "role": "allUsers",
+    "feature": "signIn",
+    "built": "2026-11-07",
+    "current": true,
+    "seconds": 138,
+    "files": "allUsers/signIn/login-everyday"
+  },
+  {
+    "id": "login-first-time",
+    "title": "First sign-in: set up your authenticator",
+    "role": "allUsers",
+    "feature": "signIn",
+    "built": "2026-11-07",
+    "current": true,
+    "seconds": 130,
+    "files": "allUsers/signIn/login-first-time"
+  },
+  {
+    "id": "login-forgot-password",
+    "title": "Forgotten password: reset and sign in",
+    "role": "allUsers",
+    "feature": "signIn",
+    "built": "2026-11-07",
+    "current": true,
+    "seconds": 137,
+    "files": "allUsers/signIn/login-forgot-password"
+  },
+  {
+    "id": "login-password-changes",
+    "title": "Change your password and temporary passwords",
+    "role": "allUsers",
+    "feature": "signIn",
+    "built": "2026-11-07",
+    "current": true,
+    "seconds": 133,
+    "files": "allUsers/signIn/login-password-changes"
+  },
+  {
+    "id": "login-recovery",
+    "title": "Lost authenticator: recovery and MFA reset",
+    "role": "allUsers",
+    "feature": "signIn",
+    "built": "2026-11-07",
+    "current": true,
+    "seconds": 136,
+    "files": "allUsers/signIn/login-recovery"
+  },
+  {
+    "id": "login-reset-help",
+    "title": "Password reset: links and support options",
+    "role": "allUsers",
+    "feature": "signIn",
+    "built": "2026-11-07",
+    "current": true,
+    "seconds": 162,
+    "files": "allUsers/signIn/login-reset-help"
+  },
+  {
+    "id": "enter-paper-result",
+    "title": "Entering a result from a paper report",
+    "role": "intakeClerk",
+    "feature": "peopleAndResults",
+    "built": "2026-11-07",
+    "current": true,
+    "seconds": 124,
+    "files": "intakeClerk/peopleAndResults/enter-paper-result"
+  }
+]
