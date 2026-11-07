@@ -14,6 +14,8 @@
     let current = null;
     let milliseconds = 0;
     let since = null;
+    let lastSentMs = null;
+    let lastSentAt = null;
     let ready = Promise.resolve();
     const visible = () => document.visibilityState === 'visible' && document.hasFocus();
     const pause = () => {
@@ -21,32 +23,47 @@
         since = null;
     };
     const resume = () => { if (current && visible() && since === null) since = performance.now(); };
-    const checkpoint = () => {
+    const checkpoint = (force = false) => {
         pause();
-        if (current && token()) {
+        const duration = Math.round(milliseconds);
+        const now = performance.now();
+        if (current && token() && duration !== lastSentMs && (force || lastSentAt === null || now - lastSentAt >= 5000)) {
             const data = new FormData();
             data.set('__RequestVerificationToken', token());
             data.set('visitId', current.id);
-            data.set('durationMs', String(Math.round(milliseconds)));
+            data.set('durationMs', String(duration));
             // The form token protects the unload beacon as well as ordinary authenticated requests.
-            navigator.sendBeacon(endpoint + 'duration', data);
+            if (navigator.sendBeacon(endpoint + 'duration', data)) {
+                lastSentMs = duration;
+                lastSentAt = now;
+            }
         }
         resume();
     };
     const begin = (code, id = guid(), navigationType = 'router') => {
         if (!code || current?.id === id) return;
-        checkpoint();
+        checkpoint(true);
         const previousVisitId = read('last');
         current = { id, code };
         milliseconds = 0;
         since = null;
+        lastSentMs = null;
+        lastSentAt = null;
         write('last', id);
         const body = JSON.stringify({ visitId: id, screenCode: code, tabId, previousVisitId, navigationType });
-        // Serialize starts so a predecessor is present before its successor is attached. Failures never block navigation.
-        ready = ready.catch(() => {}).then(() => fetch(endpoint + 'visits', {
+        const post = () => fetch(endpoint + 'visits', {
             method: 'POST', credentials: 'same-origin', keepalive: true,
             headers: { 'Content-Type': 'application/json', 'X-XSRF-TOKEN': token() }, body,
-        })).catch(() => {});
+        });
+        // A full-page predecessor's keepalive can arrive late. Retry this idempotent visit once
+        // only when the server requests reconciliation; never retain an unvalidated link in SQL.
+        ready = ready.catch(() => {}).then(async () => {
+            const response = await post();
+            if (response.status === 202) {
+                await new Promise(resolve => setTimeout(resolve, 750));
+                await post();
+            }
+        }).catch(() => {});
         resume();
     };
     const initial = document.querySelector('meta[name="merit-screen-visit"]');
@@ -71,9 +88,9 @@
             write('next', link.closest('nav') ? 'menu' : 'link');
     }, true);
     document.addEventListener('submit', event => write('next', event.target.method.toLowerCase() === 'get' ? 'search' : 'redirect'), true);
-    document.addEventListener('visibilitychange', checkpoint);
-    window.addEventListener('blur', checkpoint);
+    document.addEventListener('visibilitychange', () => checkpoint(true));
+    window.addEventListener('blur', () => checkpoint());
     window.addEventListener('focus', resume);
-    window.addEventListener('pagehide', () => { checkpoint(); pause(); });
+    window.addEventListener('pagehide', () => { checkpoint(true); pause(); });
     window.addEventListener('pageshow', event => { if (event.persisted && current) begin(current.code, guid(), 'back'); });
 })();

@@ -25,6 +25,20 @@ Usage report reads and CSV exports use existing `view`/`export` audit actions wi
 
 ## Reports and permissions
 
+Agency monitoring policy determines who should see individual staff session sequences. The default supervisor/admin access implements #227; this permission grants both aggregates and individual sessions. There is currently no separate aggregate-only permission. An agency can disable collection with `ScreenVisit__Enabled=false` or have its deployment administrator remove `usage.view` from selected roles. For example, the following soft-revokes the standard Supervisor grant within one explicitly selected data root:
+
+```sql
+DECLARE @rootTenantId UNIQUEIDENTIFIER = '00000000-0000-0000-0000-000000000000'; -- replace with the agency root
+UPDATE rp SET isDeleted = 1
+  FROM auth.rolePermission AS rp
+  JOIN auth.role AS r ON r.roleId = rp.roleId
+  JOIN auth.permission AS p ON p.permissionId = rp.permissionId
+ WHERE r.rootTenantId = @rootTenantId AND r.roleCode = 'supervisor'
+   AND p.permissionCode = 'usage.view' AND rp.isDeleted = 0;
+```
+
+Existing authorization scopes retain their grants until revoked/expired or replaced: end affected sessions and sign in again after a permission change. `501_usagePermissions.sql` restores standard-role grants on deployment, so retain and reapply agency overrides after that seed. An aggregate-only supervisor role would require a separate permission design; removing `usage.view` currently removes all Usage reporting for that role.
+
 Open **Administration → Usage** (`/admin/usage`). New permission `usage.view` is seeded for standard Supervisor and Administrator roles, including newly installed roots. It is not automatically granted to ordinary intake/case staff, user administrators or epidemiologists. Sign in again to refresh permissions after deployment. Custom roles require an explicit grant.
 
 Reads require that permission in both the web application and SQL, and restrict visits to the current root and accessible working tenants. Out-of-scope predecessors and lifecycle events are not exposed. Report queries cover 1–90 days, defaulting to 30.
@@ -53,5 +67,11 @@ Environment overrides use double underscores, for example `ScreenVisit__Enabled=
 Retention strips actor/session/profile/view-as/working-tenant/role/tab/predecessor/duration fields, reduces event and created timestamps to a calendar date, replaces attribution with generic retention text, resets the navigation hint and soft-deletes the row. Only coarse root/screen/day metadata remains; normal reports exclude these rows. It does not purge the independent security ledger or sign-in log, whose policies still apply.
 
 ## Verification
+
+Run `python .claude/hooks/validate-sql.py sourceCode/database/scripts` in addition to generator tests. Reporting uses an unnamed primary key on its local temporary table, preserving indexed joins without a shared constraint name or exceptions to the SQL convention gate.
+
+For a predecessor not yet reconciled (for example a previous document's keepalive still in flight), capture returns HTTP 202 after saving the visit with no predecessor. The browser retries the same idempotent payload once after 750 ms. SQL revalidates actor, logical session and tab before linking it. It never stores an unresolved hint. Later arrivals or a document closing before its retry can still leave a gap; collection remains best effort.
+
+Blur still pauses focused time, but its checkpoints are limited to once per five seconds per visit. Visibility changes, page hide and screen transitions flush changed time immediately; unchanged cumulative values are not sent again. This reduces focus-switch traffic without counting unfocused time as attention.
 
 Focused unit and SQL-backed integration tests cover the catalog and filter, empty pages, fragment/API exclusion, idempotency, actor ownership, normalized metadata, session continuity, report paths/loops/timing/exports, scope isolation, anti-forgery and worker-only retention. Browser checks exercise actual navigation, duration checkpoints and accessible reporting. Navigation measurements remain best effort even when these checks pass.

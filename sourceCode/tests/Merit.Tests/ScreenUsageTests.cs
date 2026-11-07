@@ -114,7 +114,7 @@ public sealed class ScreenUsageTests
     {
         public List<ScreenVisitInput> Visits { get; } = [];
         public bool Throw { get; set; }
-        public Task RecordAsync(ScreenVisitInput v, CancellationToken ct = default) { if (Throw) throw new InvalidOperationException("secret must not be logged"); Visits.Add(v); return Task.CompletedTask; }
+        public Task<bool> RecordAsync(ScreenVisitInput v, CancellationToken ct = default) { if (Throw) throw new InvalidOperationException("secret must not be logged"); Visits.Add(v); return Task.FromResult(false); }
         public Task DurationAsync(Guid id, int ms, CancellationToken ct = default) => Throw ? Task.FromException(new InvalidOperationException()) : Task.CompletedTask;
         public Task ContinueSessionAsync(Guid id, CancellationToken ct = default) => DurationAsync(id, 0, ct);
         public Task<ScreenUsageReport> ReportAsync(int days, CancellationToken ct = default) => throw new NotSupportedException();

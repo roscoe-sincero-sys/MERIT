@@ -22,7 +22,7 @@ public sealed class ScreenVisitsController(ScreenUsageRecorder recorder, ICurren
         if (input.VisitId == Guid.Empty || input.TabId is null || input.TabId == Guid.Empty
             || !Types.Contains(input.NavigationType) || ScreenCatalog.Find(input.ScreenCode)?.Allowed(session) != true)
             return BadRequest();
-        await recorder.RecordAsync(input, ct);
+        if (await recorder.RecordAsync(input, ct)) return Accepted();
         return NoContent();
     }
 

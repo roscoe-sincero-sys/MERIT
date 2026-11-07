@@ -3,6 +3,65 @@ import { ISOLATED_DATA_ONLY, sql } from '../database';
 
 test.skip(!!ISOLATED_DATA_ONLY, ISOLATED_DATA_ONLY ?? '');
 
+test('a full-page predecessor arriving late is reconciled by one bounded browser retry', async ({ asUser }) => {
+  const page = await asUser('supervisor');
+  let predecessor: { body: any; token: string } | undefined;
+  let attempts = 0;
+  let successor = '';
+  await page.route('**/api/v1/usage/visits', async route => {
+    const body = route.request().postDataJSON();
+    if (body.screenCode === 'intake') {
+      predecessor = { body, token: route.request().headers()['x-xsrf-token'] };
+      // Its Razor row exists, but the previous document's browser reconciliation is delayed.
+      return route.fulfill({ status: 204 });
+    }
+    if (body.screenCode === 'queues') {
+      attempts++;
+      successor = body.visitId;
+      if (attempts === 1) {
+        const response = await route.fetch();
+        expect(response.status()).toBe(202);
+        expect(sql(`SELECT COUNT(*) FROM logs.screenVisit WHERE screenVisitId='${successor}' AND previousVisitId IS NULL`).toString()).toMatch(/\b1\b/);
+        const late = await page.request.post('/api/v1/usage/visits', {
+          data: predecessor!.body, headers: { 'X-XSRF-TOKEN': predecessor!.token },
+        });
+        expect(late.status()).toBe(204);
+        return route.fulfill({ response });
+      }
+    }
+    return route.continue();
+  });
+  await page.goto('/intake');
+  await expect.poll(() => predecessor !== undefined).toBe(true);
+  await page.goto('/app/queues'); await angularReady(page);
+  await expect.poll(() => attempts).toBe(2);
+  await expect.poll(() => sql(`SELECT COUNT(*) FROM logs.screenVisit WHERE screenVisitId='${successor}' AND previousVisitId='${predecessor!.body.visitId}'`).toString()).toMatch(/\b1\b/);
+  await page.waitForLoadState('networkidle');
+  expect(attempts).toBe(2);
+});
+
+test('an unresolved predecessor is retried at most once and rapid blur checkpoints are bounded', async ({ asUser }) => {
+  const page = await asUser('supervisor');
+  await page.clock.install();
+  let attempts = 0, checkpoints = 0;
+  await page.route('**/api/v1/usage/visits', route => { attempts++; return route.fulfill({ status: 202 }); });
+  page.on('request', request => { if (request.url().endsWith('/api/v1/usage/duration')) checkpoints++; });
+  await page.goto('/intake');
+  await expect.poll(() => attempts).toBe(2);
+  await page.clock.fastForward(2000);
+  expect(attempts).toBe(2);
+  await page.bringToFront();
+  await page.evaluate(() => { for (let n = 0; n < 20; n++) window.dispatchEvent(new Event('blur')); });
+  await expect.poll(() => checkpoints).toBe(1);
+  await page.clock.fastForward(1000);
+  await page.evaluate(() => window.dispatchEvent(new Event('blur')));
+  await page.waitForLoadState('networkidle');
+  expect(checkpoints).toBe(1);
+  // Terminal events flush changed focused time even inside the blur throttle interval.
+  await page.evaluate(() => window.dispatchEvent(new Event('pagehide')));
+  await expect.poll(() => checkpoints).toBe(2);
+});
+
 test('Razor and router visits reconcile, preserve predecessors and omit queries', async ({ asUser }) => {
   const page = await asUser('supervisor');
   const payloads: { visitId: string; screenCode: string; previousVisitId: string | null; navigationType: string }[] = [];

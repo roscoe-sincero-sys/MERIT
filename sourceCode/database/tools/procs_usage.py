@@ -22,7 +22,7 @@ SELECT v.* INTO #visits
  WHERE v.isDeleted = 0 AND v.rootTenantId = @root AND v.eventUtc >= @from
    AND (EXISTS (SELECT 1 FROM auth.sessionScopeTenant AS st WHERE st.sessionScopeId = @scope AND st.tenantId = v.actingTenantId)
      OR EXISTS (SELECT 1 FROM auth.sessionScopeAdminTenant AS st WHERE st.sessionScopeId = @scope AND st.tenantId = v.actingTenantId));
-CREATE UNIQUE CLUSTERED INDEX IX_visits_id ON #visits (screenVisitId);"""
+ALTER TABLE #visits ADD PRIMARY KEY CLUSTERED (screenVisitId);"""
 
 DAYS = """IF @days NOT BETWEEN 1 AND 90
 BEGIN
@@ -80,9 +80,13 @@ BEGIN
     ;THROW 51422, N'Usage ids must not be authentication keys.', 1;
 END;
 -- A predecessor is a validated chain within one logical session and tab, not an untrusted URL.
+DECLARE @retryPredecessor BIT = 0;
 IF NOT EXISTS (SELECT 1 FROM logs.screenVisit WHERE screenVisitId = @previousVisitId AND appUserId = @me
                 AND sessionReference = @reference AND tabId = @tabId AND isDeleted = 0 AND screenVisitId <> @screenVisitId)
+BEGIN
+    IF @previousVisitId IS NOT NULL AND @previousVisitId <> @screenVisitId SET @retryPredecessor = 1;
     SET @previousVisitId = NULL;
+END;
 
 IF EXISTS (SELECT 1 FROM logs.screenVisit WHERE screenVisitId = @screenVisitId)
 BEGIN
@@ -115,6 +119,7 @@ BEGIN
     VALUES (@screenVisitId, @root, @acting, @me, @reference, @profile, @viewAs, @roles, @screenCode,
             @navigationType, @tabId, @previousVisitId, N'MERIT usage', N'MERIT usage');
 END;
+SELECT @retryPredecessor AS retryPredecessor;
 """,
     },
     {

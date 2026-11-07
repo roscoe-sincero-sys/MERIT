@@ -60,7 +60,8 @@
     }
     <form class="usa-form" method="get" action="/admin/usage/lookup">
         <label class="usa-label" for="usage-reference">Open a session reference</label>
-        <input class="usa-input" id="usage-reference" name="reference" required />
+        <p class="usa-hint" id="usage-reference-hint">Paste the session reference from a Usage session page, for example 12345678-1234-1234-1234-123456789abc. You can also use a View session link above.</p>
+        <input class="usa-input" id="usage-reference" name="reference" aria-describedby="usage-reference-hint" pattern="[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}" required />
         <input type="hidden" name="days" value="@Model.Days" />
         <button class="usa-button usa-button--outline" type="submit">Open session</button>
     </form>

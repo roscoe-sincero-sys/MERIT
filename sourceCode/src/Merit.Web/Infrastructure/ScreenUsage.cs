@@ -17,11 +17,12 @@ public sealed partial class ScreenUsageRecorder(IScreenUsageData data, ICurrentS
         try { await data.ContinueSessionAsync(newScope, ct).ConfigureAwait(false); }
         catch (Exception ex) when (ex is not OperationCanceledException) { Failed(logger, ex.GetType().Name); }
     }
-    public async Task RecordAsync(ScreenVisitInput visit, CancellationToken ct = default)
+    public async Task<bool> RecordAsync(ScreenVisitInput visit, CancellationToken ct = default)
     {
-        if (!Enabled || ScreenCatalog.Find(visit.ScreenCode)?.Allowed(session) != true) return;
-        try { await data.RecordAsync(visit, ct).ConfigureAwait(false); }
+        if (!Enabled || ScreenCatalog.Find(visit.ScreenCode)?.Allowed(session) != true) return false;
+        try { return await data.RecordAsync(visit, ct).ConfigureAwait(false); }
         catch (Exception ex) when (ex is not OperationCanceledException) { Failed(logger, ex.GetType().Name); }
+        return false;
     }
 
     public async Task DurationAsync(Guid id, int milliseconds, CancellationToken ct = default)

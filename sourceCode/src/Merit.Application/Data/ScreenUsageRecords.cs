@@ -6,7 +6,8 @@ public sealed record ScreenVisitInput(Guid VisitId, string ScreenCode, Guid? Tab
 
 public interface IScreenUsageData
 {
-    Task RecordAsync(ScreenVisitInput visit, CancellationToken ct = default);
+    // True requests one bounded retry of the same visit to reconcile an unresolved predecessor.
+    Task<bool> RecordAsync(ScreenVisitInput visit, CancellationToken ct = default);
     Task DurationAsync(Guid visitId, int durationMs, CancellationToken ct = default);
     Task ContinueSessionAsync(Guid newSessionScopeId, CancellationToken ct = default);
     Task<ScreenUsageReport> ReportAsync(int days, CancellationToken ct = default);

@@ -5,8 +5,8 @@ namespace Merit.Data.SqlServer;
 
 public sealed class ScreenUsageData(Db db) : IScreenUsageData
 {
-    public Task RecordAsync(ScreenVisitInput v, CancellationToken ct = default)
-        => db.ExecuteAsync("logs.uspRecordScreenVisit", new { screenVisitId = v.VisitId, v.ScreenCode, v.TabId, v.PreviousVisitId, v.NavigationType }, ct);
+    public Task<bool> RecordAsync(ScreenVisitInput v, CancellationToken ct = default)
+        => db.QuerySingleAsync<bool>("logs.uspRecordScreenVisit", new { screenVisitId = v.VisitId, v.ScreenCode, v.TabId, v.PreviousVisitId, v.NavigationType }, ct);
 
     public Task DurationAsync(Guid visitId, int durationMs, CancellationToken ct = default)
         => db.ExecuteAsync("logs.uspSetScreenDuration", new { screenVisitId = visitId, durationMs }, ct);

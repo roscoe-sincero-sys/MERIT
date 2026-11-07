@@ -101,7 +101,7 @@ BEGIN
          WHERE v.isDeleted = 0 AND v.rootTenantId = @root AND v.eventUtc >= @from
            AND (EXISTS (SELECT 1 FROM auth.sessionScopeTenant AS st WHERE st.sessionScopeId = @scope AND st.tenantId = v.actingTenantId)
              OR EXISTS (SELECT 1 FROM auth.sessionScopeAdminTenant AS st WHERE st.sessionScopeId = @scope AND st.tenantId = v.actingTenantId));
-        CREATE UNIQUE CLUSTERED INDEX IX_visits_id ON #visits (screenVisitId);
+        ALTER TABLE #visits ADD PRIMARY KEY CLUSTERED (screenVisitId);
         SELECT screenVisitId, eventUtc, screenCode, navigationType, tabId,
                CASE WHEN EXISTS (SELECT 1 FROM #visits AS p WHERE p.screenVisitId = v.previousVisitId) THEN previousVisitId END AS previousVisitId, roleCodes,
                actingTenantId, profileId, viewAsUserId, durationMs, COUNT (*) OVER () AS totalCount

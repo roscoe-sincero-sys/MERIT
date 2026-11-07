@@ -10,6 +10,39 @@ namespace Merit.IntegrationTests;
 public sealed class ScreenUsageTests(MeritFixture fixture)
 {
     [SqlFact]
+    public async Task ADelayedPredecessorRequestsRetryAndIsLinkedOnlyAfterValidation()
+    {
+        await using var account = await UserAsync("usagerace");
+        using var client = fixture.Anonymous();
+        await account.SignInAsync(client, MeritFixture.Password);
+        await client.Http.GetStringAsync("/account/profiles");
+        Guid tab = Guid.NewGuid(), predecessor = Guid.NewGuid(), successor = Guid.NewGuid();
+        var next = new ScreenVisitInput(successor, "result.new", tab, predecessor, "link");
+        using (var early = await client.Http.PostAsJsonAsync("/api/v1/usage/visits", next))
+            Assert.Equal(HttpStatusCode.Accepted, early.StatusCode);
+        Assert.Equal(1, await account.ScalarAsync<int>("SELECT COUNT (*) FROM logs.screenVisit WHERE screenVisitId = @visit AND previousVisitId IS NULL", ("@visit", successor)));
+        using (var late = await client.Http.PostAsJsonAsync("/api/v1/usage/visits", new ScreenVisitInput(predecessor, "person", tab, NavigationType: "link")))
+            Assert.Equal(HttpStatusCode.NoContent, late.StatusCode);
+        using (var retried = await client.Http.PostAsJsonAsync("/api/v1/usage/visits", next))
+            Assert.Equal(HttpStatusCode.NoContent, retried.StatusCode);
+        Assert.Equal(1, await account.ScalarAsync<int>("SELECT COUNT (*) FROM logs.screenVisit WHERE screenVisitId = @visit AND previousVisitId = @previous", ("@visit", successor), ("@previous", predecessor)));
+        // A different tab never becomes a valid predecessor, including on a replay.
+        Guid otherTab = await VisitAsync(client, "home", Guid.NewGuid());
+        var invalid = new ScreenVisitInput(Guid.NewGuid(), "result.new", tab, otherTab, "link");
+        for (int attempt = 0; attempt < 2; attempt++)
+        {
+            using var response = await client.Http.PostAsJsonAsync("/api/v1/usage/visits", invalid);
+            Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
+        }
+        Assert.Equal(1, await account.ScalarAsync<int>("SELECT COUNT (*) FROM logs.screenVisit WHERE screenVisitId = @visit AND previousVisitId IS NULL", ("@visit", invalid.VisitId)));
+        var reference = await account.ScalarAsync<Guid>("SELECT sessionReference FROM logs.screenVisit WHERE screenVisitId = @visit", ("@visit", successor));
+        // Each connection gets an unnamed temporary primary key, without shared constraint names.
+        var reports = await Task.WhenAll(Enumerable.Range(0, 8).Select(n => client.Http.GetStringAsync(n % 2 == 0
+            ? "/admin/usage" : $"/admin/usage/sessions/{reference}")));
+        Assert.All(reports, html => Assert.Contains("Usage", html));
+    }
+
+    [SqlFact]
     public async Task FullEmptyScreensAreRecordedButPollingAssetsAndFragmentsAreNot()
     {
         await using var account = await UserAsync("usagepage");

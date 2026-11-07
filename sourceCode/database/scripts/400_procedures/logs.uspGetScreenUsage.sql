@@ -94,7 +94,7 @@ BEGIN
          WHERE v.isDeleted = 0 AND v.rootTenantId = @root AND v.eventUtc >= @from
            AND (EXISTS (SELECT 1 FROM auth.sessionScopeTenant AS st WHERE st.sessionScopeId = @scope AND st.tenantId = v.actingTenantId)
              OR EXISTS (SELECT 1 FROM auth.sessionScopeAdminTenant AS st WHERE st.sessionScopeId = @scope AND st.tenantId = v.actingTenantId));
-        CREATE UNIQUE CLUSTERED INDEX IX_visits_id ON #visits (screenVisitId);
+        ALTER TABLE #visits ADD PRIMARY KEY CLUSTERED (screenVisitId);
         SELECT v.screenCode, CAST (NULL AS VARCHAR (1000)) AS roleCode, COUNT (*) AS visits,
                COUNT (DISTINCT v.sessionReference) AS sessions, COUNT (v.durationMs) AS timedVisits,
                AVG (CAST (v.durationMs AS FLOAT)) AS averageVisibleMs
