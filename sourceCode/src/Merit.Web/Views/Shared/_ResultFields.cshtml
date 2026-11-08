@@ -5,13 +5,13 @@
 @* Dependent fields of the result form. Specimen and unit changes re-request this partial with hx-include="closest form". *@
 @if (Model.Specimens.Count == 0)
 {
-    <p class="merit-meta">Choose an analyte to see its specimens and units.</p>
+    <p class="merit-meta">Choose a substance tested to see sample materials and reported units.</p>
 }
 else
 {
     <div class="merit-form-row">
         <div class="@state.GroupClass("AnalyteSpecimenId")">
-            <label class="usa-label" for="AnalyteSpecimenId">Specimen @FormErrors.RequiredMark</label>
+            <label class="usa-label" for="AnalyteSpecimenId">Sample material (specimen) @FormErrors.RequiredMark</label>
             @state.ErrorMessage("AnalyteSpecimenId")
             <select class="usa-select" id="AnalyteSpecimenId" name="AnalyteSpecimenId" aria-describedby="@state.DescribedBy("AnalyteSpecimenId")" aria-invalid="@state.AriaInvalid("AnalyteSpecimenId")"
                     hx-get="/results/fields" hx-target="#result-fields" hx-swap="innerHTML" hx-include="closest form">
@@ -19,12 +19,12 @@ else
             </select>
         </div>
         <div class="@state.GroupClass("Unit")">
-            <label class="usa-label" for="Unit">Unit @FormErrors.RequiredMark</label>
+            <label class="usa-label" for="Unit">Reported unit @FormErrors.RequiredMark</label>
             @state.ErrorMessage("Unit")
             <select class="usa-select" id="Unit" name="Unit" aria-describedby="@state.DescribedBy("Unit")" aria-invalid="@state.AriaInvalid("Unit")">
                 @foreach (var o in Model.Units) { <option value="@o.Value" selected="@o.Selected">@o.Label</option> }
             </select>
-            <div class="usa-hint">Compared in @Model.CanonicalUnit.</div>
+            <div class="usa-hint">For comparison with reference levels, MERIT converts this value to @Model.CanonicalUnit.</div>
         </div>
         @if (Model.UsesSampleType)
         {

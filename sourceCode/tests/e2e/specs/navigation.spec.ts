@@ -24,7 +24,7 @@ for (const [user, count] of [['cmbalt', 11], ['supervisor', 17], ['admin', 20]] 
       expect(links).toEqual(destinations);
       if (user === 'cmbalt') {
         await expect(nav.locator('a[href="/intake"], a[href="/admin/users"], a[href="/admin/tenants"]')).toHaveCount(0);
-        await expect(nav.locator('summary').filter({ hasText: /^Intake/ })).toHaveCount(0);
+        await expect(nav.locator('summary').filter({ hasText: /^Lab imports/ })).toHaveCount(0);
       }
       const controls = nav.locator(':scope > ul > li > a, summary');
       const boxes = await controls.evaluateAll(els => els.map(e => { const r = e.getBoundingClientRect(); return { y: r.y, height: r.height }; }));
@@ -54,7 +54,7 @@ test('disclosures support keyboard, outside dismissal and responsive focus resto
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/');
   // Chromium exposes native summary as DisclosureTriangle, rather than the ARIA button role.
-  const summary = page.locator('summary').filter({ hasText: /^Surveillance/ });
+  const summary = page.locator('summary').filter({ hasText: /^Case management/ });
   const cases = page.locator('#merit-nav a[href="/cases"]');
   await summary.focus(); await page.keyboard.press('Enter');
   await expect(cases).toBeVisible();
@@ -82,7 +82,7 @@ test('current section is announced for Razor and Angular destinations', async ({
     if (path.startsWith('/app')) await angularReady(page);
     await page.getByRole('button', { name: 'Menu', exact: true }).click();
     const summary = page.locator('.merit-nav-group').filter({ has: page.locator('a[aria-current="page"]') }).locator('summary');
-    await expect(summary).toHaveAccessibleName('Surveillance (current section)');
+    await expect(summary).toHaveAccessibleName('Case management (current section)');
     await expect(page.locator('.merit-nav a[aria-current="page"]')).toHaveAttribute('href', path);
   }
 });

@@ -20,6 +20,7 @@ public static class Permissions
     public const string InvestigationEdit = "investigation.edit";
     public const string TaskView = "task.view";
     public const string TaskEdit = "task.edit";
+    public const string WorkflowWaive = "workflow.waive";
     public const string IntakeUpload = "intake.upload";
     public const string IntakeConfigure = "intake.configure";
     public const string DataExport = "data.export";
@@ -47,6 +48,6 @@ public static class Permissions
         PersonView, PersonEdit, PersonViewIdentifiers, PersonMerge, ResultView, ResultEdit, ResultReleaseHold, CaseView,
         CaseOpen, CaseEdit, InvestigationEdit, TaskView, TaskEdit, IntakeUpload, IntakeConfigure, DataExport,
         MatchingConfigure, ExtractRun, ExtractSubmit, ConfigEdit, RegistryEdit, TenantAdminister, TenantCreate, AuditView, PlatformAdminister,
-        SecurityInvestigate, UsageView, DocumentView, DocumentEdit,
+        SecurityInvestigate, UsageView, DocumentView, DocumentEdit, WorkflowWaive,
     ];
 }

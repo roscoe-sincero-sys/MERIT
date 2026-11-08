@@ -475,7 +475,7 @@ WITH perCase AS (
            DATEDIFF (DAY, q.collectedDate, CAST (q.receivedUtc AS DATE)) AS daysToReceipt,
            DATEDIFF (DAY, CAST (q.receivedUtc AS DATE), c.openedDate) AS daysToOpen,
            DATEDIFF (DAY, c.openedDate, (SELECT MIN (ca.activityDate) FROM dbo.vwPatientActivityStream AS ca
-                                          WHERE ca.exposureCaseId = c.exposureCaseId AND ca.isDeleted = 0
+                                          WHERE ca.exposureCaseId = c.exposureCaseId AND ca.isDeleted = 0 AND ca.isVoided=0
                                             AND ca.activityType IN ('contactAttempt', 'letter', 'education', 'referral',
                                                                     'medicalManagement'))) AS daysToFollowUp
       FROM dbo.exposureCase AS c

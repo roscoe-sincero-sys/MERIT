@@ -215,7 +215,8 @@ public sealed partial class PatientCareTests
             var user = await fixture.SignedInAsync("supervisor"); await user.Http.GetStringAsync($"/cases/{caseId}");
             var version = (byte[])(await Sql(c, "SELECT rowVersion FROM dbo.exposureCase WHERE exposureCaseId=@id", ("@id", caseId)))!;
             using var closed = await user.NoRedirect.PostAsync($"/cases/{caseId}/close", Form(("closureReason", "lostToFollowUp"), ("closedDate", "2026-10-03"),
-                ("note", "Two telephone attempts recorded; first-class final scheduling letter sent with October 2 response date, required rights and case closure warning; no response. Discretionary closure approved."), ("rowVersion", "0x" + Convert.ToHexString(version))));
+                ("note", "Two telephone attempts recorded; first-class final scheduling letter sent with October 2 response date, required rights and case closure warning; no response. Discretionary closure approved."), ("rowVersion", "0x" + Convert.ToHexString(version)),
+                ("closureReviewConfirmed","true"),("closureReviewToken",await Sql(c,"SELECT dbo.udfCaseClosureReviewStamp(@id)",("@id",caseId)))));
             Assert.Equal(HttpStatusCode.OK, closed.StatusCode);
             var task = (Guid)(await Sql(c, "SELECT workTaskId FROM dbo.workTask WHERE exposureCaseId=@id AND queueCode='assessmentOwnerClosure' AND taskStatus='open'", ("@id", caseId)))!;
             Assert.Equal(1, await Sql(c, "SELECT COUNT(*) FROM dbo.personAccess WHERE personId=@person AND tenantId=@owner AND accessReason='case' AND isDeleted=0", ("@person", person), ("@owner", fixture.Ids.BaltimoreCityTenantId)));
@@ -226,7 +227,7 @@ public sealed partial class PatientCareTests
         }
         finally
         {
-            await Sql(c, "DELETE dbo.workTask WHERE exposureCaseId=@case; DELETE dbo.caseActivity WHERE exposureCaseId=@case;", ("@case", caseId));
+            await Sql(c, "DELETE dbo.workTask WHERE exposureCaseId=@case; DELETE dbo.personActivity WHERE exposureCaseId=@case; DELETE dbo.caseActivity WHERE exposureCaseId=@case;", ("@case", caseId));
             await CleanReview(c, [result], [], caseId: caseId, patientId: person);
         }
     }

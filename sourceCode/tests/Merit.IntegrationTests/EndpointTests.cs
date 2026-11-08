@@ -232,7 +232,7 @@ public sealed partial class EndpointTests(MeritFixture fixture, ITestOutputHelpe
         var supervisor = await fixture.SignedInAsync("supervisor");
         var html = await supervisor.Http.GetStringAsync("/search?q=Rivera");
         Assert.DoesNotContain("PB:", html, StringComparison.Ordinal);
-        Assert.Matches($$"""<a class="merit-badge merit-badge--\w+" href="/cases/{{fixture.Ids.MiaCaseId}}"><abbr title="[^"]+">PB</abbr> &middot; [A-Z][a-z]+ &middot; {{fixture.Ids.MiaCaseNumber}}</a>""", html);
+        Assert.Matches($$"""<a class="merit-badge merit-badge--\w+" href="/cases/{{fixture.Ids.MiaCaseId}}">Lead \(PB\) &middot; [A-Z][a-z]+ &middot; {{fixture.Ids.MiaCaseNumber}}</a>""", html);
     }
 
     [SqlFact]

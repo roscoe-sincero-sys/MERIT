@@ -28,7 +28,7 @@
         </div>
         <div class="merit-form-row">
             <div class="@state.GroupClass("AnalyteId")">
-                <label class="usa-label" for="AnalyteId">Analyte @FormErrors.RequiredMark</label>
+                <label class="usa-label" for="AnalyteId">Substance tested (analyte) @FormErrors.RequiredMark</label>
                 @state.ErrorMessage("AnalyteId")
                 @* Cascading drop-downs: each change re-renders the dependent fields from the server. *@
                 <select class="usa-select" id="AnalyteId" name="AnalyteId" required aria-describedby="@state.DescribedBy("AnalyteId")" aria-invalid="@state.AriaInvalid("AnalyteId")"
@@ -37,7 +37,7 @@
                 </select>
             </div>
             <div class="@state.GroupClass("ResultStatus")">
-                <label class="usa-label" for="ResultStatus">Status</label>
+                <label class="usa-label" for="ResultStatus">Laboratory result status</label>
                 @state.ErrorMessage("ResultStatus")
                 <select class="usa-select" id="ResultStatus" name="ResultStatus" aria-describedby="@state.DescribedBy("ResultStatus")" aria-invalid="@state.AriaInvalid("ResultStatus")">
                     @foreach (var o in Options.Fixed(Model.ResultStatus, Options.ResultStatuses)) { <option value="@o.Value" selected="@o.Selected">@o.Label</option> }
@@ -58,17 +58,17 @@
                        aria-describedby="@state.DescribedBy("ValueText", "value-hint")" aria-invalid="@state.AriaInvalid("ValueText")" />
             </div>
             <div class="@state.GroupClass("CollectedDate")">
-                <label class="usa-label" for="CollectedDate">Collected @FormErrors.RequiredMark</label>
+                <label class="usa-label" for="CollectedDate">Sample collection date @FormErrors.RequiredMark</label>
                 @state.ErrorMessage("CollectedDate")
                 <input class="usa-input" id="CollectedDate" name="CollectedDate" type="date" value="@Options.Iso(Model.CollectedDate)" aria-describedby="@state.DescribedBy("CollectedDate")" aria-invalid="@state.AriaInvalid("CollectedDate")" required />
             </div>
             <div class="@state.GroupClass("AnalyzedDate")">
-                <label class="usa-label" for="AnalyzedDate">Analyzed</label>
+                <label class="usa-label" for="AnalyzedDate">Laboratory analysis date</label>
                 @state.ErrorMessage("AnalyzedDate")
                 <input class="usa-input" id="AnalyzedDate" name="AnalyzedDate" type="date" value="@Options.Iso(Model.AnalyzedDate)" aria-describedby="@state.DescribedBy("AnalyzedDate")" aria-invalid="@state.AriaInvalid("AnalyzedDate")" />
             </div>
             <div class="@state.GroupClass("ReportedDate")">
-                <label class="usa-label" for="ReportedDate">Reported</label>
+                <label class="usa-label" for="ReportedDate">Laboratory report date</label>
                 @state.ErrorMessage("ReportedDate")
                 <input class="usa-input" id="ReportedDate" name="ReportedDate" type="date" value="@Options.Iso(Model.ReportedDate)" aria-describedby="@state.DescribedBy("ReportedDate")" aria-invalid="@state.AriaInvalid("ReportedDate")" />
             </div>

@@ -30,10 +30,10 @@ CREATE OR ALTER VIEW dbo.vwPatientActivityStream
 AS
 SELECT a.caseActivityId, c.personId, a.exposureCaseId, CAST (NULL AS UNIQUEIDENTIFIER) AS labResultId,
        a.rootTenantId, a.owningTenantId, a.activityType, a.activityDate, a.outcome, a.note, a.workerUserId,
-       a.contactPersonId, a.createdDateUtc, a.isDeleted, CAST (0 AS BIT) AS isVoided,
+       a.contactPersonId, a.createdDateUtc, a.isDeleted, a.isVoided,
        CAST (CASE WHEN a.activityType IN ('note','statusChange','classificationChange') THEN 'internal' WHEN a.contactPersonId IS NOT NULL THEN 'other' ELSE 'unknown' END AS VARCHAR (12)) AS audience,
        CAST (NULL AS VARCHAR (12)) AS channel, CAST (NULL AS NVARCHAR (200)) AS recipientLabel,
-       CAST ('case' AS VARCHAR (12)) AS sourceKind, CAST (NULL AS NVARCHAR (500)) AS voidReason, CAST (NULL AS NVARCHAR (300)) AS noticeFormReference, CAST (0 AS BIT) AS ownerScopeConfirmed
+       CAST ('case' AS VARCHAR (12)) AS sourceKind, a.voidReason, CAST (NULL AS NVARCHAR (300)) AS noticeFormReference, CAST (0 AS BIT) AS ownerScopeConfirmed
   FROM dbo.caseActivity AS a JOIN dbo.exposureCase AS c ON c.exposureCaseId = a.exposureCaseId AND c.isDeleted = 0
  WHERE a.isDeleted = 0 AND auth.udfHasPermission (N'case.view') = 1
 UNION ALL

@@ -16,19 +16,19 @@
     string? Also(string target) => alsoUnder.TryGetValue(target, out var prefixes) ? string.Join(' ', prefixes) : null;
     var groups = new[]
     {
-        (Label: "Intake", Links: new[] {
-            (Text: "Intake", Url: "/intake", Visible: CurrentSession.Has(Permissions.IntakeUpload)),
+        (Label: "Lab imports", Links: new[] {
+            (Text: "Upload lab results", Url: "/intake", Visible: CurrentSession.Has(Permissions.IntakeUpload)),
             (Text: "Held records", Url: "/app/held", Visible: CurrentSession.Has(Permissions.ResultReleaseHold)),
             (Text: "Match review", Url: "/app/match-review", Visible: CurrentSession.Has(Permissions.ResultReleaseHold)) }),
-        (Label: "Surveillance", Links: new[] {
+        (Label: "Case management", Links: new[] {
             (Text: "Cases", Url: "/cases", Visible: CurrentSession.Has(Permissions.CaseView)),
             (Text: "Clusters", Url: "/app/clusters", Visible: CurrentSession.Has(Permissions.CaseView)),
             (Text: "Map", Url: "/app/map", Visible: CurrentSession.Has(Permissions.CaseView)),
             (Text: "Investigations", Url: "/investigations", Visible: CurrentSession.Has(Permissions.CaseView)) }),
-        (Label: "Registry & reports", Links: new[] {
-            (Text: "Results", Url: "/app/results", Visible: CurrentSession.Has(Permissions.ResultView)),
+        (Label: "Lab results & reports", Links: new[] {
+            (Text: "Lab results", Url: "/app/results", Visible: CurrentSession.Has(Permissions.ResultView)),
             (Text: "Reports", Url: "/app/reports", Visible: CurrentSession.Has(Permissions.ResultView) || CurrentSession.Has(Permissions.CaseView)),
-            (Text: "Reporters", Url: "/reporters", Visible: CurrentSession.Has(Permissions.PersonView)),
+            (Text: "Reporting organizations", Url: "/reporters", Visible: CurrentSession.Has(Permissions.PersonView)),
             (Text: "Extracts", Url: "/extracts", Visible: CurrentSession.Has(Permissions.ExtractRun)) }),
         (Label: "Administration", Links: new[] {
             (Text: "Usage", Url: "/admin/usage", Visible: CurrentSession.Has(Permissions.UsageView)),

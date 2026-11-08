@@ -12,6 +12,7 @@ public static class JobTypes
     public const string IntakeBatch = "intakeBatch";
     public const string ExtractRun = "extractRun";
     public const string NotificationEvaluation = "notificationEvaluation";
+    public const string WorkflowEvaluation = "workflowEvaluation";
     public const string ClusterDetection = "clusterDetection";
 }
 
@@ -23,7 +24,7 @@ public sealed record ExtractRunPayload(Guid ExtractRunId);
 /// Runs one claimed job through the same application services the controllers use: the worker never carries its own
 /// version of a rule. The caller has already set the session for the job's tenant and user.
 /// </summary>
-public sealed class JobDispatcher(IntakeProcessor intake, ExtractBuilder extracts, IWorkData work, ISettingsProvider settings, Services.CareService care)
+public sealed class JobDispatcher(IntakeProcessor intake, ExtractBuilder extracts, IWorkData work, ISettingsProvider settings, Services.CareService care, Services.WorkflowService workflows)
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
@@ -31,6 +32,12 @@ public sealed class JobDispatcher(IntakeProcessor intake, ExtractBuilder extract
     {
         switch (job.JobType)
         {
+            case JobTypes.WorkflowEvaluation:
+            {
+                using var payload = JsonDocument.Parse(job.PayloadJson);
+                var id = payload.RootElement.GetProperty("workflowDefinitionId").GetGuid();
+                return JsonSerializer.Serialize(new { created = await workflows.EvaluateAllAsync(id, ct).ConfigureAwait(false) }, Json);
+            }
             case JobTypes.NotificationEvaluation:
             {
                 using var payload = JsonDocument.Parse(job.PayloadJson);

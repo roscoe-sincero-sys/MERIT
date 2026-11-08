@@ -40,6 +40,11 @@ BEGIN
         completedByUserId          UNIQUEIDENTIFIER  NULL,
         resolutionNote             NVARCHAR (1000)   NULL,
         testingPlanJson            NVARCHAR (MAX)    NULL,
+        workflowDefinitionId       UNIQUEIDENTIFIER  NULL,
+        workflowSnapshotJson       NVARCHAR (MAX)    NULL,
+        workflowOccurrenceKey      VARCHAR (200)     NULL,
+        completionActivityId       UNIQUEIDENTIFIER  NULL,
+        resolutionKind             VARCHAR (20)      NULL,
         rowVersion                 ROWVERSION        NOT NULL,
 
         -- Standard audit columns. Soft delete only. Convention: DF_<schema>_<tableName>_<fieldName>.
@@ -90,6 +95,16 @@ IF COL_LENGTH (N'dbo.workTask', N'resolutionNote') IS NULL
     ALTER TABLE dbo.workTask ADD resolutionNote             NVARCHAR (1000)   NULL;
 IF COL_LENGTH (N'dbo.workTask', N'testingPlanJson') IS NULL
     ALTER TABLE dbo.workTask ADD testingPlanJson            NVARCHAR (MAX)    NULL;
+IF COL_LENGTH (N'dbo.workTask', N'workflowDefinitionId') IS NULL
+    ALTER TABLE dbo.workTask ADD workflowDefinitionId       UNIQUEIDENTIFIER  NULL;
+IF COL_LENGTH (N'dbo.workTask', N'workflowSnapshotJson') IS NULL
+    ALTER TABLE dbo.workTask ADD workflowSnapshotJson       NVARCHAR (MAX)    NULL;
+IF COL_LENGTH (N'dbo.workTask', N'workflowOccurrenceKey') IS NULL
+    ALTER TABLE dbo.workTask ADD workflowOccurrenceKey      VARCHAR (200)     NULL;
+IF COL_LENGTH (N'dbo.workTask', N'completionActivityId') IS NULL
+    ALTER TABLE dbo.workTask ADD completionActivityId       UNIQUEIDENTIFIER  NULL;
+IF COL_LENGTH (N'dbo.workTask', N'resolutionKind') IS NULL
+    ALTER TABLE dbo.workTask ADD resolutionKind             VARCHAR (20)      NULL;
 IF COL_LENGTH (N'dbo.workTask', N'rowVersion') IS NULL
     ALTER TABLE dbo.workTask ADD rowVersion ROWVERSION NOT NULL;
 GO
@@ -107,6 +122,16 @@ BEGIN
     ALTER TABLE dbo.workTask ADD CONSTRAINT CK_dbo_workTask_testingPlanJson CHECK (testingPlanJson IS NULL OR ISJSON (testingPlanJson) = 1);
 END;
 GO
+IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_dbo_workTask_workflowSnapshotJson')
+BEGIN
+    ALTER TABLE dbo.workTask ADD CONSTRAINT CK_dbo_workTask_workflowSnapshotJson CHECK (workflowSnapshotJson IS NULL OR ISJSON (workflowSnapshotJson) = 1);
+END;
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_dbo_workTask_resolutionKind')
+BEGIN
+    ALTER TABLE dbo.workTask ADD CONSTRAINT CK_dbo_workTask_resolutionKind CHECK (resolutionKind IS NULL OR resolutionKind IN ('completed','waived','transferred','notApplicable','autoDismissed'));
+END;
+GO
 
 -- -------------------------------------------------------------------------------------------
 -- 4. Indexes. The clustered index leads with rootTenantId so each state's rows sit together and the
@@ -119,6 +144,16 @@ IF NOT EXISTS (SELECT 1
 BEGIN
     CREATE CLUSTERED INDEX IX_dbo_workTask_rootTenantId_workTaskId
         ON dbo.workTask (rootTenantId, workTaskId);
+END;
+GO
+IF NOT EXISTS (SELECT 1
+                 FROM sys.indexes
+                WHERE name      = N'UX_dbo_workTask_workflowOccurrenceKey'
+                  AND object_id = OBJECT_ID (N'dbo.workTask'))
+BEGIN
+    CREATE UNIQUE INDEX UX_dbo_workTask_workflowOccurrenceKey
+        ON dbo.workTask (rootTenantId, workflowOccurrenceKey)
+        WHERE isDeleted = 0 AND workflowOccurrenceKey IS NOT NULL;
 END;
 GO
 IF NOT EXISTS (SELECT 1
@@ -244,6 +279,11 @@ EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', 
 EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'workTask', @ColumnName = N'completedByUserId', @Description = N'Staff member who completed or dismissed it.';
 EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'workTask', @ColumnName = N'resolutionNote', @Description = N'What was decided.';
 EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'workTask', @ColumnName = N'testingPlanJson', @Description = N'Server-written Maryland testing-plan version, source anchors and clinical review evidence.';
+EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'workTask', @ColumnName = N'workflowDefinitionId', @Description = N'Published workflow version; null for ad-hoc and legacy tasks.';
+EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'workTask', @ColumnName = N'workflowSnapshotJson', @Description = N'Frozen task definition, evidence schema, recurrence and closure requirements.';
+EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'workTask', @ColumnName = N'workflowOccurrenceKey', @Description = N'Idempotency key for a workflow occurrence or recurrence.';
+EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'workTask', @ColumnName = N'completionActivityId', @Description = N'Canonical patient activity proving this completion.';
+EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'workTask', @ColumnName = N'resolutionKind', @Description = N'completed, waived, transferred, notApplicable or autoDismissed; legacy unknown stays null.';
 EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'workTask', @ColumnName = N'rowVersion', @Description = N'Optimistic concurrency token. The application passes back the value it read; a save whose value no longer matches is rejected.';
 EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'workTask', @ColumnName = N'isDeleted', @Description = N'Soft-delete flag. 1 = deleted, 0 = active. This database performs no hard deletes; all reads must filter isDeleted = 0.';
 EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'workTask', @ColumnName = N'deletedBy', @Description = N'Login or application user that soft-deleted the row. Stamped by trg_au_updt_workTask when isDeleted transitions 0 -> 1. Meaningful only when isDeleted = 1.';

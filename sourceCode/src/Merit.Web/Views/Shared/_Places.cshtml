@@ -60,11 +60,12 @@
                                     }
                                     @if (!r.IsPrimary)
                                     {
+                                        <details><summary>End this place</summary>
                                         <form hx-post="/people/@Model.PersonId/places/@r.PersonLocationId/end" hx-target="#section-places" hx-swap="outerHTML">
                                             <label class="usa-sr-only" for="end-@r.PersonLocationId">End date for @r.AddressLabel</label>
                                             <input class="usa-input" type="date" id="end-@r.PersonLocationId" name="endDate" value="@Options.Iso(Clock.Today)" required />
                                             <button class="usa-button usa-button--unstyled" type="submit">End place</button>
-                                        </form>
+                                        </form></details>
                                     }
                                 }
                             </td>

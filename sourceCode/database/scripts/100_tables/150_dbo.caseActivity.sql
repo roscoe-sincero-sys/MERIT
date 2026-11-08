@@ -21,6 +21,8 @@ BEGIN
     CREATE TABLE dbo.caseActivity
     (
         caseActivityId             UNIQUEIDENTIFIER  NOT NULL,
+        isVoided                   BIT               NOT NULL CONSTRAINT DF_dbo_caseActivity_isVoided DEFAULT (0),
+        voidReason                 NVARCHAR (500)    NULL,
         rootTenantId               UNIQUEIDENTIFIER  NOT NULL,
         owningTenantId             UNIQUEIDENTIFIER  NOT NULL,
         exposureCaseId             UNIQUEIDENTIFIER  NOT NULL,
@@ -49,6 +51,10 @@ GO
 -- 2. Additive columns. Each column is also added on its own when missing, so a table deployed by an
 --    earlier release converges on the current definition. A no-op on a fresh install.
 -- -------------------------------------------------------------------------------------------
+IF COL_LENGTH (N'dbo.caseActivity', N'isVoided') IS NULL
+    ALTER TABLE dbo.caseActivity ADD isVoided                   BIT               NOT NULL CONSTRAINT DF_dbo_caseActivity_isVoided DEFAULT (0);
+IF COL_LENGTH (N'dbo.caseActivity', N'voidReason') IS NULL
+    ALTER TABLE dbo.caseActivity ADD voidReason                 NVARCHAR (500)    NULL;
 IF COL_LENGTH (N'dbo.caseActivity', N'workerUserId') IS NULL
     ALTER TABLE dbo.caseActivity ADD workerUserId               UNIQUEIDENTIFIER  NULL;
 IF COL_LENGTH (N'dbo.caseActivity', N'contactPersonId') IS NULL
@@ -167,6 +173,8 @@ GO
 -- -------------------------------------------------------------------------------------------
 EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'caseActivity', @Description = N'Contact attempts, education, referrals, medical management notes and letters on a case.';
 EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'caseActivity', @ColumnName = N'caseActivityId', @Description = N'Surrogate key.';
+EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'caseActivity', @ColumnName = N'isVoided', @Description = N'Withdrawn incorrect evidence retained for audit.';
+EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'caseActivity', @ColumnName = N'voidReason', @Description = N'Reason incorrect evidence was withdrawn.';
 EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'caseActivity', @ColumnName = N'rootTenantId', @Description = N'Root tenant (normally a state) the row belongs to. Denormalized onto every row so the row-level security predicate never needs a join; leads the clustered index.';
 EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'caseActivity', @ColumnName = N'owningTenantId', @Description = N'Tenant that owns the row; drives row-level security.';
 EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'caseActivity', @ColumnName = N'exposureCaseId', @Description = N'The case.';

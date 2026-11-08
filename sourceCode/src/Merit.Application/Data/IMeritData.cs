@@ -251,7 +251,7 @@ public interface ICaseData
 
     Task<int> SaveActivityAsync(Guid caseActivityId, Guid exposureCaseId, string activityType, DateOnly activityDate, Guid? contactPersonId, string? outcome, string? note, CancellationToken ct = default);
 
-    Task CloseCaseAsync(Guid exposureCaseId, string closureReason, DateOnly closedDate, string? note, byte[] rowVersion, CancellationToken ct = default);
+    Task CloseCaseAsync(Guid exposureCaseId, string closureReason, DateOnly closedDate, string? note, byte[] rowVersion, CancellationToken ct = default, string? closureReviewToken = null, bool closureReviewConfirmed = false);
 
     Task CreateFollowUpTasksAsync(Guid exposureCaseId, int adultAgeCutoffYears, CancellationToken ct = default);
 

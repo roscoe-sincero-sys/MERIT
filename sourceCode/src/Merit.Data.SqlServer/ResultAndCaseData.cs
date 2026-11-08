@@ -74,7 +74,8 @@ public sealed class CaseData(Db db) : ICaseData
             var investigations = (await g.ReadAsync<CaseInvestigationRow>().ConfigureAwait(false)).AsList();
             var tasks = (await g.ReadAsync<CaseTaskRow>().ConfigureAwait(false)).AsList();
             var contact = await g.ReadFirstOrDefaultAsync<PrimaryContactRow>().ConfigureAwait(false);
-            return c is null ? null : new CaseDetail(c, results, activities, investigations, tasks, contact);
+            var requirements = (await g.ReadAsync<ClosureRequirementRow>().ConfigureAwait(false)).AsList();
+            return c is null ? null : new CaseDetail(c, results, activities, investigations, tasks, contact, requirements);
         }, ct);
 
     public Task<IReadOnlyList<CaseListRow>> ListCasesAsync(CaseListQuery query, CancellationToken ct = default)
@@ -112,8 +113,8 @@ public sealed class CaseData(Db db) : ICaseData
             new { caseActivityId, exposureCaseId, activityType, activityDate, contactPersonId, outcome, note }, ct).ConfigureAwait(false);
 
     public Task CloseCaseAsync(Guid exposureCaseId, string closureReason, DateOnly closedDate, string? note, byte[] rowVersion,
-                               CancellationToken ct = default)
-        => db.ExecuteAsync("dbo.uspCloseExposureCase", new { exposureCaseId, closureReason, closedDate, note, rowVersion }, ct);
+                               CancellationToken ct = default, string? closureReviewToken = null, bool closureReviewConfirmed = false)
+        => db.ExecuteAsync("dbo.uspCloseExposureCase", new { exposureCaseId, closureReason, closedDate, note, rowVersion, closureReviewToken, closureReviewConfirmed }, ct);
 
     public Task CreateFollowUpTasksAsync(Guid exposureCaseId, int adultAgeCutoffYears, CancellationToken ct = default)
         => db.ExecuteAsync("dbo.uspCreateCaseFollowUpTasks", new { exposureCaseId, adultAgeCutoffYears }, ct);

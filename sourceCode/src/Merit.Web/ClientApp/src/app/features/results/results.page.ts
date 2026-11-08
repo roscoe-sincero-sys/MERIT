@@ -27,13 +27,13 @@ export class ResultsStore {
     <h1 tabindex="-1">Results</h1>
     @if (store.error(); as e) { <div class="usa-alert usa-alert--error usa-alert--slim" role="alert"><div class="usa-alert__body"><p class="usa-alert__text">{{ e }}</p></div></div> }
     <form class="filters" (submit)="apply($event)">
-      <div><label class="usa-label" for="f-analyte">Analyte</label>
+      <div><label class="usa-label" for="f-analyte">Substance tested (analyte)</label>
         <select class="usa-select" id="f-analyte" name="analyteId">
           <option value="">All</option>
           @for (a of store.analytes(); track a.analyteId) { <option [value]="a.analyteId" [selected]="a.analyteId === store.filters().analyteId">{{ a.displayName }}</option> }
         </select></div>
-      <div><label class="usa-label" for="f-from">Collected from</label><input class="usa-input" id="f-from" name="from" [value]="store.filters().from" type="date" /></div>
-      <div><label class="usa-label" for="f-to">Collected to</label><input class="usa-input" id="f-to" name="to" [value]="store.filters().to" type="date" /></div>
+      <div><label class="usa-label" for="f-from">Sample collection date from</label><input class="usa-input" id="f-from" name="from" [value]="store.filters().from" type="date" /></div>
+      <div><label class="usa-label" for="f-to">Sample collection date to</label><input class="usa-input" id="f-to" name="to" [value]="store.filters().to" type="date" /></div>
       <div><label class="usa-label" for="f-pop">Population</label>
         <select class="usa-select" id="f-pop" name="population" [value]="store.filters().population"><option value="">All</option><option value="child">Child</option><option value="adult">Adult</option><option value="pregnant">Pregnant</option><option value="unknown">Unknown</option></select></div>
       <div><label class="usa-label" for="f-min">Value at least</label><input class="usa-input" id="f-min" name="minValue" [value]="store.filters().minValue" inputmode="decimal" /></div>
@@ -58,13 +58,13 @@ export class ResultsPage implements OnInit {
   protected readonly key = (r: ResultListItemDto): string => r.labResultId;
 
   protected readonly columns: GridColumn<ResultListItemDto>[] = [
-    { key: 'collectedDate', label: 'Collected', sortable: true, nowrap: true, cell: r => this.display.date(r.collectedDate), link: r => this.view.detail(`/results/${r.labResultId}`) },
+    { key: 'collectedDate', label: 'Sample collection date', sortable: true, nowrap: true, cell: r => this.display.date(r.collectedDate), link: r => this.view.detail(`/results/${r.labResultId}`) },
     { key: 'lastName', label: 'Person', sortable: true, cell: r => r.personName ?? '(unmatched)', link: r => (r.personId ? this.view.detail(`/people/${r.personId}`) : null) },
-    { key: 'analyteCode', label: 'Analyte', sortable: true, cell: r => `${this.display.of(r.analyteCode)}, ${this.display.of(r.specimen).toLowerCase()}` },
+    { key: 'analyteCode', label: 'Substance tested', sortable: true, cell: r => `${this.display.of(r.analyteCode)}, ${this.display.of(r.specimen).toLowerCase()}` },
     { key: 'valueCanonical', label: 'Value', sortable: true, cell: r => `${r.operator === '=' ? '' : r.operator}${r.valueCanonical ?? ''} ${r.unitCanonical}`, badge: r => (r.isIndeterminate ? 'Indeterminate' : null) },
     { key: 'sampleType', label: 'Sample', cell: r => this.display.of(r.sampleType) },
     { key: 'population', label: 'Population', cell: r => this.display.of(r.population) },
-    { key: 'status', label: 'Status', cell: r => (r.resultRowStatus === 'valid' ? this.display.of(r.resultStatus)
+    { key: 'status', label: 'Laboratory result status', cell: r => (r.resultRowStatus === 'valid' ? this.display.of(r.resultStatus)
       : `${this.display.of(r.resultStatus)} (${this.display.of(r.resultRowStatus).toLowerCase()})`) },
     { key: 'labName', label: 'Lab', cell: r => r.labName ?? '' },
     { key: 'receivedUtc', label: 'Received', sortable: true, hidden: true, nowrap: true, cell: r => this.display.dateOf(r.receivedUtc) },
