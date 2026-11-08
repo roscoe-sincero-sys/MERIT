@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { expect, expectAccessible, test } from './helpers';
+import { answerConfirmation, expect, expectAccessible, test } from './helpers';
 import { totp } from '../totp';
 import { ISOLATED_DATA_ONLY, sql } from '../database';
 
@@ -62,8 +62,8 @@ test('lost authenticator offers recovery codes and verified administrator reset 
 
     const admin = await asUser('admin');
     await admin.goto(`/admin/users/${id}`);
-    admin.once('dialog', dialog => dialog.accept());
-    await admin.getByRole('button', { name: 'Reset MFA after verifying the person' }).click();
+    const confirmation1 = answerConfirmation(admin, true, []);
+    await admin.getByRole('button', { name: 'Reset MFA after verifying the person' }).click(); await confirmation1;
     await expect(admin.getByRole('status')).toContainText('MFA reset');
     await page.getByRole('button', { name: 'Sign in again after an MFA reset' }).click();
     await expect(page).toHaveURL(/\/account\/signin$/);

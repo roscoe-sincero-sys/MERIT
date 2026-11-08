@@ -146,9 +146,12 @@ BEGIN
                 'open', @qualifyingLabResultId, @qualifyingLabResultId, @workflowTemplate, @openedDate);
 
         INSERT dbo.caseActivity (caseActivityId, rootTenantId, owningTenantId, exposureCaseId, activityType, activityDate,
-                                 workerUserId, note)
+                                 workerUserId, note, lifecycleKind)
         VALUES (CAST (CAST (NEWID () AS BINARY (10)) + CAST (DATEDIFF_BIG (MILLISECOND, '19700101', SYSUTCDATETIME ()) AS BINARY (6)) AS UNIQUEIDENTIFIER), @root, @owner, @exposureCaseId, 'statusChange', @openedDate, auth.udfSessionUserId (),
-                CONCAT (N'Case opened as ', @classification, N' from a qualifying result.'));
+                CONCAT (N'Case opened as ', @classification, N' from a qualifying result.'), 'opened');
+        INSERT dbo.caseResultLink(caseResultLinkId,rootTenantId,owningTenantId,personId,exposureCaseId,labResultId,openingActivityId)
+        SELECT NEWID(),@root,@owner,@personId,@exposureCaseId,@qualifyingLabResultId,caseActivityId
+         FROM dbo.caseActivity WHERE exposureCaseId=@exposureCaseId AND lifecycleKind='opened';
 
         EXEC dbo.uspRefreshPersonAccess @personId = @personId;
 

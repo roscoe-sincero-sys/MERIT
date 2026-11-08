@@ -104,7 +104,9 @@ SELECT TOP (1) r.labResultId, r.resultStatus, r.resultRowStatus, r.valueReported
 , @population           VARCHAR (10) = 'unknown'
 , @isIndeterminate      BIT = 0
 , @resultRowStatus      VARCHAR (20) = 'valid'
-, @intakeBatchId        UNIQUEIDENTIFIER = NULL""",
+, @intakeBatchId        UNIQUEIDENTIFIER = NULL
+, @originalRowVersion BINARY (8) = NULL
+, @correctionReason NVARCHAR (500) = NULL""",
         "key": "CONCAT (N'labResultId=', @labResultId, N', personId=', @personId, N', intakeBatchId=', @intakeBatchId)",
         "notes": "Value, unit and snapshot are payload and are never written to @KeyParameters. Returns labResultId and "
                  "intakeBatchId.",
@@ -139,19 +141,39 @@ END;
 
 IF @supersedesLabResultId IS NOT NULL
 BEGIN
-    UPDATE dbo.labResult SET resultRowStatus = 'superseded'
-     WHERE labResultId = @supersedesLabResultId AND resultRowStatus = 'valid' AND isDeleted = 0;
+    IF @intakeBatchId IS NOT NULL AND @originalRowVersion IS NULL
+       AND EXISTS (SELECT 1 FROM dbo.intakeBatch WHERE intakeBatchId=@intakeBatchId AND sourceChannel='manual')
+    BEGIN
+        ;THROW 51422, N'An explicit original result version and correction reason are required.', 1;
+    END;
+    IF @originalRowVersion IS NOT NULL AND NULLIF(TRIM(@correctionReason),N'') IS NULL
+    BEGIN
+        ;THROW 51422, N'A correction reason is required.', 1;
+    END;
+    UPDATE dbo.labResult SET resultRowStatus = 'superseded', correctionReason=@correctionReason,
+        correctionByUserId=auth.udfSessionUserId(), correctionUtc=SYSUTCDATETIME()
+     WHERE labResultId = @supersedesLabResultId AND personId=@personId AND resultRowStatus = 'valid' AND isDeleted = 0
+       AND (@originalRowVersion IS NULL OR rowVersion=@originalRowVersion);
+    IF @@ROWCOUNT <> 1
+    BEGIN
+        ;THROW 51409, N'The original result changed or is not available for this patient. Reload it.', 1;
+    END;
+    INSERT dbo.workTask(workTaskId,rootTenantId,owningTenantId,queueCode,title,detail,personId,exposureCaseId,labResultId)
+    SELECT NEWID(),c.rootTenantId,c.owningTenantId,'caseFollowUp',N'Review corrected result',
+           N'A result was superseded. Review case classification, highest result, outstanding tasks and notification evidence; these are not automatically closed.',
+           c.personId,c.exposureCaseId,@supersedesLabResultId
+      FROM dbo.exposureCase c WHERE c.personId=@personId AND c.analyteId=(SELECT analyteId FROM config.analyteSpecimen WHERE analyteSpecimenId=(SELECT analyteSpecimenId FROM dbo.labResult WHERE labResultId=@supersedesLabResultId)) AND c.isDeleted=0;
 END;
 
 INSERT dbo.labResult (labResultId, rootTenantId, owningTenantId, personId, analyteSpecimenId, collectedDate, analyzedDate,
-                      reportedDate, receivedUtc, resultStatus, supersedesLabResultId, valueReported, valueText, operator,
+                      reportedDate, receivedUtc, resultStatus, supersedesLabResultId, correctionReason, correctionByUserId, correctionUtc, valueReported, valueText, operator,
                       unitReported, valueCanonical, unitCanonical, sampleType, testMethod, deviceModel, deviceSerial, kitLot,
                       speciation, creatinineValue, valueCreatinineAdj, reasonForTest, payerType, labOrganizationId,
                       orderingProviderId, orderingFacilityId, accessionNumber, loincReported, reportedSnapshotJson,
                       reportedLocationId, ageAtCollectionMonths, population, isIndeterminate, resultRowStatus,
                       intakeBatchId)
 VALUES (@labResultId, @root, @root, @personId, @analyteSpecimenId, @collectedDate, @analyzedDate, @reportedDate,
-        @receivedUtc, @resultStatus, @supersedesLabResultId, @valueReported, @valueText, @operator, @unitReported,
+        @receivedUtc, @resultStatus, @supersedesLabResultId, @correctionReason, IIF(@supersedesLabResultId IS NULL,NULL,auth.udfSessionUserId()), IIF(@supersedesLabResultId IS NULL,NULL,SYSUTCDATETIME()), @valueReported, @valueText, @operator, @unitReported,
         @valueCanonical, @unitCanonical, @sampleType, @testMethod, @deviceModel, @deviceSerial, @kitLot, @speciation,
         @creatinineValue, @valueCreatinineAdj, @reasonForTest, @payerType, @labOrganizationId, @orderingProviderId,
         @orderingFacilityId, @accessionNumber, @loincReported, @reportedSnapshotJson, @reportedLocationId,
@@ -193,14 +215,31 @@ SET @Comments = CONCAT (@@ROWCOUNT, N' result(s) updated.');
                 "application for any case it qualified or led.",
         "params": """@labResultId     UNIQUEIDENTIFIER
 , @resultRowStatus VARCHAR (20)
-, @rowVersion      BINARY (8)""",
+, @rowVersion      BINARY (8)
+, @reason NVARCHAR (500) = NULL""",
         "key": "CONCAT (N'labResultId=', @labResultId, N', resultRowStatus=', @resultRowStatus)",
         "body": f"""
-UPDATE dbo.labResult SET resultRowStatus = @resultRowStatus
- WHERE labResultId = @labResultId AND isDeleted = 0 AND rowVersion = @rowVersion;
+IF @resultRowStatus NOT IN ('enteredInError','duplicate','rejected')
+BEGIN
+    ;THROW 51422, N'Choose an allowed withdrawal status.', 1;
+END;
+IF @resultRowStatus='enteredInError' AND NULLIF(TRIM(@reason),N'') IS NULL
+BEGIN
+    ;THROW 51422, N'A reason is required to mark a result entered in error.', 1;
+END;
+UPDATE dbo.labResult SET resultRowStatus = @resultRowStatus, correctionReason=@reason,
+    correctionByUserId=auth.udfSessionUserId(), correctionUtc=SYSUTCDATETIME()
+ WHERE labResultId = @labResultId AND isDeleted = 0 AND rowVersion = @rowVersion AND resultRowStatus='valid';
 {CONCURRENCY}
 
-SET @Comments = N'Result status changed.';
+INSERT dbo.workTask(workTaskId,rootTenantId,owningTenantId,queueCode,title,detail,personId,exposureCaseId,labResultId)
+SELECT NEWID(),c.rootTenantId,c.owningTenantId,'caseFollowUp',N'Review withdrawn result',
+       N'A result was withdrawn. Review classification, highest result, tasks and notifications. The original report is retained; cases and tasks are not automatically closed.',
+       c.personId,c.exposureCaseId,@labResultId
+  FROM dbo.exposureCase c JOIN dbo.labResult r ON r.personId=c.personId
+  JOIN config.analyteSpecimen s ON s.analyteSpecimenId=r.analyteSpecimenId AND s.analyteId=c.analyteId
+ WHERE r.labResultId=@labResultId AND c.isDeleted=0;
+SET @Comments = N'Result status changed; associated cases require review.';
 """,
     },
     {
@@ -211,7 +250,8 @@ SET @Comments = N'Result status changed.';
         "key": "CONCAT (N'labResultId=', @labResultId)",
         "validate": not_found("@labResultId", "dbo.labResult", "labResultId", "The result"),
         "body": """
-SELECT r.*, a.analyteId, a.code AS analyteCode, a.displayName AS analyteName, s.specimen,
+SELECT r.*, (SELECT TOP(1) nr.labResultId FROM dbo.labResult nr WHERE nr.supersedesLabResultId=r.labResultId AND nr.isDeleted=0 ORDER BY nr.createdDateUtc DESC) AS replacementLabResultId,
+       (SELECT displayName FROM auth.appUser WHERE appUserId=r.correctionByUserId) AS correctionByName, a.analyteId, a.code AS analyteCode, a.displayName AS analyteName, s.specimen,
        lab.organizationName AS labName, fac.organizationName AS orderingFacilityName,
        CONCAT (pv.firstName, N' ', pv.lastName) AS orderingProviderName, ib.sourceChannel, ib.fileName
   FROM dbo.labResult AS r
@@ -283,3 +323,18 @@ OFFSET (@pageNumber - 1) * @pageSize ROWS
 """,
     },
 ]
+
+PROCS.append({
+    "schema":"dbo", "name":"uspSaveResultEvaluation", "kind":"write", "grants":BOTH, "ticket":"208-216",
+    "permission":"result.edit", "desc":"Preserves the first classification decision and threshold evidence. Subsequent reruns never rewrite history.",
+    "params":"@labResultId UNIQUEIDENTIFIER\n, @snapshotJson NVARCHAR (MAX)",
+    "key":"CONCAT(N'labResultId=',@labResultId)",
+    "body":"""
+IF ISJSON(@snapshotJson)<>1
+BEGIN
+    ;THROW 51422, N'Evaluation must be valid JSON.', 1;
+END;
+UPDATE dbo.labResult SET classificationSnapshotJson=@snapshotJson
+ WHERE labResultId=@labResultId AND classificationSnapshotJson IS NULL AND isDeleted=0;
+SET @Comments=N'First result evaluation preserved.';
+"""})

@@ -87,6 +87,8 @@ BEGIN
                c.classification, c.computedClassification, c.caseStatus, c.exposureCategory, c.workflowTemplate,
                c.openedDate, c.closedDate, c.closureReason, u.displayName AS assignedToName, t.tenantName AS owningTenantName,
                hr.valueCanonical AS highestValue, hr.unitCanonical AS highestUnit,
+               (SELECT COUNT(*) FROM dbo.caseActivity ca WHERE ca.exposureCaseId=c.exposureCaseId AND ca.lifecycleKind='reopened' AND ca.isDeleted=0 AND ca.isVoided=0) AS recordedReopenings,
+               (SELECT TOP(1) activityDate FROM dbo.caseActivity ca WHERE ca.exposureCaseId=c.exposureCaseId AND ca.lifecycleKind='closed' AND ca.isDeleted=0 AND ca.isVoided=0 ORDER BY ca.createdDateUtc DESC,ca.caseActivityId DESC) AS lastRecordedClosure,
                (SELECT COUNT (*) FROM dbo.workTask AS w WHERE w.exposureCaseId = c.exposureCaseId AND w.isDeleted = 0
                    AND w.taskStatus = 'open') AS openTasks,
                (SELECT COUNT (*) FROM dbo.investigationCase AS ic WHERE ic.exposureCaseId = c.exposureCaseId

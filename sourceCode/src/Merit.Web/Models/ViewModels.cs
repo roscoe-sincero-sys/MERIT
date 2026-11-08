@@ -25,6 +25,7 @@ public sealed record HelpGuide(string File, string Title, string Summary);
 public sealed record AlertModel(string Kind, string Title, string Message);
 
 public sealed record SelectOption(string Value, string Label, bool Selected = false);
+public sealed record BreadcrumbItem(string Label, string? Url = null);
 
 /// <summary>
 /// The error summary at the top of a form (issue #46): <paramref name="Fields"/> are the form's fields in page order, so
@@ -567,6 +568,12 @@ public sealed class PregnancyFormModel
 
 public sealed class ResultFormModel
 {
+    public string? PersonIdentifiers { get; set; }
+    public DateOnly? PersonDob { get; set; }
+    public Guid? CorrectsLabResultId { get; set; }
+    public string? OriginalRowVersion { get; set; }
+    public string? CorrectionReason { get; set; }
+    public bool ConfirmCorrection { get; set; }
     public DateOnly? FinalResultDate { get; set; }
     public DateTime? DepartmentReceivedAt { get; set; }
     public Guid PersonId { get; set; }
@@ -649,7 +656,7 @@ public sealed class ResultFieldsModel
 
 public sealed record ResultSavedModel(Guid PersonId, ResultSaveSummary Summary);
 
-public sealed record ResultDetailModel(LabResultDetailRow Result, IReadOnlyList<KeyValuePair<string, string?>> Snapshot);
+public sealed record ResultDetailModel(LabResultDetailRow Result, IReadOnlyList<KeyValuePair<string, string?>> Snapshot, CaseRow? OriginCase = null);
 
 // ------------------------------------------------------------------------------------------------ cases and investigations
 

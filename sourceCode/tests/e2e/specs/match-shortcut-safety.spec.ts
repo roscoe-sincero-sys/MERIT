@@ -1,4 +1,4 @@
-import { angularReady, expect, test } from './helpers';
+import { answerConfirmation, angularReady, expect, test } from './helpers';
 
 test('bare characters cannot decide; modified shortcuts ignore drafts and require safeguard confirmation', async ({ asUser }) => {
   const page = await asUser('supervisor');
@@ -33,10 +33,10 @@ test('bare characters cannot decide; modified shortcuts ignore drafts and requir
   for (const extra of [{ repeat: true }, { isComposing: true }])
     await page.locator('app-root h1').dispatchEvent('keydown', { key: 'd', altKey: true, shiftKey: true, bubbles: true, ...extra });
   expect(decisions).toEqual([]);
-  page.once('dialog', async dialog => { expect(dialog.message()).toContain('Date of birth differs'); await dialog.dismiss(); });
-  await page.keyboard.press('Alt+Shift+S');
+  const confirmation1 = answerConfirmation(page, false, ['Date of birth differs']);
+  await page.keyboard.press('Alt+Shift+S'); await confirmation1;
   expect(decisions).toEqual([]);
-  page.once('dialog', dialog => dialog.accept());
-  await same.click();
+  const confirmation2 = answerConfirmation(page, true, []);
+  await same.click(); await confirmation2;
   await expect.poll(() => decisions).toEqual([{ decision: 'same', personId: person, note: 'Keep this draft' }]);
 });

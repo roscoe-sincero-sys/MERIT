@@ -14,7 +14,8 @@ namespace Merit.Web.Controllers;
 /// Result entry (htmx): fields cascade from the analyte lookup, one partial per change, so users only see what applies;
 /// on save the form shows the canonical value and whether any threshold was crossed, from the server rules.
 /// </summary>
-public sealed class ResultsController(IClock clock, ResultService results, PersonService people, IReferenceDataProvider reference, LookupService lookup) : Controller
+public sealed class ResultsController(ResultService results, PersonService people, IReferenceDataProvider reference, LookupService lookup,
+                                      CaseService cases, ICurrentSession session) : Controller
 {
     [HttpGet("people/{personId:guid}/results/new")]
     [Authorize(Policy = Permissions.ResultEdit)]
@@ -25,7 +26,7 @@ public sealed class ResultsController(IClock clock, ResultService results, Perso
         {
             PersonId = personId,
             PersonName = $"{header.Person.FirstName} {header.Person.LastName}".Trim(),
-            CollectedDate = clock.Today,
+            PersonDob = header.Person.Dob,
         };
         return View(await FormAsync(form, ct));
     }
@@ -47,7 +48,7 @@ public sealed class ResultsController(IClock clock, ResultService results, Perso
             var summary = await results.SaveManualAsync(new ResultEntryInput(personId, form.AnalyteId, form.AnalyteSpecimenId, form.ValueText,
                 form.Unit, form.SampleType, form.Speciation, form.Creatinine, form.CollectedDate, form.AnalyzedDate, form.ReportedDate,
                 form.TestMethod, form.LabOrganizationId, form.OrderingProviderId, form.AccessionNumber, form.ResultStatus,
-                form.ReasonForTest, form.PayerType, form.FinalResultDate, form.DepartmentReceivedAt), ct);
+                form.ReasonForTest, form.PayerType, form.FinalResultDate, form.DepartmentReceivedAt, form.CorrectsLabResultId, Options.FromHex(form.OriginalRowVersion), form.CorrectionReason, form.ConfirmCorrection), ct);
             Response.Announce("Result saved. " + summary.CaseOutcome);
             var model = new ResultSavedModel(personId, summary);
             return Request.IsHtmx() ? PartialView("_SaveSummary", model) : View("Saved", model);
@@ -84,7 +85,55 @@ public sealed class ResultsController(IClock clock, ResultService results, Perso
             snapshot.Add(new KeyValuePair<string, string?>("raw", row.ReportedSnapshotJson));
         }
 
-        return View(new ResultDetailModel(row, snapshot));
+        Merit.Application.Data.CaseRow? originCase = null;
+        if (session.Has(Permissions.CaseView) && Guid.TryParse(Request.Query["caseId"], out var caseId))
+        {
+            try
+            {
+                var detail = await cases.GetAsync(caseId, ct);
+                if (detail.Case.PersonId == row.PersonId && detail.Case.AnalyteId == row.AnalyteId) originCase = detail.Case;
+            }
+            catch (NotFoundException) { /* An unavailable origin never becomes a navigation link. */ }
+        }
+        return View("Details", new ResultDetailModel(row, snapshot, originCase));
+    }
+
+    [HttpGet("results/{id:guid}/correct")]
+    [Authorize(Policy = Permissions.ResultEdit)]
+    public async Task<IActionResult> Correct(Guid id, CancellationToken ct)
+    {
+        var r = await results.GetAsync(id, ct);
+        if (r.PersonId is not Guid pid || r.ResultRowStatus != "valid") return BadRequest("Only a current result linked to a patient can be corrected.");
+        var form = new ResultFormModel {
+            PersonId=pid, CorrectsLabResultId=id, OriginalRowVersion=Options.Hex(r.RowVersion),
+            AnalyteId=r.AnalyteId, AnalyteSpecimenId=r.AnalyteSpecimenId, ValueText=r.ValueText,
+            Unit=r.UnitReported, SampleType=r.SampleType, Speciation=r.Speciation, CollectedDate=r.CollectedDate,
+            Creatinine=r.CreatinineValue, ReasonForTest=r.ReasonForTest, PayerType=r.PayerType,
+            AnalyzedDate=r.AnalyzedDate, ReportedDate=r.ReportedDate, TestMethod=r.TestMethod,
+            LabOrganizationId=r.LabOrganizationId, OrderingProviderId=r.OrderingProviderId,
+            AccessionNumber=r.AccessionNumber, ResultStatus="corrected"
+        };
+        using var source = JsonDocument.Parse(r.ReportedSnapshotJson);
+        if (source.RootElement.ValueKind == JsonValueKind.Object && source.RootElement.TryGetProperty("finalResultDate", out var finalDate)
+            && finalDate.ValueKind == JsonValueKind.String && DateOnly.TryParse(finalDate.GetString(), out var date)) form.FinalResultDate = date;
+        return View("New", await FormAsync(form, ct));
+    }
+
+    [HttpPost("results/{id:guid}/withdraw")]
+    [Authorize(Policy = Permissions.ResultEdit)]
+    public async Task<IActionResult> Withdraw(Guid id, string? rowVersion, string? reason, bool confirmed, CancellationToken ct)
+    {
+        try {
+            await results.WithdrawAsync(id, Options.FromHex(rowVersion) ?? [], reason, confirmed, ct);
+            TempData["Success"] = "Result marked entered in error. The original is retained. Review affected cases and tasks.";
+            return Redirect($"/results/{id}");
+        }
+        catch (ValidationException ex) {
+            ModelState.AddErrors(ex);
+            ViewData["WithdrawalReason"] = reason;
+            Response.StatusCode = StatusCodes.Status422UnprocessableEntity;
+            return await Details(id, ct);
+        }
     }
 
     private async Task<ResultFormModel> FormAsync(ResultFormModel form, CancellationToken ct)
@@ -102,10 +151,12 @@ public sealed class ResultsController(IClock clock, ResultService results, Perso
         form.LabLabel = lab?.Label;
         form.OrderingProviderId = provider is null ? null : form.OrderingProviderId;
         form.ProviderLabel = provider?.Label;
-        if (string.IsNullOrEmpty(form.PersonName))
         {
             var h = await people.GetHeaderAsync(form.PersonId, ct);
             form.PersonName = $"{h.Person.FirstName} {h.Person.LastName}".Trim();
+            form.PersonDob = h.Person.Dob;
+            form.PersonIdentifiers = session.Has(Permissions.PersonViewIdentifiers)
+                ? string.Join("; ", h.Identifiers.Select(i => $"{Options.Humanize(i.IdentifierType)}: {i.IdentifierValue}")) : null;
         }
 
         return form;

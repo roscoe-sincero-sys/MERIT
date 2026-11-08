@@ -26,15 +26,18 @@ public sealed class ResultData(Db db) : IResultData
             r.UnitCanonical, r.SampleType, r.TestMethod, r.DeviceModel, r.DeviceSerial, r.KitLot, r.Speciation, r.CreatinineValue,
             r.ValueCreatinineAdj, r.ReasonForTest, r.PayerType, r.LabOrganizationId, r.OrderingProviderId, r.OrderingFacilityId,
             r.AccessionNumber, r.LoincReported, r.ReportedSnapshotJson, r.ReportedLocationId, r.AgeAtCollectionMonths, r.Population,
-            r.IsIndeterminate, r.ResultRowStatus, r.IntakeBatchId,
+            r.IsIndeterminate, r.ResultRowStatus, r.IntakeBatchId, r.OriginalRowVersion, r.CorrectionReason,
         }, ct).ConfigureAwait(false) ?? throw new NotFoundException();
 
     public Task UpdateDerivedAsync(Guid labResultId, Guid? personId, int? ageAtCollectionMonths, string population, bool isIndeterminate,
                                    CancellationToken ct = default)
         => db.ExecuteAsync("dbo.uspUpdateLabResultDerived", new { labResultId, personId, ageAtCollectionMonths, population, isIndeterminate }, ct);
 
-    public Task SetRowStatusAsync(Guid labResultId, string resultRowStatus, byte[] rowVersion, CancellationToken ct = default)
-        => db.ExecuteAsync("dbo.uspSetLabResultRowStatus", new { labResultId, resultRowStatus, rowVersion }, ct);
+    public Task SetRowStatusAsync(Guid labResultId, string resultRowStatus, byte[] rowVersion, CancellationToken ct = default, string? reason = null)
+        => db.ExecuteAsync("dbo.uspSetLabResultRowStatus", new { labResultId, resultRowStatus, rowVersion, reason }, ct);
+
+    public Task SaveEvaluationAsync(Guid labResultId, string snapshotJson, CancellationToken ct = default)
+        => db.ExecuteAsync("dbo.uspSaveResultEvaluation", new { labResultId, snapshotJson }, ct);
 
     public Task<LabResultDetailRow?> GetLabResultAsync(Guid labResultId, CancellationToken ct = default)
         => db.QuerySingleAsync<LabResultDetailRow>("dbo.uspGetLabResult", new { labResultId }, ct);

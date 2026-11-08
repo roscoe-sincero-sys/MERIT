@@ -100,7 +100,7 @@
                                 @if (Model.CanEdit)
                                 {
                                     <button class="usa-button usa-button--unstyled" type="button" hx-post="/people/@p.PersonId/contacts/@c.PersonContactMethodId/remove"
-                                            hx-target="#person-header" hx-swap="outerHTML" hx-confirm="Remove this contact method?">Remove</button>
+                                            hx-target="#person-header" hx-swap="outerHTML" data-confirm="Remove this contact method?">Remove</button>
                                 }
                             </li>
                         }

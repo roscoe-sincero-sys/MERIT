@@ -17,6 +17,16 @@ export const test = base.extend<{ asUser: (user: User) => Promise<Page> }>({
 });
 export { expect };
 
+/** Arm before triggering the action, then await this promise before asserting writes. */
+export async function answerConfirmation(page: Page, accept: boolean, fragments: string[] = []): Promise<void> {
+  const dialog = page.getByRole('dialog', { name: 'Confirm action', exact: true });
+  await expect(dialog).toBeVisible();
+  for (const fragment of fragments) await expect(dialog).toContainText(fragment);
+  await expect(dialog.getByRole('button', { name: 'Cancel', exact: true })).toBeFocused();
+  await dialog.getByRole('button', { name: accept ? 'Continue' : 'Cancel', exact: true }).click();
+  await expect(dialog).toBeHidden();
+}
+
 /** WCAG 2.1 A and AA rules only; every violation is listed with its first nodes so a failure says what to fix. */
 export async function expectAccessible(page: Page, label: string): Promise<void> {
   const results = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();

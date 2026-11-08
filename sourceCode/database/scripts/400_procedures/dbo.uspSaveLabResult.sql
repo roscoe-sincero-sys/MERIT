@@ -86,6 +86,8 @@ CREATE OR ALTER PROCEDURE dbo.uspSaveLabResult
       , @isIndeterminate      BIT = 0
       , @resultRowStatus      VARCHAR (20) = 'valid'
       , @intakeBatchId        UNIQUEIDENTIFIER = NULL
+      , @originalRowVersion BINARY (8) = NULL
+      , @correctionReason NVARCHAR (500) = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -162,19 +164,39 @@ BEGIN
 
         IF @supersedesLabResultId IS NOT NULL
         BEGIN
-            UPDATE dbo.labResult SET resultRowStatus = 'superseded'
-             WHERE labResultId = @supersedesLabResultId AND resultRowStatus = 'valid' AND isDeleted = 0;
+            IF @intakeBatchId IS NOT NULL AND @originalRowVersion IS NULL
+               AND EXISTS (SELECT 1 FROM dbo.intakeBatch WHERE intakeBatchId=@intakeBatchId AND sourceChannel='manual')
+            BEGIN
+                ;THROW 51422, N'An explicit original result version and correction reason are required.', 1;
+            END;
+            IF @originalRowVersion IS NOT NULL AND NULLIF(TRIM(@correctionReason),N'') IS NULL
+            BEGIN
+                ;THROW 51422, N'A correction reason is required.', 1;
+            END;
+            UPDATE dbo.labResult SET resultRowStatus = 'superseded', correctionReason=@correctionReason,
+                correctionByUserId=auth.udfSessionUserId(), correctionUtc=SYSUTCDATETIME()
+             WHERE labResultId = @supersedesLabResultId AND personId=@personId AND resultRowStatus = 'valid' AND isDeleted = 0
+               AND (@originalRowVersion IS NULL OR rowVersion=@originalRowVersion);
+            IF @@ROWCOUNT <> 1
+            BEGIN
+                ;THROW 51409, N'The original result changed or is not available for this patient. Reload it.', 1;
+            END;
+            INSERT dbo.workTask(workTaskId,rootTenantId,owningTenantId,queueCode,title,detail,personId,exposureCaseId,labResultId)
+            SELECT NEWID(),c.rootTenantId,c.owningTenantId,'caseFollowUp',N'Review corrected result',
+                   N'A result was superseded. Review case classification, highest result, outstanding tasks and notification evidence; these are not automatically closed.',
+                   c.personId,c.exposureCaseId,@supersedesLabResultId
+              FROM dbo.exposureCase c WHERE c.personId=@personId AND c.analyteId=(SELECT analyteId FROM config.analyteSpecimen WHERE analyteSpecimenId=(SELECT analyteSpecimenId FROM dbo.labResult WHERE labResultId=@supersedesLabResultId)) AND c.isDeleted=0;
         END;
 
         INSERT dbo.labResult (labResultId, rootTenantId, owningTenantId, personId, analyteSpecimenId, collectedDate, analyzedDate,
-                              reportedDate, receivedUtc, resultStatus, supersedesLabResultId, valueReported, valueText, operator,
+                              reportedDate, receivedUtc, resultStatus, supersedesLabResultId, correctionReason, correctionByUserId, correctionUtc, valueReported, valueText, operator,
                               unitReported, valueCanonical, unitCanonical, sampleType, testMethod, deviceModel, deviceSerial, kitLot,
                               speciation, creatinineValue, valueCreatinineAdj, reasonForTest, payerType, labOrganizationId,
                               orderingProviderId, orderingFacilityId, accessionNumber, loincReported, reportedSnapshotJson,
                               reportedLocationId, ageAtCollectionMonths, population, isIndeterminate, resultRowStatus,
                               intakeBatchId)
         VALUES (@labResultId, @root, @root, @personId, @analyteSpecimenId, @collectedDate, @analyzedDate, @reportedDate,
-                @receivedUtc, @resultStatus, @supersedesLabResultId, @valueReported, @valueText, @operator, @unitReported,
+                @receivedUtc, @resultStatus, @supersedesLabResultId, @correctionReason, IIF(@supersedesLabResultId IS NULL,NULL,auth.udfSessionUserId()), IIF(@supersedesLabResultId IS NULL,NULL,SYSUTCDATETIME()), @valueReported, @valueText, @operator, @unitReported,
                 @valueCanonical, @unitCanonical, @sampleType, @testMethod, @deviceModel, @deviceSerial, @kitLot, @speciation,
                 @creatinineValue, @valueCreatinineAdj, @reasonForTest, @payerType, @labOrganizationId, @orderingProviderId,
                 @orderingFacilityId, @accessionNumber, @loincReported, @reportedSnapshotJson, @reportedLocationId,

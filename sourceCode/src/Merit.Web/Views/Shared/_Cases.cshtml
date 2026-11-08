@@ -22,10 +22,12 @@
                             @if (c.Classification != c.ComputedClassification) { <span class="merit-meta">(computed: @c.ComputedClassification)</span> }
                         </p>
                         <p class="merit-meta">
-                            Opened @Options.Date(c.OpenedDate)@(c.ClosedDate is null ? "" : ", closed " + Options.Date(c.ClosedDate) + " (" + Options.Humanize(c.ClosureReason) + ")")
+                            Original opening @Options.Date(c.OpenedDate)@(c.ClosedDate is null ? "" : ", closed " + Options.Date(c.ClosedDate) + " (" + Options.Humanize(c.ClosureReason) + ")")
                             &middot; @Options.Humanize(c.WorkflowTemplate) workflow &middot; @c.OwningTenantName
                         </p>
                         <p>Highest: @Options.Value("=", c.HighestValue, c.HighestUnit ?? "") &middot; Assigned: @(c.AssignedToName ?? "unassigned")</p>
+                        @if(c.RecordedReopenings > 0) { <p><strong>Reopened @c.RecordedReopenings time(s) in recorded history.</strong> Last recorded closure: @Options.Date(c.LastRecordedClosure). Earlier records may be incomplete.</p> }
+                        <p><a href="/cases/@c.ExposureCaseId#case-history">Review opening, closure and reopening history</a></p>
                         <p>@Options.Count(c.OpenTasks, "open task") &middot; @Options.Count(c.Investigations, "investigation") &middot; Exposure: @Options.Humanize(c.ExposureCategory)</p>
                     </div>
                 </div>

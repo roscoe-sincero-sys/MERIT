@@ -255,13 +255,21 @@
   </div>
   <h3>Enter a result (fax or paper)</h3>
   <ol class="steps">
-    <li>On the person page click <span class="ui">Enter a result</span>.</li>
+    <li>From Home choose <span class="ui">Find a patient / enter a paper result</span>, or open People. Verify the patient name, date of birth and any identifiers your profile permits, then click <span class="ui">Enter a result</span>.</li>
     <li>Choose the <b>Analyte</b> (lead, arsenic and so on). The specimen and unit choices then follow the analyte.</li>
     <li>Enter the <b>Result value</b> exactly as reported. Use <code>&lt;</code> or <code>&gt;</code> for a detection limit: <code>4.2</code>, <code>&lt;1.0</code>, <code>&gt;65</code>.</li>
-    <li>Enter the <b>Collected</b> date (required), and the analyzed and reported dates, test method, accession number, reason for test and payer when you have them.</li>
+    <li>Enter the <b>Sample collection date</b> (required; starts blank). Use the date on the report, not the date you are entering it. Enter the analyzed and reported dates, test method, accession number, reason for test and payer when you have them.</li>
     <li>Save. MERIT shows the standardized value and whether it reached any level. A result at or above the case level opens or updates a case, exactly as for an uploaded file.</li>
   </ol>
   <figure class="shot side"><img src="../images/guide/09-result-new.jpg" style="width:4.68in" alt="The Enter a result form"><figcaption><b>Enter a result.</b> Choose the analyte first: the specimen and unit choices follow it. Type the value as reported, the collected date, and the other details you have, then <b>Save result</b>.</figcaption></figure>
+</section>
+
+<section class="flow">
+  <h2>Reading results and repeated case history</h2>
+  <p>The latest-result summary compares only the same substance, specimen, sample type, speciation, method and unit. A detection limit is not an exact measurement. A falling result alone does not resolve a case.</p>
+  <p>Open a result date to review the original report and its preserved first rule decision, including applicable collection-date rules, authority and effective dates. Legacy results may not have a recorded evaluation; MERIT says so instead of reconstructing one from today's settings. Laboratory Final status is different from record validity and from a case classification such as Confirmed.</p>
+  <p>Patient case cards show recorded reopenings. Open <span class="ui">Review opening, closure and reopening history</span> for chronological staff names and reasons. A reopened case keeps the same case number and its original opening date. Earlier closures remain in history. The timeline shows individual recorded case events, not one uninterrupted duration.</p>
+  <p>A case starts by showing results explicitly associated with its current episode. Use <span class="ui">Show all patient results</span> for earlier results and context. Legacy qualifying/highest results with no recorded episode are labeled; collection dates alone do not establish membership.</p>
 </section>
 
 <!-- ============================================================ 8 other data -->
@@ -441,7 +449,7 @@
   <p><b>My file shows "held 12". Did I do something wrong?</b><br>No. Held rows are MERIT protecting the registry. Open the held link on the batch card, fix each cause once, and release.</p>
   <p><b>A whole file is held as unknown sender.</b><br>The laboratory's CLIA number is not in the reporter registry. Add the laboratory on <span class="ui">Reporters</span>, then release the rows.</p>
   <p><b>I entered a person and then found they already existed.</b><br>Stop adding information to the new record and tell your supervisor, who arranges for the two records to be combined. A combined record is marked read-only with a link to the surviving record, so no history is lost.</p>
-  <p><b>Can I change a result a laboratory reported?</b><br>No. Reported values are kept as sent. Corrections come from the laboratory as a corrected result, or as a correction beside a held row before it is released.</p>
+  <p><b>Can I change a result a laboratory reported?</b><br>The original report is never edited. With Enter results permission, open the original result and choose <span class="ui">Correct this result</span>. Check the replacement against the source, give a reason and verify it before saving. The original and replacement link to each other, including when there is no accession number. For a wrong-patient result, choose <span class="ui">Mark entered in error</span>, record the reason and confirm, then enter the report for the verified patient. Review affected cases, highest results and tasks; MERIT does not automatically close or downgrade them.</p>
   <p><b>The Extracts card says Ready but shows findings. Can I send it?</b><br>Findings are warnings. Fix what you can and request the file again; your program decides whether to send a file that still has findings.</p>
   <p><b>I marked an extract submitted by mistake.</b><br>The file is unchanged and can still be downloaded. Ask your administrator if the status needs correcting.</p>
   <p><b>A menu item a colleague has is missing for me, or a page says Not permitted.</b><br>Your role or profile does not include it. Check the profile in the header, switch if another profile has it, then ask your administrator.</p>

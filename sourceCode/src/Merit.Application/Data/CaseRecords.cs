@@ -98,6 +98,8 @@ public sealed class DuplicateResultRow
 /// <summary>Input for dbo.uspSaveLabResult.</summary>
 public sealed record LabResultSave
 {
+    public byte[]? OriginalRowVersion { get; init; }
+    public string? CorrectionReason { get; init; }
     public Guid LabResultId { get; init; }
 
     public Guid? PersonId { get; init; }
@@ -182,6 +184,13 @@ public sealed class SaveLabResultResult
 
 public sealed class LabResultDetailRow
 {
+    public Guid? ReplacementLabResultId { get; init; }
+    public string? CorrectionReason { get; init; }
+    public string? CorrectionByName { get; init; }
+    public DateTime? CorrectionUtc { get; init; }
+    public string? ClassificationSnapshotJson { get; init; }
+    public Guid LabOrganizationId { get; init; }
+    public Guid? OrderingProviderId { get; init; }
     public Guid LabResultId { get; init; }
 
     public Guid? PersonId { get; init; }
@@ -336,6 +345,7 @@ public sealed class AttachResultOutcome
 
 public sealed class CaseRow
 {
+    public string? HighestResultRowStatus { get; init; }
     public string ClosureReviewToken { get; init; } = "";
     public int FailedContactAttempts { get; init; }
     public Guid ExposureCaseId { get; init; }
@@ -401,6 +411,7 @@ public sealed class CaseRow
 
 public sealed class CaseResultRow
 {
+    public string Membership { get; init; } = "patientContext";
     public Guid LabResultId { get; init; }
 
     public DateOnly CollectedDate { get; init; }
@@ -426,6 +437,7 @@ public sealed class CaseResultRow
 
 public sealed class CaseActivityRow
 {
+    public string? LifecycleKind { get; init; }
     public bool IsVoided { get; init; }
     public string? VoidReason { get; init; }
     public Guid CaseActivityId { get; init; }

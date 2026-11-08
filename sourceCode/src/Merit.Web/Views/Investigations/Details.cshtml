@@ -2,6 +2,13 @@
 @{
     ViewData["Title"] = "Investigation " + Model.Detail.Investigation.InvestigationNumber;
 }
-<p><a class="usa-link" href="/investigations">All investigations</a></p>
+@{
+    Guid.TryParse(Context.Request.Query["caseId"], out var fromCase);
+    var linkedCase = Model.Detail.Cases.FirstOrDefault(c => c.ExposureCaseId == fromCase);
+    IReadOnlyList<BreadcrumbItem> crumbs = linkedCase?.ExposureCaseId is Guid parent
+        ? [new("Cases", "/cases"), new(linkedCase.CaseNumber ?? "Case", $"/cases/{parent}"), new("Investigation")]
+        : [new("Investigations", "/investigations"), new("Investigation")];
+}
+<partial name="_Breadcrumbs" model="crumbs" />
 <partial name="_InvestigationBody" model="Model" />
 <partial name="_AuditLink" model='(Model.Detail.Investigation.InvestigationId, "investigation")' />

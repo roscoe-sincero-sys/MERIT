@@ -129,5 +129,5 @@ public sealed class ThresholdProvider(IConfigData data, IMemoryCache cache, ICur
     public static ThresholdRule ToRule(ThresholdRow t) => new(
         t.ThresholdId, t.Population, t.AgeMinMonths, t.AgeMaxMonths, t.Speciation, t.SampleType,
         t.ThresholdType switch { "case" => ThresholdType.Case, "action" => ThresholdType.Action, _ => ThresholdType.Reportable },
-        t.ActionCode, t.ActionName, t.QueueCode, t.DueIntervalDays, t.LowerValue, t.UpperValue, t.Comparator, t.Authority);
+        t.ActionCode, t.ActionName, t.QueueCode, t.DueIntervalDays, t.LowerValue, t.UpperValue, t.Comparator, t.Authority, t.EffectiveFrom, t.EffectiveTo);
 }

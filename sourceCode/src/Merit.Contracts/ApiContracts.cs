@@ -101,7 +101,7 @@ public sealed record AnalyteOptionDto(Guid AnalyteId, string Code, string Displa
 
 /// <summary>One event on a person's timeline: a result, an address change, a job change or a case event.</summary>
 public sealed record TimelineEventDto(DateOnly Date, DateOnly? EndDate, string Kind, string Label, string? Detail, decimal? Value, string? Unit,
-                                      string? SampleType, string? AnalyteCode);
+                                      string? SampleType, string? AnalyteCode, string? Href = null);
 
 public sealed record PersonTimelineDto(Guid PersonId, string PersonName, IReadOnlyList<TimelineEventDto> Events,
                                        IReadOnlyList<ThresholdLineDto> Thresholds);

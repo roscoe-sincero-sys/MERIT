@@ -37,7 +37,7 @@
                     @foreach (var c in Model.Rows)
                     {
                         <tr id="case-@c.ExposureCaseId">
-                            <td class="merit-nowrap"><a class="usa-link" href="/cases/@c.ExposureCaseId">@c.CaseNumber</a></td>
+                            <td class="merit-nowrap"><a class="usa-link" href="/cases/@c.ExposureCaseId?returnTo=@Uri.EscapeDataString("/cases" + f.Query(Model.PageNumber))">@c.CaseNumber</a></td>
                             <td><a class="usa-link" href="/people/@c.PersonId">@c.LastName, @c.FirstName</a></td>
                             <td>@Options.Humanize(c.AnalyteCode)</td>
                             <td><span class="merit-badge merit-badge--@c.Classification">@Options.Humanize(c.Classification)</span> <span class="merit-badge merit-badge--@c.Population">@Options.Population(c.Population)</span></td>

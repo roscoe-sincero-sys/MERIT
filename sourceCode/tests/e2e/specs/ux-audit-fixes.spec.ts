@@ -37,7 +37,7 @@ test('work queue details read under each task, never as an empty link, and phone
   await expect(grid.locator('tr[cdk-row]').nth(1).getByRole('button', { name: 'Show more' })).toHaveCount(0);
   // No link without a name (#169): the hidden person's cell is plain.
   await expect(grid.locator('a')).toHaveCount(await grid.locator('a').filter({ hasText: /\S/ }).count());
-  await expect(grid.locator('tr[cdk-row]').nth(1).locator('a')).toHaveCount(0);
+  await expect(grid.locator('tr[cdk-row]').nth(1).locator('.cdk-column-person a')).toHaveCount(0);
   await expectAccessible(page, 'work queue with second-line details');
 
   // Phones: cards, the essentials only, and actions that wait for a selection.
@@ -80,9 +80,9 @@ test('a held cause opens its correction on the field it is about and the confirm
 
   await page.getByRole('button', { name: /Missing date of birth/ }).click();
   await page.locator('#group-value').fill('2019-04-02');
-  const message = new Promise<string>(resolve => page.once('dialog', d => { resolve(d.message()); void d.dismiss(); }));
   await page.getByRole('button', { name: 'Correct entire group' }).click();
-  expect(await message).toBe('Change Date of birth to "2019-04-02" on all 4 rows in this cause, sender and batch? Release the rows afterwards to rerun validation.');
+  await expect(page.locator('#confirmation-message')).toHaveText('Change Date of birth to "2019-04-02" on all 4 rows in this cause, sender and batch? Release the rows afterwards to rerun validation.');
+  await page.locator('[data-confirm-cancel]').click();
   expect(corrected).toBe(false);
 });
 
@@ -96,8 +96,8 @@ test('a case keeps override and close behind their own disclosure, each saying w
   await expect(page.locator('#case-close-form')).toBeHidden();
   await page.getByText('Close case…').click();
   await expect(page.locator('#case-close-form')).toBeVisible();
-  await expect(page.locator('#close-consequence')).toContainText('open tasks are dismissed');
-  await expect(page.getByRole('button', { name: 'Close case', exact: true })).toHaveAccessibleDescription(/Closing ends follow-up/);
+  await expect(page.locator('#close-consequence')).toContainText('Closing dismisses routine case tasks');
+  await expect(page.getByRole('button', { name: 'Close case', exact: true })).toHaveAccessibleDescription(/Closing dismisses routine case tasks/);
   await page.getByText('Change classification…').click();
   await expect(page.locator('#case-override-form')).toBeVisible();
   // The activity history comes first, then the form to add to it.
@@ -112,7 +112,7 @@ test('every screen marks its menu item and the audit log is in Administration (#
   const results = await (await page.request.get('/api/v1/results?pageSize=5')).json() as { items: { labResultId: string; personId: string | null }[] };
   const result = results.items[0];
   await page.goto(`/results/${result.labResultId}`);
-  await expect(current()).toHaveText('Results');
+  await expect(current()).toHaveText('Lab results');
   // Supervisors see the configuration item as "Reference levels"; every configuration page marks it.
   await page.goto('/config/settings');
   await expect(current()).toHaveAttribute('href', '/config/thresholds');
@@ -144,7 +144,7 @@ test('extract runs make Download the main action, name the run to submit and mar
   expect(new Set(headings).size).toBe(headings.length);
   const submit = page.locator('form[hx-post$="/submitted"]').first();
   if (await submit.count()) {
-    await expect(submit).toHaveAttribute('hx-confirm', /^Mark the (CBLS|ABLES) .+, generated .+ file as sent to (CDC|NIOSH)\?/);
+    await expect(submit).toHaveAttribute('data-confirm', /^Mark the (CBLS|ABLES) .+, generated .+ file as sent to (CDC|NIOSH)\?/);
     await expect(submit.locator('button')).toHaveClass(/usa-button--outline/);
   }
 });
@@ -153,7 +153,7 @@ test('a person page and its charts use words and display dates, and count axes s
   const page = await asUser('supervisor');
   await page.goto('/search?q=Rivera');
   await page.getByRole('link', { name: /Rivera, Mia/ }).first().click();
-  const results = page.locator('table:has(th:text-is("Analyte")) tbody td:nth-child(2)');
+  const results = page.locator('table:has(th:text-is("Substance tested")) tbody td:nth-child(2)');
   await expect(results.first()).toBeVisible();
   for (const text of await results.allTextContents()) expect(text.trim()).not.toMatch(/^PB\b/);
   // The reference levels and the note under each chart give dates as everywhere else ("Oct 25, 2026").

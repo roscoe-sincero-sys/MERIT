@@ -394,6 +394,8 @@ public sealed class PregnancyRow
 
 public sealed class PersonCaseRow
 {
+    public int RecordedReopenings { get; init; }
+    public DateOnly? LastRecordedClosure { get; init; }
     public Guid ExposureCaseId { get; init; }
 
     public string CaseNumber { get; init; } = string.Empty;

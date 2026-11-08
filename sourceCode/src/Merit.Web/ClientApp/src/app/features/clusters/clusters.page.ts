@@ -1,3 +1,4 @@
+import { confirmAction } from '../../shared/confirmation';
 import { ChangeDetectionStrategy, Component, computed, DestroyRef, inject, Injectable, input, OnInit, signal } from '@angular/core';
 import { ApiClient, problemMessage } from '../../api/api-client';
 import { ClusterDto, ClusterListItemDto, ClusterStatus } from '../../api/contracts';
@@ -288,9 +289,9 @@ export class ClusterPage implements OnInit {
       rowVersion: c.rowVersion }), 'Cluster saved.');
   }
 
-  protected member(caseNumber: string, isMember: boolean): void {
+  protected async member(caseNumber: string, isMember: boolean): Promise<void> {
     const c = this.store.cluster();
-    if (!isMember && c?.canEdit && !this.store.busy() && !window.confirm(`Remove case ${caseNumber} from cluster ${c.title}?`)) return;
+    if (!isMember && c?.canEdit && !this.store.busy() && !await confirmAction(`Remove case ${caseNumber} from cluster ${c.title}?`)) return;
     if (c?.canEdit) this.run(this.api.setClusterMember(c.clusterId, { caseNumber, isMember }), isMember ? `${caseNumber} rejoined.` : `${caseNumber} left the cluster.`);
   }
 

@@ -197,9 +197,9 @@ BEGIN
         END;
 
         INSERT dbo.caseActivity (caseActivityId, rootTenantId, owningTenantId, exposureCaseId, activityType, activityDate,
-                                 workerUserId, note)
+                                 workerUserId, note, lifecycleKind)
         VALUES (CAST (CAST (NEWID () AS BINARY (10)) + CAST (DATEDIFF_BIG (MILLISECOND, '19700101', SYSUTCDATETIME ()) AS BINARY (6)) AS UNIQUEIDENTIFIER), @root, @owner, @exposureCaseId, 'statusChange', @closedDate, auth.udfSessionUserId (),
-                CONCAT (N'Case closed: ', @closureReason, IIF (@note IS NULL, N'', N'. ' + @note)));
+                CONCAT (N'Case closed: ', @closureReason, IIF (@note IS NULL, N'', N'. ' + @note)), 'closed');
 
         UPDATE dbo.workTask
            SET taskStatus = 'dismissed', completedUtc = SYSUTCDATETIME (), completedByUserId = auth.udfSessionUserId (),

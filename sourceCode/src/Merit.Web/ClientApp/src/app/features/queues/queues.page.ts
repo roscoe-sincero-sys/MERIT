@@ -1,3 +1,4 @@
+import { confirmAction } from '../../shared/confirmation';
 import { ChangeDetectionStrategy, Component, computed, inject, OnInit, signal } from '@angular/core';
 import { ViewQuery, pageNumber, choice } from '../../shared/view-query';
 import { ApiClient, problemMessage } from '../../api/api-client';
@@ -194,11 +195,11 @@ export class QueuesPage implements OnInit {
   protected readonly assignee = signal('');
   protected readonly assigneeName = computed(() => this.store.users().find(u => u.appUserId === this.assignee())?.displayName ?? '');
 
-  protected bulk(action: BulkTaskActionRequest['action'], assignTo?: string): void {
+  protected async bulk(action: BulkTaskActionRequest['action'], assignTo?: string): Promise<void> {
     if (this.busy() || this.store.loading() || this.pendingSelectionReset || !this.display.can('task.edit') || this.store.selected().size === 0) return;
     if (action === 'dismiss' && !this.dismissReason().trim()) { this.store.error.set('Enter a reason for dismissal.'); return; }
     const ids = [...this.store.selected()];
-    if ((action === 'complete' || action === 'dismiss') && !window.confirm(
+    if ((action === 'complete' || action === 'dismiss') && !await confirmAction(
       `${action === 'complete' ? 'Complete' : 'Dismiss'} ${this.display.count(ids.length, 'selected task')}, including selections on other pages? You can reopen them from Done or Dismissed.`)) return;
     this.tasksLoad.cancel();
     this.queuesLoad.cancel();

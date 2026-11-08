@@ -39,6 +39,10 @@ BEGIN
         receivedUtc                DATETIME2 (3)     NOT NULL,
         resultStatus               VARCHAR (12)      NOT NULL,
         supersedesLabResultId      UNIQUEIDENTIFIER  NULL,
+        correctionReason           NVARCHAR (500)    NULL,
+        correctionByUserId         UNIQUEIDENTIFIER  NULL,
+        correctionUtc              DATETIME2 (3)     NULL,
+        classificationSnapshotJson NVARCHAR (MAX)    NULL,
         valueReported              DECIMAL (18, 6)   NULL,
         valueText                  NVARCHAR (60)     NULL,
         operator                   VARCHAR (1)       NOT NULL CONSTRAINT DF_dbo_labResult_operator DEFAULT ('='),
@@ -111,6 +115,14 @@ IF COL_LENGTH (N'dbo.labResult', N'reportingVerifiedUtc') IS NULL
     ALTER TABLE dbo.labResult ADD reportingVerifiedUtc       DATETIME2 (3)     NULL;
 IF COL_LENGTH (N'dbo.labResult', N'supersedesLabResultId') IS NULL
     ALTER TABLE dbo.labResult ADD supersedesLabResultId      UNIQUEIDENTIFIER  NULL;
+IF COL_LENGTH (N'dbo.labResult', N'correctionReason') IS NULL
+    ALTER TABLE dbo.labResult ADD correctionReason           NVARCHAR (500)    NULL;
+IF COL_LENGTH (N'dbo.labResult', N'correctionByUserId') IS NULL
+    ALTER TABLE dbo.labResult ADD correctionByUserId         UNIQUEIDENTIFIER  NULL;
+IF COL_LENGTH (N'dbo.labResult', N'correctionUtc') IS NULL
+    ALTER TABLE dbo.labResult ADD correctionUtc              DATETIME2 (3)     NULL;
+IF COL_LENGTH (N'dbo.labResult', N'classificationSnapshotJson') IS NULL
+    ALTER TABLE dbo.labResult ADD classificationSnapshotJson NVARCHAR (MAX)    NULL;
 IF COL_LENGTH (N'dbo.labResult', N'valueReported') IS NULL
     ALTER TABLE dbo.labResult ADD valueReported              DECIMAL (18, 6)   NULL;
 IF COL_LENGTH (N'dbo.labResult', N'valueText') IS NULL
@@ -167,6 +179,11 @@ GO
 IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_dbo_labResult_resultStatus')
 BEGIN
     ALTER TABLE dbo.labResult ADD CONSTRAINT CK_dbo_labResult_resultStatus CHECK (resultStatus IN ('preliminary', 'final', 'corrected', 'cancelled'));
+END;
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_dbo_labResult_classificationSnapshotJson')
+BEGIN
+    ALTER TABLE dbo.labResult ADD CONSTRAINT CK_dbo_labResult_classificationSnapshotJson CHECK (classificationSnapshotJson IS NULL OR ISJSON(classificationSnapshotJson)=1);
 END;
 GO
 IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_dbo_labResult_operator')
@@ -340,6 +357,10 @@ EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', 
 EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'labResult', @ColumnName = N'receivedUtc', @Description = N'When the agency received it; taken from the intake batch.';
 EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'labResult', @ColumnName = N'resultStatus', @Description = N'preliminary, final, corrected or cancelled, as the lab sent it.';
 EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'labResult', @ColumnName = N'supersedesLabResultId', @Description = N'Earlier result this corrected or cancelled result replaces.';
+EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'labResult', @ColumnName = N'correctionReason', @Description = N'Reason for explicit manual correction or withdrawal.';
+EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'labResult', @ColumnName = N'correctionByUserId', @Description = N'Server-resolved user making a correction or withdrawal.';
+EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'labResult', @ColumnName = N'correctionUtc', @Description = N'Actual correction or withdrawal instant.';
+EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'labResult', @ColumnName = N'classificationSnapshotJson', @Description = N'First classification decision and effective-date threshold evidence; never overwritten.';
 EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'labResult', @ColumnName = N'valueReported', @Description = N'Numeric value as reported; for a < result, the detection limit.';
 EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'labResult', @ColumnName = N'valueText', @Description = N'Raw value text as reported, including non-numeric results.';
 EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'labResult', @ColumnName = N'operator', @Description = N'=, < or >.';

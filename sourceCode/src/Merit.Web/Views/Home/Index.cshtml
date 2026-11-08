@@ -1,16 +1,32 @@
 @model DashboardModel
+@inject ICurrentSession Session
 @{
     ViewData["Title"] = "Home";
     var c = Model.Data.Counts;
+    bool caseWork = Session.Has(Permissions.CaseEdit) && Session.Has(Permissions.TaskView);
 }
 <div class="merit-page-header">
     <h1>Welcome, @Model.DisplayName</h1>
     <span class="merit-meta">@Model.TenantName</span>
 </div>
 
+<section class="merit-section" aria-labelledby="start-heading">
+<h2 id="start-heading">Start your work</h2>
+<p>MERIT imports patient lab results and tracks required follow-up. These actions use your current profile and working agency.</p>
+<div class="merit-section__actions">
+@if(caseWork) { <a class="usa-button" href="/app/queues?mine=true">Work on my assigned follow-up</a><a class="usa-button usa-button--outline" href="/app/queues?overdue=true">Review overdue work</a> }
+@if(Session.Has(Permissions.IntakeUpload)) { <a class="usa-button @(caseWork ? "usa-button--outline":"")" href="/intake">Import lab results</a> }
+@if(Session.Has(Permissions.PersonView)) { <a class="usa-button usa-button--outline" href="/search">@(Session.Has(Permissions.ResultEdit) ? "Find a patient / enter a paper result":"Find a patient")</a> }
+@if(Session.Has(Permissions.TaskView) && !caseWork) { <a class="usa-button usa-button--outline" href="/app/queues?mine=true">Review assigned work</a> }
+@if(Session.Has(Permissions.ConfigEdit)) { <a class="usa-button usa-button--outline" href="/config/thresholds">Review program configuration</a> }
+@if(Session.Has(Permissions.TenantAdminister)) { <a class="usa-button usa-button--outline" href="/admin/users">Manage user access</a> }
+</div>
+@if(Session.Has(Permissions.ResultEdit) && Session.Has(Permissions.PersonView)) { <p>For a fax or paper report, find the patient, check their birth date, then choose <strong>Enter a result</strong>. For a file from a laboratory, use <strong>Import lab results</strong> when available in this profile.</p> }
+<p><a href="/help" target="_blank" rel="noopener">Open task guides<span class="usa-sr-only"> (opens in a new tab)</span></a>. You can start routine work without reading a guide first.</p>
+</section>
 <ul class="merit-tiles" aria-label="Your work">
     @* Each label says what it counts, so the held tile and the Held records queue below read as different numbers (issue #158). *@
-    <li><a class="merit-tile" href="/cases?mine=true"><span class="merit-tile__count">@c.MyOpenCases</span><span class="merit-tile__label">Open cases assigned to me</span></a></li>
+    <li><a class="merit-tile" href="/cases?assigned=me"><span class="merit-tile__count">@c.MyOpenCases</span><span class="merit-tile__label">Open cases assigned to me</span></a></li>
     <li><a class="merit-tile" href="/app/queues?mine=true"><span class="merit-tile__count">@c.MyOpenTasks</span><span class="merit-tile__label">Open tasks assigned to me</span></a></li>
     <li><a class="merit-tile @(c.OverdueTasks > 0 ? "merit-tile--urgent" : "")" href="/app/queues?overdue=true"><span class="merit-tile__count">@c.OverdueTasks</span><span class="merit-tile__label">Overdue tasks, all queues</span></a></li>
     <li><a class="merit-tile @(c.UrgentHeld > 0 ? "merit-tile--urgent" : "")" href="/app/held"><span class="merit-tile__count">@c.UrgentHeld</span><span class="merit-tile__label">Held results with an elevated value</span></a></li>
@@ -21,7 +37,7 @@
     <h2 id="urgent-heading">Needs attention</h2>
     @if (Model.Data.UrgentItems.Count == 0)
     {
-        <p class="merit-empty">Nothing urgent or overdue.</p>
+        <p class="merit-empty">No urgent or overdue work in this scope. Use the starting actions above to import a report, find a patient, or review assigned work. An empty queue does not mean no reports need entry.</p>
     }
     else
     {

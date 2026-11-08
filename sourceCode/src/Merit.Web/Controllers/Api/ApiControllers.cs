@@ -179,7 +179,7 @@ public sealed class HeldRecordsController(IntakeService intake, IReferenceDataPr
 
 [ApiController]
 [Route("api/v1")]
-public sealed class ResultsApiController(ResultService results, PersonService people, IReferenceDataProvider reference, AuditService audit)
+public sealed class ResultsApiController(ResultService results, PersonService people, IReferenceDataProvider reference, AuditService audit, CaseService cases, ICurrentSession session)
     : ControllerBase
 {
     [HttpGet("analytes")]
@@ -215,13 +215,22 @@ public sealed class ResultsApiController(ResultService results, PersonService pe
         var events = new List<TimelineEventDto>();
         events.AddRange(page.Results.Where(r => r.ResultRowStatus == "valid").Select(r => new TimelineEventDto(r.CollectedDate, null, "result",
             $"{r.AnalyteCode} {(r.Operator == "=" ? string.Empty : r.Operator)}{r.ValueCanonical:0.##} {r.UnitCanonical}",
-            r.LabName, r.ValueCanonical, r.UnitCanonical, r.SampleType, r.AnalyteCode)));
+            r.LabName, r.ValueCanonical, r.UnitCanonical, r.SampleType, r.AnalyteCode, session.Has(Permissions.ResultView) ? $"/results/{r.LabResultId}" : null)));
         events.AddRange(page.Places.Select(p => new TimelineEventDto(p.StartDate, p.EndDate, "place",
             $"{(p.IsPrimary ? "Primary residence" : names.Of(p.Role))}: {p.AddressLabel}", p.CountyName, null, null, null, null)));
         events.AddRange(page.Employment.Where(e => e.StartDate is not null).Select(e => new TimelineEventDto(e.StartDate!.Value, e.EndDate, "job",
             $"{e.JobTitle ?? "Job"} at {e.OrganizationName}", e.MetalTasks, null, null, null, null)));
-        events.AddRange(page.Cases.Select(c => new TimelineEventDto(c.OpenedDate, c.ClosedDate, "case",
-            $"Case {c.CaseNumber} ({names.Of(c.Classification)})", names.Of(c.CaseStatus), null, null, null, c.AnalyteCode)));
+        if (session.Has(Permissions.CaseView))
+        foreach (var c in page.Cases)
+        {
+            var history = await cases.GetAsync(c.ExposureCaseId, ct);
+            if (!history.Activities.Any(a => a.LifecycleKind == "opened"))
+                events.Add(new TimelineEventDto(c.OpenedDate, c.OpenedDate, "case", $"Case {c.CaseNumber}: original opening",
+                    $"Current status: {names.Of(c.CaseStatus)}. Open the case for episode membership and follow-up.", null, null, null, c.AnalyteCode, $"/cases/{c.ExposureCaseId}#case-history"));
+            events.AddRange(history.Activities.Where(a => a.ActivityType == "statusChange" && !a.IsVoided)
+                .Select(a => new TimelineEventDto(a.ActivityDate, a.ActivityDate, "case", $"Case {c.CaseNumber}: {a.Note}",
+                    $"Recorded by {a.WorkerName}. Individual events preserve earlier closures and reopenings; intervals are not inferred.", null, null, null, c.AnalyteCode, $"/cases/{c.ExposureCaseId}#case-history")));
+        }
         events.AddRange(page.Pregnancies.Select(p => new TimelineEventDto(p.StartDate, p.ActualEndDate ?? p.ExpectedEndDate, "pregnancy",
             "Pregnancy", names.Of(p.Outcome), null, null, null, null)));
         await audit.ViewedAsync("person", id, ct);

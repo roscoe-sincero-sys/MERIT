@@ -102,6 +102,14 @@ BEGIN
         SELECT @before = classification, @root = rootTenantId, @owner = owningTenantId
           FROM dbo.exposureCase WITH (UPDLOCK) WHERE exposureCaseId = @exposureCaseId AND isDeleted = 0;
 
+        IF NOT EXISTS(SELECT 1 FROM dbo.exposureCase c JOIN dbo.labResult r ON r.personId=c.personId
+            JOIN config.analyteSpecimen s ON s.analyteSpecimenId=r.analyteSpecimenId AND s.analyteId=c.analyteId
+            WHERE c.exposureCaseId=@exposureCaseId AND r.labResultId=@labResultId AND c.caseStatus<>'closed'
+              AND c.isDeleted=0 AND r.isDeleted=0 AND r.resultRowStatus='valid' AND r.resultStatus IN ('final','corrected'))
+        BEGIN
+            ;THROW 51422, N'Only a current final result for this patient and substance can attach to an active case.', 1;
+        END;
+
         UPDATE dbo.exposureCase
            SET highestLabResultId     = IIF (@isHighest = 1, @labResultId, highestLabResultId)
              , computedClassification = @computedClassification
@@ -118,6 +126,15 @@ BEGIN
                                                        N' by a new result.'));
         END;
 
+        IF NOT EXISTS(SELECT 1 FROM dbo.caseResultLink WITH(UPDLOCK,HOLDLOCK) WHERE exposureCaseId=@exposureCaseId AND labResultId=@labResultId)
+        BEGIN
+            INSERT dbo.caseResultLink(caseResultLinkId,rootTenantId,owningTenantId,personId,exposureCaseId,labResultId,openingActivityId)
+            SELECT NEWID(),c.rootTenantId,c.owningTenantId,c.personId,c.exposureCaseId,@labResultId,
+                   (SELECT TOP(1) caseActivityId FROM dbo.caseActivity WHERE exposureCaseId=c.exposureCaseId AND lifecycleKind IN ('opened','reopened') AND isDeleted=0 ORDER BY createdDateUtc DESC,caseActivityId DESC)
+              FROM dbo.exposureCase c JOIN dbo.labResult r ON r.labResultId=@labResultId AND r.personId=c.personId
+              JOIN config.analyteSpecimen s ON s.analyteSpecimenId=r.analyteSpecimenId AND s.analyteId=c.analyteId
+             WHERE c.exposureCaseId=@exposureCaseId AND c.isDeleted=0;
+        END;
         SELECT @before AS classificationBefore, @after AS classificationAfter;
 
         SET @Comments = N'Result attached to case.';

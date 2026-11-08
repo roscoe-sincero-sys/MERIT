@@ -3,9 +3,15 @@
     var r = Model.Result;
     ViewData["Title"] = "Lab result";
 }
-@if (r.PersonId is Guid pid) { <p><a class="usa-link" href="/people/@pid">Back to the person</a></p> }
-<partial name="_ReturnToList" />
+@{ IReadOnlyList<BreadcrumbItem> crumbs = Model.OriginCase is { } origin
+    ? [new("People", "/search"), new("Patient", $"/people/{origin.PersonId}"), new("Case " + origin.CaseNumber, $"/cases/{origin.ExposureCaseId}?results=all"), new("Lab result")]
+    : r.PersonId is Guid pid
+    ? [new("People", "/search"), new("Patient", $"/people/{pid}"), new("Lab result")]
+    : [new("Lab results", "/app/results"), new("Lab result")]; }
+<partial name="_Breadcrumbs" model="crumbs" />
 <h1>@r.AnalyteName result, collected @Options.Date(r.CollectedDate)</h1>
+<partial name="_ErrorSummary" model='new ErrorSummaryModel(r.ResultRowStatus == "valid" ? ["reason", "confirmed"] : [], new Dictionary<string,string> { ["confirmed"]="withdraw-confirmed" })' />
+@if(TempData["Success"] is string success) { <div class="usa-alert usa-alert--success" role="status"><div class="usa-alert__body"><p class="usa-alert__text">@success</p></div></div> }
 <div class="merit-grid-2">
     <section class="merit-section">
         <h2>Result</h2>
@@ -14,7 +20,7 @@
             @if (r.ValueCreatinineAdj is not null) { <dt>Creatinine-adjusted</dt><dd>@r.ValueCreatinineAdj ug/g</dd> }
             <dt>Specimen</dt><dd>@Options.Humanize(r.Specimen) @(r.SampleType is null ? "" : "· " + Options.Humanize(r.SampleType)) @(r.Speciation is null ? "" : "· " + r.Speciation)</dd>
             <dt>Method</dt><dd>@Options.Humanize(r.TestMethod) @r.DeviceModel @r.KitLot</dd>
-            <dt>Status</dt><dd>@Options.Humanize(r.ResultStatus) &middot; @Options.Humanize(r.ResultRowStatus)@(r.IsIndeterminate ? " · indeterminate (detection limit above the case level)" : "")</dd>
+            <dt>Laboratory result status</dt><dd>@Options.Humanize(r.ResultStatus) &middot; @Options.Humanize(r.ResultRowStatus)@(r.IsIndeterminate ? " · indeterminate (detection limit above the case level)" : "")</dd>
             <dt>Population at collection</dt><dd>@Options.Population(r.Population)@(r.AgeAtCollectionMonths is int m ? $", age {m / 12} y {m % 12} m" : "")</dd>
             <dt>Dates</dt><dd>@string.Join(", ", new[] { ("Collected", Options.Date(r.CollectedDate)), ("analyzed", Options.Date(r.AnalyzedDate)),
                                                      ("reported", Options.Date(r.ReportedDate)), ("received", Options.Date(r.ReceivedUtc)) }
@@ -36,4 +42,47 @@
         </table>
     </section>
 </div>
+<section class="merit-section" aria-labelledby="result-interpretation">
+    <h2 id="result-interpretation">What this result meant when processed</h2>
+    <p>Laboratory status describes the report. Record validity describes whether MERIT can use this row. Case classification describes the patient's follow-up case; a final laboratory report does not mean a case is resolved.</p>
+    <p><strong>Record validity: @Options.Humanize(r.ResultRowStatus).</strong> @(r.ResultRowStatus == "valid" ? "" : "Excluded from future classification; retained as history.")</p>
+    @if (r.ResultStatus == "preliminary") { <p><strong>Preliminary report:</strong> does not establish a final case classification. Obtain the final report.</p> }
+    @if (r.IsIndeterminate) { <p><strong>Indeterminate:</strong> the laboratory detection limit cannot establish whether the case level was crossed.</p> }
+    @if (r.ClassificationSnapshotJson is not null)
+    {
+        using var evaluation = System.Text.Json.JsonDocument.Parse(r.ClassificationSnapshotJson);
+        var e = evaluation.RootElement;
+        <p>Recorded when processed: @e.GetProperty("EvaluatedUtc").GetString(). Collection-date rules evaluated for @e.GetProperty("CollectionDate").GetString(); population @e.GetProperty("Population").GetString(). This preserved decision is not a reconstruction using today's settings.</p>
+        <p>Classification at processing: <strong>@Options.Humanize(e.GetProperty("Classification").GetString())</strong>. @(e.GetProperty("IsFinal").GetBoolean() ? "" : "Preliminary; not a final case decision.")</p>
+        <ul class="usa-list">@foreach (var explanation in e.GetProperty("Explanation").EnumerateArray()) { <li>@explanation.GetString()</li> }</ul>
+        <div class="merit-table-wrap"><table class="usa-table"><caption>Applicable thresholds preserved at processing</caption><thead><tr><th scope="col">Purpose</th><th scope="col">Level / band</th><th scope="col">Outcome</th><th scope="col">Authority / rule</th></tr></thead><tbody>
+        @foreach (var t in e.GetProperty("Thresholds").EnumerateArray()) {
+            <tr><td>@t.GetProperty("Type").GetString()</td><td>@t.GetProperty("Comparator").GetString() @t.GetProperty("LowerValue") @t.GetProperty("Unit").GetString() @if(t.GetProperty("UpperValue").ValueKind != System.Text.Json.JsonValueKind.Null) { <span>to less than @t.GetProperty("UpperValue")</span> }</td><td>@Options.Humanize(t.GetProperty("Outcome").GetString())</td><td>@t.GetProperty("Authority").GetString()<br /><small>@t.GetProperty("ThresholdId").GetString()</small>
+                @if(t.TryGetProperty("EffectiveFrom",out var ruleFrom)) { <div>Effective: @ruleFrom.GetString() to @(t.GetProperty("EffectiveTo").ValueKind == System.Text.Json.JsonValueKind.Null ? "no recorded end date" : t.GetProperty("EffectiveTo").GetString())</div> }
+                <div>Population: @t.GetProperty("Population").GetString(); sample: @(t.GetProperty("SampleType").GetString() ?? "any"); speciation: @(t.GetProperty("Speciation").GetString() ?? "any")</div></td></tr>
+        }
+        </tbody></table></div>
+        @if (e.GetProperty("CaseId").ValueKind == System.Text.Json.JsonValueKind.String && User.HasClaim(MeritClaims.Permission, Permissions.CaseView)) { <p><a href="/cases/@e.GetProperty("CaseId").GetString()">Open follow-up case for current classification and tasks</a></p> }
+    }
+    else { <p><strong>Historical evaluation was not recorded for this legacy result.</strong> No original rule decision can be inferred from today's chart or configuration. Review the case activity and original report.</p> }
+    <p>A lower or falling result alone does not close a case. Check outstanding follow-up and closure requirements.</p>
+</section>
+@if(r.SupersedesLabResultId is Guid previous) { <p>This result replaces <a href="/results/@previous">the preserved original result</a>.</p> }
+@if(r.ReplacementLabResultId is Guid replacement) { <p>This result was replaced by <a href="/results/@replacement">a corrected result</a>.</p> }
+@if(r.CorrectionReason is not null) { <p><strong>Correction / withdrawal reason:</strong> @r.CorrectionReason &middot; @r.CorrectionByName &middot; @Options.Date(r.CorrectionUtc)</p> }
+@if(User.HasClaim(MeritClaims.Permission, Permissions.ResultEdit) && r.ResultRowStatus == "valid" && r.PersonId is not null)
+{
+    <section class="merit-section"><h2>Correct or withdraw this result</h2>
+    <p>The source report is kept. A replacement is linked explicitly. A wrong-patient result should be marked entered in error, then entered for the verified patient; it is never silently moved.</p>
+    <a class="usa-button usa-button--outline" href="/results/@r.LabResultId/correct">Correct this result</a>
+    <details open="@(!ViewData.ModelState.IsValid)"><summary>Mark entered in error</summary>
+        <form method="post" action="/results/@r.LabResultId/withdraw" data-confirm="Mark this result entered in error? The source will be preserved. Review affected cases, tasks and notification evidence afterwards.">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="rowVersion" value="@Options.Hex(r.RowVersion)" />
+            <label class="usa-label" for="reason">Reason (required)</label><textarea class="usa-textarea" id="reason" name="reason" maxlength="500" required>@ViewData["WithdrawalReason"]</textarea>
+            <div class="usa-checkbox"><input class="usa-checkbox__input" id="withdraw-confirmed" name="confirmed" type="checkbox" value="true" required /><label class="usa-checkbox__label" for="withdraw-confirmed">I verified that this result was entered in error.</label></div>
+            <button class="usa-button usa-button--secondary" type="submit">Mark entered in error</button>
+        </form>
+    </details><p>Classification and tasks are not automatically closed or downgraded. A review task is created for affected cases.</p></section>
+}
 <partial name="_AuditLink" model='(r.LabResultId, "result")' />

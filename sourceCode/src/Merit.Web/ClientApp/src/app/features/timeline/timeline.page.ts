@@ -131,7 +131,7 @@ export class TimelineChartComponent {
         if (end < this.from() || start > this.to()) {
           return null;
         }
-        if (e.kind === 'result') {
+        if (e.kind === 'result' || (e.kind === 'case' && e.endDate === e.date)) {
           const y = this.laneY(lane) + 30;
           return { e, x: this.x(start), w: 0, y, point: true };
         }
@@ -172,18 +172,19 @@ export class TimelineStore {
         </div>
         <merit-timeline-chart [events]="t.events" [from]="r.from" [to]="r.to" (pick)="store.selected.set($event)" />
       }
-      <p class="merit-meta">Filled circles are venous results; open circles capillary or unknown. Points show when results occurred; their height does not compare values. Select a point for its labeled result.</p>
+      <p class="merit-meta">Filled circles are venous results; open circles capillary or unknown. Case points are recorded opening, closure, reopening or status events, not continuous case durations. Points show when results occurred; their height does not compare values. Select a point for its labeled result.</p>
       @if (store.selected(); as s) {
         <div class="usa-summary-box" role="status">
           <div class="usa-summary-box__body">
             <h2 class="usa-summary-box__heading">{{ s.label }}</h2>
             <p>{{ display.date(s.date) }}@if (s.endDate) { to {{ display.date(s.endDate) }} } &middot; {{ display.of(s.kind) }}@if (s.detail) { &middot; {{ s.detail }} }</p>
+            @if(s.href) { <p><a [href]="s.href">Open source record and follow-up</a></p> }
           </div>
         </div>
       }
       <h2>All events</h2>
       <ol class="usa-list">
-        @for (e of t.events; track $index) { <li>{{ display.date(e.date) }}@if (e.endDate) { &ndash; {{ display.date(e.endDate) }} }: {{ e.label }}</li> }
+        @for (e of t.events; track $index) { <li>{{ display.date(e.date) }}@if (e.endDate && e.endDate !== e.date) { &ndash; {{ display.date(e.endDate) }} }: {{ e.label }} @if(e.detail) { <span class="merit-meta">{{ e.detail }}</span> } @if(e.href) { <a [href]="e.href">Open source record</a> }</li> }
       </ol>
     } @else if (store.error(); as e) {
       <div class="usa-alert usa-alert--error usa-alert--slim" role="alert"><div class="usa-alert__body"><p class="usa-alert__text">{{ e }}</p></div></div>

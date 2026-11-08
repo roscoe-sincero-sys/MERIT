@@ -1,3 +1,4 @@
+import { confirmAction } from '../../shared/confirmation';
 import { ChangeDetectionStrategy, Component, computed, ElementRef, inject, Injectable, input, OnInit, output, signal, viewChild } from '@angular/core';
 import { ApiClient, problemMessage } from '../../api/api-client';
 import { Agreement, MatchCandidateDto, MatchDecision, MatchQueueItemDto, MatchReviewDto } from '../../api/contracts';
@@ -367,13 +368,13 @@ export class MatchReviewPage implements OnInit {
     }
   }
 
-  protected decide(decision: MatchDecision, note: string): void {
+  protected async decide(decision: MatchDecision, note: string): Promise<void> {
     const r = this.store.review();
     if (!r || !this.store.canDecide()) return;
     const rowId = r.stagingRowId;
     const candidate = this.store.candidate();
     if ((decision === 'same' || decision === 'different') && !candidate) return;
-    if (decision === 'same' && candidate?.warnings.length && !window.confirm(
+    if (decision === 'same' && candidate?.warnings.length && !await confirmAction(
       `Link this result to ${candidate.personName}? Review the safeguards:\n${candidate.warnings.join('\n')}\nThis releases the result for processing.`)) return;
     const position = Math.max(this.store.position(), 0);
     this.queueLoad.cancel();

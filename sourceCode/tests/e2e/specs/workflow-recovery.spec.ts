@@ -1,4 +1,4 @@
-import { angularReady, expect, expectAccessible, test } from './helpers';
+import { answerConfirmation, angularReady, expect, expectAccessible, test } from './helpers';
 
 const id = (n: number) => `00000000-0000-0000-0000-${String(n).padStart(12, '0')}`;
 const task = (n = 1, canEdit = true) => ({ workTaskId: id(n), queueCode: 'caseFollowUp', title: `Task ${n}`, detail: null,
@@ -127,19 +127,19 @@ test('queue confirmation, pending-write guard, failure selection, reopen, and pa
   await page.goto('/app/queues?page=2');
   await angularReady(page);
   await page.getByLabel('Select row 1', { exact: true }).focus(); await page.keyboard.press('Space');
-  page.once('dialog', d => d.dismiss());
-  await page.getByRole('button', { name: 'Complete', exact: true }).click();
+  const confirmation1 = answerConfirmation(page, false, []);
+  await page.getByRole('button', { name: 'Complete', exact: true }).click(); await confirmation1;
   expect(writes).toBe(0);
-  page.once('dialog', d => d.accept());
-  await page.getByRole('button', { name: 'Complete', exact: true }).click();
+  const confirmation2 = answerConfirmation(page, true, []);
+  await page.getByRole('button', { name: 'Complete', exact: true }).click(); await confirmation2;
   await expect(page.getByRole('button', { name: 'Dismiss', exact: true })).toBeDisabled();
   await expect(page.getByLabel('Select row 1', { exact: true })).toBeDisabled();
   await expect.poll(() => writes).toBe(1);
   await resolve(true);
   await expect(page.getByRole('alert')).toContainText('Try again later');
   await expect(page.getByLabel('Select row 1', { exact: true })).toBeChecked();
-  page.once('dialog', d => d.accept());
-  await page.getByRole('button', { name: 'Complete', exact: true }).click();
+  const confirmation3 = answerConfirmation(page, true, []);
+  await page.getByRole('button', { name: 'Complete', exact: true }).click(); await confirmation3;
   await expect.poll(() => writes).toBe(2);
   await resolve();
   await expect(page).toHaveURL(/page=1/);
@@ -171,8 +171,8 @@ for (const action of ['release', 'reject', 'correction']) {
     await page.getByLabel('Reject reason', { exact: true }).fill('Duplicate');
     await page.getByLabel('Correct Value', { exact: true }).fill('3');
     const button = page.getByRole('button', { name: action === 'release' ? 'Release selected' : action === 'reject' ? 'Reject selected' : 'Save correction', exact: true });
-    if (action === 'reject') page.once('dialog', dialog => dialog.accept());
-    await button.click();
+    const confirmation4 = action === 'reject' ? answerConfirmation(page, true, []) : Promise.resolve();
+    await button.click(); await confirmation4;
     await expect.poll(() => writes).toBe(1);
     await expect(page.getByRole('button', { name: 'Release selected', exact: true })).toBeDisabled();
     await expect(page.getByRole('button', { name: 'Reject selected', exact: true })).toBeDisabled();
@@ -203,7 +203,7 @@ test('expired Razor session retains findings and original version, and offers a 
   await expect(page.locator('#investigation-save-form [name=rowVersion]')).toHaveValue(version);
   const link = page.getByRole('link', { name: 'Sign in in a new tab' });
   await expect(link).toHaveAttribute('target', '_blank');
-  expect(new URL(await link.getAttribute('href') ?? '', page.url()).searchParams.get('ReturnUrl')).toBe(new URL(original).pathname);
+  expect(new URL(await link.getAttribute('href') ?? '', page.url()).searchParams.get('ReturnUrl')).toBe(new URL(original).pathname + new URL(original).search);
   await page.getByRole('button', { name: 'Check session', exact: true }).click();
   await expect(page.getByRole('alert')).toContainText('You are signed in again');
   await expect(page.locator('#findings')).toHaveValue('Unsaved confidential findings');
@@ -283,7 +283,7 @@ test('result filters survive detail navigation, reload and browser Back', async 
   await angularReady(page);
   await expect(page).toHaveURL(listUrl);
   await page.locator('tbody a[href^="/results/"]').first().click();
-  await page.getByRole('link', { name: 'Return to filtered results' }).click();
+  await page.getByRole('link', { name: 'Return to filtered lab results' }).click();
   await angularReady(page);
   await expect(page).toHaveURL(listUrl);
   await page.locator('#f-min').fill('5');

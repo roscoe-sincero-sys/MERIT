@@ -35,7 +35,7 @@
                                 @if (Model.CanEdit && !r.IsInverse && r.EndDate is null)
                                 {
                                     <button class="usa-button usa-button--unstyled" type="button" hx-post="/people/@Model.PersonId/relationships/@r.PersonRelationshipId/end"
-                                            hx-target="#section-relationships" hx-swap="outerHTML" hx-confirm="End this relationship today?">End</button>
+                                            hx-target="#section-relationships" hx-swap="outerHTML" data-confirm="End this relationship today?">End</button>
                                 }
                             </td>
                         </tr>
