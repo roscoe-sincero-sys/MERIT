@@ -137,11 +137,11 @@ BEGIN
         DECLARE @roles TABLE (roleCode VARCHAR (40), roleName NVARCHAR (120), isAdministrator BIT, isDeidentified BIT,
                               permissions VARCHAR (1000));
         INSERT @roles VALUES
-          ('intakeClerk', N'Intake clerk', 0, 0, 'person.view,person.edit,result.view,result.edit,result.release_hold,intake.upload,registry.edit,task.view,task.edit,case.view,case.open'),
-          ('caseManager', N'Case manager', 0, 0, 'person.view,person.edit,result.view,result.edit,case.view,case.open,case.edit,investigation.edit,task.view,task.edit,data.export'),
-          ('investigator', N'Investigator', 0, 0, 'person.view,person.edit,result.view,case.view,investigation.edit,task.view,task.edit'),
-          ('occupationalInvestigator', N'Occupational investigator', 0, 0, 'person.view,person.edit,result.view,result.edit,case.view,case.open,case.edit,investigation.edit,task.view,task.edit,data.export'),
-          ('supervisor', N'Supervisor', 0, 0, 'person.view,person.edit,person.view_identifiers,person.merge,result.view,result.edit,result.release_hold,case.view,case.open,case.edit,investigation.edit,task.view,task.edit,intake.upload,registry.edit,data.export,extract.run,extract.submit,audit.view,usage.view'),
+          ('intakeClerk', N'Intake clerk', 0, 0, 'person.view,person.edit,result.view,result.edit,result.release_hold,intake.upload,registry.edit,task.view,task.edit,case.view,case.open,document.view,document.edit'),
+          ('caseManager', N'Case manager', 0, 0, 'person.view,person.edit,result.view,result.edit,case.view,case.open,case.edit,investigation.edit,task.view,task.edit,data.export,document.view,document.edit'),
+          ('investigator', N'Investigator', 0, 0, 'person.view,person.edit,result.view,case.view,investigation.edit,task.view,task.edit,document.view,document.edit'),
+          ('occupationalInvestigator', N'Occupational investigator', 0, 0, 'person.view,person.edit,result.view,result.edit,case.view,case.open,case.edit,investigation.edit,task.view,task.edit,data.export,document.view,document.edit'),
+          ('supervisor', N'Supervisor', 0, 0, 'person.view,person.edit,person.view_identifiers,person.merge,result.view,result.edit,result.release_hold,case.view,case.open,case.edit,investigation.edit,task.view,task.edit,intake.upload,registry.edit,data.export,extract.run,extract.submit,audit.view,usage.view,document.view,document.edit'),
           ('epidemiologist', N'Epidemiologist (de-identified)', 0, 1, 'person.view,result.view,case.view,task.view,data.export,extract.run'),
           ('administrator', N'Administrator (users and configuration)', 1, 0, 'tenant.administer,tenant.create,config.edit,registry.edit,intake.configure,matching.configure,audit.view,usage.view,person.view,result.view,case.view,task.view'),
           ('userAdministrator', N'User administrator (accounts and access only)', 1, 0, 'tenant.administer,audit.view');

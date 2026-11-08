@@ -1,0 +1,7 @@
+@model PatientDocumentRow
+@{ ViewData["Title"] = "Document preview"; }
+<p><a href="/people/@Model.PersonId/care?caseId=@Model.ExposureCaseId#documents">Back to documents</a></p>
+<h1>@Model.Title</h1><p>@Model.FileName · Original file</p>
+@if(Model.ContentType.StartsWith("image/", StringComparison.Ordinal)) { <img src="/people/@Model.PersonId/care/documents/@Model.PersonDocumentId/image" alt="@Model.Title" class="care-image" /> }
+else { <p>Download this @(Model.ContentType == "application/pdf" ? "PDF" : "Excel workbook") to open it with your organization's document viewer.</p> }
+<p><a class="usa-button" href="/people/@Model.PersonId/care/documents/@Model.PersonDocumentId">Download original</a></p>

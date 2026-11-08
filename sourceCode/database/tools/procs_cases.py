@@ -175,9 +175,9 @@ SELECT r.labResultId, r.collectedDate, r.operator, r.valueCanonical, r.unitCanon
  WHERE r.personId = @personId AND s.analyteId = @analyteId AND r.isDeleted = 0
  ORDER BY r.collectedDate DESC;
 
-SELECT ca.caseActivityId, ca.activityType, ca.activityDate, ca.outcome, ca.note, u.displayName AS workerName,
+SELECT ca.caseActivityId, ca.activityType, ca.activityDate, ca.outcome, ca.note, ca.isVoided, ca.voidReason, u.displayName AS workerName,
        cp.lastName AS contactLastName, cp.firstName AS contactFirstName, ca.createdDateUtc
-  FROM dbo.caseActivity AS ca
+  FROM dbo.vwPatientActivityStream AS ca
   LEFT JOIN auth.appUser AS u ON u.appUserId = ca.workerUserId
   LEFT JOIN dbo.person AS cp ON cp.personId = ca.contactPersonId
  WHERE ca.exposureCaseId = @exposureCaseId AND ca.isDeleted = 0
@@ -388,7 +388,7 @@ SELECT @caseActivityId, rootTenantId, owningTenantId, @exposureCaseId, @activity
   FROM dbo.exposureCase WHERE exposureCaseId = @exposureCaseId;
 
 SELECT COUNT (*) AS failedContactAttempts
-  FROM dbo.caseActivity
+  FROM dbo.vwPatientActivityStream
  WHERE exposureCaseId = @exposureCaseId AND activityType = 'contactAttempt' AND isDeleted = 0
    AND outcome IN ('noAnswer', 'leftMessage', 'wrongNumber');
 
@@ -412,6 +412,12 @@ DECLARE @personId UNIQUEIDENTIFIER, @root UNIQUEIDENTIFIER, @owner UNIQUEIDENTIF
 SELECT @personId = personId, @root = rootTenantId, @owner = owningTenantId, @opened = openedDate
   FROM dbo.exposureCase WHERE exposureCaseId = @exposureCaseId;
 
+IF EXISTS (SELECT 1 FROM dbo.notificationObligation WITH (UPDLOCK, HOLDLOCK)
+            WHERE exposureCaseId = @exposureCaseId AND isDeleted = 0 AND completedActivityId IS NULL AND evaluationState <> 'notApplicable')
+BEGIN
+    ;THROW 51422, N'Complete required notifications or record a justified applicability decision in the patient notification workspace before closing this case.', 1;
+END;
+
 IF @closedDate < @opened
 BEGIN
     ;THROW 51422, N'The closed date cannot be before the opened date.', 1;
@@ -430,7 +436,7 @@ VALUES ({NEWID}, @root, @owner, @exposureCaseId, 'statusChange', @closedDate, au
 UPDATE dbo.workTask
    SET taskStatus = 'dismissed', completedUtc = SYSUTCDATETIME (), completedByUserId = auth.udfSessionUserId (),
        resolutionNote = N'Case closed.'
- WHERE exposureCaseId = @exposureCaseId AND taskStatus = 'open' AND isDeleted = 0;
+ WHERE exposureCaseId = @exposureCaseId AND taskStatus = 'open' AND isDeleted = 0 AND queueCode <> 'notificationDue';
 
 EXEC dbo.uspRefreshPersonAccess @personId = @personId;
 

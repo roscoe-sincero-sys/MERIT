@@ -20,6 +20,7 @@
             <span class="merit-badge merit-badge--@c.Population">@Options.Population(c.Population)</span>
         </p>
     </div>
+    <p><a class="usa-button usa-button--outline" href="/people/@c.PersonId/care?caseId=@c.ExposureCaseId">Case activities, notification deadlines and documents</a></p>
     @if (Model.Message is not null)
     {
         <div class="usa-alert usa-alert--info usa-alert--slim" role="status"><div class="usa-alert__body"><p class="usa-alert__text">@Model.Message</p></div></div>
@@ -140,7 +141,7 @@
             <ol class="usa-list usa-list--unstyled">
                 @foreach (var a in Model.Detail.Activities)
                 {
-                    <li class="margin-bottom-1"><strong>@Options.Date(a.ActivityDate)</strong> &middot; @Options.Humanize(a.ActivityType)@(a.Outcome is null ? "" : " · " + Options.Humanize(a.Outcome))
+                    <li class="margin-bottom-1">@if(a.IsVoided) { <strong>Withdrawn evidence: @a.VoidReason</strong> } <strong>@Options.Date(a.ActivityDate)</strong> &middot; @Options.Humanize(a.ActivityType)@(a.Outcome is null ? "" : " · " + Options.Humanize(a.Outcome))
                         @if (a.ContactLastName is not null) { <span>&middot; with @a.ContactFirstName @a.ContactLastName</span> }
                         <span class="merit-meta">&middot; @a.WorkerName</span><div>@a.Note</div></li>
                 }

@@ -363,7 +363,7 @@ public sealed partial class EndpointTests(MeritFixture fixture, ITestOutputHelpe
         Assert.Equal(HttpStatusCode.OK, (await supervisor.NoRedirect.GetAsync("/admin/audit?page=2")).StatusCode);
 
         // The filtered view as CSV, and the export is itself in the ledger.
-        var csv = await supervisor.NoRedirect.GetAsync($"/admin/audit.csv?entityId={mia}&action=view");
+        var csv = await supervisor.NoRedirect.GetAsync($"/admin/audit.csv?entityId={mia}&action=view&recordType=person");
         Assert.Equal("text/csv", csv.Content.Headers.ContentType?.MediaType);
         var lines = (await csv.Content.ReadAsStringAsync()).Split("\r\n", StringSplitOptions.RemoveEmptyEntries);
         Assert.Equal("When,User,Action,Record type,Record id,Rows,Address", lines[0]);

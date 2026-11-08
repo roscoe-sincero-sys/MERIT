@@ -1,0 +1,108 @@
+@model CareWorkspaceModel
+@inject ICurrentSession Session
+@{
+    ViewData["Title"] = "Patient follow-up and documents";
+    var c = Model.Care;
+    var n = Model.Completing;
+    bool edit = Session.Has(Permissions.PersonEdit) && (c.CaseId is null || Session.Has(Permissions.CaseEdit));
+    string root = $"/people/{c.PersonId}/care";
+    string V(string key, string fallback = "") => ViewData.ModelState.TryGetValue(key, out var e) ? e.AttemptedValue ?? fallback : fallback;
+    string today = Clock.Today.ToString("yyyy-MM-dd");
+}
+<p><a href="/people/@c.PersonId">Back to patient</a> @if(c.CaseId is not null) { <a href="/cases/@c.CaseId">Back to case</a> }</p>
+<h1>Patient follow-up and documents</h1>
+<p><strong>@Model.Person.Header.Person.LastName, @Model.Person.Header.Person.FirstName</strong> · @(c.CaseId is null ? "All accessible patient and case records" : "This case only")</p>
+<nav aria-label="Patient follow-up"><a href="#notifications">Notification deadlines</a> · <a href="#activity">Activity history</a> · <a href="#documents">Documents</a> · <a href="/notifications">All notification deadlines</a></nav>
+@if(TempData["CareMessage"] is string message) { <div class="usa-alert usa-alert--success" role="status"><p>@message</p></div> }
+@if(!ViewData.ModelState.IsValid) { <div class="usa-alert usa-alert--error" role="alert"><h2>Changes were not saved</h2><div asp-validation-summary="All"></div><p>Correct the fields below. For documents, choose the file again.</p></div> }
+<section class="merit-section" id="notifications" aria-labelledby="notification-heading">
+<h2 id="notification-heading">Notification deadlines</h2>
+<p>Each approved threshold rule creates a separate obligation from the blood test's receipt date. Contact attempts and general case follow-up do not count as completed notification. All dates use the policy's time zone.</p>
+@if(edit) { <form asp-antiforgery="true" method="post" action="@root/evaluate"><input type="hidden" name="caseId" value="@c.CaseId" /><button class="usa-button usa-button--outline">Evaluate received results against approved rules</button></form> }
+@if(c.Notifications.Count == 0) { <p>No notification obligations on this page. This does not establish compliance: approved rules may not be configured or evaluated. @if(Session.Has(Permissions.ConfigEdit)) { <a href="/config/notification-rules">Review notification policy configuration</a> } else { <span>Ask the program administrator to check notification policies.</span> }</p> }
+@foreach(var r in c.Notifications) {
+<article class="merit-section" aria-labelledby="notification-@r.NotificationObligationId">
+<h3 id="notification-@r.NotificationObligationId">@r.RuleName — @r.Status</h3>
+<p>Notify <strong>@r.RecipientKind</strong> by <strong>@r.DueDate.ToString("MMM d, yyyy")</strong> (@r.TimeZoneId). Receipt: @r.AnchorDate.ToString("MMM d, yyyy").</p>
+<p><a href="/results/@r.LabResultId">@r.AnalyteName / @Options.Humanize(r.Specimen): @r.Operator @r.ValueCanonical @r.CanonicalUnit</a> · Collected @r.CollectedDate.ToString("MMM d, yyyy") · @(r.CaseNumber ?? "Patient only")</p>
+@if(r.ResultRowStatus != "valid") { <p role="status"><strong>Source result is @r.ResultRowStatus.</strong> Review applicability; existing evidence and the original policy are retained.</p> }
+@if(r.ReviewReason is not null) { <p>Eligibility decision: @r.ReviewReason</p> }
+@if(r.CompletedDate is not null) { <p>Delivered @r.CompletedDate to @r.RecipientName via @Options.Humanize(r.EvidenceChannel ?? "").</p> }
+<details><summary>Policy used for this deadline</summary><pre class="care-policy">@r.PolicySnapshotJson</pre></details>
+@if(Session.Has(Permissions.PersonEdit) && (r.ExposureCaseId is null || Session.Has(Permissions.CaseEdit))) {
+    if(r.CompletedDate is null && r.EvaluationState == "eligible") { <p><a class="usa-button" href="@root?caseId=@r.ExposureCaseId&amp;completing=@r.NotificationObligationId#record-activity">Record completed notification</a></p> }
+    if(r.CompletedDate is null) {
+    <details><summary>Review whether notification is required</summary>
+    <form asp-antiforgery="true" method="post" action="@root/review" id="review-@r.NotificationObligationId" data-unsaved-work>
+    <input type="hidden" name="notificationObligationId" value="@r.NotificationObligationId" /><input type="hidden" name="caseId" value="@c.CaseId" />
+    <label class="usa-label" for="applies-@r.NotificationObligationId">Eligibility decision</label><select class="usa-select" id="applies-@r.NotificationObligationId" name="applies"><option value="true">Required</option><option value="false">Not applicable</option></select>
+    <label class="usa-label" for="review-reason-@r.NotificationObligationId">Reason, including facts checked</label><textarea class="usa-textarea" id="review-reason-@r.NotificationObligationId" name="reason" required maxlength="500">@V("reason")</textarea><button class="usa-button">Save eligibility decision</button>
+    </form></details>
+    } else {
+    <details><summary>Correct mistaken completion evidence</summary><form asp-antiforgery="true" method="post" action="@root/withdraw" id="withdraw-@r.NotificationObligationId" data-unsaved-work><input type="hidden" name="notificationObligationId" value="@r.NotificationObligationId" /><input type="hidden" name="caseId" value="@c.CaseId" /><label class="usa-label" for="withdraw-reason-@r.NotificationObligationId">Why is this evidence incorrect?</label><textarea class="usa-textarea" id="withdraw-reason-@r.NotificationObligationId" name="reason" required maxlength="500">@V("reason")</textarea><button class="usa-button usa-button--outline">Withdraw evidence and reopen linked deadlines</button></form></details>
+    }
+}
+</article>
+}
+<partial name="_CarePaging" model='new CarePagingModel(root, c.CaseId, "notificationPage", c.NotificationPage, c.Notifications.FirstOrDefault()?.TotalCount ?? 0, "notification")' />
+</section>
+<section class="merit-section" id="activity" aria-labelledby="activity-heading">
+<h2 id="activity-heading">Activity history</h2>
+<p>Patient activities appear here even before a case is opened. Case activities appear once in this shared history. Internal notes are distinguished from external contact.</p>
+@if(c.Activities.Count == 0) { <p>No recorded activities on this page.</p> }
+@foreach(var a in c.Activities) {
+<article class="merit-section"><h3>@a.ActivityDate.ToString("MMM d, yyyy") · @Options.Humanize(a.ActivityType)</h3>
+@if(a.IsVoided) { <p><strong>Withdrawn evidence — @a.VoidReason</strong></p> }
+<p>@(a.Audience == "unknown" ? "Legacy audience not recorded" : a.Audience == "other" ? "External contact (legacy recipient type not recorded)" : Options.Humanize(a.Audience)) · @Options.Humanize(a.Channel ?? "legacy channel not recorded") · @Options.Humanize(a.Outcome ?? "")<br />Recipient: @(string.IsNullOrWhiteSpace(a.ContactName?.Trim(',', ' ')) ? a.RecipientLabel ?? "No external recipient recorded" : a.ContactName)</p>
+<p class="care-note">@a.Note</p><p>Recorded by @a.WorkerName · @a.CreatedDateUtc.ToString("yyyy-MM-dd HH:mm") UTC · @(a.CaseNumber ?? "Patient only")</p>
+@if(edit && Session.Has(Permissions.CaseEdit) && a.SourceKind == "patient" && a.ExposureCaseId is null && !a.IsVoided && a.ActivityType != "notificationCompleted") {
+<details><summary>Link this activity to a case</summary><form asp-antiforgery="true" method="post" action="@root/link"><input type="hidden" name="activityId" value="@a.CaseActivityId" /><label class="usa-label" for="case-@a.CaseActivityId">Case for this patient</label><select class="usa-select" id="case-@a.CaseActivityId" name="exposureCaseId" required><option value="">Choose a case</option>@foreach(var k in Model.Person.Cases) { <option value="@k.ExposureCaseId">@k.CaseNumber · @k.AnalyteName · @k.CaseStatus · @k.OpenedDate</option> }</select><button class="usa-button usa-button--outline">Link activity, retaining original date and author</button></form></details>
+}
+</article>
+}
+<partial name="_CarePaging" model='new CarePagingModel(root, c.CaseId, "activityPage", c.ActivityPage, c.Activities.FirstOrDefault()?.TotalCount ?? 0, "activity")' />
+@if(edit) {
+<h3 id="record-activity">@(n is null ? "Record an activity" : $"Complete notification: {n.RuleName}")</h3>
+@if(n is not null) { <p>Required recipient: <strong>@n.RecipientKind</strong>. Due @n.DueDate (@n.TimeZoneId). Record only delivery that actually happened. <a href="@root?caseId=@c.CaseId#record-activity">Record an attempt or another activity instead</a>.</p> }
+<form asp-antiforgery="true" class="usa-form" method="post" action="@root/activity" id="patient-activity-form" data-unsaved-work>
+<input type="hidden" name="personActivityId" value="@V("personActivityId", Guid.NewGuid().ToString())" /><input type="hidden" name="caseId" value="@(n?.ExposureCaseId ?? c.CaseId)" />
+<input type="hidden" name="notificationObligationId" value="@n?.NotificationObligationId" />
+<label class="usa-label" for="activityType">Activity</label><select class="usa-select" name="activityType" id="activityType">@foreach(var type in n is null ? new[] { "note", "contactAttempt", "education", "referral", "medicalManagement", "letter", "notificationCompleted" } : new[] { "notificationCompleted" }) { <option value="@type" selected="@(V("activityType", n is null ? "note" : "notificationCompleted") == type)">@Options.Humanize(type)</option> }</select>
+<label class="usa-label" for="activityDate">Date it happened</label><input class="usa-input" type="date" id="activityDate" name="activityDate" value="@V("activityDate", n?.PolicyToday.ToString("yyyy-MM-dd") ?? today)" required />
+<label class="usa-label" for="audience">Audience</label><select class="usa-select" id="audience" name="audience">@foreach(var audience in n is null ? new[] { "internal", "patient", "caregiver", "provider" } : new[] { n.RecipientKind }) { <option value="@audience" selected="@(V("audience", n?.RecipientKind ?? "internal") == audience)">@Options.Humanize(audience)</option> }</select>
+<label class="usa-label" for="channel">Delivery channel</label><select class="usa-select" id="channel" name="channel">@foreach(var ch in n is null ? new[] { "internal", "phone", "email", "letter", "inPerson", "portal", "other" } : new[] { "phone", "email", "letter", "inPerson", "portal", "other" }) { <option value="@ch" selected="@(V("channel", n is null ? "internal" : "phone") == ch)">@Options.Humanize(ch)</option> }</select>
+<label class="usa-label" for="contactPersonId">Actual recipient</label><select class="usa-select" id="contactPersonId" name="contactPersonId"><option value="">None (internal note or named provider below)</option><option value="@c.PersonId" selected="@(V("contactPersonId") == c.PersonId.ToString())">Patient: @Model.Person.Header.Person.LastName, @Model.Person.Header.Person.FirstName</option>@foreach(var r in Model.Person.Relationships.DistinctBy(r => r.OtherPersonId)) { <option value="@r.OtherPersonId" selected="@(V("contactPersonId") == r.OtherPersonId.ToString())">@r.OtherLastName, @r.OtherFirstName — @r.RoleLabel (@r.StartDate – @r.EndDate)</option> }</select>
+<p>Caregiver completion requires a recorded caregiver or guardian valid on the activity date. <a href="/people/@c.PersonId#section-relationships">Manage relationships</a>.</p>
+<label class="usa-label" for="recipientLabel">Provider name / recipient detail (optional)</label><input class="usa-input" id="recipientLabel" name="recipientLabel" value="@V("recipientLabel")" maxlength="200" />
+<label class="usa-label" for="outcome">Outcome</label><select class="usa-select" id="outcome" name="outcome">@foreach(var o in n is null ? new[] { "other", "reached", "noAnswer", "leftMessage", "wrongNumber", "completed" } : new[] { "completed" }) { <option value="@o" selected="@(V("outcome", n is null ? "other" : "completed") == o)">@Options.Humanize(o)</option> }</select>
+<label class="usa-label" for="labResultId">Blood test (required for completed notification)</label><select class="usa-select" id="labResultId" name="labResultId"><option value="">No specific result</option>@foreach(var r in Model.Person.Results) { <option value="@r.LabResultId" selected="@(V("labResultId", n?.LabResultId.ToString() ?? "") == r.LabResultId.ToString())">@r.CollectedDate · @r.AnalyteName · @r.Operator @r.ValueCanonical @r.UnitCanonical</option> }</select>
+<label class="usa-label" for="note">What happened?</label><textarea class="usa-textarea" id="note" name="note" required maxlength="2000">@V("note")</textarea>
+<div class="usa-checkbox"><input class="usa-checkbox__input" type="checkbox" id="confirmed" name="confirmed" value="true" checked="@(V("confirmed") == "true")" /><label class="usa-checkbox__label" for="confirmed">For completed notification: I confirm delivery to this recipient actually occurred.</label></div>
+@if(n is not null) { <div class="usa-checkbox"><input class="usa-checkbox__input" type="checkbox" id="completeMatching" name="completeMatching" value="true" /><label class="usa-checkbox__label" for="completeMatching">Use this same delivery as evidence for all other eligible open obligations for this result, recipient type and case. Each keeps its own deadline.</label></div> }
+<button class="usa-button">@(n is null ? "Record activity" : "Save evidence and complete this obligation")</button>
+</form>
+}
+</section>
+<section class="merit-section" id="documents" aria-labelledby="documents-heading"><h2 id="documents-heading">Documents</h2>
+@if(!Session.Has(Permissions.DocumentView)) { <p>Your profile does not allow access to patient documents.</p> } else {
+@if(c.Documents.Count == 0) { <p>No documents on this page.</p> }
+@foreach(var d in c.Documents) { <article class="merit-section"><h3>@d.Title</h3><p>@Options.Humanize(d.Category) · Document dated @d.DocumentDate · @d.FileName (@((d.SizeBytes / 1024.0).ToString("N1")) KB)</p><p>Source: @d.Source · Uploaded by @d.UploadedBy · @d.CreatedDateUtc.ToString("yyyy-MM-dd HH:mm") UTC · @(d.CaseNumber ?? "Patient only")</p><p>@d.Description</p>@if(d.SupersedesDocumentId is not null) { <p>New revision of <a href="@root/documents/@d.SupersedesDocumentId/preview">earlier original</a>. Both originals are retained.</p> }<p><a href="@root/documents/@d.PersonDocumentId/preview">Preview / details</a> · <a href="@root/documents/@d.PersonDocumentId">Download original</a></p></article> }
+<partial name="_CarePaging" model='new CarePagingModel(root, c.CaseId, "documentPage", c.DocumentPage, c.Documents.FirstOrDefault()?.TotalCount ?? 0, "document")' />
+}
+@if(Session.Has(Permissions.DocumentEdit) && (c.CaseId is null || Session.Has(Permissions.CaseEdit))) {
+<h3>Upload a document or new revision</h3><p>PDF, XLSX without macros or external links, JPEG, PNG or WebP. Maximum 10 MB. Earlier versions are retained. Files are private to authorized staff; check the patient and case before uploading.</p>
+<form asp-antiforgery="true" class="usa-form" method="post" enctype="multipart/form-data" action="@root/documents" id="patient-document-form" data-unsaved-work>
+<input type="hidden" name="personDocumentId" value="@V("personDocumentId", Guid.NewGuid().ToString())" /><input type="hidden" name="caseId" value="@c.CaseId" />
+<label class="usa-label" for="file">Choose a file</label><input class="usa-file-input" id="file" type="file" name="file" accept=".pdf,.xlsx,.png,.jpg,.jpeg,.webp" required />
+<label class="usa-label" for="title">Document title</label><input class="usa-input" id="title" name="title" value="@V("title")" required maxlength="200" />
+<label class="usa-label" for="category">Category</label><select class="usa-select" id="category" name="category">@foreach(var cat in new[] { "correspondence", "labReport", "consent", "photo", "other" }) { <option value="@cat" selected="@(V("category") == cat)">@Options.Humanize(cat)</option> }</select>
+<label class="usa-label" for="documentDate">Document date</label><input class="usa-input" id="documentDate" name="documentDate" type="date" value="@V("documentDate", today)" required />
+<label class="usa-label" for="source">Source / received from</label><input class="usa-input" id="source" name="source" value="@V("source")" required maxlength="200" />
+<label class="usa-label" for="description">Description (optional)</label><textarea class="usa-textarea" id="description" name="description" maxlength="1000">@V("description")</textarea>
+<label class="usa-label" for="supersedesDocumentId">New document or revision?</label><select class="usa-select" id="supersedesDocumentId" name="supersedesDocumentId"><option value="">New document</option>@foreach(var d in c.Documents.Where(d => d.ExposureCaseId == c.CaseId)) { <option value="@d.PersonDocumentId" selected="@(V("supersedesDocumentId") == d.PersonDocumentId.ToString())">Revision of @d.Title · @d.CreatedDateUtc.ToString("yyyy-MM-dd HH:mm") UTC</option> }</select>
+<button class="usa-button" id="upload-document">Upload document</button><button type="button" class="usa-button usa-button--outline" id="cancel-upload" hidden>Cancel upload</button>
+<progress id="upload-progress" max="100" value="0" aria-label="Document upload progress" hidden></progress><p id="upload-status" role="status" aria-live="polite"></p><a id="upload-refresh" href="@root?caseId=@c.CaseId#documents" hidden>Refresh document list</a>
+</form>
+}
+</section>
+@section Scripts { <script src="~/js/patient-documents.js" asp-append-version="true" merit-nonce></script> }

@@ -100,7 +100,7 @@ BEGIN
                 ('populationReview', N'Population unknown (no DOB)'), ('deceasedReview', N'Deceased: close open cases'),
                 ('siteReview', N'Other sites to review'), ('investigationRequest', N'Investigation requests'),
                 ('prenatalNotification', N'Prenatal provider notifications'), ('newbornTesting', N'Newborn testing'),
-                ('letterDue', N'Letters to send'), ('actionLevel', N'Action level follow-up'),
+                ('notificationDue', N'Patient/caregiver notification deadlines'), ('letterDue', N'Letters to send'), ('actionLevel', N'Action level follow-up'),
                 ('matchReview', N'Person match review (supervisor)')) AS q (queueCode, queueName)
           LEFT JOIN dbo.workTask AS w ON w.queueCode = q.queueCode AND w.taskStatus = 'open' AND w.isDeleted = 0
          GROUP BY q.queueCode, q.queueName

@@ -1,0 +1,41 @@
+@model NotificationPolicyModel
+@{ ViewData["Title"] = "Notification rules";
+string V(string key, string fallback = "") => ViewData.ModelState.TryGetValue(key, out var e) ? e.AttemptedValue ?? fallback : fallback;
+}
+<partial name="~/Views/Config/_ConfigNav.cshtml" model='@("notifications")' />
+<h1>Approved notification rules</h1>
+<p>Deadlines start with receipt of the blood test, in the policy time zone; receipt day is day zero. Calendar days include weekends. Business days exclude Saturdays, Sundays and only the holiday dates recorded here. Each matching threshold rule creates a separate obligation.</p>
+<p><a href="/notifications">View notification deadlines and completed evidence</a></p>
+@if(TempData["CareMessage"] is string message) { <div class="usa-alert usa-alert--success" role="status"><p>@message</p></div> }
+@if(!ViewData.ModelState.IsValid) { <div class="usa-alert usa-alert--error" role="alert"><h2>Rule was not activated</h2><div asp-validation-summary="All"></div></div> }
+@if(Model.Rules.Count == 0) { <p><strong>No notification policies are configured.</strong> Have the program owner approve threshold, population, recipient, effective dates and holiday policy before activation. Maryland's 10-business-day and Montana's 7-day examples are not automatically activated.</p> }
+@foreach(var r in Model.Rules) {
+<section class="merit-section"><h2>@r.RuleName · @(r.IsActive ? "Active" : "Retired")</h2>
+<p>@r.ScopeName · @r.AnalyteCode / @Options.Humanize(r.Specimen) · ≥ @r.MinimumValue @(r.MaximumValue is null ? "" : $"and < {r.MaximumValue}") @r.CanonicalUnit · @r.Population</p>
+<p>Notify @r.RecipientKind within @r.DueInDays @r.DayBasis days from receipt. @r.CalendarName · @r.TimeZoneId · Effective @r.EffectiveFrom to @(r.EffectiveTo?.ToString() ?? "no end date").</p><p>Approval reference: @r.ApprovalReference</p><details><summary>Holiday dates</summary><pre class="care-policy">@r.HolidayDatesJson</pre></details>
+@if(r.IsActive) { <form asp-antiforgery="true" method="post" action="/config/notification-rules/@r.NotificationRuleId/evaluate"><button class="usa-button usa-button--outline">Evaluate existing results</button></form><form asp-antiforgery="true" method="post" action="/config/notification-rules/@r.NotificationRuleId/retire"><button class="usa-button usa-button--outline">Retire this rule</button></form> }
+</section>
+}
+<h2>Activate a new approved policy version</h2><p>Versions are immutable. To correct a policy, retire it and add an approved replacement. Existing obligations keep their original deadline and policy snapshot; review them individually when corrections are required. Rules apply to the current working agency and its descendants.</p>
+<form asp-antiforgery="true" class="usa-form" method="post" action="/config/notification-rules" id="notification-policy-form" data-unsaved-work>
+<input type="hidden" name="notificationRuleId" value="@V("notificationRuleId", Guid.NewGuid().ToString())" />
+<label class="usa-label" for="ruleName">Rule name / version</label><input class="usa-input" id="ruleName" name="ruleName" value="@V("ruleName")" required maxlength="120" />
+<label class="usa-label" for="analyteSpecimenId">Analyte, specimen and canonical threshold unit</label><select class="usa-select" id="analyteSpecimenId" name="analyteSpecimenId" required><option value="">Choose analyte / specimen</option>@foreach(var s in Model.Specimens) { <option value="@s.Value" selected="@(V("analyteSpecimenId") == s.Value)">@s.Label</option> }</select>
+<label class="usa-label" for="minimumValue">Threshold minimum (inclusive)</label><input class="usa-input" type="number" step="0.000001" min="0" id="minimumValue" name="minimumValue" value="@V("minimumValue")" required />
+<label class="usa-label" for="maximumValue">Threshold maximum (exclusive, optional)</label><input class="usa-input" type="number" step="0.000001" min="0" id="maximumValue" name="maximumValue" value="@V("maximumValue")" />
+<label class="usa-label" for="population">Patient population at collection</label><select class="usa-select" id="population" name="population">@foreach(var p in new[] { "all", "child", "adult", "pregnant", "unknown" }) { <option value="@p" selected="@(V("population", "all") == p)">@Options.Humanize(p)</option> }</select>
+<label class="usa-label" for="minimumAgeMonths">Minimum age in months (inclusive, optional)</label><input class="usa-input" id="minimumAgeMonths" name="minimumAgeMonths" type="number" min="0" value="@V("minimumAgeMonths")" />
+<label class="usa-label" for="maximumAgeMonths">Maximum age in months (inclusive, optional)</label><input class="usa-input" id="maximumAgeMonths" name="maximumAgeMonths" type="number" min="0" value="@V("maximumAgeMonths")" />
+<p>Unknown age/population or censored results that could qualify are flagged for eligibility review rather than silently excluded.</p>
+<label class="usa-label" for="recipientKind">Required recipient</label><select class="usa-select" id="recipientKind" name="recipientKind"><option value="caregiver" selected="@(V("recipientKind", "caregiver") == "caregiver")">Caregiver / guardian</option><option value="patient" selected="@(V("recipientKind") == "patient")">Patient</option></select>
+<label class="usa-label" for="dueInDays">Days from receipt (receipt day is day zero)</label><input class="usa-input" id="dueInDays" name="dueInDays" type="number" min="1" max="365" value="@V("dueInDays")" required />
+<label class="usa-label" for="dayBasis">Day basis</label><select class="usa-select" id="dayBasis" name="dayBasis"><option value="calendar" selected="@(V("dayBasis", "calendar") == "calendar")">Calendar days</option><option value="business" selected="@(V("dayBasis") == "business")">Business days</option></select>
+<label class="usa-label" for="timeZoneId">Policy time zone (Windows time zone ID)</label><input class="usa-input" id="timeZoneId" name="timeZoneId" value="@V("timeZoneId", "Eastern Standard Time")" required maxlength="100" /><p>For example: Eastern Standard Time or Mountain Standard Time. Verify the program's policy time zone.</p>
+<label class="usa-label" for="calendarName">Approved calendar name / year coverage</label><input class="usa-input" id="calendarName" name="calendarName" value="@V("calendarName")" required maxlength="120" />
+<label class="usa-label" for="holidays">Excluded holiday dates (YYYY-MM-DD, one per line)</label><textarea class="usa-textarea" id="holidays" name="holidays">@V("holidays")</textarea><p>Blank means weekends only for business-day rules. Include observed holidays and dates in following years where deadlines can cross year-end. This calendar is frozen with each obligation.</p>
+<label class="usa-label" for="effectiveFrom">Receipt dates from</label><input class="usa-input" type="date" id="effectiveFrom" name="effectiveFrom" value="@V("effectiveFrom", Clock.Today.ToString("yyyy-MM-dd"))" required />
+<label class="usa-label" for="effectiveTo">Receipt dates through (optional)</label><input class="usa-input" type="date" id="effectiveTo" name="effectiveTo" value="@V("effectiveTo")" />
+<label class="usa-label" for="approvalReference">Program approval reference / policy citation</label><input class="usa-input" id="approvalReference" name="approvalReference" value="@V("approvalReference")" required maxlength="300" />
+<div class="usa-checkbox"><input class="usa-checkbox__input" id="approved" name="approved" type="checkbox" value="true" required /><label class="usa-checkbox__label" for="approved">The program owner approved these thresholds, recipients, effective dates, time zone and holiday dates, including any decision to exclude no holidays.</label></div>
+<button class="usa-button">Activate approved rule</button>
+</form>

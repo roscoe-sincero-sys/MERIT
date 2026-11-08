@@ -283,3 +283,10 @@ th .merit-sort:hover, th .merit-sort:focus { color: var(--merit-primary); }
 .merit-filter .usa-input { max-width: 30rem; float: none; height: 2.5rem; }   /* USWDS floats search boxes left */
 .merit-filter__count { margin: .75rem 0 1rem; }
 .usa-form.merit-form--wide { max-width: 46rem; }
+
+/* Patient care: readable policy snapshots and originals at narrow viewport widths. */
+.care-policy { white-space: pre-wrap; overflow-wrap: anywhere; max-width: 100%; }
+.care-note { white-space: pre-wrap; overflow-wrap: anywhere; }
+.care-image { max-width: 100%; height: auto; }
+#patient-document-form progress { display: block; max-width: 100%; margin-top: 1rem; }
+#patient-document-form progress[hidden] { display: none; }

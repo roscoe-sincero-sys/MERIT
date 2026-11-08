@@ -10,7 +10,7 @@ QUEUE_NAMES = """('unmatchedResult', N'Unmatched results'), ('unknownCode', N'Un
         ('populationReview', N'Population unknown (no DOB)'), ('deceasedReview', N'Deceased: close open cases'),
         ('siteReview', N'Other sites to review'), ('investigationRequest', N'Investigation requests'),
         ('prenatalNotification', N'Prenatal provider notifications'), ('newbornTesting', N'Newborn testing'),
-        ('letterDue', N'Letters to send'), ('actionLevel', N'Action level follow-up'),
+        ('notificationDue', N'Patient/caregiver notification deadlines'), ('letterDue', N'Letters to send'), ('actionLevel', N'Action level follow-up'),
         ('matchReview', N'Person match review (supervisor)')"""
 
 PROCS = [
@@ -226,6 +226,12 @@ DECLARE @ids TABLE (workTaskId UNIQUEIDENTIFIER PRIMARY KEY);
 INSERT @ids SELECT DISTINCT TRY_CAST ([value] AS UNIQUEIDENTIFIER) FROM OPENJSON (@workTaskIdsJson)
              WHERE TRY_CAST ([value] AS UNIQUEIDENTIFIER) IS NOT NULL;
 
+IF @action IN ('complete','dismiss','reopen') AND EXISTS
+    (SELECT 1 FROM @ids AS i JOIN dbo.workTask AS w ON w.workTaskId = i.workTaskId WHERE w.queueCode = 'notificationDue' AND w.isDeleted = 0)
+BEGIN
+    ;THROW 51422, N'Use the patient notification workspace to record completed delivery, review applicability or correct evidence. No tasks were changed.', 1;
+END;
+
 IF @action IN ('assign', 'assignToMe')
 BEGIN
     DECLARE @worker UNIQUEIDENTIFIER = CASE WHEN @action = 'assignToMe' THEN @me ELSE @assignToUserId END;
@@ -238,6 +244,13 @@ BEGIN
                              WHERE p.personId = w.personId AND p.isDeleted = 0
                                AND (p.owningTenantId = pg.tenantId OR EXISTS (SELECT 1 FROM dbo.personAccess AS pa
                                     WHERE pa.personId = p.personId AND pa.tenantId = pg.tenantId AND pa.isDeleted = 0))))
+                        AND (w.queueCode <> 'notificationDue' OR (EXISTS
+                            (SELECT 1 FROM dbo.person AS np JOIN auth.tvfUserGrantPermissions (@worker) AS ng ON ng.permissionCode = 'person.edit'
+                              WHERE np.personId = w.personId AND np.isDeleted = 0 AND (np.owningTenantId = ng.tenantId OR EXISTS
+                                (SELECT 1 FROM dbo.personAccess AS na WHERE na.personId = np.personId AND na.tenantId = ng.tenantId AND na.isDeleted = 0)))
+                            AND (w.exposureCaseId IS NULL OR EXISTS (SELECT 1 FROM dbo.exposureCase AS nc
+                                JOIN auth.tvfUserGrantPermissions (@worker) AS cg ON cg.tenantId = nc.owningTenantId AND cg.permissionCode = 'case.edit'
+                                WHERE nc.exposureCaseId = w.exposureCaseId AND nc.isDeleted = 0))))
                         AND (w.exposureCaseId IS NULL OR EXISTS
                             (SELECT 1 FROM dbo.exposureCase AS c
                               JOIN auth.tvfUserGrantPermissions (@worker) AS g ON g.tenantId = c.owningTenantId AND g.permissionCode = 'case.view'

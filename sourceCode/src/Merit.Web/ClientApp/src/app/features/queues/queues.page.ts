@@ -37,7 +37,7 @@ import { ContextPanelComponent } from '../../shared/context-panel.component';
       </nav>
       <section [attr.aria-label]="store.currentQueueName()">
         <h2>{{ store.currentQueueName() }}</h2>
-        <p class="merit-meta">Queue counts show open tasks.</p>
+        <p class="merit-meta">Queue counts show open tasks. Notification tasks require recorded delivery evidence; use the patient notification workspace to complete or review them. <a href="/notifications">Notification deadlines and compliance</a></p>
         <div class="filters">
           <label class="usa-label" for="status">Status</label>
           <select class="usa-select" id="status" [value]="store.status()" [disabled]="busy()" (change)="setStatus($event)">
@@ -106,7 +106,7 @@ export class QueuesPage implements OnInit {
 
   protected readonly columns: GridColumn<WorkTaskDto>[] = [
     // The detail reads under its task rather than in a squeezed column of its own (issue #154).
-    { key: 'title', label: 'Task', sortable: true, cell: t => t.title, badge: t => (t.isUrgent ? 'Urgent' : null), subtext: t => t.detail },
+    { key: 'title', label: 'Task', sortable: true, cell: t => t.title, badge: t => (t.isUrgent ? 'Urgent' : null), subtext: t => t.detail, link: t => t.queueCode === 'notificationDue' && t.personId ? `/people/${t.personId}/care?caseId=${t.exposureCaseId ?? ''}#notifications` : null },
     { key: 'queueCode', label: 'Queue', sortable: true, phoneHidden: true, cell: t => this.queueName(t.queueCode) },
     { key: 'person', label: 'Person', nowrap: true, cell: t => t.personName ?? '', link: t => (t.personId && t.personName ? this.view.detail(`/people/${t.personId}`) : null) },
     { key: 'case', label: 'Case', nowrap: true, cell: t => t.caseNumber ?? '', link: t => (t.exposureCaseId ? this.view.detail(`/cases/${t.exposureCaseId}`) : null) },

@@ -84,13 +84,20 @@ public sealed class CaseService(IClock clock, ICaseData cases, IWorkData work, I
             input.ContactPersonId, input.Outcome, input.Note, ct).ConfigureAwait(false);
         await audit.ChangedAsync("exposureCase", input.ExposureCaseId, ct).ConfigureAwait(false);
 
+        return await ProposeLetterAsync(input.ExposureCaseId, failed, input.ActivityType, input.Outcome, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>Shared by legacy case entry and the canonical patient activity workspace.</summary>
+    public async Task<string?> ProposeLetterAsync(Guid caseId, int failed, string activityType, string? outcome, CancellationToken ct)
+    {
+        session.Require(Permissions.CaseEdit);
         var config = await settings.GetAsync(ct).ConfigureAwait(false);
-        if (input.ActivityType == "contactAttempt" && config.ContactAttemptsBeforeLetter is int limit && failed >= limit
-            && input.Outcome is "noAnswer" or "leftMessage" or "wrongNumber")
+        if (activityType == "contactAttempt" && config.ContactAttemptsBeforeLetter is int limit && failed >= limit
+            && outcome is "noAnswer" or "leftMessage" or "wrongNumber")
         {
             await work.CreateTaskAsync(new WorkTaskCreate(TimeOrderedId.New(), "letterDue", "Send a letter",
                 $"{failed} contact attempts have not reached anyone (the jurisdiction sends a letter after {limit}).", null,
-                input.ExposureCaseId, null, null, null, false, clock.Today.AddDays(7)), ct).ConfigureAwait(false);
+                caseId, null, null, null, false, clock.Today.AddDays(7)), ct).ConfigureAwait(false);
             return "A letter task was queued.";
         }
 

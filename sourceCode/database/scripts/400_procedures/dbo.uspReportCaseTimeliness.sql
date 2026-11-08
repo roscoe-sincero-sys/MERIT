@@ -96,7 +96,7 @@ BEGIN
             SELECT DATEFROMPARTS (YEAR (c.openedDate), MONTH (c.openedDate), 1) AS monthStart,
                    DATEDIFF (DAY, q.collectedDate, CAST (q.receivedUtc AS DATE)) AS daysToReceipt,
                    DATEDIFF (DAY, CAST (q.receivedUtc AS DATE), c.openedDate) AS daysToOpen,
-                   DATEDIFF (DAY, c.openedDate, (SELECT MIN (ca.activityDate) FROM dbo.caseActivity AS ca
+                   DATEDIFF (DAY, c.openedDate, (SELECT MIN (ca.activityDate) FROM dbo.vwPatientActivityStream AS ca
                                                   WHERE ca.exposureCaseId = c.exposureCaseId AND ca.isDeleted = 0
                                                     AND ca.activityType IN ('contactAttempt', 'letter', 'education', 'referral',
                                                                             'medicalManagement'))) AS daysToFollowUp

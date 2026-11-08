@@ -25,7 +25,7 @@ public static class AuditText
     /// <summary>"report" stands for every report ("report:testingCounts").</summary>
     public static readonly IReadOnlyList<(string Code, string Label)> RecordTypes =
     [
-        ("person", "Person"), ("labResult", "Lab result"), ("exposureCase", "Case"), ("investigation", "Investigation"),
+        ("person", "Person"), ("patientCare", "Patient follow-up workspace"), ("patientActivity", "Patient activity"), ("patientDocument", "Patient document"), ("notificationObligation", "Notification obligation"), ("notificationRule", "Notification rule"), ("labResult", "Lab result"), ("exposureCase", "Case"), ("investigation", "Investigation"),
         ("cluster", "Cluster"), ("stagingRow", "Laboratory file row"), ("workTask", "Work queue tasks"), ("caseMap", "Case map"),
         ("report", "Report"), ("extractRun", "Extract"), ("appUser", "User account"), ("viewAsUser", "User account (view as)"),
         ("personOutsideScope", "Person outside your access"), ("auditEvent", "Audit log"),
@@ -45,6 +45,7 @@ public static class AuditText
     public static string? Link(string entityType, Guid? id, ICurrentSession session) => id is not Guid g ? null : entityType switch
     {
         "person" when session.Has(Permissions.PersonView) => $"/people/{g}",
+        "patientCare" when session.Has(Permissions.PersonView) => $"/people/{g}/care",
         "exposureCase" when session.Has(Permissions.CaseView) => $"/cases/{g}",
         "investigation" when session.Has(Permissions.CaseView) => $"/investigations/{g}",
         "cluster" when session.Has(Permissions.CaseView) => $"/app/clusters/{g}",

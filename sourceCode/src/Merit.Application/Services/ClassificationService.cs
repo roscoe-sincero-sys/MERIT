@@ -34,7 +34,8 @@ public sealed class ClassificationService(
     IPersonData persons,
     IReferenceDataProvider reference,
     IThresholdProvider thresholds,
-    ISettingsProvider settings)
+    ISettingsProvider settings,
+    ICareData care)
 {
     public async Task<ClassificationOutcome> ClassifyAsync(Guid labResultId, Guid personId, Guid analyteSpecimenId,
                                                            ClassifiableResult result, CancellationToken ct = default)
@@ -97,6 +98,8 @@ public sealed class ClassificationService(
                 caseId, labResultId, null, null, task.IsUrgent, due), ct).ConfigureAwait(false);
             created.Add(task.Title);
         }
+
+        await care.ReconcileAsync(labResultId, null, null, ct).ConfigureAwait(false);
 
         return new ClassificationOutcome(population.Population, population.AgeMonths, decision, caseId, caseNumber, owner,
             before, created);
@@ -170,6 +173,8 @@ public sealed class ClassificationService(
             }
         }
 
+        int created;
+        do { created = await care.ReconcileAsync(null, null, personId, ct).ConfigureAwait(false); } while (created == 500);
         _ = refData;
         return changes;
     }

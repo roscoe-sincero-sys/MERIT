@@ -114,9 +114,9 @@ BEGIN
          WHERE r.personId = @personId AND s.analyteId = @analyteId AND r.isDeleted = 0
          ORDER BY r.collectedDate DESC;
 
-        SELECT ca.caseActivityId, ca.activityType, ca.activityDate, ca.outcome, ca.note, u.displayName AS workerName,
+        SELECT ca.caseActivityId, ca.activityType, ca.activityDate, ca.outcome, ca.note, ca.isVoided, ca.voidReason, u.displayName AS workerName,
                cp.lastName AS contactLastName, cp.firstName AS contactFirstName, ca.createdDateUtc
-          FROM dbo.caseActivity AS ca
+          FROM dbo.vwPatientActivityStream AS ca
           LEFT JOIN auth.appUser AS u ON u.appUserId = ca.workerUserId
           LEFT JOIN dbo.person AS cp ON cp.personId = ca.contactPersonId
          WHERE ca.exposureCaseId = @exposureCaseId AND ca.isDeleted = 0

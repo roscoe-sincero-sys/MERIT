@@ -114,7 +114,7 @@ BEGIN
           FROM dbo.exposureCase WHERE exposureCaseId = @exposureCaseId;
 
         SELECT COUNT (*) AS failedContactAttempts
-          FROM dbo.caseActivity
+          FROM dbo.vwPatientActivityStream
          WHERE exposureCaseId = @exposureCaseId AND activityType = 'contactAttempt' AND isDeleted = 0
            AND outcome IN ('noAnswer', 'leftMessage', 'wrongNumber');
 

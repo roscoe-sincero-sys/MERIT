@@ -424,6 +424,8 @@ public sealed class CaseResultRow
 
 public sealed class CaseActivityRow
 {
+    public bool IsVoided { get; init; }
+    public string? VoidReason { get; init; }
     public Guid CaseActivityId { get; init; }
 
     public string ActivityType { get; init; } = string.Empty;
