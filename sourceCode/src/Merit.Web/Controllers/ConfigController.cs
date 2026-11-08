@@ -385,8 +385,9 @@ public sealed class IntakeController(IntakeService intake) : Controller
     [HttpPost("upload")]
     [Authorize(Policy = Permissions.IntakeUpload)]
     [RequestSizeLimit(IntakeService.MaxFileBytes + 65536)]
-    public async Task<IActionResult> Upload(Guid intakeProfileId, IFormFile? file, bool uploadAgain, CancellationToken ct)
+    public async Task<IActionResult> Upload(Guid intakeProfileId, IFormFile? file, bool uploadAgain, bool historical, DateTime? departmentReceivedAt, string? receiptEvidence, bool receiptConfirmed, CancellationToken ct)
     {
+        if (!ModelState.IsValid) return Flash("Check the Department receipt date and time before uploading.", "error");
         if (file is null || file.Length == 0)
         {
             return Flash("Choose a file to upload.", "error");
@@ -402,7 +403,7 @@ public sealed class IntakeController(IntakeService intake) : Controller
         string content = await reader.ReadToEndAsync(ct);
         try
         {
-            await intake.UploadAsync(intakeProfileId, file.FileName, content, uploadAgain, ct);
+            await intake.UploadAsync(intakeProfileId, file.FileName, content, uploadAgain, ct, historical, departmentReceivedAt, receiptEvidence, receiptConfirmed);
         }
         catch (ValidationException ex)
         {

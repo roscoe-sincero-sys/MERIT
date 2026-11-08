@@ -22,6 +22,7 @@
                     <div class="usa-card__body">
                         <p><span class="merit-badge @(b.BatchStatus == "paused" ? "merit-badge--urgent" : incomplete ? "merit-badge--suspect" : b.BatchStatus == "loaded" ? "merit-badge--ok" : "")">@label</span>
                             <span class="merit-meta">@b.SenderName &middot; @Options.Date(b.ReceivedUtc) &middot; @b.SubmittedBy</span></p>
+                        @if (b.DepartmentReceivedUtc is DateTime originalReceipt) { <p><strong>Historical Department receipt:</strong> @TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(originalReceipt, DateTimeKind.Utc), TimeZoneInfo.FindSystemTimeZoneById(b.ReceiptTimeZone!)).ToString("yyyy-MM-dd HH:mm") (@b.ReceiptTimeZone). Upload time above is retained separately.</p><details><summary>Receipt source evidence</summary><p class="care-note">@b.ReceiptEvidence</p></details> }
                         @if (b.PauseReason is not null) { <p>@b.PauseReason</p> }
                         <p>Received @b.ReceivedCount &middot; loaded @b.LoadedCount &middot;
                             @if (b.HeldCount > 0) { <a class="usa-link" href="/app/held?batch=@b.IntakeBatchId">held @b.HeldCount</a> } else { <span>held 0</span> }

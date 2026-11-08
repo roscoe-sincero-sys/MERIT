@@ -83,7 +83,7 @@ BEGIN
         -- ===== The procedure's own work starts here. Everything above and below is boilerplate. ==
         -- =========================================================================================
 
-        SELECT TOP (@maxRows) b.intakeBatchId, b.fileName, b.sourceChannel, b.receivedUtc, b.batchStatus, b.pauseReason,
+        SELECT TOP (@maxRows) b.intakeBatchId, b.fileName, b.sourceChannel, b.receivedUtc, b.departmentReceivedUtc,b.receiptEvidence,b.receiptTimeZone,b.batchStatus, b.pauseReason,
                b.receivedCount, b.loadedCount, b.heldCount, b.rejectedCount, o.organizationName AS senderName,
                u.displayName AS submittedBy
           FROM dbo.intakeBatch AS b

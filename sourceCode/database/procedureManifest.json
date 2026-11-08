@@ -2469,6 +2469,18 @@
     "type": "CHAR (64)",
     "hasDefault": true,
     "isOutput": false
+   },
+   {
+    "name": "departmentReceivedUtc",
+    "type": "DATETIME2(3)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "receiptEvidence",
+    "type": "NVARCHAR(1000)",
+    "hasDefault": true,
+    "isOutput": false
    }
   ]
  },
@@ -6934,6 +6946,18 @@
     "type": "BIT",
     "hasDefault": true,
     "isOutput": false
+   },
+   {
+    "name": "currentGuidanceConfirmed",
+    "type": "BIT",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "currentGuidanceReason",
+    "type": "NVARCHAR(1000)",
+    "hasDefault": true,
+    "isOutput": false
    }
   ]
  },
@@ -7186,6 +7210,52 @@
     "name": "geocodeQuality",
     "type": "VARCHAR (20)",
     "hasDefault": false,
+    "isOutput": false
+   }
+  ]
+ },
+ {
+  "name": "dbo.uspTestingOutreach",
+  "kind": "read",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": "task.view",
+  "params": [
+   {
+    "name": "dueFilter",
+    "type": "VARCHAR(12)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "planKind",
+    "type": "VARCHAR(20)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "assignedToUserId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "taskStatus",
+    "type": "VARCHAR(20)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "pageNumber",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "pageSize",
+    "type": "INT",
+    "hasDefault": true,
     "isOutput": false
    }
   ]

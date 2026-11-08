@@ -12,7 +12,7 @@ namespace Merit.Application.Intake;
 /// Intake from the web side: receive a file and queue it (long work runs in the worker), show batch status, and the
 /// held-records queue built around fixing causes -- grouped by reason and reported value, released in bulk.
 /// </summary>
-public sealed class IntakeService(IIntakeData intake, IWorkData work, Services.AuditService audit, ICurrentSession session)
+public sealed class IntakeService(IIntakeData intake, IWorkData work, Services.AuditService audit, ICurrentSession session, IClock clock)
 {
     public const int MaxFileBytes = 20 * 1024 * 1024;
 
@@ -28,9 +28,25 @@ public sealed class IntakeService(IIntakeData intake, IWorkData work, Services.A
     /// not hold every row twice (issue #20); <paramref name="uploadAgain"/> accepts a laboratory's genuine re-send.
     /// </summary>
     public async Task<Guid> UploadAsync(Guid intakeProfileId, string fileName, string content, bool uploadAgain = false,
-                                        CancellationToken ct = default)
+                                        CancellationToken ct = default, bool historical = false, DateTime? departmentReceivedAt = null,
+                                        string? receiptEvidence = null, bool receiptConfirmed = false)
     {
         session.Require(Permissions.IntakeUpload);
+        DateTime? originalReceipt = null;
+        if (historical)
+        {
+            session.Require(Permissions.PersonEdit);
+            if (!receiptConfirmed || departmentReceivedAt is null || string.IsNullOrWhiteSpace(receiptEvidence) || receiptEvidence.Length > 1000)
+                throw new ValidationException("departmentReceivedAt", "Historical import requires the verified original Department receipt, source evidence (up to 1000 characters), and confirmation. Split files with different receipts into separate batches. Unknown receipt must be verified before importing.");
+            var local = DateTime.SpecifyKind(departmentReceivedAt.Value, DateTimeKind.Unspecified);
+            if (clock.Zone.IsInvalidTime(local) || clock.Zone.IsAmbiguousTime(local))
+                throw new ValidationException("departmentReceivedAt", "Choose an unambiguous Department receipt time in the agency time zone.");
+            originalReceipt = TimeZoneInfo.ConvertTimeToUtc(local, clock.Zone);
+            if (originalReceipt > DateTime.UtcNow)
+                throw new ValidationException("departmentReceivedAt", "Department receipt cannot be in the future.");
+        }
+        else if (departmentReceivedAt is not null || !string.IsNullOrWhiteSpace(receiptEvidence) || receiptConfirmed)
+            throw new ValidationException("historical", "Select historical import to record an original Department receipt.");
         var profile = await intake.GetProfileAsync(intakeProfileId, ct).ConfigureAwait(false)
                       ?? throw new ValidationException("IntakeProfileId", "Choose the sender's intake profile.");
         if (!profile.IsActive)
@@ -49,7 +65,7 @@ public sealed class IntakeService(IIntakeData intake, IWorkData work, Services.A
         }
 
         Guid batchId = TimeOrderedId.New();
-        await intake.CreateBatchAsync(batchId, intakeProfileId, Path.GetFileName(fileName), content, hash, TimeOrderedId.New(), ct)
+        await intake.CreateBatchAsync(batchId, intakeProfileId, Path.GetFileName(fileName), content, hash, TimeOrderedId.New(), ct, originalReceipt, historical ? receiptEvidence?.Trim() : null)
             .ConfigureAwait(false);
         return batchId;
     }

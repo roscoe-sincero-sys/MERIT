@@ -30,6 +30,9 @@ BEGIN
         rawContent                 NVARCHAR (MAX)    NULL,
         contentSha256              CHAR (64)         NULL,
         receivedUtc                DATETIME2 (3)     NOT NULL,
+        departmentReceivedUtc      DATETIME2 (3)     NULL,
+        receiptEvidence            NVARCHAR (1000)   NULL,
+        receiptTimeZone            VARCHAR (100)     NULL,
         batchStatus                VARCHAR (20)      NOT NULL CONSTRAINT DF_dbo_intakeBatch_batchStatus DEFAULT ('received'),
         pauseReason                NVARCHAR (500)    NULL,
         receivedCount              INT               NOT NULL CONSTRAINT DF_dbo_intakeBatch_receivedCount DEFAULT (0),
@@ -66,6 +69,12 @@ IF COL_LENGTH (N'dbo.intakeBatch', N'rawContent') IS NULL
     ALTER TABLE dbo.intakeBatch ADD rawContent                 NVARCHAR (MAX)    NULL;
 IF COL_LENGTH (N'dbo.intakeBatch', N'contentSha256') IS NULL
     ALTER TABLE dbo.intakeBatch ADD contentSha256              CHAR (64)         NULL;
+IF COL_LENGTH (N'dbo.intakeBatch', N'departmentReceivedUtc') IS NULL
+    ALTER TABLE dbo.intakeBatch ADD departmentReceivedUtc      DATETIME2 (3)     NULL;
+IF COL_LENGTH (N'dbo.intakeBatch', N'receiptEvidence') IS NULL
+    ALTER TABLE dbo.intakeBatch ADD receiptEvidence            NVARCHAR (1000)   NULL;
+IF COL_LENGTH (N'dbo.intakeBatch', N'receiptTimeZone') IS NULL
+    ALTER TABLE dbo.intakeBatch ADD receiptTimeZone            VARCHAR (100)     NULL;
 IF COL_LENGTH (N'dbo.intakeBatch', N'batchStatus') IS NULL
     ALTER TABLE dbo.intakeBatch ADD batchStatus                VARCHAR (20)      NOT NULL CONSTRAINT DF_dbo_intakeBatch_batchStatus DEFAULT ('received');
 IF COL_LENGTH (N'dbo.intakeBatch', N'pauseReason') IS NULL
@@ -214,6 +223,9 @@ EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', 
 EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'intakeBatch', @ColumnName = N'rawContent', @Description = N'Raw file or message exactly as received. Never edited.';
 EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'intakeBatch', @ColumnName = N'contentSha256', @Description = N'SHA-256 of the content as received (UTF-8), in hex: finds the same file uploaded twice for the same profile. Null for batches received before it was recorded.';
 EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'intakeBatch', @ColumnName = N'receivedUtc', @Description = N'UTC time the agency received it.';
+EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'intakeBatch', @ColumnName = N'departmentReceivedUtc', @Description = N'Verified original Department receipt for a historical batch; ingestion remains receivedUtc.';
+EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'intakeBatch', @ColumnName = N'receiptEvidence', @Description = N'Source evidence attested by the submitting user for historical Department receipt.';
+EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'intakeBatch', @ColumnName = N'receiptTimeZone', @Description = N'Jurisdiction time zone used to interpret the verified original receipt.';
 EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'intakeBatch', @ColumnName = N'batchStatus', @Description = N'received, parsing, paused, loaded or failed.';
 EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'intakeBatch', @ColumnName = N'pauseReason', @Description = N'Why the batch paused, e.g. the sender''s header changed.';
 EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'intakeBatch', @ColumnName = N'receivedCount', @Description = N'Rows received.';

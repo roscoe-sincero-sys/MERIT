@@ -9,3 +9,4 @@ public sealed record NotificationReportModel(IReadOnlyList<NotificationRow> Rows
 public sealed record CarePagingModel(string Root, Guid? CaseId, string Key, int Page, int Total, string Label);
 public sealed record ReceiptWorkModel(IReadOnlyList<ReceiptWorkRow> Rows, int Page, Guid? PersonId, Merit.Application.Services.PersonPage? Person);
 public sealed record TestingPlanModel(PersonPage Person, IReadOnlyList<TestingPlanRow> Plans);
+public sealed record TestingOutreachModel(IReadOnlyList<TestingOutreachRow> Rows, int Total, int Page, TestingOutreachQuery Query, IReadOnlyList<AssignableUserRow> Assignees);

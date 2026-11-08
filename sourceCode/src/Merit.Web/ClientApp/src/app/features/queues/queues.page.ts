@@ -17,6 +17,7 @@ import { ContextPanelComponent } from '../../shared/context-panel.component';
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <h1 tabindex="-1">Work queues</h1>
+    <p><a href="/testing">Clinical testing outreach: upcoming tests and caregiver contacts</a></p>
     @if (store.error(); as e) {
       <div class="usa-alert usa-alert--error usa-alert--slim" role="alert"><div class="usa-alert__body"><p class="usa-alert__text">{{ e }}</p></div></div>
     }

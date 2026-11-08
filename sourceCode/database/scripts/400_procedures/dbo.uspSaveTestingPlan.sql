@@ -56,6 +56,8 @@ CREATE OR ALTER PROCEDURE dbo.uspSaveTestingPlan
       , @labResultId UNIQUEIDENTIFIER = NULL
       , @targetDate DATE = NULL
       , @remediationConfirmed BIT = 0
+      , @currentGuidanceConfirmed BIT = 0
+      , @currentGuidanceReason NVARCHAR(1000) = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -240,6 +242,12 @@ BEGIN
         BEGIN
             ;THROW 51422, N'Use an active case or a patient-only testing plan.', 1;
         END;
+        -- A current-care plan for an old draw is not a reconstruction of the policy in force at collection.
+        DECLARE @policyReference DATE=COALESCE(@draw,@latest);
+        IF @policyReference<'20250301' AND (ISNULL(@currentGuidanceConfirmed,0)<>1 OR NULLIF(TRIM(@currentGuidanceReason),N'') IS NULL)
+        BEGIN
+            ;THROW 51422, N'This source predates March 2025 guidance. Historical policy reconstruction is not supported. For current care, explicitly confirm the clinician chose current guidance and document why; otherwise obtain an approved historical plan.', 1;
+        END;
         SET @due=COALESCE(@targetDate,@latest);
         IF @due>@latest OR (@draw IS NOT NULL AND @due<@draw) OR @due<@dob
         BEGIN
@@ -251,10 +259,14 @@ BEGIN
             ;THROW 51422, N'An open plan of this type exists. Complete it with a real test or dismiss it with a documented clinical reason before replacing it.', 1;
         END;
         DECLARE @json NVARCHAR(MAX)=(SELECT 'MDH-2025-03' AS policyVersion,@planKind AS kind,@labResultId AS anchorResultId,@draw AS anchorDate,
-         @second AS previousLowResultId,@remediationConfirmed AS remediationConfirmed,@evidence AS clinicalEvidence FOR JSON PATH,WITHOUT_ARRAY_WRAPPER);
+         @second AS previousLowResultId,@remediationConfirmed AS remediationConfirmed,@evidence AS clinicalEvidence,
+         @policyReference AS policyReferenceDate,'currentCare' AS policyPurpose,
+         @currentGuidanceConfirmed AS currentGuidanceConfirmed,@currentGuidanceReason AS currentGuidanceReason,
+         auth.udfSessionToday() AS reviewedDate FOR JSON PATH,WITHOUT_ARRAY_WRAPPER);
         INSERT dbo.workTask(workTaskId,rootTenantId,owningTenantId,personId,exposureCaseId,labResultId,queueCode,title,detail,dueDate,isUrgent,testingPlanJson,taskStatus,completedUtc,completedByUserId,resolutionNote)
         VALUES(@workTaskId,@root,@owner,@personId,@exposureCaseId,@labResultId,CASE WHEN @planKind='discharge' THEN 'testingDischarge' ELSE 'testingFollowUp' END,
-         CONCAT(N'Maryland testing: ',@planKind),CONCAT(@advice,N' Source review: ',@evidence),@due,@urgent,@json,
+         CONCAT(N'Maryland testing: ',@planKind),CONCAT(@advice,N' Source review: ',@evidence,
+         CASE WHEN @policyReference<'20250301' THEN CONCAT(N' Current-care policy decision: ',@currentGuidanceReason) END),@due,@urgent,@json,
          CASE WHEN @planKind='discharge' THEN 'done' ELSE 'open' END,CASE WHEN @planKind='discharge' THEN SYSUTCDATETIME() END,
          CASE WHEN @planKind='discharge' THEN auth.udfSessionUserId() END,CASE WHEN @planKind='discharge' THEN @evidence END);
         UPDATE dbo.workTask SET taskStatus='done',completedUtc=SYSUTCDATETIME(),completedByUserId=auth.udfSessionUserId(),resolutionNote=N'Clinician-approved testing plan recorded.'

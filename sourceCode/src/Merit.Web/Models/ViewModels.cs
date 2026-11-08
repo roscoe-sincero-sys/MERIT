@@ -254,6 +254,7 @@ public sealed record PersonPageModel(
     bool CanViewIdentifiers)
 {
     public PersonRow Person => Page.Header.Person;
+    public IReadOnlyList<TestingPlanRow> TestingPlans { get; init; } = [];
 
     public string FullName => string.Join(' ', new[] { Person.FirstName, Person.MiddleName, Person.LastName }.Where(s => !string.IsNullOrWhiteSpace(s)));
 }

@@ -133,6 +133,7 @@ public sealed record NotificationSummaryRow(string Status, int ObligationCount);
 
 public interface ICareData
 {
+    Task<IReadOnlyList<TestingOutreachRow>> TestingOutreachAsync(TestingOutreachQuery query, CancellationToken ct);
     Task<IReadOnlyList<TestingPlanRow>> TestingPlansAsync(Guid personId, CancellationToken ct);
     Task SaveTestingPlanAsync(TestingPlanSave plan, CancellationToken ct);
     Task ResolveTestingPlanAsync(Guid personId, Guid workTaskId, string evidence, bool confirmed, Guid? completedLabResultId, bool dismiss, CancellationToken ct);
@@ -159,10 +160,21 @@ public interface ICareData
 }
 
 public sealed record TestingPlanSave(Guid WorkTaskId, Guid PersonId, string PlanKind, string Evidence, bool ClinicianConfirmed,
-    Guid? ExposureCaseId = null, Guid? LabResultId = null, DateOnly? TargetDate = null, bool RemediationConfirmed = false);
+    Guid? ExposureCaseId = null, Guid? LabResultId = null, DateOnly? TargetDate = null, bool RemediationConfirmed = false,
+    bool CurrentGuidanceConfirmed = false, string? CurrentGuidanceReason = null);
 
 public sealed class TestingPlanRow
 {
+    public string? AssignedToName { get; init; }
+    public string Kind
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(TestingPlanJson)) return "review";
+            using var json = System.Text.Json.JsonDocument.Parse(TestingPlanJson);
+            return json.RootElement.TryGetProperty("kind", out var value) ? value.GetString() ?? "review" : "review";
+        }
+    }
     public Guid WorkTaskId { get; init; }
     public Guid? ExposureCaseId { get; init; }
     public Guid? LabResultId { get; init; }

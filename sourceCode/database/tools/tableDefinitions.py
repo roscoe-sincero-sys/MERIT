@@ -951,6 +951,9 @@ TABLES = [
             c("contentSha256", "CHAR (64)", "SHA-256 of the content as received (UTF-8), in hex: finds the same file "
               "uploaded twice for the same profile. Null for batches received before it was recorded."),
             c("receivedUtc", "DATETIME2 (3)", "UTC time the agency received it.", null=False),
+            c("departmentReceivedUtc", "DATETIME2 (3)", "Verified original Department receipt for a historical batch; ingestion remains receivedUtc."),
+            c("receiptEvidence", "NVARCHAR (1000)", "Source evidence attested by the submitting user for historical Department receipt."),
+            c("receiptTimeZone", "VARCHAR (100)", "Jurisdiction time zone used to interpret the verified original receipt."),
             c("batchStatus", "VARCHAR (20)", "received, parsing, paused, loaded or failed.", null=False,
               default="'received'", check="batchStatus IN ('received', 'parsing', 'paused', 'loaded', 'failed')"),
             c("pauseReason", "NVARCHAR (500)", "Why the batch paused, e.g. the sender's header changed."),

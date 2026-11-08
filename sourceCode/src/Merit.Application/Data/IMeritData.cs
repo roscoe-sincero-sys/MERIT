@@ -316,7 +316,7 @@ public interface IIntakeData
     Task<IntakeProfileRow?> GetProfileAsync(Guid intakeProfileId, CancellationToken ct = default);
 
     Task CreateBatchAsync(Guid intakeBatchId, Guid intakeProfileId, string fileName, string rawContent, string contentSha256, Guid jobId,
-                          CancellationToken ct = default);
+                          CancellationToken ct = default, DateTime? departmentReceivedUtc = null, string? receiptEvidence = null);
 
     /// <summary>The first batch already received for the profile with exactly this content, or null.</summary>
     Task<ReceivedBatchRow?> FindBatchByContentAsync(Guid intakeProfileId, string contentSha256, CancellationToken ct = default);
