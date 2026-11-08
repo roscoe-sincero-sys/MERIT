@@ -285,10 +285,11 @@ public sealed class AdminController(IClock clock, AdminService admin, AuditServi
     public async Task<IActionResult> Audit([FromQuery] AuditFilterModel filter, CancellationToken ct)
     {
         filter.Page = Math.Max(filter.Page, 1);
-        var events = await audit.SearchAsync(session, AuditQuery(filter, filter.Page, AuditPageSize), ct);
+        filter.PageSize = filter.PageSize == 25 ? 25 : AuditPageSize;
+        var events = await audit.SearchAsync(session, AuditQuery(filter, filter.Page, filter.PageSize), ct);
         var users = (await audit.UsersAsync(session, ct))
             .Select(u => new SelectOption(u.AppUserId.ToString(), u.DisplayName, u.AppUserId == filter.UserId)).ToList();
-        return View(new AuditModel(events, filter, events.FirstOrDefault()?.TotalCount ?? 0, AuditPageSize, users));
+        return View(new AuditModel(events, filter, events.FirstOrDefault()?.TotalCount ?? 0, filter.PageSize, users));
     }
 
     /// <summary>The filtered view as CSV, up to 10,000 events. The export is itself audited.</summary>

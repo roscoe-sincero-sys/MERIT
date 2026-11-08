@@ -239,6 +239,9 @@ public sealed class RecordCorrectionTests(MeritFixture fixture)
             Assert.Equal(1960, await Sql(c, "SELECT yearBuilt FROM dbo.location WHERE locationId = @location", ("@location", location)));
             Assert.Equal("weekdays", await Sql(c, "SELECT scheduleType FROM dbo.personLocation WHERE personLocationId = @id", ("@id", id)));
             using var stale = await client.NoRedirect.PostAsync($"/people/{person}/places/{id}/edit", new FormUrlEncodedContent(fields)); Assert.Equal(HttpStatusCode.Conflict, stale.StatusCode);
+            using var missingDate = await client.NoRedirect.PostAsync($"/people/{person}/places/{id}/end", new FormUrlEncodedContent(new Dictionary<string, string>()));
+            Assert.Equal(HttpStatusCode.UnprocessableEntity, missingDate.StatusCode);
+            Assert.Equal(DBNull.Value, await Sql(c, "SELECT endDate FROM dbo.personLocation WHERE personLocationId=@id", ("@id",id)));
             using var ended = await client.NoRedirect.PostAsync($"/people/{person}/places/{id}/end", new FormUrlEncodedContent(new Dictionary<string, string> { ["endDate"] = "2026-02-01" })); Assert.Equal(HttpStatusCode.OK, ended.StatusCode);
             Assert.Equal(new DateTime(2026, 2, 1), await Sql(c, "SELECT endDate FROM dbo.personLocation WHERE personLocationId = @id", ("@id", id)));
         }

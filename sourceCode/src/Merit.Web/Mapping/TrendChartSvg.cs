@@ -33,7 +33,7 @@ public static class TrendChartSvg
             pts.Select(p => $"{Options.Date(p.Date)} {(p.Operator == "=" ? string.Empty : p.Operator)}{p.Value.ToString("0.##", CultureInfo.InvariantCulture)}"));
 
         var sb = new StringBuilder();
-        sb.Append(CultureInfo.InvariantCulture, $"<svg class=\"merit-chart\" viewBox=\"0 0 {N(W)} {N(H)}\" role=\"group\" aria-labelledby=\"{E(id)}\">");
+        sb.Append(CultureInfo.InvariantCulture, $"<svg class=\"merit-chart\" data-chart-width=\"640\" viewBox=\"0 0 {N(W)} {N(H)}\" role=\"group\" aria-labelledby=\"{E(id)}\">");
         sb.Append(CultureInfo.InvariantCulture, $"<title id=\"{E(id)}\">{E(title)}</title>");
         for (int i = 0; i <= 4; i++)
         {
@@ -62,7 +62,8 @@ public static class TrendChartSvg
         foreach (var p in pts)
         {
             var pointLabel = $"{Options.Date(p.Date)}: {(p.Operator == "=" ? string.Empty : p.Operator)}{p.Value.ToString("0.##", CultureInfo.InvariantCulture)} {chart.Unit}; {p.SampleType ?? "unknown sample type"}";
-            if (p.ResultId is Guid resultId) sb.Append($"<a href=\"/results/{resultId:D}\" aria-label=\"{E(pointLabel)}\">");
+            if (p.ResultId is Guid resultId) sb.Append($"<a data-chart-result=\"true\" href=\"/results/{resultId:D}\" aria-label=\"{E(pointLabel)}\">");
+            if (p.ResultId is not null) sb.Append(CultureInfo.InvariantCulture, $"<circle class=\"point-hit\" cx=\"{N(X(p.Date))}\" cy=\"{N(Y((double)p.Value))}\" r=\"12\" aria-hidden=\"true\" />");
             sb.Append(CultureInfo.InvariantCulture,
                 $"<circle class=\"{(p.SampleType == "venous" ? "venous" : "capillary")}\" cx=\"{N(X(p.Date))}\" cy=\"{N(Y((double)p.Value))}\" r=\"5\"><title>{E(pointLabel)}</title></circle>");
             if (p.ResultId is not null) sb.Append("</a>");

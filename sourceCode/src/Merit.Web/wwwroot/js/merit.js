@@ -536,6 +536,38 @@
         return Array.from(listbox.querySelectorAll('[role=option]:not([aria-disabled=true])[data-value]'));
     }
 
+    function positionCombobox(input, allowScroll = false) {
+        const list = document.getElementById(input.getAttribute('aria-controls'));
+        if (!list || list.hidden) return;
+        const viewport = window.visualViewport;
+        const top = viewport?.offsetTop || 0, bottom = top + (viewport?.height || innerHeight);
+        const left = viewport?.offsetLeft || 0, right = left + (viewport?.width || innerWidth);
+        const box = input.getBoundingClientRect();
+        const above = box.top - top - 8, below = bottom - box.bottom - 8;
+        if (!allowScroll && (box.bottom < top || box.top > bottom)) { closeCombobox(input); return; }
+        if (allowScroll && (box.top < top || box.bottom > bottom || Math.max(above, below) < 80)) {
+            let scroller = input.parentElement;
+            while (scroller && !(scroller.scrollHeight > scroller.clientHeight && /auto|scroll/.test(getComputedStyle(scroller).overflowY))) scroller = scroller.parentElement;
+            const distance = box.top - (top + (bottom - top) / 3);
+            (scroller || window).scrollBy({ top: distance, behavior: 'instant' });
+            requestAnimationFrame(() => positionCombobox(input)); return;
+        }
+        const flipped = below < 180 && above > below;
+        const height = Math.max(32, Math.min(256, flipped ? above : below));
+        list.style.position = 'fixed'; list.style.width = `${Math.min(box.width, right - left - 16)}px`;
+        list.style.left = `${Math.max(left + 8, Math.min(box.left, right - box.width - 8))}px`;
+        list.style.maxHeight = `${height}px`; list.style.bottom = 'auto';
+        list.style.top = `${flipped ? Math.max(top + 4, box.top - Math.min(list.scrollHeight, height) - 4) : box.bottom + 4}px`;
+        list.dataset.direction = flipped ? 'above' : 'below';
+    }
+    function positionOpenComboboxes(allowScroll = false) {
+        document.querySelectorAll('[role=combobox][aria-expanded=true]').forEach(input => positionCombobox(input, allowScroll));
+    }
+    window.addEventListener('resize', () => positionOpenComboboxes());
+    document.addEventListener('scroll', () => positionOpenComboboxes(), true);
+    window.visualViewport?.addEventListener('resize', () => positionOpenComboboxes(true));
+    window.visualViewport?.addEventListener('scroll', () => positionOpenComboboxes());
+
     function closeCombobox(input) {
         lookupVersions.set(input, (lookupVersions.get(input) || 0) + 1);
         const listbox = document.getElementById(input.getAttribute('aria-controls'));
@@ -625,6 +657,7 @@
                 target.hidden = false;
                 input.removeAttribute('aria-activedescendant');
                 input.setAttribute("aria-expanded", "true");
+                positionCombobox(input, true);
             }
             announce(count === 0 ? "No matches" : count + " matches. Use the arrow keys to choose.");
         }
@@ -758,7 +791,12 @@ document.addEventListener('change', event => { if (event.target.closest('#manual
 document.addEventListener('htmx:after:swap', updateResultReview);
 updateResultReview();
 document.addEventListener('submit', async event => {
-    const form = event.target, message = form.dataset.confirm;
+    const form = event.target;
+    let message = form.dataset.confirm;
+    if (message && form.dataset.confirmDate) {
+        const date = document.getElementById(form.dataset.confirmDate)?.value;
+        if (date) message += ` End date: ${date}.`;
+    }
     if (!message) return;
     if (confirmedActions.delete(form)) return;
     event.preventDefault(); event.stopImmediatePropagation();

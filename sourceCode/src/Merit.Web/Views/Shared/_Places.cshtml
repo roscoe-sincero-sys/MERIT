@@ -23,8 +23,8 @@
     }
     else
     {
-        <div class="merit-table-wrap" tabindex="0" role="region" aria-label="Table; scroll sideways for more columns">
-            <table class="usa-table usa-table--borderless">
+        <div class="merit-table-wrap merit-phone-table-wrap" tabindex="0" role="region" aria-label="Table; scroll sideways for more columns">
+            <table data-phone-cards role="table" class="usa-table usa-table--borderless">
                 <caption class="usa-sr-only">Current places</caption>
                 <thead><tr><th scope="col">Role</th><th scope="col">Address</th><th scope="col">County</th><th scope="col">Schedule</th><th scope="col">Dates</th><th scope="col">Source</th><th scope="col"><span class="usa-sr-only">Actions</span></th></tr></thead>
                 <tbody>
@@ -61,9 +61,9 @@
                                     @if (!r.IsPrimary)
                                     {
                                         <details><summary>End this place</summary>
-                                        <form hx-post="/people/@Model.PersonId/places/@r.PersonLocationId/end" hx-target="#section-places" hx-swap="outerHTML">
-                                            <label class="usa-sr-only" for="end-@r.PersonLocationId">End date for @r.AddressLabel</label>
-                                            <input class="usa-input" type="date" id="end-@r.PersonLocationId" name="endDate" value="@Options.Iso(Clock.Today)" required />
+                                        <form data-confirm-date="end-@r.PersonLocationId" data-confirm="End this place association for @r.AddressLabel on the selected date? This changes the patient's place history and may affect follow-up." hx-post="/people/@Model.PersonId/places/@r.PersonLocationId/end" hx-target="#section-places" hx-swap="outerHTML">
+                                            <label class="usa-label" for="end-@r.PersonLocationId">End date for @r.AddressLabel</label>
+                                            <input class="usa-input" type="date" id="end-@r.PersonLocationId" name="endDate" required />
                                             <button class="usa-button usa-button--unstyled" type="submit">End place</button>
                                         </form></details>
                                     }

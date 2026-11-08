@@ -2,7 +2,7 @@
 @{
     string id = "chart-" + Guid.NewGuid().ToString("N");
 }
-<figure>
+<figure class="merit-trend-figure">
     @* Rendered by Merit.Web.Mapping.TrendChartSvg, which HTML-encodes every text value it writes. *@
     @Merit.Web.Mapping.TrendChartSvg.Render(Model, id)
     <figcaption class="merit-legend">
@@ -16,4 +16,5 @@
         </ul>
     }
     @if (Model.ReferenceNote is not null) { <p class="usa-hint">@Model.ReferenceNote</p> }
+    <p><a href="#section-results-table">Show the numbers, sample types and report status</a></p>
 </figure>

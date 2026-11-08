@@ -11,6 +11,33 @@
     --merit-bg-soft: #f0f0f0;
 }
 
+.merit-mobile-label { display:none; }
+.merit-trend-figure { margin:1rem 0; min-width:0; max-width:48rem; }
+.merit-chart text { font-size:13px; }
+.merit-chart .point-hit { fill:transparent; stroke:none; }
+.merit-chart a:focus .point-hit { stroke:#2491ff; stroke-width:2; }
+.merit-touch-action { min-width:44px; min-height:44px; padding:.5rem; }
+.merit-secondary-filters { display:contents; }
+.merit-secondary-filters > summary { display:none; }
+.merit-secondary-filters__body { display:contents; }
+@media (max-width:640px) {
+    /* CDK creates these row groups itself, without Angular's scoped-style attribute. */
+    merit-data-grid .grid-cards table > thead, merit-data-grid .grid-cards table > tbody { display:block; width:100%; }
+    merit-data-grid .grid-cards td { overflow-wrap:anywhere; }
+    .merit-secondary-filters { display:block; width:100%; margin:.5rem 0; }
+    .merit-secondary-filters > summary { display:list-item; cursor:pointer; min-height:44px; padding:.65rem .5rem; }
+    .merit-secondary-filters__body { display:flex; flex-wrap:wrap; gap:.5rem 1rem; padding:.5rem; }
+    .merit-secondary-filters__body > div { flex:1 1 12rem; }
+    .merit-phone-table-wrap { overflow:visible; }
+    [data-phone-cards] { display:block; width:100%; }
+    [data-phone-cards] thead { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); }
+    [data-phone-cards] tbody { display:block; }
+    [data-phone-cards] tbody tr { display:block; border:1px solid var(--merit-line); border-radius:.25rem; padding:.75rem; margin:.75rem 0; }
+    [data-phone-cards] tbody td, [data-phone-cards] tbody th { display:block; border:0; padding:.25rem 0; white-space:normal; overflow-wrap:anywhere; }
+    [data-phone-cards] .merit-mobile-label { display:inline; font-weight:700; }
+    [data-phone-cards] .usa-button--unstyled { min-height:44px; padding:.5rem .25rem; }
+}
+
 body { background: #fff; color: var(--merit-ink); }
 
 .merit-skip { position: absolute; left: -999em; }
@@ -119,14 +146,14 @@ dialog.merit-dialog::backdrop { background: rgba(0,0,0,.5); }
 .merit-listbox small { display: block; color: var(--merit-muted); }
 
 /* ---------------------------------------------------------------------------------------------- trend chart (server SVG) */
-.merit-chart { width: 100%; max-width: 48rem; height: auto; }
+.merit-chart { width: 100%; height: auto; }
 .merit-chart .axis { stroke: #71767a; stroke-width: 1; }
 .merit-chart .grid { stroke: var(--merit-line); stroke-width: 1; }
 .merit-chart .level { stroke: var(--merit-urgent); stroke-width: 1.5; stroke-dasharray: 6 4; }
 .merit-chart .line { fill: none; stroke: var(--merit-primary); stroke-width: 2; }
 .merit-chart .venous { fill: var(--merit-primary); }
 .merit-chart .capillary { fill: #fff; stroke: var(--merit-primary); stroke-width: 2; }
-.merit-chart text { font-size: 11px; fill: #3d4551; }
+.merit-chart text { font-size: 13px; fill: #3d4551; }
 .merit-legend { display: flex; flex-wrap: wrap; gap: 1rem; font-size: .85rem; color: var(--merit-muted); }
 
 /* ---------------------------------------------------------------------------------------------- request indicator */
@@ -317,3 +344,5 @@ th .merit-sort:hover, th .merit-sort:focus { color: var(--merit-primary); }
  .merit-header__user { margin-left:0; flex-wrap:wrap; }
  .merit-header__search--shortcut { min-width:0; width:100%; }
 }
+
+.merit-listbox { box-sizing:border-box; overflow-wrap:anywhere; }

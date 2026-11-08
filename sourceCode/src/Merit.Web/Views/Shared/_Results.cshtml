@@ -47,8 +47,8 @@
     }
     else
     {
-        <div class="merit-table-wrap" tabindex="0" role="region" aria-label="Table; scroll sideways for more columns">
-            <table class="usa-table usa-table--borderless usa-table--compact">
+        <div id="section-results-table" class="merit-table-wrap merit-phone-table-wrap" tabindex="0" role="region" aria-label="Table; scroll sideways for more columns">
+            <table data-phone-cards role="table" class="usa-table usa-table--borderless usa-table--compact">
                 <thead><tr><th scope="col">Sample collection date</th><th scope="col">Substance tested</th><th scope="col">Result</th><th scope="col">Sample</th><th scope="col">Method</th><th scope="col">Population</th><th scope="col">Laboratory result status</th><th scope="col">Lab</th></tr></thead>
                 <tbody>
                     @foreach (var r in Model.Rows)

@@ -60,15 +60,15 @@ export function needsMatchReview(r: HeldRowDto): boolean {
 
     @if (store.batch()) {
       <p class="usa-alert usa-alert--info usa-alert--slim">Showing batch: <strong>{{ store.batchFileName() ?? store.batch() }}</strong>.
-        <button type="button" class="usa-button usa-button--unstyled" [disabled]="store.busy()" (click)="clearBatch()">Show all batches</button></p>
+        <button type="button" class="usa-button usa-button--unstyled merit-touch-action" [disabled]="store.busy()" (click)="clearBatch()">Show all batches</button></p>
     }
     <h2>By cause</h2>
     @if (store.groupsLoaded() && store.groups().length === 0) { <p class="merit-empty">Nothing is held.</p> }
     <ul class="groups">
-      <li><button type="button" class="usa-button usa-button--unstyled" [attr.aria-pressed]="store.group() === null" [disabled]="store.busy()" (click)="choose(null)">{{ store.batch() ? 'All held rows in this batch' : 'All held rows' }}</button></li>
+      <li><button type="button" class="usa-button usa-button--unstyled merit-touch-action" [attr.aria-pressed]="store.group() === null" [disabled]="store.busy()" (click)="choose(null)">{{ store.batch() ? 'All held rows in this batch' : 'All held rows' }}</button></li>
       @for (g of store.groups(); track groupKey(g)) {
         <li>
-          <button type="button" class="usa-button usa-button--unstyled" [attr.aria-pressed]="isChosen(g)" [disabled]="store.busy()" (click)="choose(g)">
+          <button type="button" class="usa-button usa-button--unstyled merit-touch-action" [attr.aria-pressed]="isChosen(g)" [disabled]="store.busy()" (click)="choose(g)">
             {{ label(g.reasonCode) }}@if (g.reportedValue) { : <code>{{ g.reportedValue }}</code> } &middot; {{ sender(g) }} &middot; {{ display.count(g.rowCount, 'row') }}
           </button>
           @if (g.urgentCount > 0) { <span class="urgent">{{ g.urgentCount }} urgent</span> }
@@ -118,7 +118,7 @@ export function needsMatchReview(r: HeldRowDto): boolean {
         <a class="usa-link" href="/app/match-review">Open Match review</a>.
       </p>
     }
-    <merit-data-grid gridId="held" caption="Held rows" [columns]="columns" [rows]="store.rows().items" [total]="store.rows().totalCount"
+    <merit-data-grid gridId="held" [cards]="true" caption="Held rows" [columns]="columns" [rows]="store.rows().items" [total]="store.rows().totalCount"
                      [page]="store.page()" [pageSize]="50" [loading]="store.loading() || store.busy()" [selectable]="true" [selectionDisabled]="store.loading() || store.busy()" [selected]="store.selected()"
                      [rowKey]="key" emptyText="No held rows in this group." (pageChange)="onPage($event)" (selectionChange)="onSelect($event)" />
 
@@ -126,22 +126,33 @@ export function needsMatchReview(r: HeldRowDto): boolean {
       <section class="merit-section" aria-labelledby="row-detail">
         <h2 id="row-detail" tabindex="-1">Row {{ r.rowNumber }} of {{ r.fileName }}</h2>
         <p>Held for: {{ r.reasons }}. Corrections are separate from bulk row selection.</p>
-        <table class="usa-table usa-table--borderless usa-table--compact">
+        @if (needsMatch(r)) {
+          <p id="held-row-match-note">Choose the correct person before release. Releasing cannot make this decision.</p>
+          <a class="usa-button usa-button--outline" [href]="'/app/match-review?row=' + r.stagingRowId">Review the match for row {{ r.rowNumber }}</a>
+        }
+        <table role="table" class="usa-table usa-table--borderless usa-table--compact held-detail-table">
           <thead><tr><th scope="col">Field</th><th scope="col">As reported</th><th scope="col">Correction</th></tr></thead>
           <tbody>
             @for (k of fields(r); track k) {
-              <tr [class.usa-form-group--error]="needsAttention(r, k)"><th scope="row">{{ display.field(k) }}@if (needsAttention(r, k)) { <span class="usa-hint">Needs attention</span> }</th><td>{{ hasReported(r, k) ? (r.reported[k] ?? '(empty)') : '(not supplied)' }}</td>
-                <td><label class="usa-sr-only" [for]="'fix-' + k">Correct {{ display.field(k) }}</label><input class="usa-input" [id]="'fix-' + k" [type]="fieldType(k)" [attr.inputmode]="k === 'value' ? 'decimal' : null" [attr.aria-describedby]="'hint-' + k" [value]="r.corrected[k] ?? ''" [disabled]="store.busy() || store.loading()" (input)="setFix(k, $event)" /><span class="usa-hint" [id]="'hint-' + k">{{ fieldHint(k) }}</span></td></tr>
+              <tr [class.usa-form-group--error]="needsAttention(r, k)"><th scope="row">{{ display.field(k) }}@if (needsAttention(r, k)) { <span class="usa-hint">Needs attention</span> }</th><td><span class="mobile-label" aria-hidden="true">As reported: </span>{{ hasReported(r, k) ? (r.reported[k] ?? '(empty)') : '(not supplied)' }}</td>
+                <td><span class="mobile-label" aria-hidden="true">Correction: </span><label class="usa-sr-only" [for]="'fix-' + k">Correct {{ display.field(k) }}</label><input class="usa-input" [id]="'fix-' + k" [type]="fieldType(k)" [attr.inputmode]="k === 'value' ? 'decimal' : null" [attr.aria-describedby]="'hint-' + k" [value]="r.corrected[k] ?? ''" [disabled]="store.busy() || store.loading()" (input)="setFix(k, $event)" /><span class="usa-hint" [id]="'hint-' + k">{{ fieldHint(k) }}</span></td></tr>
             }
           </tbody>
         </table>
         <button class="usa-button usa-button--outline" type="button" [disabled]="store.busy() || store.loading()" (click)="saveFix(r)">Save correction</button>
-        <button class="usa-button" type="button" [disabled]="store.busy() || store.loading() || needsMatch(r)" (click)="saveFix(r, true)">Save and release this row</button>
-        @if (needsMatch(r)) { <p>Decide this person's match in Match review before release.</p> }
+        <button class="usa-button" type="button" [disabled]="store.busy() || store.loading() || needsMatch(r)" [attr.aria-describedby]="needsMatch(r) ? 'held-row-match-note' : null" (click)="saveFix(r, true)">Save and release this row</button>
+
       </section>
     }
   `,
   styles: `
+    .mobile-label { display:none; }
+    @media(max-width:640px) {
+      .held-detail-table, .held-detail-table tbody, .held-detail-table tr, .held-detail-table td, .held-detail-table th { display:block; width:100%; white-space:normal; overflow-wrap:anywhere; }
+      .held-detail-table thead { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); }
+      .held-detail-table tbody tr { border:1px solid #dfe1e2; padding:.5rem; margin:.5rem 0; }
+      .mobile-label { display:inline; font-weight:700; }
+    }
     .groups { list-style: none; padding: 0; }
     .groups li { margin: .35rem 0; }
     .urgent { margin-left: .5rem; padding: 0 .4rem; border-radius: 1rem; background: #b50909; color: #fff; font-size: .8rem; font-weight: 700; }

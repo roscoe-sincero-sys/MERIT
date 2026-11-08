@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject, Injectable, input, OnInit, output, signal } from '@angular/core';
+import { afterNextRender, DestroyRef, ElementRef, viewChild, ChangeDetectionStrategy, Component, computed, inject, Injectable, input, OnInit, output, signal } from '@angular/core';
 import { ApiClient, problemMessage } from '../../api/api-client';
 import { PersonTimelineDto, TimelineEventDto } from '../../api/contracts';
 import { Display } from '../../shared/display.service';
@@ -43,6 +43,7 @@ export function axisTicks(from: number, to: number): { at: number; label: string
 }
 
 interface DrawnEvent {
+  index: number;
   e: TimelineEventDto;
   x: number;
   w: number;
@@ -58,33 +59,37 @@ interface DrawnEvent {
   selector: 'merit-timeline-chart',
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <svg class="timeline" [attr.viewBox]="'0 0 ' + width + ' ' + height" role="group" aria-label="Timeline of events">
+    <svg #plot class="timeline" [attr.viewBox]="'0 0 ' + width() + ' ' + height" role="group" aria-label="Timeline of events">
       @for (lane of lanes; track lane.kind; let i = $index) {
         <text class="lane-label" x="4" [attr.y]="laneY(i) + 14">{{ lane.label }}</text>
-        <line class="lane" [attr.x1]="left" [attr.x2]="width - 8" [attr.y1]="laneY(i) + 30" [attr.y2]="laneY(i) + 30" />
+        <line class="lane" [attr.x1]="left" [attr.x2]="width() - 8" [attr.y1]="laneY(i) + 30" [attr.y2]="laneY(i) + 30" />
       }
       @for (t of ticks(); track t.x) {
         <line class="tick" [attr.x1]="t.x" [attr.x2]="t.x" y1="0" [attr.y2]="height - 16" />
-        <text class="tick-label" [attr.x]="t.x + 2" [attr.y]="height - 4">{{ t.label }}</text>
+        <text class="tick-label" [attr.x]="t.x + 2" [attr.y]="height - 4" [attr.text-anchor]="t.x > width() - 80 ? 'end' : 'start'">{{ t.label }}</text>
       }
       @for (d of drawn(); track $index) {
+        <g class="event-marker" role="button" [attr.tabindex]="d.index === activeId() ? 0 : -1"
+           [attr.data-event-index]="d.index" [attr.aria-label]="d.e.date + ': ' + d.e.label"
+           (focus)="active.set(d.index)" (click)="active.set(d.index); pick.emit(d.e)"
+           (keydown)="onEventKey($event, d)">
         @if (d.point) {
-          <circle class="point" [class.venous]="d.e.sampleType === 'venous'" [attr.cx]="d.x" [attr.cy]="d.y" r="6"
-                  tabindex="0" role="button" [attr.aria-label]="d.e.date + ': ' + d.e.label" (click)="pick.emit(d.e)" (keydown.enter)="activate($event, d.e)" (keydown.space)="activate($event, d.e)" />
+          <circle class="event-hit" [attr.cx]="d.x" [attr.cy]="d.y" r="12" aria-hidden="true" />
+          <circle class="point" [class.venous]="d.e.sampleType === 'venous'" [attr.cx]="d.x" [attr.cy]="d.y" r="6" aria-hidden="true" />
         } @else {
-          <rect class="bar" [class]="'bar bar--' + d.e.kind" [attr.x]="d.x" [attr.y]="d.y - 8" [attr.width]="d.w" height="16" rx="3"
-                tabindex="0" role="button" [attr.aria-label]="d.e.date + (d.e.endDate ? ' to ' + d.e.endDate : ' onward') + ': ' + d.e.label"
-                (click)="pick.emit(d.e)" (keydown.enter)="activate($event, d.e)" (keydown.space)="activate($event, d.e)" />
+          <rect class="event-hit" [attr.x]="d.x - MathMax(0, (24 - d.w) / 2)" [attr.y]="d.y - 12" [attr.width]="MathMax(24,d.w)" height="24" aria-hidden="true" />
+          <rect [class]="'bar bar--' + d.e.kind" [attr.x]="d.x" [attr.y]="d.y - 8" [attr.width]="d.w" height="16" rx="3" aria-hidden="true" />
         }
+        </g>
       }
     </svg>
   `,
   styles: `
-    .timeline { width: 100%; height: auto; border: 1px solid #dfe1e2; }
+    .timeline { display:block; box-sizing:border-box; width: 100%; height: auto; border: 1px solid #dfe1e2; }
     .lane { stroke: #dfe1e2; }
     .lane-label { font-size: 12px; font-weight: 700; fill: #1b1b1b; }
     .tick { stroke: #f0f0f0; }
-    .tick-label { font-size: 10px; fill: #565c65; }
+    .tick-label { font-size: 12px; fill: #565c65; }
     .point { fill: #fff; stroke: #1a4480; stroke-width: 2; cursor: pointer; }
     .point.venous { fill: #1a4480; }
     .bar { fill: #73b3e7; cursor: pointer; }
@@ -92,7 +97,10 @@ interface DrawnEvent {
     .bar--job { fill: #ffbe2e; }
     .bar--case { fill: #d54309; }
     .bar--pregnancy { fill: #f2938c; }
-    circle:focus, rect:focus { outline: 3px solid #2491ff; }
+    .event-marker { cursor:pointer; }
+    .event-marker:focus { outline:none; }
+    .event-marker:focus .event-hit { stroke:#2491ff; stroke-width:2; }
+    .event-hit { fill:transparent; }
   `,
 })
 export class TimelineChartComponent {
@@ -101,7 +109,35 @@ export class TimelineChartComponent {
   readonly to = input.required<number>();
   readonly pick = output<TimelineEventDto>();
 
-  protected readonly width = 960;
+  protected readonly width = signal(960);
+  protected readonly MathMax = Math.max;
+  protected readonly active = signal<number | null>(null);
+  protected readonly activeId = computed(() => this.drawn().some(d => d.index === this.active()) ? this.active() : this.drawn()[0]?.index);
+  private readonly plot = viewChild.required<ElementRef<SVGSVGElement>>('plot');
+  constructor() {
+    const destroy = inject(DestroyRef);
+    afterNextRender(() => {
+      const svg = this.plot().nativeElement;
+      const measure = () => this.width.set(Math.max(200, Math.floor(svg.clientWidth)));
+      measure(); const observer = new ResizeObserver(measure); observer.observe(svg);
+      destroy.onDestroy(() => observer.disconnect());
+    });
+  }
+
+  protected onEventKey(event: KeyboardEvent, item: DrawnEvent): void {
+    if (['Enter',' '].includes(event.key)) { this.activate(event,item.e); return; }
+    const points = this.drawn(), i = points.findIndex(d => d.index === item.index);
+    let next: number;
+    switch(event.key) {
+      case 'ArrowRight': case 'ArrowDown': next=Math.min(i+1,points.length-1); break;
+      case 'ArrowLeft': case 'ArrowUp': next=Math.max(i-1,0); break;
+      case 'Home': next=0; break;
+      case 'End': next=points.length-1; break;
+      default:return;
+    }
+    event.preventDefault(); this.active.set(points[next].index);
+    this.plot().nativeElement.querySelector<SVGElement>(`[data-event-index="${points[next].index}"]`)?.focus();
+  }
   protected readonly left = 90;
   protected readonly lanes = LANES;
   protected readonly height = LANES.length * 48 + 24;
@@ -117,14 +153,18 @@ export class TimelineChartComponent {
 
   private x(ms: number): number {
     const span = Math.max(this.to() - this.from(), DAY);
-    return this.left + ((ms - this.from()) / span) * (this.width - this.left - 16);
+    return this.left + ((ms - this.from()) / span) * (this.width() - this.left - 16);
   }
 
-  protected readonly ticks = computed(() => axisTicks(this.from(), this.to()).map(t => ({ x: this.x(t.at), label: t.label })));
+  protected readonly ticks = computed(() => {
+    const ticks = axisTicks(this.from(), this.to());
+    const every = Math.max(1,Math.ceil(ticks.length / Math.max(2,Math.floor((this.width()-this.left)/80))));
+    return ticks.filter((_,i)=>i%every===0).map(t=>({x:this.x(t.at),label:t.label}));
+  });
 
   protected readonly drawn = computed<DrawnEvent[]>(() => {
     return this.events()
-      .map(e => {
+      .map((e,index) => {
         const lane = LANES.findIndex(l => l.kind === e.kind);
         const start = Date.parse(e.date);
         const end = e.endDate ? Date.parse(e.endDate) : this.to();
@@ -133,13 +173,13 @@ export class TimelineChartComponent {
         }
         if (e.kind === 'result' || (e.kind === 'case' && e.endDate === e.date)) {
           const y = this.laneY(lane) + 30;
-          return { e, x: this.x(start), w: 0, y, point: true };
+          return { e, index, x: this.x(start), w: 0, y, point: true };
         }
         const x1 = this.x(Math.max(start, this.from()));
         const x2 = this.x(Math.min(end, this.to()));
-        return { e, x: x1, w: Math.max(4, x2 - x1), y: this.laneY(lane) + 30, point: false };
+        return { e, index, x: x1, w: Math.max(4, x2 - x1), y: this.laneY(lane) + 30, point: false };
       })
-      .filter((d): d is DrawnEvent => d !== null);
+      .filter((d): d is DrawnEvent => d !== null).sort((a,b)=>Date.parse(a.e.date)-Date.parse(b.e.date) || a.index-b.index);
   });
 }
 
@@ -182,6 +222,7 @@ export class TimelineStore {
           </div>
         </div>
       }
+      <p>Keyboard: Tab enters the chart once. Arrow keys move chronologically between visible events; Home/End reach the first/last. Enter or Space selects an event. The list below contains every event.</p>
       <h2>All events</h2>
       <ol class="usa-list">
         @for (e of t.events; track $index) { <li>{{ display.date(e.date) }}@if (e.endDate && e.endDate !== e.date) { &ndash; {{ display.date(e.endDate) }} }: {{ e.label }} @if(e.detail) { <span class="merit-meta">{{ e.detail }}</span> } @if(e.href) { <a [href]="e.href">Open source record</a> }</li> }

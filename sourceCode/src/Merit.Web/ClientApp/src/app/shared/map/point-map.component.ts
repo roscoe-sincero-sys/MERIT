@@ -38,7 +38,7 @@ const MIN_SPAN = 0.12;
     <div class="controls" role="group" aria-label="Map zoom and pan">
       <button class="usa-button usa-button--outline usa-button--small" type="button" (click)="zoomBy(1.6)" aria-keyshortcuts="+">Zoom in</button>
       <button class="usa-button usa-button--outline usa-button--small" type="button" (click)="zoomBy(1 / 1.6)" aria-keyshortcuts="-">Zoom out</button>
-      <button class="usa-button usa-button--unstyled" type="button" (click)="reset()">Fit all points</button>
+      <button class="usa-button usa-button--outline usa-button--small" type="button" (click)="reset()">Fit all points</button>
       <ul class="legend" aria-label="Legend">
         @for (c of categories(); track c.key; let i = $index) { <li><svg class="legend-marker" viewBox="-9 -9 18 18" aria-hidden="true"><path [attr.d]="marker(c.key)" [attr.fill]="color(c.key)" /></svg>{{ c.label }}</li> }
         <li><span class="dot ring"></span>{{ ringLabel() }}</li>
@@ -64,11 +64,14 @@ const MIN_SPAN = 0.12;
         </g>
         @for (p of projected(); track p.point.id) {
           @if (p.point.ringed) { <circle class="ring" [attr.cx]="p.x" [attr.cy]="p.y" r="9" /> }
-          <path class="point" [attr.d]="marker(p.point.category)" [attr.transform]="'translate(' + p.x + ',' + p.y + ')'" [attr.fill]="color(p.point.category)" role="button"
+          <g class="point" [attr.transform]="'translate(' + p.x + ',' + p.y + ')'" role="button"
                   [attr.tabindex]="p.point.id === activeId() ? 0 : -1" [attr.data-point-id]="p.point.id"
                   [attr.aria-label]="p.point.label + '. ' + p.point.detail" (focus)="focused.set(p.point.id); active.set(p.point.id)" (blur)="focused.set(null)"
-                  (mouseenter)="focused.set(p.point.id)" (mouseleave)="focused.set(null)" (click)="pick.emit(p.point.id)"
-                  (keydown.enter)="activate($event, p.point.id)" (keydown.space)="activate($event, p.point.id)" />
+                  (mouseenter)="focused.set(p.point.id)" (mouseleave)="focused.set(null)" (click)="choosePoint(p.point.id)"
+                  (keydown.enter)="activate($event, p.point.id)" (keydown.space)="activate($event, p.point.id)">
+            <circle class="point-hit" r="12" aria-hidden="true" />
+            <path class="marker" [attr.d]="marker(p.point.category)" [attr.fill]="color(p.point.category)" aria-hidden="true" />
+          </g>
         }
       </svg>
       @if (tooltip(); as t) {
@@ -77,8 +80,19 @@ const MIN_SPAN = 0.12;
         </div>
       }
     </div>
+    @if (choices().length > 0) {
+      <section class="chooser" aria-label="Choose a case at this location" (keydown)="$event.stopPropagation()" (keydown.escape)="closeChoices($event)">
+        <h2 #choiceHeading tabindex="-1">Choose a case at this location</h2>
+        <p>These markers are close together. Choose the intended case instead of guessing from the map.</p>
+        <ul>@for (point of choices(); track point.id) {
+          <li><button class="usa-button usa-button--outline" type="button" (click)="selectChoice(point.id)">{{ point.label }} — {{ point.detail }}</button></li>
+        }</ul>
+        <button class="usa-button usa-button--outline" type="button" (click)="closeChoices()">Cancel selection</button>
+      </section>
+    }
   `,
   styles: `
+    .controls > button { min-height:44px; min-width:44px; }
     .controls { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1rem; margin-bottom: .5rem; }
     .legend { display: flex; flex-wrap: wrap; gap: .25rem 1rem; list-style: none; padding: 0; margin: 0 0 0 auto; font-size: .9rem; }
     .legend-marker { display: inline-block; width: 1rem; height: 1rem; margin-right: .35rem; vertical-align: -2px; }
@@ -90,11 +104,16 @@ const MIN_SPAN = 0.12;
     .plot:focus { outline: 3px solid #2491ff; }
     svg { display: block; }
     .area { fill: #f1f3f6; stroke: #8d9297; stroke-width: 1; stroke-linejoin: round; }
-    .area-label { font-size: 11px; fill: #565c65; paint-order: stroke; stroke: #f1f3f6; stroke-width: 3px; }
+    .area-label { font-size: 13px; fill: #565c65; paint-order: stroke; stroke: #f1f3f6; stroke-width: 3px; }
     .grid { stroke: #ececec; }
-    .tick { font-size: 10px; fill: #71767a; }
+    .tick { font-size: 13px; fill: #71767a; }
     .point { stroke: #1b1b1b; stroke-width: 1.5; cursor: pointer; }
-    .point:focus { outline: none; stroke: #1b1b1b; stroke-width: 3; }
+    .point:focus { outline:none; }
+    .point:focus .marker { stroke:#1b1b1b; stroke-width:3; }
+    .point-hit { fill:transparent; stroke:none; }
+    .chooser { border:1px solid #a9aeb1; padding:1rem; margin-top:.75rem; }
+    .chooser ul { list-style:none; padding:0; max-height:18rem; overflow:auto; }
+    .chooser button { min-height:44px; white-space:normal; text-align:left; }
     .ring { fill: none; stroke: #1b1b1b; stroke-width: 2; }
     .tooltip { position: absolute; box-sizing: border-box; width: max-content; pointer-events: none; background: #fff; color: #1b1b1b;
                border: 1px solid #a9aeb1; border-radius: 4px; padding: .35rem .5rem; font-size: .85rem; max-width: min(20rem, calc(100% - 16px)); max-height: calc(100% - 16px); overflow: auto; z-index: 1;
@@ -109,6 +128,9 @@ export class PointMapComponent {
   readonly maxHeight = input(560);
   readonly pick = output<string>();
 
+  private readonly choiceIds = signal<string[]>([]);
+  private readonly choiceHeading = viewChild<ElementRef<HTMLElement>>('choiceHeading');
+  protected readonly choices = computed(() => this.points().filter(p => this.choiceIds().includes(p.id)));
   private readonly areas = inject(MapAreas).areas;
   private readonly tooltipBox = viewChild<ElementRef<HTMLElement>>('tooltipBox');
   private readonly plot = viewChild.required<ElementRef<HTMLElement>>('plot');
@@ -213,8 +235,8 @@ export class PointMapComponent {
     if (!s.area.label) return [];
     const name = s.area.name.replace(/ County$/, '');
     const p = this.toScreen(...this.xy(s.area.label.latitude, s.area.label.longitude));
-    const fits = s.maxX - s.minX > name.length * 6.5 + 8 && s.maxY - s.minY > 18;
-    const inside = p.x > 20 && p.x < this.W() - 20 && p.y > 14 && p.y < this.H() - 14;
+    const fits = s.maxX - s.minX > name.length * 7.5 + 8 && s.maxY - s.minY > 18;
+    const inside = p.x > name.length * 3.75 + 4 && p.x < this.W() - name.length * 3.75 - 4 && p.y > 14 && p.y < this.H() - 14;
     return fits && inside ? [{ id: s.area.id, name, x: p.x, y: p.y + 4 }] : [];
   }));
 
@@ -252,7 +274,7 @@ export class PointMapComponent {
   protected readonly grid = computed(() => {
     const v = this.view();
     const spanLon = (this.W() * v.scale) / this.cosLat();
-    const step = [0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2].find(s => spanLon / s <= 6) ?? 5;
+    const step = [0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2].find(s => spanLon / s <= Math.max(2, Math.floor(this.W() / 90))) ?? 5;
     const lines: { key: string; vertical: boolean; pos: number; label: string }[] = [];
     const lonMin = (v.cx - (this.W() / 2) * v.scale) / this.cosLat(), lonMax = (v.cx + (this.W() / 2) * v.scale) / this.cosLat();
     for (let lon = Math.ceil(lonMin / step) * step; lon <= lonMax; lon += step) {
@@ -269,6 +291,26 @@ export class PointMapComponent {
     if (category === 'suspect') return 'M0,-7 L7,6 L-7,6 Z';
     if (category === 'notACase') return 'M-6,-6 H6 V6 H-6 Z';
     return 'M-6,0 A6,6 0 1,0 6,0 A6,6 0 1,0 -6,0';
+  }
+
+  protected choosePoint(id: string): void {
+    this.active.set(id);
+    const target = this.projected().find(p => p.point.id === id);
+    const close = target ? this.projected().filter(p => Math.hypot(p.x - target.x, p.y - target.y) < 28).map(p => p.point.id) : [];
+    if (close.length > 1) {
+      this.choiceIds.set(close);
+      setTimeout(() => this.choiceHeading()?.nativeElement.focus());
+    } else { this.choiceIds.set([]); this.pick.emit(id); }
+  }
+
+  protected selectChoice(id: string): void {
+    this.choiceIds.set([]); this.active.set(id); this.pick.emit(id);
+    this.plot().nativeElement.focus();
+  }
+
+  protected closeChoices(event?: Event): void {
+    event?.preventDefault(); event?.stopPropagation(); this.choiceIds.set([]);
+    this.plot().nativeElement.querySelector<SVGElement>(`[data-point-id="${this.activeId()}"]`)?.focus();
   }
 
   protected activate(event: Event, id: string): void {
@@ -296,7 +338,7 @@ export class PointMapComponent {
   }
 
   protected dragStart(event: PointerEvent): void {
-    if ((event.target as Element).classList.contains('point')) return;
+    if ((event.target as Element).closest('.point')) return;
     const v = this.view();
     this.drag = { x: event.clientX, y: event.clientY, cx: v.cx, cy: v.cy };
     (event.currentTarget as HTMLElement).setPointerCapture?.(event.pointerId);

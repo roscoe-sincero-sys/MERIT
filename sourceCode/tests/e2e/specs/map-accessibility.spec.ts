@@ -11,7 +11,7 @@ test('classification shapes match the legend and edge tooltips stay inside the m
   await page.goto('/app/map'); await angularReady(page);
   const points = page.locator('merit-point-map .point');
   await expect(points).toHaveCount(3);
-  const shapes = await points.evaluateAll(elements => elements.map(e => e.getAttribute('d')));
+  const shapes = await points.locator('path.marker').evaluateAll(elements => elements.map(e => e.getAttribute('d')));
   expect(new Set(shapes).size).toBe(3);
   expect(await page.locator('.legend-marker path').evaluateAll(elements => elements.map(e => e.getAttribute('d')))).toEqual(shapes);
   for (let i = 0; i < 3; i++) {

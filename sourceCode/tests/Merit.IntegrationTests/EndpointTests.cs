@@ -416,7 +416,7 @@ public sealed partial class EndpointTests(MeritFixture fixture, ITestOutputHelpe
     {
         // Issue #50: Open only and Assigned to me were the only choices; no sort, no search.
         var supervisor = await fixture.SignedInAsync("supervisor");
-        static List<string> Numbers(string html) => System.Text.RegularExpressions.Regex.Matches(html, @"<a class=""usa-link"" href=""/cases/[0-9a-f-]{36}"">([A-Z]{2}-\d{4}-\d{6})</a>")
+        static List<string> Numbers(string html) => System.Text.RegularExpressions.Regex.Matches(html, @"<a class=""usa-link"" href=""/cases/[0-9a-f-]{36}(?:\?[^""]*)?"">([A-Z]{2}-\d{4}-\d{6})</a>")
             .Select(m => m.Groups[1].Value).ToList();
 
         string all = await supervisor.Http.GetStringAsync("/cases?openOnly=false");

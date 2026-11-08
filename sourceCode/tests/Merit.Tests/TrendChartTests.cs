@@ -20,7 +20,10 @@ public sealed class TrendChartTests
         var link = Assert.Single(svg.Elements("a"));
         Assert.Equal($"/results/{id}", link.Attribute("href")?.Value);
         Assert.Contains("Jul 1, 2026: <45 ug/dL; venous", link.Attribute("aria-label")?.Value);
-        Assert.Equal("Jul 1, 2026: <45 ug/dL; venous", link.Element("circle")?.Element("title")?.Value);
+        var mark = Assert.Single(link.Elements("circle"), c => c.Attribute("class")?.Value == "venous");
+        Assert.Equal("Jul 1, 2026: <45 ug/dL; venous", mark.Element("title")?.Value);
+        var hit = Assert.Single(link.Elements("circle"), c => c.Attribute("class")?.Value == "point-hit");
+        Assert.Equal("12", hit.Attribute("r")?.Value);
         var lines = svg.Elements("line").Where(e => e.Attribute("class")?.Value == "level").ToList();
         Assert.Equal(2, lines.Count);
         Assert.NotEqual(lines[0].Attribute("y1")?.Value, lines[1].Attribute("y1")?.Value);

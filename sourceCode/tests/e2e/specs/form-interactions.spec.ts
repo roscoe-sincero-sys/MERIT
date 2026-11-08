@@ -86,6 +86,11 @@ test(`a lookup response arriving after ${dismiss} cannot reopen the popup`, asyn
 test('inline person forms have unique IDs and cancel restores the exact opener', async ({ asUser }) => {
   const page = await asUser('supervisor');
   await personPage(page);
+  // Empty child employment and exposure-source sections use progressive disclosure on merged main.
+  for (const label of ['Employment (none recorded)', 'Exposure sources (none recorded)']) {
+    const summary = page.locator('summary').filter({ hasText: label });
+    if (await summary.count()) await summary.click();
+  }
   for (const name of ['Add relationship', 'Add residence', 'Add job', 'Add source', 'Add episode']) {
     await page.getByRole('button', { name, exact: true }).click();
   }
