@@ -47,7 +47,7 @@
                                 @if (r.RunStatus == "ready" && CurrentSession.Has(Permissions.ExtractSubmit))
                                 {
                                     <form hx-post="/extracts/@r.ExtractRunId/submitted" hx-target="#extract-runs" hx-swap="outerHTML"
-                                          hx-confirm="Mark the @runName file as sent to @(r.ExtractType == "CBLS" ? "CDC" : "NIOSH")?@(latest is not null && latest.ExtractRunId != r.ExtractRunId ? " A newer run exists for this period." : "") Do this only after the upload succeeds; it cannot be undone.">
+                                          data-confirm="Mark the @runName file as sent to @(r.ExtractType == "CBLS" ? "CDC" : "NIOSH")?@(latest is not null && latest.ExtractRunId != r.ExtractRunId ? " A newer run exists for this period." : "") Do this only after the upload succeeds; it cannot be undone.">
                                         <button class="usa-button usa-button--outline" type="submit">Mark submitted<span class="usa-sr-only"> @r.ExtractType @Options.Date(r.PeriodStart)</span></button>
                                     </form>
                                 }

@@ -991,6 +991,10 @@ TABLES = [
             c("resultStatus", "VARCHAR (12)", "preliminary, final, corrected or cancelled, as the lab sent it.", null=False,
               check="resultStatus IN ('preliminary', 'final', 'corrected', 'cancelled')"),
             c("supersedesLabResultId", UUID, "Earlier result this corrected or cancelled result replaces."),
+            c("correctionReason", "NVARCHAR (500)", "Reason for explicit manual correction or withdrawal."),
+            c("correctionByUserId", UUID, "Server-resolved user making a correction or withdrawal."),
+            c("correctionUtc", "DATETIME2 (3)", "Actual correction or withdrawal instant."),
+            c("classificationSnapshotJson", "NVARCHAR (MAX)", "First classification decision and effective-date threshold evidence; never overwritten.", check="classificationSnapshotJson IS NULL OR ISJSON(classificationSnapshotJson)=1"),
             c("valueReported", "DECIMAL (18, 6)", "Numeric value as reported; for a < result, the detection limit."),
             c("valueText", "NVARCHAR (60)", "Raw value text as reported, including non-numeric results."),
             c("operator", "VARCHAR (1)", "=, < or >.", null=False, default="'='", check="operator IN ('=', '<', '>')"),
@@ -1135,6 +1139,7 @@ TABLES = [
         "desc": "Contact attempts, education, referrals, medical management notes and letters on a case.",
         "cols": [
             c("caseActivityId", UUID, "Surrogate key.", null=False),
+            c("lifecycleKind", "VARCHAR (12)", "Typed opened, closed or reopened event; legacy untyped events remain intact.", check="lifecycleKind IS NULL OR lifecycleKind IN ('opened','closed','reopened')"),
             c("isVoided", "BIT", "Withdrawn incorrect evidence retained for audit.", null=False, default="0"),
             c("voidReason", "NVARCHAR (500)", "Reason incorrect evidence was withdrawn."),
             *tenant_cols(),
@@ -1779,3 +1784,13 @@ TABLES += [
      "fks": [("analyteSpecimenId", "config.analyteSpecimen", "analyteSpecimenId")],
      "indexes": [{"name": "UX_config_workflowDefinition_name_version", "cols": "rootTenantId, owningTenantId, name, version", "unique": True}]},
 ]
+
+TABLES += [{"schema":"dbo", "name":"caseResultLink", "rls":"person", "personCol":"personId",
+ "desc":"Explicit result association recorded when classified into a case episode. Legacy membership is not inferred from dates.",
+ "cols":[c("caseResultLinkId",UUID,"Association identifier.",null=False), *tenant_cols(),
+   c("personId",UUID,"Patient owning both case and result.",null=False),
+   c("exposureCaseId",UUID,"Case.",null=False), c("labResultId",UUID,"Associated result.",null=False),
+   c("openingActivityId",UUID,"Opening or reopening event; null when original episode was not recorded.")],
+ "fks":[("personId","dbo.person","personId"),("exposureCaseId","dbo.exposureCase","exposureCaseId"),
+        ("labResultId","dbo.labResult","labResultId"),("openingActivityId","dbo.caseActivity","caseActivityId")],
+ "indexes":[{"name":"UX_dbo_caseResultLink_case_result","cols":"exposureCaseId, labResultId","unique":True}]}]

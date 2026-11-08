@@ -1,4 +1,4 @@
-import { angularReady, expect, test } from './helpers';
+import { answerConfirmation, angularReady, expect, test } from './helpers';
 
 // Key flows done with the keyboard alone, at tablet width.
 
@@ -288,7 +288,7 @@ test('match review: delayed response for an earlier record never overwrites the 
   await page.keyboard.press('Alt+Shift+j');
   await reachedA;
   await expect(page.locator('nav ol li [aria-current="true"]')).toContainText('Alvarez, Elena');
-  await expect(page.locator('#record-heading')).toHaveCount(0);
+  await expect(page.locator('#record-heading')).toHaveText('Record review');
   await expect(page.locator('.merit-indicator')).toContainText('Loading the record');
   await page.keyboard.press('Alt+Shift+s');
   expect(decisions).toEqual([]);
@@ -536,8 +536,8 @@ test('work queues: a delayed filter load superseded by sorting cannot carry stal
   await firstRowBox.focus();
   await page.keyboard.press('Space');
   await expect(page.locator('.grid-count')).toHaveText('1 row, 1 selected');
-  page.once('dialog', dialog => dialog.accept());
-  await page.getByRole('button', { name: 'Complete' }).click();
+  const confirmation1 = answerConfirmation(page, true, []);
+  await page.getByRole('button', { name: 'Complete' }).click(); await confirmation1;
   expect(bulkPayloads).toEqual([{ taskIds: [taskB], action: 'complete' }]);
 });
 

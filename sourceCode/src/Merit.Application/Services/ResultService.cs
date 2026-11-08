@@ -31,7 +31,11 @@ public sealed record ResultEntryInput(
     string? ReasonForTest,
     string? PayerType,
     DateOnly? FinalResultDate = null,
-    DateTime? DepartmentReceivedAt = null);
+    DateTime? DepartmentReceivedAt = null,
+    Guid? CorrectsLabResultId = null,
+    byte[]? OriginalRowVersion = null,
+    string? CorrectionReason = null,
+    bool ConfirmCorrection = false);
 
 public sealed record ThresholdLine(string Type, string Label, decimal Level, string Unit, string Outcome);
 
@@ -72,6 +76,19 @@ public sealed class ResultService(
         v.Required(nameof(input.Unit), input.Unit, "Unit");
         v.ThrowIfInvalid();
 
+        LabResultDetailRow? originalResult = null;
+        if (input.CorrectsLabResultId is Guid originalId)
+        {
+            var original = await results.GetLabResultAsync(originalId, ct).ConfigureAwait(false) ?? throw new NotFoundException();
+            originalResult = original;
+            v.When(original.PersonId != input.PersonId || original.ResultRowStatus != "valid", nameof(input.CorrectsLabResultId), "The original result is no longer available for correction. Reload it.");
+            v.When(input.OriginalRowVersion is not { Length: 8 }, nameof(input.OriginalRowVersion), "Reload the original result before correcting it.");
+            v.When(string.IsNullOrWhiteSpace(input.CorrectionReason) || input.CorrectionReason.Length > 500, nameof(input.CorrectionReason), "Enter a correction reason of 1 to 500 characters.");
+            v.When(!input.ConfirmCorrection, nameof(input.ConfirmCorrection), "Verify the original and replacement before saving.");
+            v.When(input.ResultStatus != "corrected", nameof(input.ResultStatus), "A replacement must have corrected laboratory status.");
+            v.ThrowIfInvalid();
+        }
+
         var specimen = refData.Specimen(input.AnalyteSpecimenId!.Value);
         v.When(specimen is null || specimen.AnalyteId != input.AnalyteId, nameof(input.AnalyteSpecimenId), "Choose a specimen for this analyte.");
         v.ThrowIfInvalid();
@@ -86,7 +103,7 @@ public sealed class ResultService(
             nameof(input.Speciation), "Choose a speciation from the list.");
         v.When(specimen.RequiresCreatinine && input.Creatinine is null, nameof(input.Creatinine), "Creatinine is required for this specimen.");
         var today = clock.Today;
-        DateTime receivedUtc = DateTime.UtcNow;
+        DateTime receivedUtc = originalResult?.ReceivedUtc ?? DateTime.UtcNow;
         if (input.DepartmentReceivedAt is DateTime localReceipt)
         {
             localReceipt = DateTime.SpecifyKind(localReceipt, DateTimeKind.Unspecified);
@@ -112,7 +129,9 @@ public sealed class ResultService(
 
         var duplicate = await results.FindDuplicateAsync(input.PersonId, specimen.AnalyteSpecimenId, input.CollectedDate!.Value,
             input.LabOrganizationId!.Value, Clean(input.AccessionNumber), normalized.ValueReported, ct).ConfigureAwait(false);
-        bool isCorrection = input.ResultStatus == "corrected";
+        bool isCorrection = input.CorrectsLabResultId is not null;
+        v.When(input.ResultStatus == "corrected" && !isCorrection, nameof(input.ResultStatus), "Open the original result and choose Correct this result so the replacement is linked explicitly.");
+        v.ThrowIfInvalid();
         bool isDuplicate = duplicate is not null && !isCorrection && duplicate.ResultRowStatus == "valid";
 
         var snapshot = JsonSerializer.Serialize(new Dictionary<string, string?>(StringComparer.Ordinal)
@@ -138,7 +157,9 @@ public sealed class ResultService(
             ReportedDate = input.ReportedDate,
             ReceivedUtc = receivedUtc,
             ResultStatus = input.ResultStatus,
-            SupersedesLabResultId = isCorrection ? duplicate?.LabResultId : null,
+            SupersedesLabResultId = input.CorrectsLabResultId,
+            OriginalRowVersion = input.OriginalRowVersion,
+            CorrectionReason = Clean(input.CorrectionReason),
             ValueReported = normalized.ValueReported,
             ValueText = parsed.RawText,
             Operator = normalized.Operator.ToCode(),
@@ -159,6 +180,10 @@ public sealed class ResultService(
             ResultRowStatus = isDuplicate ? "duplicate" : "valid",
         }, ct).ConfigureAwait(false);
         await audit.CreatedAsync("labResult", id, ct).ConfigureAwait(false);
+        if (input.CorrectsLabResultId is Guid supersededId)
+        {
+            await audit.ChangedAsync("labResult", supersededId, ct).ConfigureAwait(false);
+        }
 
         var analyte = refData.Analyte(specimen.AnalyteId)!;
         string valueDisplay = $"{normalized.Operator.ToCode().Replace("=", string.Empty, StringComparison.Ordinal)}{normalized.ValueReported} {input.Unit}";
@@ -190,6 +215,19 @@ public sealed class ResultService(
 
         return new ResultSaveSummary(id, analyte.DisplayName, valueDisplay, canonicalDisplay, outcome.Population.ToString(), lines,
             Describe(outcome), outcome.ExposureCaseId, outcome.Decision.Explanation, outcome.TasksCreated, false);
+    }
+
+    public async Task WithdrawAsync(Guid id, byte[] rowVersion, string? reason, bool confirmed, CancellationToken ct = default)
+    {
+        session.Require(Permissions.ResultEdit);
+        var row = await results.GetLabResultAsync(id, ct).ConfigureAwait(false) ?? throw new NotFoundException();
+        var v = new Validator();
+        v.When(row.ResultRowStatus != "valid", "reason", "Only a current valid result can be marked entered in error.");
+        v.When(string.IsNullOrWhiteSpace(reason) || reason.Length > 500, "reason", "Enter a reason of 1 to 500 characters.");
+        v.When(!confirmed, "confirmed", "Confirm that this result was entered in error.");
+        v.ThrowIfInvalid();
+        await results.SetRowStatusAsync(id, "enteredInError", rowVersion, ct, reason!.Trim()).ConfigureAwait(false);
+        await audit.ChangedAsync("labResult", id, ct).ConfigureAwait(false);
     }
 
     public async Task<LabResultDetailRow> GetAsync(Guid labResultId, CancellationToken ct = default)

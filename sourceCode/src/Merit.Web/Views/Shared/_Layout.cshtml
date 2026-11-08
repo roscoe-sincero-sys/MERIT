@@ -57,6 +57,10 @@
                         <button class="usa-button usa-button--accent-cool" type="submit">Search</button>
                     </form>
                 }
+                @if (CurrentSession.Has(Permissions.PersonView) && path.Equals("/search", StringComparison.OrdinalIgnoreCase))
+                {
+                    <div class="merit-header__search merit-header__search--shortcut"><a href="#search-q" data-focus-target="search-q">Search people on this page</a></div>
+                }
                 <div id="merit-user" class="merit-header__user">
                     <span class="merit-header__who">@CurrentSession.DisplayName<br /><small>@CurrentSession.ActingTenantName</small></span>
                     @* A control, not a caption: profiles and jurisdictions are switched here (issue #152). *@
@@ -104,6 +108,14 @@
 
     <footer class="merit-footer">MERIT &middot; Synthetic demonstration data only &middot; Every view, change and export of a person, result or case is audited.</footer>
 
+    <dialog id="confirmation-dialog" class="merit-dialog" aria-labelledby="confirmation-heading" aria-describedby="confirmation-message">
+        <h2 id="confirmation-heading">Confirm action</h2>
+        <p id="confirmation-message"></p>
+        <div class="merit-section__actions">
+            <button type="button" class="usa-button usa-button--outline" data-confirm-cancel autofocus>Cancel</button>
+            <button type="button" class="usa-button usa-button--secondary" data-confirm-accept>Continue</button>
+        </div>
+    </dialog>
     <dialog id="unsaved-work-dialog" class="merit-dialog" aria-labelledby="unsaved-work-heading" aria-describedby="unsaved-work-description">
         <h2 id="unsaved-work-heading">Leave without saving?</h2>
         <p id="unsaved-work-description">This page has unsaved changes. Leaving will discard them. Choose Stay to review and save your work.</p>

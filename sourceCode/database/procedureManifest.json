@@ -5882,6 +5882,18 @@
     "type": "UNIQUEIDENTIFIER",
     "hasDefault": true,
     "isOutput": false
+   },
+   {
+    "name": "originalRowVersion",
+    "type": "BINARY (8)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "correctionReason",
+    "type": "NVARCHAR (500)",
+    "hasDefault": true,
+    "isOutput": false
    }
   ]
  },
@@ -6795,6 +6807,29 @@
   ]
  },
  {
+  "name": "dbo.uspSaveResultEvaluation",
+  "kind": "write",
+  "grants": [
+   "meritWebRole",
+   "meritWorkerRole"
+  ],
+  "permission": "result.edit",
+  "params": [
+   {
+    "name": "labResultId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "snapshotJson",
+    "type": "NVARCHAR (MAX)",
+    "hasDefault": false,
+    "isOutput": false
+   }
+  ]
+ },
+ {
   "name": "dbo.uspSaveStagingCorrection",
   "kind": "write",
   "grants": [
@@ -7110,6 +7145,12 @@
     "name": "rowVersion",
     "type": "BINARY (8)",
     "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "reason",
+    "type": "NVARCHAR (500)",
+    "hasDefault": true,
     "isOutput": false
    }
   ]

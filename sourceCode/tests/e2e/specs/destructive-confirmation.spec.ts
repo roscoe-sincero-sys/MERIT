@@ -1,4 +1,4 @@
-import { angularReady, expect, test } from './helpers';
+import { answerConfirmation, angularReady, expect, test } from './helpers';
 
 test('held rejection cancels without writing and clears the reason only on success', async ({ asUser }) => {
   const page = await asUser('supervisor');
@@ -19,12 +19,14 @@ test('held rejection cancels without writing and clears the reason only on succe
   const reason = page.getByLabel('Reject reason', { exact: true });
   await reason.fill('Duplicate');
   const reject = page.getByRole('button', { name: 'Reject selected', exact: true });
-  page.once('dialog', async d => { expect(d.message()).toContain('1 selected held record'); await d.dismiss(); });
-  await reject.click(); expect(writes).toBe(0); await expect(reason).toHaveValue('Duplicate');
-  page.once('dialog', d => d.accept()); await reject.click();
+  const confirmation1 = answerConfirmation(page, false, ['1 selected held record']);
+  await reject.click(); await confirmation1; expect(writes).toBe(0); await expect(reason).toHaveValue('Duplicate');
+  const confirmation2 = answerConfirmation(page, true, []);
+  await reject.click(); await confirmation2;
   await expect(page.getByRole('alert')).toBeVisible(); await expect(reason).toHaveValue('Duplicate');
   success = true;
-  page.once('dialog', d => d.accept()); await reject.click();
+  const confirmation3 = answerConfirmation(page, true, []);
+  await reject.click(); await confirmation3;
   await expect(reason).toHaveValue(''); expect(writes).toBe(2);
 });
 
@@ -39,11 +41,11 @@ test('plain admin forms confirm MFA reset and ending a grant before POST', async
     writes++; await route.fulfill({ status: 303, headers: { location: page.url() } });
   });
   for (const button of [page.getByRole('button', { name: /Reset MFA after/ }), page.getByRole('button', { name: /^End / }).first()]) {
-    page.once('dialog', async d => { expect(d.message()).toContain('sessions'); await d.dismiss(); });
-    await button.click(); expect(writes).toBe(0);
+    const confirmation4 = answerConfirmation(page, false, ['sessions']);
+    await button.click(); await confirmation4; expect(writes).toBe(0);
   }
-  page.once('dialog', d => d.accept());
-  await page.getByRole('button', { name: /Reset MFA after/ }).click();
+  const confirmation5 = answerConfirmation(page, true, []);
+  await page.getByRole('button', { name: /Reset MFA after/ }).click(); await confirmation5;
   await expect.poll(() => writes).toBe(1);
   await context.close();
 });
@@ -63,8 +65,9 @@ test('cluster removal names its case and cluster and cancellation sends nothing'
   });
   await page.goto(`/app/clusters/${id}`); await angularReady(page);
   const button = page.getByRole('button', { name: /Remove from cluster/ });
-  page.once('dialog', async d => { expect(d.message()).toContain('PB-2026-000123'); expect(d.message()).toContain('Harbor review'); await d.dismiss(); });
-  await button.click(); expect(writes).toBe(0);
-  page.once('dialog', d => d.accept()); await button.click();
+  const confirmation6 = answerConfirmation(page, false, ['PB-2026-000123', 'Harbor review']);
+  await button.click(); await confirmation6; expect(writes).toBe(0);
+  const confirmation7 = answerConfirmation(page, true, []);
+  await button.click(); await confirmation7;
   await expect.poll(() => writes).toBe(1);
 });

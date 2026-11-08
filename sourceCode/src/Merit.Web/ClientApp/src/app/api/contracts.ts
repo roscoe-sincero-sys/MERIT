@@ -135,6 +135,7 @@ export interface AnalyteOptionDto {
 }
 
 export interface TimelineEventDto {
+  href?: string | null;
   date: string;
   endDate: string | null;
   kind: 'result' | 'place' | 'job' | 'case' | 'pregnancy';

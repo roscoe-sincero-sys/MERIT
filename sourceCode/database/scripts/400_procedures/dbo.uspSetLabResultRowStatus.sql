@@ -50,6 +50,7 @@ CREATE OR ALTER PROCEDURE dbo.uspSetLabResultRowStatus
       @labResultId     UNIQUEIDENTIFIER
       , @resultRowStatus VARCHAR (20)
       , @rowVersion      BINARY (8)
+      , @reason NVARCHAR (500) = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -96,14 +97,30 @@ BEGIN
         -- ===== The procedure's own work starts here. Everything above and below is boilerplate. ==
         -- =========================================================================================
 
-        UPDATE dbo.labResult SET resultRowStatus = @resultRowStatus
-         WHERE labResultId = @labResultId AND isDeleted = 0 AND rowVersion = @rowVersion;
+        IF @resultRowStatus NOT IN ('enteredInError','duplicate','rejected')
+        BEGIN
+            ;THROW 51422, N'Choose an allowed withdrawal status.', 1;
+        END;
+        IF @resultRowStatus='enteredInError' AND NULLIF(TRIM(@reason),N'') IS NULL
+        BEGIN
+            ;THROW 51422, N'A reason is required to mark a result entered in error.', 1;
+        END;
+        UPDATE dbo.labResult SET resultRowStatus = @resultRowStatus, correctionReason=@reason,
+            correctionByUserId=auth.udfSessionUserId(), correctionUtc=SYSUTCDATETIME()
+         WHERE labResultId = @labResultId AND isDeleted = 0 AND rowVersion = @rowVersion AND resultRowStatus='valid';
         IF @@ROWCOUNT = 0
         BEGIN
             ;THROW 51409, N'This record was changed by someone else, or is no longer available. Reload it and try again.', 1;
         END;
 
-        SET @Comments = N'Result status changed.';
+        INSERT dbo.workTask(workTaskId,rootTenantId,owningTenantId,queueCode,title,detail,personId,exposureCaseId,labResultId)
+        SELECT NEWID(),c.rootTenantId,c.owningTenantId,'caseFollowUp',N'Review withdrawn result',
+               N'A result was withdrawn. Review classification, highest result, tasks and notifications. The original report is retained; cases and tasks are not automatically closed.',
+               c.personId,c.exposureCaseId,@labResultId
+          FROM dbo.exposureCase c JOIN dbo.labResult r ON r.personId=c.personId
+          JOIN config.analyteSpecimen s ON s.analyteSpecimenId=r.analyteSpecimenId AND s.analyteId=c.analyteId
+         WHERE r.labResultId=@labResultId AND c.isDeleted=0;
+        SET @Comments = N'Result status changed; associated cases require review.';
 
         -- =========================================================================================
         -- ===== End of the procedure's own work. ===================================================

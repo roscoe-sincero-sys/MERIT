@@ -36,6 +36,7 @@
         </div>
     </div>
     <p>
+        <a class="usa-button usa-button--outline" href="/results/@s.LabResultId">View saved result and interpretation</a>
         @if (s.ExposureCaseId is Guid cid) { <a class="usa-button" href="/cases/@cid">Open the case</a> }
         <a class="usa-button usa-button--outline" href="/people/@Model.PersonId/results/new">Enter another result</a>
         <a class="usa-button usa-button--unstyled" href="/people/@Model.PersonId">Back to the person</a>

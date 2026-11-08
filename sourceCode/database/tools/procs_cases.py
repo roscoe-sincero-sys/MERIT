@@ -20,8 +20,8 @@ END;
 UPDATE dbo.exposureCase SET caseStatus = 'open', closedDate = NULL, closureReason = NULL
  WHERE exposureCaseId = @exposureCaseId AND caseStatus = 'closed' AND rowVersion = @rowVersion AND isDeleted = 0;
 {CONCURRENCY}
-INSERT dbo.caseActivity (caseActivityId, rootTenantId, owningTenantId, exposureCaseId, activityType, activityDate, workerUserId, note)
-VALUES ({NEWID}, @root, @owner, @exposureCaseId, 'statusChange', auth.udfSessionToday (), auth.udfSessionUserId (), CONCAT (N'Reopened: ', @reason));
+INSERT dbo.caseActivity (caseActivityId, rootTenantId, owningTenantId, exposureCaseId, activityType, activityDate, workerUserId, note, lifecycleKind)
+VALUES ({NEWID}, @root, @owner, @exposureCaseId, 'statusChange', auth.udfSessionToday (), auth.udfSessionUserId (), CONCAT (N'Reopened: ', @reason), 'reopened');
 INSERT dbo.workTask (workTaskId, rootTenantId, owningTenantId, queueCode, title, exposureCaseId, personId)
 VALUES ({NEWID}, @root, @owner, 'caseFollowUp', N'Review reopened case', @exposureCaseId, @person);
 SET @Comments = N'Case reopened with review task.';
@@ -90,9 +90,12 @@ VALUES (@exposureCaseId, @root, @owner, @number, @personId, @analyteId, @populat
         'open', @qualifyingLabResultId, @qualifyingLabResultId, @workflowTemplate, @openedDate);
 
 INSERT dbo.caseActivity (caseActivityId, rootTenantId, owningTenantId, exposureCaseId, activityType, activityDate,
-                         workerUserId, note)
+                         workerUserId, note, lifecycleKind)
 VALUES ({NEWID}, @root, @owner, @exposureCaseId, 'statusChange', @openedDate, auth.udfSessionUserId (),
-        CONCAT (N'Case opened as ', @classification, N' from a qualifying result.'));
+        CONCAT (N'Case opened as ', @classification, N' from a qualifying result.'), 'opened');
+INSERT dbo.caseResultLink(caseResultLinkId,rootTenantId,owningTenantId,personId,exposureCaseId,labResultId,openingActivityId)
+SELECT NEWID(),@root,@owner,@personId,@exposureCaseId,@qualifyingLabResultId,caseActivityId
+ FROM dbo.caseActivity WHERE exposureCaseId=@exposureCaseId AND lifecycleKind='opened';
 
 EXEC dbo.uspRefreshPersonAccess @personId = @personId;
 
@@ -119,6 +122,14 @@ DECLARE @before VARCHAR (12), @after VARCHAR (12), @root UNIQUEIDENTIFIER, @owne
 SELECT @before = classification, @root = rootTenantId, @owner = owningTenantId
   FROM dbo.exposureCase WITH (UPDLOCK) WHERE exposureCaseId = @exposureCaseId AND isDeleted = 0;
 
+IF NOT EXISTS(SELECT 1 FROM dbo.exposureCase c JOIN dbo.labResult r ON r.personId=c.personId
+    JOIN config.analyteSpecimen s ON s.analyteSpecimenId=r.analyteSpecimenId AND s.analyteId=c.analyteId
+    WHERE c.exposureCaseId=@exposureCaseId AND r.labResultId=@labResultId AND c.caseStatus<>'closed'
+      AND c.isDeleted=0 AND r.isDeleted=0 AND r.resultRowStatus='valid' AND r.resultStatus IN ('final','corrected'))
+BEGIN
+    ;THROW 51422, N'Only a current final result for this patient and substance can attach to an active case.', 1;
+END;
+
 UPDATE dbo.exposureCase
    SET highestLabResultId     = IIF (@isHighest = 1, @labResultId, highestLabResultId)
      , computedClassification = @computedClassification
@@ -135,6 +146,15 @@ BEGIN
                                                N' by a new result.'));
 END;
 
+IF NOT EXISTS(SELECT 1 FROM dbo.caseResultLink WITH(UPDLOCK,HOLDLOCK) WHERE exposureCaseId=@exposureCaseId AND labResultId=@labResultId)
+BEGIN
+    INSERT dbo.caseResultLink(caseResultLinkId,rootTenantId,owningTenantId,personId,exposureCaseId,labResultId,openingActivityId)
+    SELECT NEWID(),c.rootTenantId,c.owningTenantId,c.personId,c.exposureCaseId,@labResultId,
+           (SELECT TOP(1) caseActivityId FROM dbo.caseActivity WHERE exposureCaseId=c.exposureCaseId AND lifecycleKind IN ('opened','reopened') AND isDeleted=0 ORDER BY createdDateUtc DESC,caseActivityId DESC)
+      FROM dbo.exposureCase c JOIN dbo.labResult r ON r.labResultId=@labResultId AND r.personId=c.personId
+      JOIN config.analyteSpecimen s ON s.analyteSpecimenId=r.analyteSpecimenId AND s.analyteId=c.analyteId
+     WHERE c.exposureCaseId=@exposureCaseId AND c.isDeleted=0;
+END;
 SELECT @before AS classificationBefore, @after AS classificationAfter;
 
 SET @Comments = N'Result attached to case.';
@@ -157,7 +177,7 @@ SELECT c.exposureCaseId, c.caseNumber, c.personId, p.lastName, p.firstName, p.do
        c.overrideReason, c.caseStatus, c.exposureCategory, c.workflowTemplate, c.openedDate, c.closedDate,
        c.closureReason, c.assignedToUserId, u.displayName AS assignedToName, c.owningTenantId,
        t.tenantName AS owningTenantName, c.qualifyingLabResultId, c.highestLabResultId,
-       h.valueCanonical AS highestValue, h.unitCanonical AS highestUnit, h.collectedDate AS highestCollectedDate,
+       h.valueCanonical AS highestValue, h.unitCanonical AS highestUnit, h.collectedDate AS highestCollectedDate, h.resultRowStatus AS highestResultRowStatus,
        c.rowVersion, dbo.udfCaseClosureReviewStamp(c.exposureCaseId) AS closureReviewToken,
        (SELECT COUNT(*) FROM dbo.vwPatientActivityStream AS ca WHERE ca.exposureCaseId=c.exposureCaseId AND ca.activityType='contactAttempt' AND ca.isDeleted=0 AND ca.isVoided=0
         AND ca.outcome IN ('noAnswer','leftMessage','wrongNumber') AND (ca.contactPersonId IS NOT NULL OR NULLIF(TRIM(ca.recipientLabel),N'') IS NOT NULL)) AS failedContactAttempts
@@ -170,16 +190,22 @@ SELECT c.exposureCaseId, c.caseNumber, c.personId, p.lastName, p.firstName, p.do
  WHERE c.exposureCaseId = @exposureCaseId;
 
 SELECT r.labResultId, r.collectedDate, r.operator, r.valueCanonical, r.unitCanonical, r.sampleType, r.testMethod,
-       r.resultStatus, r.resultRowStatus, s.specimen, lab.organizationName AS labName
+       r.resultStatus, r.resultRowStatus, s.specimen, lab.organizationName AS labName,
+       CASE WHEN EXISTS(SELECT 1 FROM dbo.caseResultLink l WHERE l.exposureCaseId=@exposureCaseId AND l.labResultId=r.labResultId
+          AND l.openingActivityId=(SELECT TOP(1) caseActivityId FROM dbo.caseActivity WHERE exposureCaseId=@exposureCaseId AND lifecycleKind IN ('opened','reopened') AND isDeleted=0 ORDER BY createdDateUtc DESC,caseActivityId DESC)) THEN 'currentEpisode'
+            WHEN EXISTS(SELECT 1 FROM dbo.caseResultLink l WHERE l.exposureCaseId=@exposureCaseId AND l.labResultId=r.labResultId) THEN 'earlierOrUnknownEpisode'
+            WHEN EXISTS(SELECT 1 FROM dbo.exposureCase c WHERE c.exposureCaseId=@exposureCaseId AND (c.qualifyingLabResultId=r.labResultId OR c.highestLabResultId=r.labResultId)) THEN 'legacyCaseResult'
+            ELSE 'patientContext' END AS membership
   FROM dbo.labResult AS r
   JOIN config.analyteSpecimen AS s ON s.analyteSpecimenId = r.analyteSpecimenId
   LEFT JOIN dbo.organization AS lab ON lab.organizationId = r.labOrganizationId
  WHERE r.personId = @personId AND s.analyteId = @analyteId AND r.isDeleted = 0
  ORDER BY r.collectedDate DESC;
 
-SELECT ca.caseActivityId, ca.activityType, ca.activityDate, ca.outcome, ca.note, ca.isVoided, ca.voidReason, u.displayName AS workerName,
+SELECT ca.caseActivityId, ca.activityType, ca.activityDate, ca.outcome, ca.note, ca.isVoided, ca.voidReason, meta.lifecycleKind, u.displayName AS workerName,
        cp.lastName AS contactLastName, cp.firstName AS contactFirstName, ca.createdDateUtc
   FROM dbo.vwPatientActivityStream AS ca
+  LEFT JOIN dbo.caseActivity AS meta ON meta.caseActivityId=ca.caseActivityId
   LEFT JOIN auth.appUser AS u ON u.appUserId = ca.workerUserId
   LEFT JOIN dbo.person AS cp ON cp.personId = ca.contactPersonId
  WHERE ca.exposureCaseId = @exposureCaseId AND ca.isDeleted = 0
@@ -517,9 +543,9 @@ UPDATE dbo.exposureCase
 {CONCURRENCY}
 
 INSERT dbo.caseActivity (caseActivityId, rootTenantId, owningTenantId, exposureCaseId, activityType, activityDate,
-                         workerUserId, note)
+                         workerUserId, note, lifecycleKind)
 VALUES ({NEWID}, @root, @owner, @exposureCaseId, 'statusChange', @closedDate, auth.udfSessionUserId (),
-        CONCAT (N'Case closed: ', @closureReason, IIF (@note IS NULL, N'', N'. ' + @note)));
+        CONCAT (N'Case closed: ', @closureReason, IIF (@note IS NULL, N'', N'. ' + @note)), 'closed');
 
 UPDATE dbo.workTask
    SET taskStatus = 'dismissed', completedUtc = SYSUTCDATETIME (), completedByUserId = auth.udfSessionUserId (),

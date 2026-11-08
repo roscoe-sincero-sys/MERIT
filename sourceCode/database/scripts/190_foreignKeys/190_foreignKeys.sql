@@ -831,3 +831,27 @@ BEGIN
         ADD CONSTRAINT FK_config_workflowDefinition_config_analyteSpecimen FOREIGN KEY (analyteSpecimenId) REFERENCES config.analyteSpecimen (analyteSpecimenId);
 END;
 GO
+IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_dbo_caseResultLink_dbo_person')
+BEGIN
+    ALTER TABLE dbo.caseResultLink
+        ADD CONSTRAINT FK_dbo_caseResultLink_dbo_person FOREIGN KEY (personId) REFERENCES dbo.person (personId);
+END;
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_dbo_caseResultLink_dbo_exposureCase')
+BEGIN
+    ALTER TABLE dbo.caseResultLink
+        ADD CONSTRAINT FK_dbo_caseResultLink_dbo_exposureCase FOREIGN KEY (exposureCaseId) REFERENCES dbo.exposureCase (exposureCaseId);
+END;
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_dbo_caseResultLink_dbo_labResult')
+BEGIN
+    ALTER TABLE dbo.caseResultLink
+        ADD CONSTRAINT FK_dbo_caseResultLink_dbo_labResult FOREIGN KEY (labResultId) REFERENCES dbo.labResult (labResultId);
+END;
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_dbo_caseResultLink_dbo_caseActivity')
+BEGIN
+    ALTER TABLE dbo.caseResultLink
+        ADD CONSTRAINT FK_dbo_caseResultLink_dbo_caseActivity FOREIGN KEY (openingActivityId) REFERENCES dbo.caseActivity (caseActivityId);
+END;
+GO

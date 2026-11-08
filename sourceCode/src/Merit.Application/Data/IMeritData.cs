@@ -224,7 +224,9 @@ public interface IResultData
 
     Task UpdateDerivedAsync(Guid labResultId, Guid? personId, int? ageAtCollectionMonths, string population, bool isIndeterminate, CancellationToken ct = default);
 
-    Task SetRowStatusAsync(Guid labResultId, string resultRowStatus, byte[] rowVersion, CancellationToken ct = default);
+    Task SetRowStatusAsync(Guid labResultId, string resultRowStatus, byte[] rowVersion, CancellationToken ct = default, string? reason = null);
+
+    Task SaveEvaluationAsync(Guid labResultId, string snapshotJson, CancellationToken ct = default);
 
     Task<LabResultDetailRow?> GetLabResultAsync(Guid labResultId, CancellationToken ct = default);
 

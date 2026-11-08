@@ -12,6 +12,22 @@
           hx-status:422="target:#result-form swap:outerHTML">
         @Html.AntiForgeryToken()
         @FormErrors.RequiredNote
+        <section class="merit-section" aria-label="Patient identity">
+            <strong>@Model.PersonName</strong> &middot; Date of birth: @(Model.PersonDob is null ? "Not recorded - verify patient identity before entry" : Options.Date(Model.PersonDob))
+            @if (!string.IsNullOrEmpty(Model.PersonIdentifiers)) { <p>@Model.PersonIdentifiers</p> }
+            <p>Before saving, compare the patient, collection date, substance, specimen, result value and reported unit with the original report. Use the sample collection date, not today's entry date.</p>
+        </section>
+        @if (Model.CorrectsLabResultId is Guid originalId)
+        {
+            <input type="hidden" name="CorrectsLabResultId" value="@originalId" />
+            <input type="hidden" name="OriginalRowVersion" value="@Model.OriginalRowVersion" />
+            <p><a href="/results/@originalId">Review original result</a>. The original report will be preserved. Existing case classifications and tasks require staff review; they will not be automatically closed.</p>
+            <label class="usa-label" for="CorrectionReason">Reason for correction (required)</label>
+            @state.ErrorMessage("CorrectionReason")
+            <textarea class="usa-textarea" id="CorrectionReason" name="CorrectionReason" maxlength="500" required>@Model.CorrectionReason</textarea>
+            <div class="usa-checkbox"><input class="usa-checkbox__input" id="ConfirmCorrection" name="ConfirmCorrection" type="checkbox" value="true" checked="@Model.ConfirmCorrection" /><label class="usa-checkbox__label" for="ConfirmCorrection">I verified the original and replacement against the source report.</label></div>
+            @state.ErrorMessage("ConfirmCorrection")
+        }
         <div class="merit-form-row">
             <div class="@state.GroupClass("FinalResultDate")">
                 <label class="usa-label" for="FinalResultDate">Laboratory final-result date (if known)</label>
@@ -23,7 +39,7 @@
                 <label class="usa-label" for="DepartmentReceivedAt">Department received at (if earlier than entry)</label>
                 @state.ErrorMessage("DepartmentReceivedAt")
                 <input class="usa-input" id="DepartmentReceivedAt" name="DepartmentReceivedAt" type="datetime-local" value="@Model.DepartmentReceivedAt?.ToString("yyyy-MM-ddTHH:mm")" />
-                <p class="usa-hint">@Clock.Zone.DisplayName. Blank records receipt now. Record when the Department actually received the test, including fax/paper received before data entry.</p>
+                <p class="usa-hint">@Clock.Zone.DisplayName. @(Model.CorrectsLabResultId is null ? "Blank records receipt now." : "Blank preserves the original Department receipt time; correcting a transcription does not restart a deadline.") Record when the Department actually received the test, including fax/paper received before data entry.</p>
             </div>
         </div>
         <div class="merit-form-row">
@@ -97,7 +113,17 @@
             <partial name="_Combobox" view-data="required" model='("LabOrganizationId", "LabOrganizationId", "Laboratory", "/lookup/organizations?type=laboratory", Model.LabOrganizationId?.ToString(), Model.LabLabel, (string?)"Type part of the lab name or its CLIA number.")' />
             <partial name="_Combobox" model='("OrderingProviderId", "OrderingProviderId", "Ordering provider", "/lookup/providers", Model.OrderingProviderId?.ToString(), Model.ProviderLabel, (string?)"Last name or NPI.")' />
         </div>
-        <button class="usa-button" type="submit">Save result</button>
+        <section class="merit-section" aria-labelledby="result-review-heading">
+            <h2 id="result-review-heading">Review before saving</h2>
+            <p><strong>@Model.PersonName</strong> &middot; Date of birth: @Options.Date(Model.PersonDob)</p>
+            <dl>
+                <dt>Sample collection date</dt><dd data-result-review="CollectedDate">@(Options.Iso(Model.CollectedDate) is { Length: > 0 } collected ? collected : "Not selected")</dd>
+                <dt>Substance / sample material</dt><dd><span data-result-review="AnalyteId">@Model.Analytes.FirstOrDefault(a => a.Selected)?.Label</span> / <span data-result-review="AnalyteSpecimenId">@Model.Fields.Specimens.FirstOrDefault(a => a.Selected)?.Label</span></dd>
+                <dt>Reported value and unit</dt><dd><span data-result-review="ValueText">@(Model.ValueText ?? "Not entered")</span> <span data-result-review="Unit">@Model.Unit</span></dd>
+            </dl>
+            <p>Compare these details with the source report before saving.</p>
+        </section>
+        <button class="usa-button" type="submit">@(Model.CorrectsLabResultId is null ? "Save result" : "Save correction")</button>
         <a class="usa-button usa-button--unstyled" href="/people/@Model.PersonId">Cancel</a>
     </form>
 </div>

@@ -716,13 +716,69 @@ function resetUploadForm(form) {
     form.querySelector('[data-upload-status]')?.remove();
 }
 window.addEventListener('pageshow', () => document.querySelectorAll('form[data-upload-busy]').forEach(resetUploadForm));
+document.addEventListener('click', event => {
+    const link = event.target.closest('[data-focus-target]');
+    const target = link && document.getElementById(link.dataset.focusTarget);
+    if (target) { event.preventDefault(); target.focus(); target.scrollIntoView({ block: 'center' }); }
+});
 document.addEventListener('htmx:after:request', event => resetUploadForm(event.detail?.ctx?.sourceElement?.closest('form[data-upload-busy]')));
 
-// Plain POST forms use the same explicit confirmation pattern as htmx actions.
-document.addEventListener('submit', event => {
-    const message = event.target.dataset.confirm;
-    if (message && !window.confirm(message)) event.preventDefault();
+// Shared modal confirmation for Razor, htmx and Angular. The native dialog supplies
+// focus containment and Escape; all messages are plain text, never HTML.
+window.meritConfirm = (message, acceptLabel = 'Continue') => new Promise(resolve => {
+    const dialog = document.getElementById('confirmation-dialog');
+    if (!dialog || dialog.open) { resolve(false); return; }
+    const previous = document.activeElement;
+    dialog.querySelector('#confirmation-message').textContent = message;
+    dialog.querySelector('[data-confirm-accept]').textContent = acceptLabel;
+    dialog.returnValue = '';
+    dialog.addEventListener('close', () => {
+        if (previous?.isConnected) previous.focus();
+        resolve(dialog.returnValue === 'accept');
+    }, { once: true });
+    dialog.showModal();
+    dialog.querySelector('[data-confirm-cancel]').focus();
 });
+document.addEventListener('click', event => {
+    if (event.target.closest('[data-confirm-cancel]')) document.getElementById('confirmation-dialog').close('cancel');
+    if (event.target.closest('[data-confirm-accept]')) document.getElementById('confirmation-dialog').close('accept');
+});
+const confirmedActions = new WeakSet();
+function updateResultReview() {
+    const form = document.getElementById('manual-result-form');
+    if (!form) return;
+    form.querySelectorAll('[data-result-review]').forEach(target => {
+        const field = form.elements.namedItem(target.dataset.resultReview);
+        target.textContent = field instanceof HTMLSelectElement ? field.selectedOptions[0]?.textContent || 'Not selected'
+            : field?.value || 'Not entered';
+    });
+}
+document.addEventListener('input', event => { if (event.target.closest('#manual-result-form')) updateResultReview(); });
+document.addEventListener('change', event => { if (event.target.closest('#manual-result-form')) updateResultReview(); });
+document.addEventListener('htmx:after:swap', updateResultReview);
+updateResultReview();
+document.addEventListener('submit', async event => {
+    const form = event.target, message = form.dataset.confirm;
+    if (!message) return;
+    if (confirmedActions.delete(form)) return;
+    event.preventDefault(); event.stopImmediatePropagation();
+    const submitter = event.submitter;
+    if (await window.meritConfirm(message) && form.isConnected) {
+        confirmedActions.add(form);
+        try { form.requestSubmit(submitter?.isConnected ? submitter : undefined); }
+        finally { confirmedActions.delete(form); }
+    }
+}, true);
+document.addEventListener('click', async event => {
+    const control = event.target.closest('[data-confirm]');
+    if (!control || control.tagName === 'FORM') return;
+    if (confirmedActions.delete(control)) return;
+    event.preventDefault(); event.stopImmediatePropagation();
+    if (await window.meritConfirm(control.dataset.confirm) && control.isConnected) {
+        confirmedActions.add(control);
+        try { control.click(); } finally { confirmedActions.delete(control); }
+    }
+}, true);
 
 // Recovery codes stay in this document; copying and printing require an explicit user action.
 document.addEventListener('click', async event => {

@@ -6,7 +6,7 @@
     int first = (f.Page - 1) * Model.PageSize + 1;
     int last = first + Model.Events.Count - 1;
 }
-@if (CurrentSession.Has(Permissions.TenantAdminister)) { <p><a class="usa-link" href="/admin/users">Back to users</a></p> }
+<partial name="_Breadcrumbs" model='(IReadOnlyList<BreadcrumbItem>)[new("Home", "/"), new("Audit history")]' />
 <h1>Audit log</h1>
 <p class="merit-meta">The tamper-evident ledger of views, changes and exports. It holds IDs, actions, users and times only.</p>
 

@@ -21,6 +21,7 @@ BEGIN
     CREATE TABLE dbo.caseActivity
     (
         caseActivityId             UNIQUEIDENTIFIER  NOT NULL,
+        lifecycleKind              VARCHAR (12)      NULL,
         isVoided                   BIT               NOT NULL CONSTRAINT DF_dbo_caseActivity_isVoided DEFAULT (0),
         voidReason                 NVARCHAR (500)    NULL,
         rootTenantId               UNIQUEIDENTIFIER  NOT NULL,
@@ -51,6 +52,8 @@ GO
 -- 2. Additive columns. Each column is also added on its own when missing, so a table deployed by an
 --    earlier release converges on the current definition. A no-op on a fresh install.
 -- -------------------------------------------------------------------------------------------
+IF COL_LENGTH (N'dbo.caseActivity', N'lifecycleKind') IS NULL
+    ALTER TABLE dbo.caseActivity ADD lifecycleKind              VARCHAR (12)      NULL;
 IF COL_LENGTH (N'dbo.caseActivity', N'isVoided') IS NULL
     ALTER TABLE dbo.caseActivity ADD isVoided                   BIT               NOT NULL CONSTRAINT DF_dbo_caseActivity_isVoided DEFAULT (0);
 IF COL_LENGTH (N'dbo.caseActivity', N'voidReason') IS NULL
@@ -63,6 +66,15 @@ IF COL_LENGTH (N'dbo.caseActivity', N'outcome') IS NULL
     ALTER TABLE dbo.caseActivity ADD outcome                    VARCHAR (30)      NULL;
 IF COL_LENGTH (N'dbo.caseActivity', N'note') IS NULL
     ALTER TABLE dbo.caseActivity ADD note                       NVARCHAR (2000)   NULL;
+GO
+
+-- -------------------------------------------------------------------------------------------
+-- 3. Check constraints. System-defined values and cross-column rules.
+-- -------------------------------------------------------------------------------------------
+IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_dbo_caseActivity_lifecycleKind')
+BEGIN
+    ALTER TABLE dbo.caseActivity ADD CONSTRAINT CK_dbo_caseActivity_lifecycleKind CHECK (lifecycleKind IS NULL OR lifecycleKind IN ('opened','closed','reopened'));
+END;
 GO
 
 -- -------------------------------------------------------------------------------------------
@@ -173,6 +185,7 @@ GO
 -- -------------------------------------------------------------------------------------------
 EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'caseActivity', @Description = N'Contact attempts, education, referrals, medical management notes and letters on a case.';
 EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'caseActivity', @ColumnName = N'caseActivityId', @Description = N'Surrogate key.';
+EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'caseActivity', @ColumnName = N'lifecycleKind', @Description = N'Typed opened, closed or reopened event; legacy untyped events remain intact.';
 EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'caseActivity', @ColumnName = N'isVoided', @Description = N'Withdrawn incorrect evidence retained for audit.';
 EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'caseActivity', @ColumnName = N'voidReason', @Description = N'Reason incorrect evidence was withdrawn.';
 EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'caseActivity', @ColumnName = N'rootTenantId', @Description = N'Root tenant (normally a state) the row belongs to. Denormalized onto every row so the row-level security predicate never needs a join; leads the clustered index.';

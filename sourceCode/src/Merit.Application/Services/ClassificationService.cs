@@ -107,6 +107,19 @@ public sealed class ClassificationService(
         await workflows.ReconcileAsync(personId, labResultId, caseId, null, ct).ConfigureAwait(false);
         await workflows.ReconcileAsync(personId, null, null, null, ct).ConfigureAwait(false);
 
+        var evaluation = new ResultForEvaluation(result.Operator, result.ValueCanonical ?? 0, decision.EffectiveSampleType,
+            result.Speciation, population.Population, population.AgeMonths);
+        await results.SaveEvaluationAsync(labResultId, System.Text.Json.JsonSerializer.Serialize(new {
+            EvaluatedUtc = DateTime.UtcNow, CollectionDate = result.CollectedDate, Population = population.Population.ToCode(),
+            population.AgeMonths, result.IsFinal, HasNumericValue = result.ValueCanonical is not null,
+            Explanation = decision.Explanation, Classification = decision.Classification.ToCode(),
+            CaseId = caseId, Tasks = created,
+            Thresholds = result.ValueCanonical is null ? [] : ThresholdEvaluator.Evaluate(evaluation, rules)
+                .Select(o => new { o.Rule.ThresholdId, Type = o.Rule.Type.ToString(), o.Rule.LowerValue, o.Rule.UpperValue,
+                    o.Rule.Comparator, o.Rule.Population, o.Rule.SampleType, o.Rule.Speciation,
+                    o.Rule.Authority, o.Rule.EffectiveFrom, o.Rule.EffectiveTo, Outcome = o.Crossing.ToString(), Unit = specimen.CanonicalUnit }).ToArray()
+        }), ct).ConfigureAwait(false);
+
         return new ClassificationOutcome(population.Population, population.AgeMonths, decision, caseId, caseNumber, owner,
             before, created);
     }

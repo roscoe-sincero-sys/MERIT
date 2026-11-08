@@ -1,0 +1,30 @@
+@model IReadOnlyList<BreadcrumbItem>
+@{
+    string? origin = Context.Request.Query["returnTo"].FirstOrDefault();
+    string? listPath = origin?.Split('?')[0];
+    bool validOrigin = origin is not null && Url.IsLocalUrl(origin)
+        && listPath is "/app/results" or "/app/queues" or "/app/map" or "/cases" or "/investigations";
+    string listLabel = listPath switch
+    {
+        "/app/results" => "lab results",
+        "/app/queues" => "work queue",
+        "/app/map" => "map",
+        "/cases" => "cases",
+        _ => "investigations",
+    };
+}
+<nav aria-label="Breadcrumb" class="merit-breadcrumbs">
+    <ol>
+        @foreach (var item in Model)
+        {
+            <li>
+                @if (item.Url is not null) { <a href="@item.Url">@item.Label</a> }
+                else { <span aria-current="page">@item.Label</span> }
+            </li>
+        }
+    </ol>
+    @if (validOrigin)
+    {
+        <a class="merit-breadcrumbs__return" href="@origin">Return to filtered @listLabel</a>
+    }
+</nav>

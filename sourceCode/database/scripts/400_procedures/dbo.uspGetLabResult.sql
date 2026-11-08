@@ -88,7 +88,8 @@ BEGIN
         -- ===== The procedure's own work starts here. Everything above and below is boilerplate. ==
         -- =========================================================================================
 
-        SELECT r.*, a.analyteId, a.code AS analyteCode, a.displayName AS analyteName, s.specimen,
+        SELECT r.*, (SELECT TOP(1) nr.labResultId FROM dbo.labResult nr WHERE nr.supersedesLabResultId=r.labResultId AND nr.isDeleted=0 ORDER BY nr.createdDateUtc DESC) AS replacementLabResultId,
+               (SELECT displayName FROM auth.appUser WHERE appUserId=r.correctionByUserId) AS correctionByName, a.analyteId, a.code AS analyteCode, a.displayName AS analyteName, s.specimen,
                lab.organizationName AS labName, fac.organizationName AS orderingFacilityName,
                CONCAT (pv.firstName, N' ', pv.lastName) AS orderingProviderName, ib.sourceChannel, ib.fileName
           FROM dbo.labResult AS r

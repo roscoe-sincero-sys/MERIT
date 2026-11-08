@@ -1,3 +1,4 @@
+import { confirmAction } from '../../shared/confirmation';
 import { of, switchMap } from 'rxjs';
 import { Router } from '@angular/router';
 import { ChangeDetectionStrategy, Component, computed, inject, Injectable, input, OnInit, signal } from '@angular/core';
@@ -237,9 +238,9 @@ export class HeldPage implements OnInit {
 
   protected readonly needsMatch = needsMatchReview;
 
-  protected inspect(row: HeldRowDto, moveFocus = true): void {
+  protected async inspect(row: HeldRowDto, moveFocus = true): Promise<void> {
     if (!row || this.store.busy()) return;
-    if (this.store.focusRow()?.stagingRowId !== row.stagingRowId && Object.keys(this.fixes).length && !window.confirm('Discard the unsaved corrections for the open row?')) return;
+    if (this.store.focusRow()?.stagingRowId !== row.stagingRowId && Object.keys(this.fixes).length && !await confirmAction('Discard the unsaved corrections for the open row?')) return;
     this.store.focusRow.set(row); this.fixes = {};
     if (moveFocus) setTimeout(() => document.getElementById('row-detail')?.focus());
   }
@@ -257,12 +258,12 @@ export class HeldPage implements OnInit {
     return '';
   }
 
-  protected correctGroup(field: string, value: string, entire: boolean): void {
+  protected async correctGroup(field: string, value: string, entire: boolean): Promise<void> {
     const g = this.store.group(); if (!g || !field || this.store.busy() || this.store.loading()) return;
     // Say exactly what will be written where, and on how many rows (issue #155).
     const where = `${g.rowCount === 1 ? 'the 1 row' : `all ${g.rowCount} rows`} in this cause, sender and batch`;
     const what = value ? `Change ${this.display.field(field)} to "${value}" on ${where}?` : `Restore the reported ${this.display.field(field)} on ${where}?`;
-    if (entire && !window.confirm(`${what} Release the rows afterwards to rerun validation.`)) return;
+    if (entire && !await confirmAction(`${what} Release the rows afterwards to rerun validation.`)) return;
     this.beginWrite();
     this.api.correctHeldGroup({ reason: g.reasonCode, reportedValue: g.reportedValue, sender: g.senderOrganizationId,
       batch: this.store.batch(), field, value: value || null, selectedIds: entire ? null : [...this.store.selected()] }).subscribe({
@@ -323,14 +324,14 @@ export class HeldPage implements OnInit {
     });
   }
 
-  protected reject(input: HTMLInputElement): void {
+  protected async reject(input: HTMLInputElement): Promise<void> {
     const reason = input.value;
     if (this.store.loading() || this.store.busy() || this.store.selected().size === 0) return;
     if (!reason.trim()) {
       this.store.error.set('A reason is required to reject held records.');
       return;
     }
-    if (!window.confirm(`Reject ${this.display.count(this.store.selected().size, 'selected held record')}? Reason: ${reason.trim()}`)) return;
+    if (!await confirmAction(`Reject ${this.display.count(this.store.selected().size, 'selected held record')}? Reason: ${reason.trim()}`)) return;
     this.beginWrite();
     this.api.rejectHeld({ stagingRowIds: [...this.store.selected()], reason }).subscribe({
       next: r => { input.value = ''; this.done(`${this.display.count(r.updated, 'row')} rejected.`); },

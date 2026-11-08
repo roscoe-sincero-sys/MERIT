@@ -26,7 +26,9 @@ public sealed record ThresholdRule(
     decimal LowerValue,
     decimal? UpperValue,
     string Comparator,
-    string? Authority);
+    string? Authority,
+    DateOnly? EffectiveFrom = null,
+    DateOnly? EffectiveTo = null);
 
 /// <summary>The facts about one result that thresholds are compared against, in canonical units.</summary>
 public sealed record ResultForEvaluation(

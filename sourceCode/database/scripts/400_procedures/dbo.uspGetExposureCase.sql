@@ -96,7 +96,7 @@ BEGIN
                c.overrideReason, c.caseStatus, c.exposureCategory, c.workflowTemplate, c.openedDate, c.closedDate,
                c.closureReason, c.assignedToUserId, u.displayName AS assignedToName, c.owningTenantId,
                t.tenantName AS owningTenantName, c.qualifyingLabResultId, c.highestLabResultId,
-               h.valueCanonical AS highestValue, h.unitCanonical AS highestUnit, h.collectedDate AS highestCollectedDate,
+               h.valueCanonical AS highestValue, h.unitCanonical AS highestUnit, h.collectedDate AS highestCollectedDate, h.resultRowStatus AS highestResultRowStatus,
                c.rowVersion, dbo.udfCaseClosureReviewStamp(c.exposureCaseId) AS closureReviewToken,
                (SELECT COUNT(*) FROM dbo.vwPatientActivityStream AS ca WHERE ca.exposureCaseId=c.exposureCaseId AND ca.activityType='contactAttempt' AND ca.isDeleted=0 AND ca.isVoided=0
                 AND ca.outcome IN ('noAnswer','leftMessage','wrongNumber') AND (ca.contactPersonId IS NOT NULL OR NULLIF(TRIM(ca.recipientLabel),N'') IS NOT NULL)) AS failedContactAttempts
@@ -109,16 +109,22 @@ BEGIN
          WHERE c.exposureCaseId = @exposureCaseId;
 
         SELECT r.labResultId, r.collectedDate, r.operator, r.valueCanonical, r.unitCanonical, r.sampleType, r.testMethod,
-               r.resultStatus, r.resultRowStatus, s.specimen, lab.organizationName AS labName
+               r.resultStatus, r.resultRowStatus, s.specimen, lab.organizationName AS labName,
+               CASE WHEN EXISTS(SELECT 1 FROM dbo.caseResultLink l WHERE l.exposureCaseId=@exposureCaseId AND l.labResultId=r.labResultId
+                  AND l.openingActivityId=(SELECT TOP(1) caseActivityId FROM dbo.caseActivity WHERE exposureCaseId=@exposureCaseId AND lifecycleKind IN ('opened','reopened') AND isDeleted=0 ORDER BY createdDateUtc DESC,caseActivityId DESC)) THEN 'currentEpisode'
+                    WHEN EXISTS(SELECT 1 FROM dbo.caseResultLink l WHERE l.exposureCaseId=@exposureCaseId AND l.labResultId=r.labResultId) THEN 'earlierOrUnknownEpisode'
+                    WHEN EXISTS(SELECT 1 FROM dbo.exposureCase c WHERE c.exposureCaseId=@exposureCaseId AND (c.qualifyingLabResultId=r.labResultId OR c.highestLabResultId=r.labResultId)) THEN 'legacyCaseResult'
+                    ELSE 'patientContext' END AS membership
           FROM dbo.labResult AS r
           JOIN config.analyteSpecimen AS s ON s.analyteSpecimenId = r.analyteSpecimenId
           LEFT JOIN dbo.organization AS lab ON lab.organizationId = r.labOrganizationId
          WHERE r.personId = @personId AND s.analyteId = @analyteId AND r.isDeleted = 0
          ORDER BY r.collectedDate DESC;
 
-        SELECT ca.caseActivityId, ca.activityType, ca.activityDate, ca.outcome, ca.note, ca.isVoided, ca.voidReason, u.displayName AS workerName,
+        SELECT ca.caseActivityId, ca.activityType, ca.activityDate, ca.outcome, ca.note, ca.isVoided, ca.voidReason, meta.lifecycleKind, u.displayName AS workerName,
                cp.lastName AS contactLastName, cp.firstName AS contactFirstName, ca.createdDateUtc
           FROM dbo.vwPatientActivityStream AS ca
+          LEFT JOIN dbo.caseActivity AS meta ON meta.caseActivityId=ca.caseActivityId
           LEFT JOIN auth.appUser AS u ON u.appUserId = ca.workerUserId
           LEFT JOIN dbo.person AS cp ON cp.personId = ca.contactPersonId
          WHERE ca.exposureCaseId = @exposureCaseId AND ca.isDeleted = 0

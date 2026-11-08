@@ -21,7 +21,7 @@
                     @foreach (var i in Model.Rows)
                     {
                         <tr id="inv-@i.InvestigationId">
-                            <td><a class="usa-link" href="/investigations/@i.InvestigationId">@i.InvestigationNumber</a></td>
+                            <td><a class="usa-link" href="/investigations/@i.InvestigationId?returnTo=@Uri.EscapeDataString(Link(Model.PageNumber))">@i.InvestigationNumber</a></td>
                             <td>@Options.Humanize(i.InvestigationType)</td>
                             <td>@i.TargetLabel</td>
                             <td>@Options.Humanize(i.InvestigationStatus)</td>

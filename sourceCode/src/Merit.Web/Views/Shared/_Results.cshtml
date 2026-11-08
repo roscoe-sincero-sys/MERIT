@@ -21,6 +21,26 @@
         <partial name="_TrendChart" model="chart" />
     }
 
+    @if (Model.Rows.Count > 0)
+    {
+        <p>Laboratory status (for example, Final) describes the report, not whether a follow-up case is resolved. Withdrawn, duplicate and superseded rows are history and do not count toward future classification. Open a result date to see its original report, recorded rule decision and correction links.</p>
+        @foreach (var group in Model.Rows.Where(r => r.ResultRowStatus == "valid" && r.ResultStatus is "final" or "corrected")
+            .GroupBy(r => new { r.AnalyteCode, r.Specimen, r.SampleType, r.Speciation, r.TestMethod, r.UnitCanonical }))
+        {
+            var latest = group.OrderByDescending(r => r.CollectedDate).ThenByDescending(r => r.ReceivedUtc).First();
+            var earlier = group.Where(r => r.CollectedDate < latest.CollectedDate).OrderByDescending(r => r.CollectedDate).FirstOrDefault();
+            <p><strong>Latest @Options.Humanize(latest.AnalyteCode) @Options.Humanize(latest.Specimen) @Options.Humanize(latest.SampleType) @latest.Speciation (@Options.Humanize(latest.TestMethod)):</strong>
+                @Options.Value(latest.Operator, latest.ValueCanonical, latest.UnitCanonical) on @Options.Date(latest.CollectedDate).
+                @if (earlier is not null && latest.Operator == "=" && earlier.Operator == "=" && latest.ValueCanonical is not null && earlier.ValueCanonical is not null)
+                {
+                    <span>@(latest.ValueCanonical > earlier.ValueCanonical ? "Higher" : latest.ValueCanonical < earlier.ValueCanonical ? "Lower" : "Unchanged") compared with @Options.Date(earlier.CollectedDate).</span>
+                }
+                else { <span>No simple trend comparison is available for this sample type and reporting limit.</span> }
+                <span>A falling value alone does not close a case.</span>
+            </p>
+        }
+    }
+
     @if (Model.Rows.Count == 0)
     {
         <p class="merit-empty">No results recorded.</p>

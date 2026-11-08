@@ -93,7 +93,7 @@
                                     @if (s.ExceedsStandard == true) { <span class="merit-badge merit-badge--urgent">Hazard</span> }</td>
                                 @if (Model.CanEdit) {
                                     <td><button class="usa-button usa-button--unstyled" type="button" hx-get="/investigations/@i.InvestigationId/samples/@s.EnvironmentalSampleId/edit" hx-target="#dialog-body" hx-swap="innerHTML">Edit reading</button>
-                                    <details><summary>Void reading</summary><form hx-post="/investigations/@i.InvestigationId/samples/@s.EnvironmentalSampleId/void" hx-target="#investigation-body" hx-swap="outerHTML" hx-confirm="Void this reading? The original will remain in the audit history.">
+                                    <details><summary>Void reading</summary><form hx-post="/investigations/@i.InvestigationId/samples/@s.EnvironmentalSampleId/void" hx-target="#investigation-body" hx-swap="outerHTML" data-confirm="Void this reading? The original will remain in the audit history.">
                                         <input type="hidden" name="originalModifiedUtc" value="@s.ModifiedDateUtc.ToString("O")" />
                                         <label class="usa-label" for="void-@s.EnvironmentalSampleId">Reason for voiding</label><input class="usa-input" id="void-@s.EnvironmentalSampleId" name="reason" required maxlength="250" />
                                         <button class="usa-button usa-button--secondary" type="submit">Void sample</button>
