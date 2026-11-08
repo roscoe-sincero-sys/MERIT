@@ -90,7 +90,9 @@ SET @Comments = CONCAT (N'Profile version ', @version, N' saved.');
 , @fileName        NVARCHAR (260)
 , @rawContent      NVARCHAR (MAX)
 , @jobId           UNIQUEIDENTIFIER
-, @contentSha256   CHAR (64) = NULL""",
+, @contentSha256   CHAR (64) = NULL
+, @departmentReceivedUtc DATETIME2(3) = NULL
+, @receiptEvidence NVARCHAR(1000) = NULL""",
         "key": "CONCAT (N'intakeBatchId=', @intakeBatchId, N', intakeProfileId=', @intakeProfileId, N', jobId=', @jobId)",
         "body": """
 DECLARE @root UNIQUEIDENTIFIER = auth.udfSessionRootTenantId ();
@@ -104,10 +106,22 @@ BEGIN
     ;THROW 51404, N'The intake profile was not found.', 1;
 END;
 
+IF @departmentReceivedUtc IS NOT NULL AND auth.udfHasPermission(N'person.edit')=0
+BEGIN
+    ;THROW 51403, N'Patient editing permission is required to attest historical Department receipt.', 1;
+END;
+IF (@departmentReceivedUtc IS NOT NULL AND (@departmentReceivedUtc>SYSUTCDATETIME() OR NULLIF(TRIM(@receiptEvidence),N'') IS NULL))
+ OR (@departmentReceivedUtc IS NULL AND @receiptEvidence IS NOT NULL)
+BEGIN
+    ;THROW 51422, N'Provide an original Department receipt that is not in the future and its verified source evidence.', 1;
+END;
+
 INSERT dbo.intakeBatch (intakeBatchId, rootTenantId, owningTenantId, intakeProfileId, senderOrganizationId, sourceChannel,
-                        fileName, rawContent, contentSha256, receivedUtc, batchStatus, submittedByUserId)
+                        fileName, rawContent, contentSha256, receivedUtc, batchStatus, submittedByUserId,
+                        departmentReceivedUtc,receiptEvidence,receiptTimeZone)
 VALUES (@intakeBatchId, @root, @acting, @intakeProfileId, @sender, 'upload', @fileName, @rawContent, @contentSha256,
-        SYSUTCDATETIME (), 'received', @user);
+        SYSUTCDATETIME (), 'received', @user,@departmentReceivedUtc,@receiptEvidence,
+        CASE WHEN @departmentReceivedUtc IS NOT NULL THEN TRY_CAST(SESSION_CONTEXT(N'timeZone') AS VARCHAR(100)) END);
 
 """ + JOB_SCOPE + """
 
@@ -142,7 +156,7 @@ SELECT TOP (1) intakeBatchId, fileName, receivedUtc
         "params": "@maxRows INT = 50",
         "key": "CONCAT (N'maxRows=', @maxRows)",
         "body": """
-SELECT TOP (@maxRows) b.intakeBatchId, b.fileName, b.sourceChannel, b.receivedUtc, b.batchStatus, b.pauseReason,
+SELECT TOP (@maxRows) b.intakeBatchId, b.fileName, b.sourceChannel, b.receivedUtc, b.departmentReceivedUtc,b.receiptEvidence,b.receiptTimeZone,b.batchStatus, b.pauseReason,
        b.receivedCount, b.loadedCount, b.heldCount, b.rejectedCount, o.organizationName AS senderName,
        u.displayName AS submittedBy
   FROM dbo.intakeBatch AS b
@@ -162,7 +176,7 @@ SELECT TOP (@maxRows) b.intakeBatchId, b.fileName, b.sourceChannel, b.receivedUt
         "key": "CONCAT (N'intakeBatchId=', @intakeBatchId, N', includeContent=', @includeContent)",
         "body": """
 SELECT b.intakeBatchId, b.intakeProfileId, b.senderOrganizationId, o.organizationName AS senderName, b.fileName,
-       b.sourceChannel, b.receivedUtc, b.batchStatus, b.pauseReason, b.receivedCount, b.loadedCount, b.heldCount,
+       b.sourceChannel, b.receivedUtc,b.departmentReceivedUtc,b.receiptEvidence,b.receiptTimeZone,b.batchStatus, b.pauseReason, b.receivedCount, b.loadedCount, b.heldCount,
        b.rejectedCount, IIF (@includeContent = 1, b.rawContent, NULL) AS rawContent
   FROM dbo.intakeBatch AS b
   LEFT JOIN dbo.organization AS o ON o.organizationId = b.senderOrganizationId

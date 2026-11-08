@@ -16,7 +16,7 @@ namespace Merit.Web.Controllers;
 /// SVG. Every section URL also renders as a full page on its own, so anything htmx pushes into history works.
 /// </summary>
 [Route("people")]
-public sealed class PeopleController(IClock clock, PersonService people, PersonPageBuilder builder, IReferenceDataProvider reference, LookupService lookup) : Controller
+public sealed class PeopleController(IClock clock, PersonService people, PersonPageBuilder builder, IReferenceDataProvider reference, LookupService lookup, CareService care, ICurrentSession session) : Controller
 {
     // ------------------------------------------------------------------------------------------ person
     [HttpGet("new")]
@@ -47,7 +47,11 @@ public sealed class PeopleController(IClock clock, PersonService people, PersonP
     [HttpGet("{id:guid}")]
     [Authorize(Policy = Permissions.PersonView)]
     public async Task<IActionResult> Details(Guid id, Guid? analyteId, CancellationToken ct)
-        => View("Details", await builder.BuildAsync(await people.GetPageAsync(id, ct), analyteId, ct));
+    {
+        var model = await builder.BuildAsync(await people.GetPageAsync(id, ct), analyteId, ct);
+        if (session.Has(Permissions.TaskView)) model = model with { TestingPlans = await care.TestingPlansAsync(id, ct) };
+        return View("Details", model);
+    }
 
     [HttpGet("{id:guid}/edit")]
     [Authorize(Policy = Permissions.PersonEdit)]

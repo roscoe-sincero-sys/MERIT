@@ -1,0 +1,29 @@
+@model TestingOutreachModel
+@inject ICurrentSession Session
+@{
+    ViewData["Title"] = "Clinical testing outreach";
+    string Link(int page, bool export = false) => Url.Action(export ? "Export" : "Index", "TestingOutreach", new { Model.Query.DueFilter, Model.Query.PlanKind, Model.Query.AssignedToUserId, Model.Query.TaskStatus, page })!;
+}
+<p><a href="/app/queues">Back to work queues</a></p>
+<h1>Clinical testing outreach</h1>
+<p>Reviewed screening, confirmation and follow-up plans, plus unresolved clinical reviews. Dates and warnings use your agency time zone. Next 7 days includes today through seven calendar days from today. Verify contact details before outreach; a recorded relationship does not establish current contact information.</p>
+<form method="get" action="/testing" class="usa-form merit-form--wide">
+<label class="usa-label" for="dueFilter">When due</label><select class="usa-select" name="dueFilter" id="dueFilter">@foreach(var item in new[] { ("all","All targets and reviews"), ("overdue","Overdue"), ("today","Due today"), ("next7","Today and next 7 days") }) { <option value="@item.Item1" selected="@(Model.Query.DueFilter == item.Item1)">@item.Item2</option> }</select>
+<label class="usa-label" for="planKind">Testing stage</label><select class="usa-select" name="planKind" id="planKind"><option value="">All stages</option>@foreach(var kind in new[] { "screen12", "screen24", "confirmation", "early", "later", "review", "discharge" }) { <option value="@kind" selected="@(Model.Query.PlanKind == kind)">@TestingDisplay.Kind(kind)</option> }</select>
+<label class="usa-label" for="assignedToUserId">Assigned to</label><select class="usa-select" name="assignedToUserId" id="assignedToUserId"><option value="">All staff</option>@foreach(var person in Model.Assignees) { <option value="@person.AppUserId" selected="@(Model.Query.AssignedToUserId == person.AppUserId)">@person.DisplayName</option> }</select>
+<label class="usa-label" for="taskStatus">Plan status</label><select class="usa-select" name="taskStatus" id="taskStatus">@foreach(var item in new[] { ("open","Open work"), ("done","Completed history"), ("dismissed","Dismissed history") }) { <option value="@item.Item1" selected="@(Model.Query.TaskStatus == item.Item1)">@item.Item2</option> }</select>
+<button class="usa-button" type="submit">Apply filters</button>
+</form>
+<p role="status">@Model.Total matching tasks. Each row is one plan or unresolved review; a patient may have more than one.</p>
+@if(Session.Has(Permissions.DataExport)) { <p><a class="usa-button usa-button--outline" href="@Link(1, true)">Export all matching rows to CSV</a></p> }
+@if(Model.Rows.Count == 0) { <p>No tasks match these filters. This does not establish that all patients have an approved testing plan. Use All targets and reviews to include reviews without targets.</p> }
+@foreach(var row in Model.Rows) {
+<article class="merit-section" aria-labelledby="test-@row.WorkTaskId">
+<h2 id="test-@row.WorkTaskId"><a href="/people/@row.PersonId/care/testing#plan-@row.WorkTaskId">@row.PatientName — @TestingDisplay.Kind(row.PlanKind)</a></h2>
+<p><strong>@TestingDisplay.Status(row.TaskStatus, row.DueDate, Clock.Today)</strong> @if(row.IsUrgent) { <strong> · Urgent clinician coordination</strong> } · Target: @(row.DueDate?.ToString("yyyy-MM-dd") ?? "Not yet planned") · Source draw: @(row.AnchorDate?.ToString("yyyy-MM-dd") ?? "Not applicable")</p>
+<p>Assigned to: @(row.AssignedToName ?? "Unassigned") · <a href="/people/@row.PersonId">Patient overview</a> @if(row.ExposureCaseId is Guid caseId) { <span> · <a href="/cases/@caseId">Associated case</a></span> }</p>
+<p><strong>@row.ContactStatus</strong></p>
+@if(!string.IsNullOrWhiteSpace(row.ContactName)) { <dl><dt>Contact</dt><dd>@row.ContactName</dd><dt>Phone</dt><dd>@(row.Phone ?? "Not recorded")</dd><dt>Email</dt><dd>@(row.Email ?? "Not recorded")</dd><dt>Mailing address (current residence)</dt><dd>@(row.MailingAddress ?? "Not recorded")</dd></dl> }
+</article>
+}
+<nav aria-label="Testing outreach pages">@if(Model.Page > 1) { <a href="@Link(Model.Page - 1)">Previous page</a> } <span>Page @Model.Page</span> @if(Model.Page * 50 < Model.Total) { <a href="@Link(Model.Page + 1)">Next page</a> }</nav>

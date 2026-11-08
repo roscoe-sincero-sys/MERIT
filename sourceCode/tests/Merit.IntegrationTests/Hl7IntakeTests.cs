@@ -12,7 +12,7 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Merit.IntegrationTests;
 
 [Collection(MeritCollection.Name)]
-public sealed class Hl7IntakeTests(MeritFixture fixture)
+public sealed partial class Hl7IntakeTests(MeritFixture fixture)
 {
     private static string Segment(string tag, params (int Field, string Value)[] values)
     {
@@ -181,10 +181,12 @@ public sealed class Hl7IntakeTests(MeritFixture fixture)
             return id;
         }
 
-        public async Task<IntakeBatchRow> RunAsync(Guid profile, string content, bool uploadAgain = false)
+        public async Task<IntakeBatchRow> RunAsync(Guid profile, string content, bool uploadAgain = false, DateTime? departmentReceivedAt = null)
         {
             webSession.Current = admin;
-            var batch = await Web.GetRequiredService<IntakeService>().UploadAsync(profile, "native-" + Guid.NewGuid() + (content.StartsWith("MSH") ? ".hl7" : ".csv"), content, uploadAgain);
+            var batch = await Web.GetRequiredService<IntakeService>().UploadAsync(profile, "native-" + Guid.NewGuid() + (content.StartsWith("MSH") ? ".hl7" : ".csv"), content, uploadAgain,
+                historical: departmentReceivedAt is not null, departmentReceivedAt: departmentReceivedAt,
+                receiptEvidence: departmentReceivedAt is null ? null : "Synthetic verified Department receipt ledger, scenario #245", receiptConfirmed: departmentReceivedAt is not null);
             var json = await SqlAsync<string>("SELECT j.* FROM dbo.jobQueue j WHERE payloadJson LIKE '%' + CONVERT(nvarchar(36),@a) + '%' FOR JSON PATH,WITHOUT_ARRAY_WRAPPER", batch);
             var job = JsonSerializer.Deserialize<ClaimedJobRow>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })!;
             workerSession.Current = null;

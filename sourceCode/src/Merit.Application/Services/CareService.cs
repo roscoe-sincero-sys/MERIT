@@ -13,6 +13,30 @@ public sealed record CarePage(Guid PersonId, Guid? CaseId, IReadOnlyList<Patient
 
 public sealed class CareService(ICareData data, IWorkData work, AuditService audit, ICurrentSession session, IClock clock, CaseService cases)
 {
+    public Task<IReadOnlyList<AssignableUserRow>> TestingAssigneesAsync(CancellationToken ct)
+        => cases.AssignableUsersAsync(ct, Permissions.TaskEdit);
+
+    public async Task<(IReadOnlyList<TestingOutreachRow> Rows, int Total, int Page)> TestingOutreachAsync(TestingOutreachQuery query, CancellationToken ct)
+    {
+        session.Require(Permissions.PersonView); session.Require(Permissions.TaskView);
+        var result = await Paging.ReadAsync(query.Page, 50, p => data.TestingOutreachAsync(query with { Page = p }, ct), r => r.TotalCount).ConfigureAwait(false);
+        await audit.ListedAsync("testingOutreach", result.Rows.Count, ct).ConfigureAwait(false);
+        return (result.Rows, result.Total, result.Page);
+    }
+
+    public async Task<IReadOnlyList<TestingOutreachRow>> ExportTestingAsync(TestingOutreachQuery query, CancellationToken ct)
+    {
+        session.Require(Permissions.PersonView); session.Require(Permissions.TaskView); session.Require(Permissions.DataExport);
+        var all = new List<TestingOutreachRow>();
+        for (int page = 1; ; page++)
+        {
+            var rows = await data.TestingOutreachAsync(query with { Page = page }, ct).ConfigureAwait(false);
+            all.AddRange(rows);
+            if (rows.Count < 50) break;
+        }
+        await audit.ExportedAsync("testingOutreach", null, all.Count, ct).ConfigureAwait(false);
+        return all;
+    }
     public async Task<CarePage> PageAsync(Guid personId, Guid? caseId, int activities, int documents, int notifications, CancellationToken ct)
     {
         session.Require(Permissions.PersonView);
@@ -134,7 +158,8 @@ public sealed class CareService(ICareData data, IWorkData work, AuditService aud
     public async Task SaveTestingPlanAsync(TestingPlanSave plan, CancellationToken ct)
     {
         session.Require(Permissions.PersonEdit); session.Require(Permissions.TaskEdit);
-        var v = new Validator(); v.Required("evidence", plan.Evidence, "Clinical/source evidence").MaxLength("evidence", plan.Evidence, 1000, "Clinical/source evidence"); v.ThrowIfInvalid();
+        var v = new Validator(); v.Required("evidence", plan.Evidence, "Clinical/source evidence").MaxLength("evidence", plan.Evidence, 1000, "Clinical/source evidence")
+            .MaxLength("currentGuidanceReason", plan.CurrentGuidanceReason, 1000, "Current guidance decision"); v.ThrowIfInvalid();
         await data.SaveTestingPlanAsync(plan, ct).ConfigureAwait(false);
         await audit.CreatedAsync("testingPlan", plan.WorkTaskId, ct).ConfigureAwait(false);
     }

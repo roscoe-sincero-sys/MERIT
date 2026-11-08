@@ -1,4 +1,5 @@
 @model IntakeModel
+@inject ICurrentSession Session
 @{
     ViewData["Title"] = "Upload lab results";
 }
@@ -63,6 +64,16 @@ else if (Model.Message is not null)
                 <input class="usa-checkbox__input" id="uploadAgain" name="uploadAgain" type="checkbox" value="true" />
                 <label class="usa-checkbox__label" for="uploadAgain">This is a genuine re-send: process it again</label>
             </div>
+        }
+        @if(Session.Has(Permissions.PersonEdit)) {
+        <p>Upload records new Department receipt now. If the Department received these reports earlier, record the verified original receipt below before uploading.</p>
+        <details><summary>Previously received reports / historical import</summary>
+        <p>For reports the Department received earlier, verify the original receipt from an authoritative source. Do not substitute collection or laboratory reporting time. All results in this batch must share that receipt; split files with different receipts. If receipt is unknown, verify it before importing.</p>
+        <div class="usa-checkbox"><input class="usa-checkbox__input" id="historical" name="historical" type="checkbox" value="true" /><label class="usa-checkbox__label" for="historical">This file contains previously received reports.</label></div>
+        <label class="usa-label" for="departmentReceivedAt">Original Department receipt (agency local date and time)</label><input class="usa-input" id="departmentReceivedAt" name="departmentReceivedAt" type="datetime-local" />
+        <label class="usa-label" for="receiptEvidence">Source evidence for the original receipt</label><textarea class="usa-textarea" id="receiptEvidence" name="receiptEvidence" maxlength="1000"></textarea>
+        <div class="usa-checkbox"><input class="usa-checkbox__input" id="receiptConfirmed" name="receiptConfirmed" type="checkbox" value="true" /><label class="usa-checkbox__label" for="receiptConfirmed">I verified that every result in this file shares this Department receipt and the evidence identifies its source.</label></div>
+        </details>
         }
         <button class="usa-button" type="submit">Upload</button>
     </form>

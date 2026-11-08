@@ -26,7 +26,7 @@
 @if(Model.Plans.Count == 0) { <p>No reviewed testing plans. This does not establish that screening or follow-up is complete.</p> }
 @foreach(var p in Model.Plans) {
 <article class="merit-section" id="plan-@p.WorkTaskId"><h3>@p.Title — @Options.Humanize(p.TaskStatus) @(p.IsUrgent ? "· Urgent clinician coordination" : "")</h3>
-<p>Target: @(p.DueDate?.ToString("yyyy-MM-dd") ?? "Clinical review required") @if(p.TaskStatus == "open" && p.DueDate < Clock.Today) { <strong>Overdue</strong> }</p>
+<p>Target: @(p.DueDate?.ToString("yyyy-MM-dd") ?? "Clinical review required") · <strong>@TestingDisplay.Status(p.TaskStatus, p.DueDate, Clock.Today)</strong> · Assigned to: @(p.AssignedToName ?? "Unassigned")</p>
 <p class="care-note">@p.Detail</p>
 @if(p.LabResultId is not null) { <p><a href="/results/@p.LabResultId">Original source draw</a></p> }
 @if(p.CompletedResultId is Guid actual) { <p><a href="/results/@actual">Actual completed test</a></p> }
@@ -56,5 +56,10 @@
 <label class="usa-label" for="testingEvidence">Clinician plan and source evidence</label><textarea class="usa-textarea" id="testingEvidence" name="evidence" required maxlength="1000">@V("evidence")</textarea>
 <div class="usa-checkbox"><input class="usa-checkbox__input" type="checkbox" id="remediationConfirmed" name="remediationConfirmed" value="true" /><label class="usa-checkbox__label" for="remediationConfirmed">For below-level closure: environmental remediation is complete; the evidence above identifies the work and verification.</label></div>
 <div class="usa-checkbox"><input class="usa-checkbox__input" type="checkbox" id="clinicianConfirmed" name="clinicianConfirmed" value="true" required /><label class="usa-checkbox__label" for="clinicianConfirmed">I verified Maryland applicability, source history, episode/decline stage and the clinician-approved plan. Urgent results require immediate clinical coordination.</label></div>
+<details><summary>Source draw or screening target before March 2025</summary>
+<p>This workspace supports current care using March 2025 guidance. It cannot reconstruct an approved historical policy. For an older source, record the clinician's explicit decision to use current guidance. This decision does not establish the deadline that applied historically.</p>
+<div class="usa-checkbox"><input class="usa-checkbox__input" type="checkbox" id="currentGuidanceConfirmed" name="currentGuidanceConfirmed" value="true" checked="@(V("currentGuidanceConfirmed") == "true")" /><label class="usa-checkbox__label" for="currentGuidanceConfirmed">The clinician explicitly chose current guidance for current care of this older source.</label></div>
+<label class="usa-label" for="currentGuidanceReason">Why current guidance applies to this older source</label><textarea class="usa-textarea" id="currentGuidanceReason" name="currentGuidanceReason" maxlength="1000">@V("currentGuidanceReason")</textarea>
+</details>
 <button class="usa-button">Save reviewed testing plan</button></form></section>
 }

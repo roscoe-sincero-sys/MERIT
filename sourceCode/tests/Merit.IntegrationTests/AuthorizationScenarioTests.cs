@@ -15,7 +15,7 @@ namespace Merit.IntegrationTests;
 /// own answer, not the application's.
 /// </summary>
 [Collection(MeritCollection.Name)]
-public sealed class AuthorizationScenarioTests(MeritFixture fixture) : IAsyncLifetime
+public sealed partial class AuthorizationScenarioTests(MeritFixture fixture) : IAsyncLifetime
 {
     public Task InitializeAsync() => Task.CompletedTask;
 

@@ -287,6 +287,9 @@ public sealed class ReceivedBatchRow
 
 public sealed class IntakeBatchRow
 {
+    public DateTime? DepartmentReceivedUtc { get; init; }
+    public string? ReceiptEvidence { get; init; }
+    public string? ReceiptTimeZone { get; init; }
     public Guid IntakeBatchId { get; init; }
 
     public Guid? IntakeProfileId { get; init; }

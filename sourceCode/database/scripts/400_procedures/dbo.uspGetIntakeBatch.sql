@@ -85,7 +85,7 @@ BEGIN
         -- =========================================================================================
 
         SELECT b.intakeBatchId, b.intakeProfileId, b.senderOrganizationId, o.organizationName AS senderName, b.fileName,
-               b.sourceChannel, b.receivedUtc, b.batchStatus, b.pauseReason, b.receivedCount, b.loadedCount, b.heldCount,
+               b.sourceChannel, b.receivedUtc,b.departmentReceivedUtc,b.receiptEvidence,b.receiptTimeZone,b.batchStatus, b.pauseReason, b.receivedCount, b.loadedCount, b.heldCount,
                b.rejectedCount, IIF (@includeContent = 1, b.rawContent, NULL) AS rawContent
           FROM dbo.intakeBatch AS b
           LEFT JOIN dbo.organization AS o ON o.organizationId = b.senderOrganizationId

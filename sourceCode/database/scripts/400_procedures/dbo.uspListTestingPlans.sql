@@ -93,8 +93,9 @@ BEGIN
         -- =========================================================================================
 
         SELECT w.workTaskId,w.personId,w.exposureCaseId,w.labResultId,w.title,w.detail,w.queueCode,w.taskStatus,w.dueDate,
-         w.isUrgent,w.createdDateUtc,w.completedUtc,w.resolutionNote,w.testingPlanJson
-        FROM dbo.workTask AS w WHERE w.personId=@personId AND w.isDeleted=0 AND w.queueCode IN ('testingReview','testingFollowUp','testingDischarge')
+         w.isUrgent,w.createdDateUtc,w.completedUtc,w.resolutionNote,w.testingPlanJson,u.displayName AS assignedToName
+        FROM dbo.workTask AS w LEFT JOIN auth.appUser u ON u.appUserId=w.assignedToUserId AND u.isDeleted=0
+        WHERE w.personId=@personId AND w.isDeleted=0 AND w.queueCode IN ('testingReview','testingFollowUp','testingDischarge')
          AND (w.exposureCaseId IS NULL OR (auth.udfHasPermission(N'case.view')=1 AND EXISTS
          (SELECT 1 FROM dbo.exposureCase WHERE exposureCaseId=w.exposureCaseId AND isDeleted=0)))
         ORDER BY CASE WHEN w.taskStatus='open' THEN 0 ELSE 1 END,w.isUrgent DESC,w.dueDate,w.createdDateUtc DESC;

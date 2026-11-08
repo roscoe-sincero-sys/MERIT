@@ -230,6 +230,14 @@ public sealed partial class IntakeProcessor(
         DateOnly? dob = ParseDate(Get("dob"), formats);
         DateOnly? collected = ParseDate(Get("collectedDate"), formats);
         DateOnly? reported = ParseDate(Get("reportedDate"), formats);
+        if (batch.DepartmentReceivedUtc is DateTime originalReceipt)
+        {
+            var receiptDay = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(originalReceipt, DateTimeKind.Utc),
+                TimeZoneInfo.FindSystemTimeZoneById(batch.ReceiptTimeZone ?? clock.Zone.Id)));
+            var historicalFinalText = Get("finalResultDate"); var finalDay = ParseDate(historicalFinalText, formats);
+            if (collected > receiptDay || reported > receiptDay || (historicalFinalText is not null && (finalDay is null || finalDay > receiptDay || finalDay < collected)))
+                holds.Add(new HoldReason("impossibleDates", "collectedDate", "Verified Department receipt precedes collection/report/final-result date, or the final-result date is invalid. Review the original source and receipt evidence; do not replace receipt with upload time.", Get("collectedDate")));
+        }
         if (collected is null || collected > today || (reported is not null && reported < collected)
             || (dob is not null && collected < dob) || (dob is not null && dob > today))
         {
@@ -366,6 +374,16 @@ public sealed partial class IntakeProcessor(
             reportedSnapshot = JsonSerializer.Serialize(finalSnapshot);
         }
         Guid resultId = TimeOrderedId.New();
+        if (batch.DepartmentReceivedUtc is not null)
+        {
+            var provenance = JsonSerializer.Deserialize<Dictionary<string, string?>>(reportedSnapshot) ?? [];
+            provenance["departmentReceiptSource"] = "verifiedHistoricalBatch";
+            provenance["departmentReceiptBatchId"] = batch.IntakeBatchId.ToString();
+            provenance["departmentReceiptUtc"] = batch.DepartmentReceivedUtc.Value.ToString("O", CultureInfo.InvariantCulture);
+            provenance["departmentReceiptTimeZone"] = batch.ReceiptTimeZone;
+            provenance["departmentReceiptEvidence"] = batch.ReceiptEvidence;
+            reportedSnapshot = JsonSerializer.Serialize(provenance);
+        }
         await results.SaveLabResultAsync(new LabResultSave
         {
             LabResultId = resultId,
@@ -373,7 +391,7 @@ public sealed partial class IntakeProcessor(
             AnalyteSpecimenId = specimen.AnalyteSpecimenId,
             CollectedDate = collected.Value,
             ReportedDate = reported,
-            ReceivedUtc = batch.ReceivedUtc,
+            ReceivedUtc = batch.DepartmentReceivedUtc ?? batch.ReceivedUtc,
             ResultStatus = status,
             SupersedesLabResultId = supersedes ? duplicate!.LabResultId : null,
             ValueReported = normalized.ValueReported,

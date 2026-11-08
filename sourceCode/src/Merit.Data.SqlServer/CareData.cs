@@ -4,6 +4,8 @@ namespace Merit.Data.SqlServer;
 
 public sealed class CareData(Db db) : ICareData
 {
+    public Task<IReadOnlyList<TestingOutreachRow>> TestingOutreachAsync(TestingOutreachQuery query, CancellationToken ct)
+        => db.QueryAsync<TestingOutreachRow>("dbo.uspTestingOutreach", new { query.DueFilter, query.PlanKind, query.AssignedToUserId, query.TaskStatus, pageNumber = query.Page, pageSize = 50 }, ct);
     public Task<IReadOnlyList<TestingPlanRow>> TestingPlansAsync(Guid personId, CancellationToken ct)
         => db.QueryAsync<TestingPlanRow>("dbo.uspListTestingPlans", new { personId }, ct);
     public Task SaveTestingPlanAsync(TestingPlanSave plan, CancellationToken ct)

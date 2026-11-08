@@ -157,7 +157,7 @@ public sealed class AssignmentEligibilityTests(MeritFixture fixture)
     public async Task EmptyIntakeHasRecoveryInstructionsAndCannotQueueAnInactiveFormat()
     {
         await using var account = await SyntheticAccount.CreateAsync(fixture.Factory, "emptyintake");
-        string ids = await account.ScalarAsync<string>("SELECT STRING_AGG (CONVERT (VARCHAR (36), intakeProfileId), ',') FROM dbo.intakeProfile WHERE rootTenantId = (SELECT rootTenantId FROM auth.appUser WHERE appUserId = @id) AND isActive = 1 AND isDeleted = 0");
+        string ids = await account.ScalarAsync<string>("SELECT STRING_AGG (CONVERT (VARCHAR (MAX), intakeProfileId), ',') FROM dbo.intakeProfile WHERE rootTenantId = (SELECT rootTenantId FROM auth.appUser WHERE appUserId = @id) AND isActive = 1 AND isDeleted = 0");
         Guid profile = Guid.Parse(ids.Split(',')[0]);
         var client = await fixture.SignedInAsync("supervisor");
         string configured = await client.Http.GetStringAsync("/intake");

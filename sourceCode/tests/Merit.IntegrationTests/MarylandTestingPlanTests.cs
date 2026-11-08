@@ -32,7 +32,8 @@ public sealed partial class PatientCareTests
         var user = await fixture.SignedInAsync("supervisor"); await user.Http.GetStringAsync($"/people/{person}/care/testing");
         return await user.NoRedirect.PostAsync($"/people/{person}/care/testing", Form(("workTaskId", id), ("planKind", kind), ("labResultId", result),
             ("exposureCaseId", caseId), ("targetDate", target), ("evidence", "Synthetic original reports and clinician-approved Maryland plan reviewed, including episode and remediation evidence."),
-            ("clinicianConfirmed", "true"), ("remediationConfirmed", remediation ? "true" : "false")));
+            ("clinicianConfirmed", "true"), ("remediationConfirmed", remediation ? "true" : "false"),
+            ("currentGuidanceConfirmed", "true"), ("currentGuidanceReason", "Synthetic clinician decision: current care using current guidance; this is not a historical policy reconstruction.")));
     }
 
     [SqlTheory]

@@ -169,9 +169,9 @@ public sealed class CareController(CareService care, PersonService people, IRefe
     [Authorize(Policy = Permissions.PersonEdit)]
     [Authorize(Policy = Permissions.TaskEdit)]
     public async Task<IActionResult> SaveTesting(Guid personId, Guid workTaskId, string planKind, string evidence, bool clinicianConfirmed,
-        Guid? exposureCaseId, Guid? labResultId, DateOnly? targetDate, bool remediationConfirmed, CancellationToken ct)
+        Guid? exposureCaseId, Guid? labResultId, DateOnly? targetDate, bool remediationConfirmed, bool currentGuidanceConfirmed, string? currentGuidanceReason, CancellationToken ct)
     {
-        try { if (ModelState.IsValid) await care.SaveTestingPlanAsync(new(workTaskId, personId, planKind, evidence, clinicianConfirmed, exposureCaseId, labResultId, targetDate, remediationConfirmed), ct); }
+        try { if (ModelState.IsValid) await care.SaveTestingPlanAsync(new(workTaskId, personId, planKind, evidence, clinicianConfirmed, exposureCaseId, labResultId, targetDate, remediationConfirmed, currentGuidanceConfirmed, currentGuidanceReason), ct); }
         catch (MeritException ex) when (FormError(ex)) { return await Testing(personId, ct); }
         if (!ModelState.IsValid) return await Testing(personId, ct);
         TempData["CareMessage"] = "Reviewed testing plan saved. Initial draws and previous plans remain in history.";

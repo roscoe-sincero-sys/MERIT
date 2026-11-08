@@ -1,0 +1,12 @@
+@model IReadOnlyList<TestingPlanRow>
+@{
+    var open = Model.Where(p => p.TaskStatus == "open").OrderByDescending(p => p.IsUrgent).ThenBy(p => p.DueDate is null ? 1 : 0).ThenBy(p => p.DueDate).ToList();
+}
+<section class="merit-section" aria-labelledby="next-testing-heading">
+<h2 id="next-testing-heading">Next blood lead test and clinical reviews</h2>
+@if(open.Count == 0) { <p>No open testing plan or clinical review is recorded. Verify screening and outside records; this does not establish that testing is complete.</p> }
+@foreach(var plan in open) {
+<article><h3><a href="/people/@ViewData["TestingPersonId"]/care/testing#plan-@plan.WorkTaskId">@TestingDisplay.Kind(plan.Kind)</a></h3>
+<p><strong>@TestingDisplay.Status(plan.TaskStatus, plan.DueDate, Clock.Today)</strong> @if(plan.IsUrgent) { <strong> · Urgent clinician coordination</strong> } · Target: @(plan.DueDate?.ToString("yyyy-MM-dd") ?? "Clinician assessment required") · Assigned to: @(plan.AssignedToName ?? "Unassigned")</p></article>
+}
+</section>

@@ -53,6 +53,8 @@ CREATE OR ALTER PROCEDURE dbo.uspCreateIntakeBatch
       , @rawContent      NVARCHAR (MAX)
       , @jobId           UNIQUEIDENTIFIER
       , @contentSha256   CHAR (64) = NULL
+      , @departmentReceivedUtc DATETIME2(3) = NULL
+      , @receiptEvidence NVARCHAR(1000) = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -110,10 +112,22 @@ BEGIN
             ;THROW 51404, N'The intake profile was not found.', 1;
         END;
 
+        IF @departmentReceivedUtc IS NOT NULL AND auth.udfHasPermission(N'person.edit')=0
+        BEGIN
+            ;THROW 51403, N'Patient editing permission is required to attest historical Department receipt.', 1;
+        END;
+        IF (@departmentReceivedUtc IS NOT NULL AND (@departmentReceivedUtc>SYSUTCDATETIME() OR NULLIF(TRIM(@receiptEvidence),N'') IS NULL))
+         OR (@departmentReceivedUtc IS NULL AND @receiptEvidence IS NOT NULL)
+        BEGIN
+            ;THROW 51422, N'Provide an original Department receipt that is not in the future and its verified source evidence.', 1;
+        END;
+
         INSERT dbo.intakeBatch (intakeBatchId, rootTenantId, owningTenantId, intakeProfileId, senderOrganizationId, sourceChannel,
-                                fileName, rawContent, contentSha256, receivedUtc, batchStatus, submittedByUserId)
+                                fileName, rawContent, contentSha256, receivedUtc, batchStatus, submittedByUserId,
+                                departmentReceivedUtc,receiptEvidence,receiptTimeZone)
         VALUES (@intakeBatchId, @root, @acting, @intakeProfileId, @sender, 'upload', @fileName, @rawContent, @contentSha256,
-                SYSUTCDATETIME (), 'received', @user);
+                SYSUTCDATETIME (), 'received', @user,@departmentReceivedUtc,@receiptEvidence,
+                CASE WHEN @departmentReceivedUtc IS NOT NULL THEN TRY_CAST(SESSION_CONTEXT(N'timeZone') AS VARCHAR(100)) END);
 
         DECLARE @jobProfile UNIQUEIDENTIFIER, @jobViewAs UNIQUEIDENTIFIER, @jobActing UNIQUEIDENTIFIER;
         SELECT @jobProfile = userProfileId, @jobViewAs = viewAsUserId, @jobActing = actingTenantId
