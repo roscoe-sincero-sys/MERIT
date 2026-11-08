@@ -1,0 +1,7 @@
+@model ActivityCorrectionModel
+@{ ViewData["Title"]="Correct recorded activity"; }
+<h1>Correct recorded activity</h1><div class="usa-alert usa-alert--error" role="alert"><div asp-validation-summary="All"></div></div>
+<p>The original event remains in history. Corrected completion evidence reopens linked work. Reopen a closed case before changing evidence supporting its closure.</p>
+<form asp-antiforgery="true" method="post" action="/people/@Model.PersonId/work/correct" class="usa-form">
+<input type="hidden" name="activityId" value="@Model.ActivityId" /><input type="hidden" name="sourceKind" value="@Model.SourceKind" />
+<label class="usa-label" for="reason">Correction reason</label><textarea class="usa-textarea" id="reason" name="reason" required maxlength="500">@Model.Reason</textarea><button class="usa-button">Withdraw incorrect activity evidence</button></form><p><a href="/people/@Model.PersonId/care#activity">Back to activity history</a></p>

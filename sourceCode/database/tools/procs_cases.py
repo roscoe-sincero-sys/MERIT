@@ -158,7 +158,9 @@ SELECT c.exposureCaseId, c.caseNumber, c.personId, p.lastName, p.firstName, p.do
        c.closureReason, c.assignedToUserId, u.displayName AS assignedToName, c.owningTenantId,
        t.tenantName AS owningTenantName, c.qualifyingLabResultId, c.highestLabResultId,
        h.valueCanonical AS highestValue, h.unitCanonical AS highestUnit, h.collectedDate AS highestCollectedDate,
-       c.rowVersion
+       c.rowVersion, dbo.udfCaseClosureReviewStamp(c.exposureCaseId) AS closureReviewToken,
+       (SELECT COUNT(*) FROM dbo.vwPatientActivityStream AS ca WHERE ca.exposureCaseId=c.exposureCaseId AND ca.activityType='contactAttempt' AND ca.isDeleted=0 AND ca.isVoided=0
+        AND ca.outcome IN ('noAnswer','leftMessage','wrongNumber') AND (ca.contactPersonId IS NOT NULL OR NULLIF(TRIM(ca.recipientLabel),N'') IS NOT NULL)) AS failedContactAttempts
   FROM dbo.exposureCase AS c
   JOIN dbo.person AS p ON p.personId = c.personId
   JOIN config.analyte AS a ON a.analyteId = c.analyteId
@@ -209,6 +211,11 @@ SELECT TOP (1) r.relatedPersonId AS contactPersonId, cp.lastName, cp.firstName, 
   JOIN dbo.person AS cp ON cp.personId = r.relatedPersonId
  WHERE r.personId = @personId AND r.isDeleted = 0 AND r.isPrimaryContact = 1
    AND (r.endDate IS NULL OR r.endDate >= auth.udfSessionToday ());
+
+SELECT d.name,d.closureReason,d.minimumContactAttempts,e.evaluationState,e.explanation
+ FROM config.workflowDefinition AS d CROSS APPLY config.tvfWorkflowEligibility(d.workflowDefinitionId,@personId,@exposureCaseId,NULL) AS e
+ WHERE d.definitionStatus='published' AND d.blocksClosure=1 AND d.isDeleted=0 AND e.evaluationState IN ('eligible','needsReview')
+ ORDER BY d.name,d.version;
 """,
     },
     {
@@ -381,6 +388,17 @@ SET @Comments = N'Classification overridden.';
         "notes": "Returns failedContactAttempts: the count of contact attempts on the case that did not reach anyone, so "
                  "the application can queue a letter once the jurisdiction's limit is reached.",
         "body": """
+IF @activityType='contactAttempt' AND (@contactPersonId IS NULL OR @outcome IS NULL OR @outcome NOT IN ('reached','noAnswer','leftMessage','wrongNumber') OR NULLIF(TRIM(@note),N'') IS NULL)
+BEGIN
+    ;THROW 51422, N'A contact attempt requires a recorded recipient, actual outcome and note. Internal work should be recorded as a note.', 1;
+END;
+IF @activityDate>auth.udfSessionToday() OR (@contactPersonId IS NOT NULL AND NOT EXISTS
+ (SELECT 1 FROM dbo.exposureCase AS c WHERE c.exposureCaseId=@exposureCaseId AND (c.personId=@contactPersonId OR EXISTS
+ (SELECT 1 FROM dbo.personRelationship WHERE isDeleted=0 AND ((personId=c.personId AND relatedPersonId=@contactPersonId) OR (relatedPersonId=c.personId AND personId=@contactPersonId))
+ AND (startDate IS NULL OR startDate<=@activityDate) AND (endDate IS NULL OR endDate>=@activityDate)))))
+BEGIN
+    ;THROW 51422, N'Use an actual date and the patient or a recorded relationship valid on that date.', 1;
+END;
 INSERT dbo.caseActivity (caseActivityId, rootTenantId, owningTenantId, exposureCaseId, activityType, activityDate,
                          workerUserId, contactPersonId, outcome, note)
 SELECT @caseActivityId, rootTenantId, owningTenantId, @exposureCaseId, @activityType, @activityDate,
@@ -389,7 +407,7 @@ SELECT @caseActivityId, rootTenantId, owningTenantId, @exposureCaseId, @activity
 
 SELECT COUNT (*) AS failedContactAttempts
   FROM dbo.vwPatientActivityStream
- WHERE exposureCaseId = @exposureCaseId AND activityType = 'contactAttempt' AND isDeleted = 0
+ WHERE exposureCaseId = @exposureCaseId AND activityType = 'contactAttempt' AND isDeleted = 0 AND isVoided=0
    AND outcome IN ('noAnswer', 'leftMessage', 'wrongNumber');
 
 SET @Comments = N'Activity logged.';
@@ -404,13 +422,51 @@ SET @Comments = N'Activity logged.';
 , @closureReason  VARCHAR (30)
 , @closedDate     DATE
 , @note           NVARCHAR (2000) = NULL
-, @rowVersion     BINARY (8)""",
+, @rowVersion     BINARY (8)
+, @closureReviewToken VARCHAR(64) = NULL
+, @closureReviewConfirmed BIT = 0""",
         "key": "CONCAT (N'exposureCaseId=', @exposureCaseId, N', closureReason=', @closureReason)",
         "validate": CASE_VISIBLE,
         "body": f"""
 DECLARE @personId UNIQUEIDENTIFIER, @root UNIQUEIDENTIFIER, @owner UNIQUEIDENTIFIER, @opened DATE;
 SELECT @personId = personId, @root = rootTenantId, @owner = owningTenantId, @opened = openedDate
   FROM dbo.exposureCase WHERE exposureCaseId = @exposureCaseId;
+
+DECLARE @workflowLock INT,@workflowResource NVARCHAR(255)=CONCAT(N'MERIT.workflow.',@personId);
+EXEC @workflowLock=sys.sp_getapplock @Resource=@workflowResource,@LockMode='Exclusive',@LockOwner='Transaction';
+IF @workflowLock<0
+BEGIN
+    ;THROW 51409, N'Program work changed during closure review. Reload and try again.', 1;
+END;
+DECLARE @openTasks INT=(SELECT COUNT(*) FROM dbo.workTask WITH(UPDLOCK,HOLDLOCK) WHERE exposureCaseId=@exposureCaseId AND taskStatus='open' AND isDeleted=0);
+DECLARE @liveAttempts INT=(SELECT COUNT(*) FROM dbo.vwPatientActivityStream WHERE exposureCaseId=@exposureCaseId
+ AND activityType='contactAttempt' AND isDeleted=0 AND isVoided=0 AND activityDate<=@closedDate AND activityDate>=@opened
+ AND outcome IN ('noAnswer','leftMessage','wrongNumber') AND (contactPersonId IS NOT NULL OR NULLIF(TRIM(recipientLabel),N'') IS NOT NULL));
+IF EXISTS(SELECT 1 FROM dbo.workTask AS w LEFT JOIN dbo.personActivity AS a ON a.personActivityId=w.completionActivityId
+ WHERE (w.exposureCaseId=@exposureCaseId OR (w.personId=@personId AND w.exposureCaseId IS NULL)) AND w.isDeleted=0
+ AND JSON_VALUE(w.workflowSnapshotJson,'$.blocksClosure')='true' AND JSON_VALUE(w.workflowSnapshotJson,'$.closureReason') IN ('all',@closureReason)
+ AND w.resolutionKind='completed' AND (TRY_CONVERT(INT,JSON_VALUE(w.workflowSnapshotJson,'$.minimumContactAttempts'))>@liveAttempts OR a.activityDate>@closedDate OR a.isVoided=1))
+BEGIN
+    ;THROW 51422, N'The recorded program completion no longer supports this closure date: check corrected contact evidence, the actual attempt count and the completion event date.', 1;
+END;
+IF @openTasks>0 AND (@closureReviewConfirmed<>1 OR @closureReviewToken IS NULL OR @closureReviewToken<>dbo.udfCaseClosureReviewStamp(@exposureCaseId))
+BEGIN
+    ;THROW 51422, N'Review the current outstanding task names and dispositions, then confirm closure review. Work may have changed since this page was opened.', 1;
+END;
+IF EXISTS(SELECT 1 FROM dbo.workTask WHERE (exposureCaseId=@exposureCaseId OR (personId=@personId AND exposureCaseId IS NULL)) AND taskStatus='open' AND isDeleted=0
+ AND JSON_VALUE(workflowSnapshotJson,'$.blocksClosure')='true' AND JSON_VALUE(workflowSnapshotJson,'$.closureReason') IN ('all',@closureReason))
+BEGIN
+    ;THROW 51422, N'Required program work remains open. Complete it with evidence, record a permitted authorized exception, or transfer it to an active case before this closure.', 1;
+END;
+IF EXISTS(SELECT 1 FROM config.workflowDefinition AS d CROSS APPLY config.tvfWorkflowEligibility(d.workflowDefinitionId,@personId,@exposureCaseId,NULL) AS e
+ WHERE d.definitionStatus='published' AND d.isDeleted=0 AND d.blocksClosure=1 AND d.closureReason IN ('all',@closureReason)
+ AND e.evaluationState IN ('eligible','needsReview') AND NOT EXISTS
+ (SELECT 1 FROM dbo.workTask AS w WHERE w.workflowDefinitionId=d.workflowDefinitionId AND w.isDeleted=0 AND w.taskStatus<>'open'
+  AND (w.exposureCaseId=@exposureCaseId OR (w.personId=@personId AND w.exposureCaseId IS NULL))
+  AND w.resolutionKind IN ('completed','waived','transferred','notApplicable')))
+BEGIN
+    ;THROW 51422, N'An applicable program closure requirement has not been resolved. Evaluate the case program checklist and record completion, applicability or an authorized exception.', 1;
+END;
 
 IF EXISTS (SELECT 1 FROM dbo.notificationObligation WITH (UPDLOCK, HOLDLOCK)
             WHERE exposureCaseId = @exposureCaseId AND isDeleted = 0 AND completedActivityId IS NULL AND evaluationState <> 'notApplicable')
@@ -467,7 +523,7 @@ VALUES ({NEWID}, @root, @owner, @exposureCaseId, 'statusChange', @closedDate, au
 
 UPDATE dbo.workTask
    SET taskStatus = 'dismissed', completedUtc = SYSUTCDATETIME (), completedByUserId = auth.udfSessionUserId (),
-       resolutionNote = N'Case closed.'
+       resolutionNote = CONCAT(N'Automatically dismissed after reviewed case closure: ',@closureReason,N'. ',COALESCE(@note,N'')),resolutionKind='autoDismissed'
  WHERE exposureCaseId = @exposureCaseId AND taskStatus = 'open' AND isDeleted = 0 AND queueCode NOT IN ('notificationDue','assessmentOwnerClosure');
 
 IF @mdClosure=1 AND NOT EXISTS (SELECT 1 FROM dbo.workTask WHERE exposureCaseId=@exposureCaseId AND queueCode='assessmentOwnerClosure' AND taskStatus='open' AND isDeleted=0)

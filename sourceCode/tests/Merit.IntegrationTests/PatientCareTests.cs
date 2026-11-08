@@ -165,7 +165,8 @@ public sealed partial class PatientCareTests(MeritFixture fixture)
             Assert.Equal(HttpStatusCode.UnprocessableEntity, bulk.StatusCode);
             var version = (byte[])(await Sql(c, "SELECT rowVersion FROM dbo.exposureCase WHERE exposureCaseId=@id", ("@id", fixture.Ids.MiaCaseId)))!;
             using var close = await user.NoRedirect.PostAsync($"/cases/{fixture.Ids.MiaCaseId}/close", Form(("closureReason", "other"),
-                ("closedDate", "2026-11-07"), ("rowVersion", "0x" + Convert.ToHexString(version))));
+                ("closedDate", "2026-11-07"), ("rowVersion", "0x" + Convert.ToHexString(version)), ("closureReviewConfirmed", "true"),
+                ("closureReviewToken", await Sql(c,"SELECT dbo.udfCaseClosureReviewStamp(@id)",("@id",fixture.Ids.MiaCaseId)))));
             Assert.Equal(HttpStatusCode.UnprocessableEntity, close.StatusCode);
             Assert.Contains("Complete required notifications", await close.Content.ReadAsStringAsync(), StringComparison.Ordinal);
             using var attempt = await user.NoRedirect.PostAsync($"/people/{person}/care/activity", Form(("personActivityId", activity), ("caseId", fixture.Ids.MiaCaseId),

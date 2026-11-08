@@ -113,9 +113,22 @@ BEGIN
                      WHERE TRY_CAST ([value] AS UNIQUEIDENTIFIER) IS NOT NULL;
 
         IF @action IN ('complete','dismiss','reopen') AND EXISTS
-            (SELECT 1 FROM @ids AS i JOIN dbo.workTask AS w ON w.workTaskId = i.workTaskId WHERE w.queueCode IN ('notificationDue','receiptFinding','missingInformation','labReportingReview','testingFollowUp','testingDischarge') AND w.isDeleted = 0)
+            (SELECT 1 FROM @ids AS i JOIN dbo.workTask AS w ON w.workTaskId = i.workTaskId WHERE w.isDeleted = 0 AND
+             (w.queueCode IN ('notificationDue','receiptFinding','missingInformation','labReportingReview','testingFollowUp','testingDischarge','workflowReview') OR w.workflowDefinitionId IS NOT NULL
+              OR (@action<>'dismiss' AND w.queueCode='programTask')))
         BEGIN
             ;THROW 51422, N'Use the patient notification, laboratory receipt or testing-plan workspace to record evidence. Detection history and pending information requests cannot be changed by bulk actions. No tasks were changed.', 1;
+        END;
+
+        IF @action='complete' AND (NULLIF(TRIM(@note),N'') IS NULL OR EXISTS
+         (SELECT 1 FROM @ids AS i JOIN dbo.workTask AS w ON w.workTaskId=i.workTaskId WHERE w.isDeleted=0 AND
+         (w.workflowSnapshotJson IS NOT NULL OR w.queueCode IN ('letterDue','prenatalNotification','confirmatoryTest','newbornTesting','actionLevel','crossLink','investigationRequest','assessmentContact'))))
+        BEGIN
+            ;THROW 51422, N'Provide a completion note for shared internal work. Contact/delivery and program tasks require their individual evidence form; no tasks were changed.', 1;
+        END;
+        IF @action='reopen' AND EXISTS(SELECT 1 FROM @ids AS i JOIN dbo.workTask AS w ON w.workTaskId=i.workTaskId WHERE w.completionActivityId IS NOT NULL AND w.isDeleted=0)
+        BEGIN
+            ;THROW 51422, N'Correct the linked patient activity to reopen this work while retaining the original evidence.', 1;
         END;
 
         IF @action IN ('complete','dismiss') AND NULLIF(TRIM(@note),N'') IS NULL AND EXISTS
@@ -154,6 +167,21 @@ BEGIN
             END;
         END;
 
+        DECLARE @evidencedCount INT=0;
+        IF @action='complete'
+        BEGIN
+            DECLARE @toComplete TABLE(id UNIQUEIDENTIFIER PRIMARY KEY,processed BIT NOT NULL DEFAULT(0));
+            INSERT @toComplete(id) SELECT w.workTaskId FROM dbo.workTask AS w JOIN @ids AS i ON i.workTaskId=w.workTaskId
+             WHERE w.taskStatus='open' AND w.isDeleted=0 AND (w.personId IS NOT NULL OR w.exposureCaseId IS NOT NULL);
+            WHILE EXISTS(SELECT 1 FROM @toComplete WHERE processed=0)
+            BEGIN
+                DECLARE @task UNIQUEIDENTIFIER=(SELECT TOP(1) id FROM @toComplete WHERE processed=0 ORDER BY id),@event UNIQUEIDENTIFIER=NEWID(),@eventDate DATE=auth.udfSessionToday();
+                EXEC dbo.uspResolveWorkWithEvidence @workTaskId=@task,@personActivityId=@event,@action='complete',@activityDate=@eventDate,@note=@note;
+                UPDATE @toComplete SET processed=1 WHERE id=@task;
+                SET @evidencedCount+=1;
+            END;
+        END;
+
         UPDATE w
            SET assignedToUserId  = CASE @action WHEN 'assignToMe' THEN @me WHEN 'assign' THEN @assignToUserId
                                                 ELSE w.assignedToUserId END
@@ -163,6 +191,7 @@ BEGIN
                                         WHEN @action = 'reopen' THEN NULL ELSE w.completedUtc END
              , completedByUserId = CASE WHEN @action IN ('complete', 'dismiss') THEN @me
                                         WHEN @action = 'reopen' THEN NULL ELSE w.completedByUserId END
+             , resolutionKind    = CASE @action WHEN 'complete' THEN 'completed' WHEN 'dismiss' THEN 'waived' WHEN 'reopen' THEN NULL ELSE w.resolutionKind END
              , resolutionNote    = CASE WHEN @action IN ('complete', 'dismiss') THEN COALESCE (@note, w.resolutionNote)
                                         ELSE w.resolutionNote END
           FROM dbo.workTask AS w
@@ -173,7 +202,7 @@ BEGIN
                 OR (@action IN ('assign', 'assignToMe') AND w.taskStatus = 'open'
                     AND (w.assignedToUserId IS NULL OR w.assignedToUserId <> CASE WHEN @action = 'assignToMe' THEN @me ELSE @assignToUserId END)));
 
-        DECLARE @updatedCount INT = @@ROWCOUNT;
+        DECLARE @updatedCount INT = @@ROWCOUNT + @evidencedCount;
         DECLARE @refresh TABLE (personId UNIQUEIDENTIFIER PRIMARY KEY, processed BIT NOT NULL DEFAULT (0));
         INSERT @refresh (personId) SELECT DISTINCT w.personId FROM dbo.workTask AS w JOIN @ids AS i ON i.workTaskId=w.workTaskId
          WHERE w.queueCode='assessmentOwnerClosure' AND w.personId IS NOT NULL AND w.isDeleted=0;

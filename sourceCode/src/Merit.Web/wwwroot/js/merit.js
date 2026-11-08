@@ -778,3 +778,15 @@ document.addEventListener('input', event => {
     chooser.addEventListener('change', showFormat);
     showFormat();
 })();
+
+// Delegation also supports case sections replaced by HTMX. Native hashes retain browser back/history behavior.
+document.addEventListener('click', function (event) {
+    const link = event.target.closest('.workspace-sections a[href^="#"]');
+    if (!link) return;
+    const target = document.getElementById(link.hash.slice(1));
+    if (!target) return;
+    const disclosure = target.closest('details');
+    if (disclosure) disclosure.open = true;
+    target.setAttribute('tabindex', '-1');
+    requestAnimationFrame(function () { target.focus({ preventScroll: true }); target.scrollIntoView({ block: 'start' }); });
+});

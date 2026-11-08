@@ -107,6 +107,17 @@ BEGIN
         -- ===== The procedure's own work starts here. Everything above and below is boilerplate. ==
         -- =========================================================================================
 
+        IF @activityType='contactAttempt' AND (@contactPersonId IS NULL OR @outcome IS NULL OR @outcome NOT IN ('reached','noAnswer','leftMessage','wrongNumber') OR NULLIF(TRIM(@note),N'') IS NULL)
+        BEGIN
+            ;THROW 51422, N'A contact attempt requires a recorded recipient, actual outcome and note. Internal work should be recorded as a note.', 1;
+        END;
+        IF @activityDate>auth.udfSessionToday() OR (@contactPersonId IS NOT NULL AND NOT EXISTS
+         (SELECT 1 FROM dbo.exposureCase AS c WHERE c.exposureCaseId=@exposureCaseId AND (c.personId=@contactPersonId OR EXISTS
+         (SELECT 1 FROM dbo.personRelationship WHERE isDeleted=0 AND ((personId=c.personId AND relatedPersonId=@contactPersonId) OR (relatedPersonId=c.personId AND personId=@contactPersonId))
+         AND (startDate IS NULL OR startDate<=@activityDate) AND (endDate IS NULL OR endDate>=@activityDate)))))
+        BEGIN
+            ;THROW 51422, N'Use an actual date and the patient or a recorded relationship valid on that date.', 1;
+        END;
         INSERT dbo.caseActivity (caseActivityId, rootTenantId, owningTenantId, exposureCaseId, activityType, activityDate,
                                  workerUserId, contactPersonId, outcome, note)
         SELECT @caseActivityId, rootTenantId, owningTenantId, @exposureCaseId, @activityType, @activityDate,
@@ -115,7 +126,7 @@ BEGIN
 
         SELECT COUNT (*) AS failedContactAttempts
           FROM dbo.vwPatientActivityStream
-         WHERE exposureCaseId = @exposureCaseId AND activityType = 'contactAttempt' AND isDeleted = 0
+         WHERE exposureCaseId = @exposureCaseId AND activityType = 'contactAttempt' AND isDeleted = 0 AND isVoided=0
            AND outcome IN ('noAnswer', 'leftMessage', 'wrongNumber');
 
         SET @Comments = N'Activity logged.';

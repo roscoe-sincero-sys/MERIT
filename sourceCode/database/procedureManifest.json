@@ -1356,6 +1356,101 @@
   "params": []
  },
  {
+  "name": "config.uspListWorkflowDefinitions",
+  "kind": "read",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": "config.edit",
+  "params": []
+ },
+ {
+  "name": "config.uspPreviewWorkflowDefinition",
+  "kind": "read",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": "config.edit",
+  "params": [
+   {
+    "name": "workflowDefinitionId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "personId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "exposureCaseId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
+  "name": "config.uspPublishWorkflowDefinition",
+  "kind": "write",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": "config.edit",
+  "params": [
+   {
+    "name": "workflowDefinitionId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "versionStamp",
+    "type": "VARCHAR(16)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "approvalReference",
+    "type": "NVARCHAR(300)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "approved",
+    "type": "BIT",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "samplePersonId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "secondSamplePersonId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "sampleCaseId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "secondSampleCaseId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
   "name": "config.uspRetireNotificationRule",
   "kind": "write",
   "grants": [
@@ -1365,6 +1460,22 @@
   "params": [
    {
     "name": "notificationRuleId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   }
+  ]
+ },
+ {
+  "name": "config.uspRetireWorkflowDefinition",
+  "kind": "write",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": "config.edit",
+  "params": [
+   {
+    "name": "workflowDefinitionId",
     "type": "UNIQUEIDENTIFIER",
     "hasDefault": false,
     "isOutput": false
@@ -1682,6 +1793,178 @@
   ]
  },
  {
+  "name": "config.uspSaveWorkflowDefinition",
+  "kind": "write",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": "config.edit",
+  "params": [
+   {
+    "name": "workflowDefinitionId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "name",
+    "type": "NVARCHAR(120)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "version",
+    "type": "INT",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "description",
+    "type": "NVARCHAR(1000)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "triggerEvent",
+    "type": "VARCHAR(20)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "population",
+    "type": "VARCHAR(10)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "completionKind",
+    "type": "VARCHAR(12)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "effectiveFrom",
+    "type": "DATE",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "timeZoneId",
+    "type": "VARCHAR(100)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "evidenceFieldsJson",
+    "type": "NVARCHAR(MAX)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "analyteSpecimenId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "minimumAgeMonths",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "maximumAgeMonths",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "minimumValue",
+    "type": "DECIMAL(18,6)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "maximumValue",
+    "type": "DECIMAL(18,6)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "requiresEligibilityReview",
+    "type": "BIT",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "assignmentRoleCode",
+    "type": "VARCHAR(40)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "dueInDays",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "recurrenceDays",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "dayBasis",
+    "type": "VARCHAR(12)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "holidayDatesJson",
+    "type": "NVARCHAR(MAX)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "blocksClosure",
+    "type": "BIT",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "closureReason",
+    "type": "VARCHAR(30)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "minimumContactAttempts",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "allowWaiver",
+    "type": "BIT",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "effectiveTo",
+    "type": "DATE",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "versionStamp",
+    "type": "VARCHAR(16)",
+    "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
   "name": "config.uspSetSubJurisdictionBoundary",
   "kind": "write",
   "grants": [],
@@ -1813,6 +2096,18 @@
     "type": "BINARY (8)",
     "hasDefault": false,
     "isOutput": false
+   },
+   {
+    "name": "closureReviewToken",
+    "type": "VARCHAR(64)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "closureReviewConfirmed",
+    "type": "BIT",
+    "hasDefault": true,
+    "isOutput": false
    }
   ]
  },
@@ -1931,6 +2226,40 @@
   ]
  },
  {
+  "name": "dbo.uspCorrectPatientActivity",
+  "kind": "write",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": "person.edit",
+  "params": [
+   {
+    "name": "personId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "activityId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "sourceKind",
+    "type": "VARCHAR(12)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "reason",
+    "type": "NVARCHAR(500)",
+    "hasDefault": false,
+    "isOutput": false
+   }
+  ]
+ },
+ {
   "name": "dbo.uspCorrectPersonPlace",
   "kind": "write",
   "grants": [
@@ -1977,6 +2306,58 @@
    {
     "name": "correctLocation",
     "type": "BIT",
+    "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
+  "name": "dbo.uspCreateAdHocWork",
+  "kind": "write",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": "person.edit",
+  "params": [
+   {
+    "name": "workTaskId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "personId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "title",
+    "type": "NVARCHAR(200)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "description",
+    "type": "NVARCHAR(1000)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "completionKind",
+    "type": "VARCHAR(12)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "exposureCaseId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "dueDate",
+    "type": "DATE",
     "hasDefault": true,
     "isOutput": false
    }
@@ -3067,6 +3448,22 @@
   ]
  },
  {
+  "name": "dbo.uspGetWorkTask",
+  "kind": "read",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": "task.view",
+  "params": [
+   {
+    "name": "workTaskId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   }
+  ]
+ },
+ {
   "name": "dbo.uspImportEnvironmentalSamples",
   "kind": "write",
   "grants": [
@@ -3697,6 +4094,22 @@
   ]
  },
  {
+  "name": "dbo.uspListPatientWork",
+  "kind": "read",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": "task.view",
+  "params": [
+   {
+    "name": "personId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   }
+  ]
+ },
+ {
   "name": "dbo.uspListReceiptPolicyResults",
   "kind": "read",
   "grants": [
@@ -3857,6 +4270,46 @@
     "name": "overdueOnly",
     "type": "BIT",
     "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
+  "name": "dbo.uspListWorkflowPatients",
+  "kind": "read",
+  "grants": [
+   "meritWebRole",
+   "meritWorkerRole"
+  ],
+  "permission": "config.edit",
+  "params": [
+   {
+    "name": "workflowDefinitionId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "pageNumber",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
+  "name": "dbo.uspListWorkflowSources",
+  "kind": "read",
+  "grants": [
+   "meritWebRole",
+   "meritWorkerRole"
+  ],
+  "permission": null,
+  "params": [
+   {
+    "name": "personId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
     "isOutput": false
    }
   ]
@@ -4095,6 +4548,41 @@
   ]
  },
  {
+  "name": "dbo.uspReconcileWorkflowTasks",
+  "kind": "write",
+  "grants": [
+   "meritWebRole",
+   "meritWorkerRole"
+  ],
+  "permission": null,
+  "params": [
+   {
+    "name": "personId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "labResultId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "exposureCaseId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "workflowDefinitionId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
   "name": "dbo.uspRecordMatchDecision",
   "kind": "write",
   "grants": [
@@ -4234,6 +4722,12 @@
    },
    {
     "name": "ownerScopeConfirmed",
+    "type": "BIT",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "returnCount",
     "type": "BIT",
     "hasDefault": true,
     "isOutput": false
@@ -4549,6 +5043,88 @@
    {
     "name": "dismiss",
     "type": "BIT",
+    "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
+  "name": "dbo.uspResolveWorkWithEvidence",
+  "kind": "write",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": "task.edit",
+  "params": [
+   {
+    "name": "workTaskId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "personActivityId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "action",
+    "type": "VARCHAR(12)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "activityDate",
+    "type": "DATE",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "note",
+    "type": "NVARCHAR(1000)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "outcome",
+    "type": "VARCHAR(30)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "audience",
+    "type": "VARCHAR(12)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "channel",
+    "type": "VARCHAR(12)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "contactPersonId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "recipientLabel",
+    "type": "NVARCHAR(200)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "evidenceJson",
+    "type": "NVARCHAR(MAX)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "transferCaseId",
+    "type": "UNIQUEIDENTIFIER",
     "hasDefault": true,
     "isOutput": false
    }

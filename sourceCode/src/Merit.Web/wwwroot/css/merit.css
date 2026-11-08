@@ -290,3 +290,10 @@ th .merit-sort:hover, th .merit-sort:focus { color: var(--merit-primary); }
 .care-image { max-width: 100%; height: auto; }
 #patient-document-form progress { display: block; max-width: 100%; margin-top: 1rem; }
 #patient-document-form progress[hidden] { display: none; }
+
+/* Patient and case wayfinding: identity remains visible without pinning a large mobile toolbar. */
+.workspace-context { position: sticky; top: 0; z-index: 3; background: #fff; border-bottom: 2px solid var(--merit-primary); padding: .5rem; overflow-wrap: anywhere; }
+.workspace-sections { display: flex; flex-wrap: wrap; gap: .25rem 1rem; margin: .75rem 0 1rem; }
+.workspace-sections a { display: inline-flex; align-items: center; min-height: 2.75rem; }
+[id^="section-"], [id^="case-"], #close-heading { scroll-margin-top: 5rem; }
+@media print { .workspace-context { position: static; } .workspace-sections { display: none; } }

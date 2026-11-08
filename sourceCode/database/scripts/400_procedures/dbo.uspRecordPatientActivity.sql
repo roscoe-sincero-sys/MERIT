@@ -63,6 +63,7 @@ CREATE OR ALTER PROCEDURE dbo.uspRecordPatientActivity
       , @completeMatching BIT = 0
       , @noticeFormReference NVARCHAR (300) = NULL
       , @ownerScopeConfirmed BIT = 0
+      , @returnCount BIT = 1
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -144,6 +145,10 @@ BEGIN
         IF @audience = 'internal' AND (@channel <> 'internal' OR @contactPersonId IS NOT NULL)
         BEGIN
             ;THROW 51422, N'Internal notes cannot name an external contact or delivery channel.', 1;
+        END;
+        IF @activityType='contactAttempt' AND (@audience='internal' OR @channel='internal' OR @outcome NOT IN ('reached','noAnswer','leftMessage','wrongNumber'))
+        BEGIN
+            ;THROW 51422, N'A contact attempt requires an external recipient, channel and actual contact outcome. Use a note for internal work.', 1;
         END;
         IF @contactPersonId IS NOT NULL AND (@contactPersonId <> @personId AND NOT EXISTS
             (SELECT 1 FROM dbo.personRelationship AS r WHERE r.isDeleted = 0
@@ -248,7 +253,7 @@ BEGIN
                 resolutionNote = N'Completed notification recorded with recipient and result evidence.'
               FROM dbo.workTask AS w JOIN @targets AS t ON t.taskId = w.workTaskId;
         END;
-        SELECT COUNT (*) AS failedContactAttempts FROM dbo.vwPatientActivityStream
+        IF @returnCount=1 SELECT COUNT (*) AS failedContactAttempts FROM dbo.vwPatientActivityStream
          WHERE exposureCaseId = @exposureCaseId AND activityType = 'contactAttempt' AND isDeleted = 0 AND isVoided = 0
            AND outcome IN ('noAnswer','leftMessage','wrongNumber');
 

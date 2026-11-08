@@ -93,11 +93,11 @@ public sealed class CasesController(IClock clock, CaseService cases, PersonServi
     [HttpPost("{id:guid}/close")]
     [Authorize(Policy = Permissions.CaseEdit)]
     public async Task<IActionResult> Close(Guid id, string? closureReason, DateOnly? closedDate, string? note, string rowVersion,
-                                           CancellationToken ct)
+                                           CancellationToken ct, string? closureReviewToken, bool closureReviewConfirmed)
     {
         try
         {
-            await cases.CloseAsync(id, closureReason, closedDate, note, Options.FromHex(rowVersion) ?? [], ct);
+            await cases.CloseAsync(id, closureReason, closedDate, note, Options.FromHex(rowVersion) ?? [], ct, closureReviewToken, closureReviewConfirmed);
         }
         catch (ValidationException ex)
         {

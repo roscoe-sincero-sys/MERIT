@@ -5,6 +5,8 @@
 <partial name="_ReturnToList" />
 <partial name="_Header" model="Model" />
 <p><a class="usa-button usa-button--outline" href="/people/@Model.Person.PersonId/care">Patient activities, notification deadlines and documents</a></p>
+<div class="workspace-context" aria-label="Patient context"><strong>@Model.FullName</strong> | @Model.Person.Dob</div>
+<nav class="workspace-sections" aria-label="Patient sections"><a href="#section-results">Lab results</a><a href="#section-cases">Cases and history</a><a href="/people/@Model.Person.PersonId/care#activity">Activity</a><a href="/people/@Model.Person.PersonId/care#documents">Documents</a>@foreach(var item in Model.Sections.Where(s => s.Key != "results" && s.Key != "cases")) { <a href="#section-@item.Key">@item.Title</a> }</nav>
 <partial name="_AuditLink" model='(Model.Person.PersonId, "person")' />
 
 @* Sections in the order the person's population gives them; every section stays visible with an empty state. *@
@@ -25,10 +27,10 @@
             <partial name="_Cases" model="Model.Cases" />
             break;
         case "employment":
-            <partial name="_Employment" model="Model.Employment" />
+            @if(Model.Employment.Rows.Count == 0 && Model.Page.CurrentPopulation == "child") { <details class="merit-details"><summary>Employment (none recorded)</summary><partial name="_Employment" model="Model.Employment" /></details> } else { <partial name="_Employment" model="Model.Employment" /> }
             break;
         case "sources":
-            <partial name="_Sources" model="Model.Sources" />
+            @if(Model.Sources.Rows.Count == 0) { <details class="merit-details"><summary>Exposure sources (none recorded)</summary><partial name="_Sources" model="Model.Sources" /></details> } else { <partial name="_Sources" model="Model.Sources" /> }
             break;
         case "pregnancy":
             <partial name="_Pregnancy" model="Model.Pregnancy" />

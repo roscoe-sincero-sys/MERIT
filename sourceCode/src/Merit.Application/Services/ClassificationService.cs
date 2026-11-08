@@ -35,7 +35,8 @@ public sealed class ClassificationService(
     IReferenceDataProvider reference,
     IThresholdProvider thresholds,
     ISettingsProvider settings,
-    ICareData care)
+    ICareData care,
+    IWorkflowData workflows)
 {
     public async Task<ClassificationOutcome> ClassifyAsync(Guid labResultId, Guid personId, Guid analyteSpecimenId,
                                                            ClassifiableResult result, CancellationToken ct = default)
@@ -103,6 +104,8 @@ public sealed class ClassificationService(
         do { notificationsCreated = await care.ReconcileAsync(labResultId, null, null, ct).ConfigureAwait(false); } while (notificationsCreated == 500);
         await care.ReconcileReceiptAsync(labResultId, null, ct).ConfigureAwait(false);
         await care.ReconcileTestingAsync(labResultId, ct).ConfigureAwait(false);
+        await workflows.ReconcileAsync(personId, labResultId, caseId, null, ct).ConfigureAwait(false);
+        await workflows.ReconcileAsync(personId, null, null, null, ct).ConfigureAwait(false);
 
         return new ClassificationOutcome(population.Population, population.AgeMonths, decision, caseId, caseNumber, owner,
             before, created);

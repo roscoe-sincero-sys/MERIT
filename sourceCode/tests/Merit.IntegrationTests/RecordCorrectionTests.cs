@@ -43,12 +43,13 @@ public sealed class RecordCorrectionTests(MeritFixture fixture)
             Assert.Equal("open", await Sql(c, "SELECT caseStatus FROM dbo.exposureCase WHERE exposureCaseId = @id", ("@id", id)));
             var task = (Guid)(await Sql(c, "SELECT workTaskId FROM dbo.workTask WHERE exposureCaseId = @id AND title = 'Review reopened case'", ("@id", id)))!;
             using var wrong = await client.NoRedirect.PostAsync($"/cases/{fixture.Ids.MiaCaseId}/tasks/{task}", new FormUrlEncodedContent(new Dictionary<string, string> { ["action"] = "complete" })); Assert.Equal(HttpStatusCode.NotFound, wrong.StatusCode);
-            using var completed = await client.NoRedirect.PostAsync($"/cases/{id}/tasks/{task}", new FormUrlEncodedContent(new Dictionary<string, string> { ["action"] = "complete" })); Assert.Equal(HttpStatusCode.OK, completed.StatusCode);
+            using var noEvidence = await client.NoRedirect.PostAsync($"/cases/{id}/tasks/{task}", new FormUrlEncodedContent(new Dictionary<string, string> { ["action"] = "complete" })); Assert.Equal(HttpStatusCode.UnprocessableEntity,noEvidence.StatusCode);
+            using var completed = await client.NoRedirect.PostAsync($"/work/tasks/{task}", new FormUrlEncodedContent(new Dictionary<string, string> { ["personActivityId"]=Guid.NewGuid().ToString(),["action"]="complete",["activityDate"]="2026-11-07",["note"]="Reviewed new evidence supporting case reopening",["confirmed"]="true" })); Assert.Equal(HttpStatusCode.Redirect,completed.StatusCode);
             Assert.Equal("done", await Sql(c, "SELECT taskStatus FROM dbo.workTask WHERE workTaskId = @task", ("@task", task)));
             using var duplicate = await client.NoRedirect.PostAsync($"/cases/{id}/reopen", new FormUrlEncodedContent(fields)); Assert.False(duplicate.IsSuccessStatusCode);
             Assert.Equal(1, await Sql(c, "SELECT COUNT (*) FROM dbo.workTask WHERE exposureCaseId = @id", ("@id", id)));
         }
-        finally { await Sql(c, "DELETE dbo.workTask WHERE exposureCaseId = @id; DELETE dbo.caseActivity WHERE exposureCaseId = @id; DELETE dbo.exposureCase WHERE exposureCaseId = @id; DELETE dbo.labResult WHERE labResultId = @result; DELETE dbo.person WHERE personId = @person", ("@id", id), ("@person", person), ("@result", result)); }
+        finally { await Sql(c, "DELETE dbo.workTask WHERE exposureCaseId = @id; DELETE dbo.personActivity WHERE exposureCaseId=@id; DELETE dbo.caseActivity WHERE exposureCaseId = @id; DELETE dbo.exposureCase WHERE exposureCaseId = @id; DELETE dbo.labResult WHERE labResultId = @result; DELETE dbo.person WHERE personId = @person", ("@id", id), ("@person", person), ("@result", result)); }
     }
 
     [SqlFact]

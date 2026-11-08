@@ -44,6 +44,7 @@ USING (VALUES
     ('usage.view',                N'Review scoped workforce screen usage and export usage reports', 'admin'),
     ('document.view',             N'Read private patient and case attachments', 'read'),
     ('document.edit',             N'Attach and link patient and case documents', 'write'),
+    ('workflow.waive',            N'Authorize documented exceptions to waiver-enabled program tasks', 'write'),
     ('tenant.administer',         N'Manage users, their master profiles and child tenants at the tenants they administer', 'admin'),
     ('tenant.create',             N'Add tenants under the tenants you administer', 'admin'),
     ('platform.administer',       N'Platform administration: create data roots and manage every account (no access to records)', 'admin'),

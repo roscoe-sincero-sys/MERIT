@@ -1,8 +1,8 @@
 @model IntakeModel
 @{
-    ViewData["Title"] = "Intake";
+    ViewData["Title"] = "Upload lab results";
 }
-<h1>Intake</h1>
+<h1>Upload lab results</h1>
 @if (Model.Message is not null && Model.DuplicateOf is Guid earlier)
 {
     <div class="usa-alert usa-alert--warning usa-alert--slim" role="alert"><div class="usa-alert__body"><p class="usa-alert__text">@Model.Message

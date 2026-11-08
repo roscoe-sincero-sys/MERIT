@@ -38,7 +38,7 @@ public sealed class QueueService(IWorkData work, AuditService audit, ICurrentSes
     {
         session.Require(Permissions.TaskEdit);
         var v = new Validator();
-        v.When(action == "dismiss" && string.IsNullOrWhiteSpace(note), "note", "Enter a reason for dismissal.");
+        v.When(action is "complete" or "dismiss" && string.IsNullOrWhiteSpace(note), "note", "Enter completion evidence or a reason for dismissal.");
         v.MaxLength("note", note, 1000, "Reason");
         v.When(taskIds.Count == 0, "taskIds", "Select at least one task.");
         v.When(!BulkActions.Contains(action), "action", "Unknown action.");

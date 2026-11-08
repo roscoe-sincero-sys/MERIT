@@ -28,7 +28,7 @@ public sealed class WorkflowRecoveryTests(MeritFixture fixture)
             await client.Http.GetStringAsync("/");
             async Task<int> Act(string action)
             {
-                using var response = await client.Http.PostAsJsonAsync("/api/v1/tasks/bulk", new { taskIds = new[] { task }, action });
+                using var response = await client.Http.PostAsJsonAsync("/api/v1/tasks/bulk", new { taskIds = new[] { task }, action, note="Verified internal work was completed" });
                 response.EnsureSuccessStatusCode();
                 using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
                 return json.RootElement.GetProperty("updated").GetInt32();

@@ -1,0 +1,26 @@
+@model PatientWorkModel
+@inject ICurrentSession Session
+@{ ViewData["Title"]="Patient work checklist"; var p=Model.Person.Header.Person; string root=$"/people/{p.PersonId}/work";
+string V(string k,string fallback="") => ViewData.ModelState.TryGetValue(k,out var e) ? e.AttemptedValue ?? fallback : fallback; }
+<p><a href="/people/@p.PersonId">Back to patient</a> · <a href="/people/@p.PersonId/care#activity">Activity and documents</a></p>
+<h1>Patient work checklist</h1><div class="workspace-context"><strong>@p.LastName, @p.FirstName</strong> · @p.Dob</div>
+@if(p.MergedIntoPersonId is Guid canonical) { <p>This patient record was merged. <a href="/people/@canonical/work">Open the current patient's work checklist</a>. Historical work remains available here.</p> }
+@if(TempData["WorkMessage"] is string message) { <div class="usa-alert usa-alert--success" role="status"><p>@message</p></div> }
+@if(!ViewData.ModelState.IsValid) { <div class="usa-alert usa-alert--error" role="alert"><h2>Task was not saved</h2><div asp-validation-summary="All"></div></div> }
+<p>Completed work, authorized exceptions, transfers and automatic closure dismissals retain different dispositions. Legacy records without evidence are labelled as unrecorded; their done status is not retroactive proof of delivery.</p>
+@if(Session.Has(Permissions.PersonEdit) && p.MergedIntoPersonId is null) { <form asp-antiforgery="true" method="post" action="@root/evaluate"><button class="usa-button usa-button--outline">Evaluate approved program tasks</button></form> }
+@if(Model.Work.Count==0) { <p>No tasks on record. This does not establish that all required work is complete; approved definitions must be configured and evaluated.</p> }
+@foreach(var w in Model.Work) {
+<article class="merit-section"><h2><a href="/work/tasks/@w.WorkTaskId">@w.Title</a> — @Options.Humanize(w.TaskStatus)</h2><p>@(w.CaseNumber ?? "Patient only") · Due @(w.DueDate?.ToString("yyyy-MM-dd") ?? "no numeric deadline") · Disposition: @(w.ResolutionKind is null ? "Not recorded / pending" : Options.Humanize(w.ResolutionKind))</p><p class="care-note">@w.Detail</p><p class="care-note">@w.ResolutionNote</p>
+@if(w.CompletionActivityId is not null) { <p><a href="/people/@p.PersonId/care#activity">View the recorded patient/case activity</a></p> }</article>
+}
+@if(Session.Has(Permissions.PersonEdit) && Session.Has(Permissions.TaskEdit) && p.MergedIntoPersonId is null) {
+<h2>Add ad-hoc work for this patient</h2><p>This creates one scoped task. It does not change program-wide requirements. Routine ad-hoc work can be <a href="/app/queues?queue=programTask">dismissed with a reason in the queue</a>; published program requirements use their evidence and authorized-exception workflow.</p>
+<form asp-antiforgery="true" method="post" action="@root" class="usa-form" data-unsaved-work>
+<input type="hidden" name="workTaskId" value="@V("workTaskId",Guid.NewGuid().ToString())" />
+<label class="usa-label" for="title">Task</label><input class="usa-input" id="title" name="title" required maxlength="200" value="@V("title")" />
+<label class="usa-label" for="description">Instructions</label><textarea class="usa-textarea" id="description" name="description" required maxlength="1000">@V("description")</textarea>
+<label class="usa-label" for="completionKind">Completion evidence</label><select class="usa-select" id="completionKind" name="completionKind"><option value="internal">Internal work with a completed outcome and note</option><option value="contact">Successful contact with a recipient and outcome</option><option value="delivery">Completed external delivery</option></select>
+<label class="usa-label" for="exposureCaseId">Associated active case (optional)</label><select class="usa-select" id="exposureCaseId" name="exposureCaseId"><option value="">Patient only</option>@foreach(var c in Model.Person.Cases.Where(c=>c.CaseStatus!="closed")) { <option value="@c.ExposureCaseId">@c.CaseNumber · @c.AnalyteName</option> }</select>
+<label class="usa-label" for="dueDate">Target date (optional)</label><input class="usa-input" type="date" id="dueDate" name="dueDate" value="@V("dueDate")" /><button class="usa-button">Create patient task</button></form>
+}

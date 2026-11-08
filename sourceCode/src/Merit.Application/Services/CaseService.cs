@@ -70,6 +70,7 @@ public sealed class CaseService(IClock clock, ICaseData cases, IWorkData work, I
         session.Require(Permissions.CaseEdit);
         new Validator().Required("ActivityType", input.ActivityType, "Activity type")
             .When(input.ActivityDate > clock.Today, "ActivityDate", "The date cannot be in the future.")
+            .When(input.ActivityType == "contactAttempt" && (input.ContactPersonId is null || input.Outcome is not ("reached" or "noAnswer" or "leftMessage" or "wrongNumber") || string.IsNullOrWhiteSpace(input.Note)), "Outcome", "A contact attempt needs a recorded recipient, actual outcome and a note. Use an internal note for internal work.")
             .MaxLength("Note", input.Note, 2000, "Note")
             .ThrowIfInvalid();
         if (input.ContactPersonId is Guid contact)
@@ -114,14 +115,14 @@ public sealed class CaseService(IClock clock, ICaseData cases, IWorkData work, I
     }
 
     public async Task CloseAsync(Guid exposureCaseId, string? closureReason, DateOnly? closedDate, string? note, byte[] rowVersion,
-                                 CancellationToken ct = default)
+                                 CancellationToken ct = default, string? closureReviewToken = null, bool closureReviewConfirmed = false)
     {
         session.Require(Permissions.CaseEdit);
         new Validator().When(closureReason is null || !ClosureReasons.Contains(closureReason), "ClosureReason", "Choose a closure reason.")
             .Required("ClosedDate", closedDate, "Closed date")
             .When(closedDate > clock.Today, "ClosedDate", "The date cannot be in the future.")
             .ThrowIfInvalid();
-        await cases.CloseCaseAsync(exposureCaseId, closureReason!, closedDate!.Value, note, rowVersion, ct).ConfigureAwait(false);
+        await cases.CloseCaseAsync(exposureCaseId, closureReason!, closedDate!.Value, note, rowVersion, ct, closureReviewToken, closureReviewConfirmed).ConfigureAwait(false);
         await audit.ChangedAsync("exposureCase", exposureCaseId, ct).ConfigureAwait(false);
     }
 

@@ -825,3 +825,9 @@ BEGIN
         ADD CONSTRAINT FK_dbo_notificationObligation_dbo_personActivity FOREIGN KEY (completedActivityId) REFERENCES dbo.personActivity (personActivityId);
 END;
 GO
+IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_config_workflowDefinition_config_analyteSpecimen')
+BEGIN
+    ALTER TABLE config.workflowDefinition
+        ADD CONSTRAINT FK_config_workflowDefinition_config_analyteSpecimen FOREIGN KEY (analyteSpecimenId) REFERENCES config.analyteSpecimen (analyteSpecimenId);
+END;
+GO

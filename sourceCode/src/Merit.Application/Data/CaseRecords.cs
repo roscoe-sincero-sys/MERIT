@@ -336,6 +336,8 @@ public sealed class AttachResultOutcome
 
 public sealed class CaseRow
 {
+    public string ClosureReviewToken { get; init; } = "";
+    public int FailedContactAttempts { get; init; }
     public Guid ExposureCaseId { get; init; }
 
     public string CaseNumber { get; init; } = string.Empty;
@@ -504,7 +506,10 @@ public sealed record CaseDetail(
     IReadOnlyList<CaseActivityRow> Activities,
     IReadOnlyList<CaseInvestigationRow> Investigations,
     IReadOnlyList<CaseTaskRow> Tasks,
-    PrimaryContactRow? PrimaryContact);
+    PrimaryContactRow? PrimaryContact,
+    IReadOnlyList<ClosureRequirementRow>? ClosureRequirements = null);
+
+public sealed record ClosureRequirementRow(string Name, string ClosureReason, int MinimumContactAttempts, string EvaluationState, string Explanation);
 
 /// <summary>
 /// A case list search (issue #50): every filter optional. Sort is opened, case, classification or person; Assigned is

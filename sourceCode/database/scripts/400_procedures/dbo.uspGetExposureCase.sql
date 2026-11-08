@@ -97,7 +97,9 @@ BEGIN
                c.closureReason, c.assignedToUserId, u.displayName AS assignedToName, c.owningTenantId,
                t.tenantName AS owningTenantName, c.qualifyingLabResultId, c.highestLabResultId,
                h.valueCanonical AS highestValue, h.unitCanonical AS highestUnit, h.collectedDate AS highestCollectedDate,
-               c.rowVersion
+               c.rowVersion, dbo.udfCaseClosureReviewStamp(c.exposureCaseId) AS closureReviewToken,
+               (SELECT COUNT(*) FROM dbo.vwPatientActivityStream AS ca WHERE ca.exposureCaseId=c.exposureCaseId AND ca.activityType='contactAttempt' AND ca.isDeleted=0 AND ca.isVoided=0
+                AND ca.outcome IN ('noAnswer','leftMessage','wrongNumber') AND (ca.contactPersonId IS NOT NULL OR NULLIF(TRIM(ca.recipientLabel),N'') IS NOT NULL)) AS failedContactAttempts
           FROM dbo.exposureCase AS c
           JOIN dbo.person AS p ON p.personId = c.personId
           JOIN config.analyte AS a ON a.analyteId = c.analyteId
@@ -148,6 +150,11 @@ BEGIN
           JOIN dbo.person AS cp ON cp.personId = r.relatedPersonId
          WHERE r.personId = @personId AND r.isDeleted = 0 AND r.isPrimaryContact = 1
            AND (r.endDate IS NULL OR r.endDate >= auth.udfSessionToday ());
+
+        SELECT d.name,d.closureReason,d.minimumContactAttempts,e.evaluationState,e.explanation
+         FROM config.workflowDefinition AS d CROSS APPLY config.tvfWorkflowEligibility(d.workflowDefinitionId,@personId,@exposureCaseId,NULL) AS e
+         WHERE d.definitionStatus='published' AND d.blocksClosure=1 AND d.isDeleted=0 AND e.evaluationState IN ('eligible','needsReview')
+         ORDER BY d.name,d.version;
 
         -- =========================================================================================
         -- ===== End of the procedure's own work. ===================================================
