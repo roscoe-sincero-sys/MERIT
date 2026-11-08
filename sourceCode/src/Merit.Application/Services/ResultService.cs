@@ -29,7 +29,9 @@ public sealed record ResultEntryInput(
     string? AccessionNumber,
     string ResultStatus,
     string? ReasonForTest,
-    string? PayerType);
+    string? PayerType,
+    DateOnly? FinalResultDate = null,
+    DateTime? DepartmentReceivedAt = null);
 
 public sealed record ThresholdLine(string Type, string Label, decimal Level, string Unit, string Outcome);
 
@@ -84,6 +86,18 @@ public sealed class ResultService(
             nameof(input.Speciation), "Choose a speciation from the list.");
         v.When(specimen.RequiresCreatinine && input.Creatinine is null, nameof(input.Creatinine), "Creatinine is required for this specimen.");
         var today = clock.Today;
+        DateTime receivedUtc = DateTime.UtcNow;
+        if (input.DepartmentReceivedAt is DateTime localReceipt)
+        {
+            localReceipt = DateTime.SpecifyKind(localReceipt, DateTimeKind.Unspecified);
+            v.When(clock.Zone.IsInvalidTime(localReceipt) || clock.Zone.IsAmbiguousTime(localReceipt), nameof(input.DepartmentReceivedAt), "Choose an unambiguous Department receipt time in the jurisdiction's time zone.");
+            v.ThrowIfInvalid();
+            receivedUtc = TimeZoneInfo.ConvertTimeToUtc(localReceipt, clock.Zone);
+            v.When(receivedUtc > DateTime.UtcNow, nameof(input.DepartmentReceivedAt), "Department receipt cannot be in the future.");
+            v.When(DateOnly.FromDateTime(localReceipt) < input.CollectedDate, nameof(input.DepartmentReceivedAt), "Department receipt cannot precede collection.");
+        }
+        v.When(input.FinalResultDate is DateOnly final && (final < input.CollectedDate || final > DateOnly.FromDateTime(clock.ToLocal(receivedUtc))),
+            nameof(input.FinalResultDate), "The laboratory's final-result date must be between collection and Department receipt; do not substitute the analysis or collection date.");
         v.When(input.CollectedDate > today, nameof(input.CollectedDate), "The collection date cannot be in the future.");
         v.When(input.ReportedDate is not null && input.ReportedDate < input.CollectedDate, nameof(input.ReportedDate),
             "The reported date must be on or after the collection date.");
@@ -108,6 +122,7 @@ public sealed class ResultService(
             ["unit"] = input.Unit,
             ["sampleType"] = input.SampleType,
             ["collectedDate"] = input.CollectedDate?.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
+            ["finalResultDate"] = input.FinalResultDate?.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
             ["accessionNumber"] = input.AccessionNumber,
             ["enteredBy"] = session.UserName,
         });
@@ -121,7 +136,7 @@ public sealed class ResultService(
             CollectedDate = input.CollectedDate!.Value,
             AnalyzedDate = input.AnalyzedDate,
             ReportedDate = input.ReportedDate,
-            ReceivedUtc = DateTime.UtcNow,
+            ReceivedUtc = receivedUtc,
             ResultStatus = input.ResultStatus,
             SupersedesLabResultId = isCorrection ? duplicate?.LabResultId : null,
             ValueReported = normalized.ValueReported,

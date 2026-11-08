@@ -30,7 +30,7 @@ CREATE OR ALTER FUNCTION config.udfNotificationDueDate (@anchor DATE, @days INT,
 RETURNS DATE
 AS
 BEGIN
-    IF @days NOT BETWEEN 1 AND 365 OR @basis NOT IN ('calendar','business') OR ISJSON (@holidays) <> 1 RETURN NULL;
+    IF @anchor IS NULL OR @anchor > '9980-12-31' OR @days NOT BETWEEN 1 AND 365 OR @basis NOT IN ('calendar','business') OR ISJSON (@holidays) <> 1 RETURN NULL;
     DECLARE @cursor DATE = @anchor, @remaining INT = @days, @steps INT = 0;
     WHILE @remaining > 0 AND @steps < 5000
     BEGIN

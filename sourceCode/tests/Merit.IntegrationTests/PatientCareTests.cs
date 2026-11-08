@@ -13,7 +13,7 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Merit.IntegrationTests;
 
 [Collection(MeritCollection.Name)]
-public sealed class PatientCareTests(MeritFixture fixture)
+public sealed partial class PatientCareTests(MeritFixture fixture)
 {
     private static async Task<object?> Sql(SqlConnection c, string sql, params (string, object?)[] args)
     {

@@ -10,7 +10,7 @@ QUEUE_NAMES = """('unmatchedResult', N'Unmatched results'), ('unknownCode', N'Un
         ('populationReview', N'Population unknown (no DOB)'), ('deceasedReview', N'Deceased: close open cases'),
         ('siteReview', N'Other sites to review'), ('investigationRequest', N'Investigation requests'),
         ('prenatalNotification', N'Prenatal provider notifications'), ('newbornTesting', N'Newborn testing'),
-        ('notificationDue', N'Patient/caregiver notification deadlines'), ('letterDue', N'Letters to send'), ('actionLevel', N'Action level follow-up'),
+        ('receiptFinding', N'Laboratory receipt findings'), ('missingInformation', N'Missing information received'), ('labReportingReview', N'Laboratory reporting review'), ('assessmentContact', N'Environmental assessment scheduling'), ('assessmentOwnerClosure', N'Property-owner closure letters'), ('notificationDue', N'Patient/caregiver notification deadlines'), ('letterDue', N'Letters to send'), ('actionLevel', N'Action level follow-up'),
         ('matchReview', N'Person match review (supervisor)')"""
 
 PROCS = [
@@ -227,11 +227,16 @@ INSERT @ids SELECT DISTINCT TRY_CAST ([value] AS UNIQUEIDENTIFIER) FROM OPENJSON
              WHERE TRY_CAST ([value] AS UNIQUEIDENTIFIER) IS NOT NULL;
 
 IF @action IN ('complete','dismiss','reopen') AND EXISTS
-    (SELECT 1 FROM @ids AS i JOIN dbo.workTask AS w ON w.workTaskId = i.workTaskId WHERE w.queueCode = 'notificationDue' AND w.isDeleted = 0)
+    (SELECT 1 FROM @ids AS i JOIN dbo.workTask AS w ON w.workTaskId = i.workTaskId WHERE w.queueCode IN ('notificationDue','receiptFinding','missingInformation','labReportingReview') AND w.isDeleted = 0)
 BEGIN
-    ;THROW 51422, N'Use the patient notification workspace to record completed delivery, review applicability or correct evidence. No tasks were changed.', 1;
+    ;THROW 51422, N'Use the notification or laboratory receipt review workspace to record evidence. Detection history and pending information requests cannot be changed by bulk actions. No tasks were changed.', 1;
 END;
 
+IF @action IN ('complete','dismiss') AND NULLIF(TRIM(@note),N'') IS NULL AND EXISTS
+ (SELECT 1 FROM @ids AS i JOIN dbo.workTask AS w ON w.workTaskId=i.workTaskId WHERE w.queueCode='assessmentOwnerClosure' AND w.isDeleted=0)
+BEGIN
+    ;THROW 51422, N'Record the owner closure-letter recipient/address and source evidence, or a source-based reason that the letter is not required, in the queue evidence/reason field.', 1;
+END;
 IF @action IN ('assign', 'assignToMe')
 BEGIN
     DECLARE @worker UNIQUEIDENTIFIER = CASE WHEN @action = 'assignToMe' THEN @me ELSE @assignToUserId END;
@@ -283,6 +288,16 @@ UPDATE w
             AND (w.assignedToUserId IS NULL OR w.assignedToUserId <> CASE WHEN @action = 'assignToMe' THEN @me ELSE @assignToUserId END)));
 
 DECLARE @updatedCount INT = @@ROWCOUNT;
+DECLARE @refresh TABLE (personId UNIQUEIDENTIFIER PRIMARY KEY, processed BIT NOT NULL DEFAULT (0));
+INSERT @refresh (personId) SELECT DISTINCT w.personId FROM dbo.workTask AS w JOIN @ids AS i ON i.workTaskId=w.workTaskId
+ WHERE w.queueCode='assessmentOwnerClosure' AND w.personId IS NOT NULL AND w.isDeleted=0;
+WHILE EXISTS (SELECT 1 FROM @refresh WHERE processed=0)
+BEGIN
+    DECLARE @refreshPerson UNIQUEIDENTIFIER = (SELECT TOP(1) personId FROM @refresh WHERE processed=0 ORDER BY personId);
+    EXEC dbo.uspRefreshPersonAccess @personId=@refreshPerson;
+    UPDATE @refresh SET processed=1 WHERE personId=@refreshPerson;
+END;
+
 SET @Comments = CONCAT (@updatedCount, N' task(s) updated.');
 SELECT @updatedCount AS updatedCount;
 """,

@@ -61,6 +61,8 @@ CREATE OR ALTER PROCEDURE dbo.uspRecordPatientActivity
       , @labResultId UNIQUEIDENTIFIER = NULL
       , @notificationObligationId UNIQUEIDENTIFIER = NULL
       , @completeMatching BIT = 0
+      , @noticeFormReference NVARCHAR (300) = NULL
+      , @ownerScopeConfirmed BIT = 0
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -177,9 +179,32 @@ BEGIN
         BEGIN
             ;THROW 51422, N'Notification cannot precede collection of the blood test.', 1;
         END;
-        IF @activityType = 'notificationCompleted' AND (@outcome <> 'completed' OR @contactPersonId IS NULL OR @labResultId IS NULL OR @audience NOT IN ('patient','caregiver'))
+        IF @activityType = 'notificationCompleted' AND (@outcome <> 'completed' OR (@contactPersonId IS NULL AND @audience <> 'owner') OR @labResultId IS NULL OR @audience NOT IN ('patient','caregiver','owner'))
         BEGIN
             ;THROW 51422, N'Completed notification requires a result, a recorded recipient, a delivery channel and a completed outcome.', 1;
+        END;
+        IF @activityType = 'notificationCompleted' AND @audience = 'owner' AND (@ownerScopeConfirmed <> 1 OR NULLIF (TRIM (@recipientLabel), N'') IS NULL)
+        BEGIN
+            ;THROW 51422, N'Name the property-owner recipients and confirm that every required owner was notified. List property addresses and delivery details in the activity note; use the last actual delivery date.', 1;
+        END;
+        IF @notificationObligationId IS NOT NULL AND EXISTS (SELECT 1 FROM dbo.notificationObligation WHERE notificationObligationId = @notificationObligationId
+            AND COALESCE (JSON_VALUE (policySnapshotJson, '$.eligibilityMode'), 'threshold') <> 'threshold')
+        BEGIN
+            IF EXISTS (SELECT 1 FROM dbo.notificationObligation AS o WHERE o.notificationObligationId=@notificationObligationId
+              AND dbo.udfMarylandEblConfirmed (o.labResultId,TRY_CONVERT(DECIMAL(18,6),JSON_VALUE(o.policySnapshotJson,'$.minimumValue')))=0)
+            BEGIN
+                ;THROW 51422, N'The Maryland confirmation evidence has changed or is insufficient. Review the source tests before completing delivery.', 1;
+            END;
+            IF NULLIF (TRIM (@noticeFormReference), N'') IS NULL
+            BEGIN
+                ;THROW 51422, N'Record the Department-approved notice form or attached document reference used for this Maryland notice.', 1;
+            END;
+            IF @audience = 'caregiver' AND NOT EXISTS (SELECT 1 FROM dbo.personRelationship WHERE personId = @personId AND relatedPersonId = @contactPersonId
+                AND isDeleted = 0 AND (startDate IS NULL OR startDate <= @activityDate) AND (endDate IS NULL OR endDate >= @activityDate)
+                AND (hasLegalCustody = 1 OR role IN ('parent','legalGuardian','fosterParent')))
+            BEGIN
+                ;THROW 51422, N'Maryland caregiver notice requires a recorded parent, guardian or legal responsibility; primary-contact status alone is insufficient.', 1;
+            END;
         END;
         IF EXISTS (SELECT 1 FROM dbo.caseActivity WHERE caseActivityId = @personActivityId)
         BEGIN
@@ -190,9 +215,9 @@ BEGIN
             ;THROW 51409, N'This activity was already submitted. Refresh the history before submitting another event.', 1;
         END;
         INSERT dbo.personActivity (personActivityId, rootTenantId, owningTenantId, personId, exposureCaseId, labResultId,
-            activityType, activityDate, audience, channel, contactPersonId, recipientLabel, outcome, note, workerUserId)
+            activityType, activityDate, audience, channel, contactPersonId, recipientLabel, noticeFormReference, ownerScopeConfirmed, outcome, note, workerUserId)
         VALUES (@personActivityId, @root, @owner, @personId, @exposureCaseId, @labResultId, @activityType, @activityDate,
-            @audience, @channel, @contactPersonId, @recipientLabel, @outcome, @note, auth.udfSessionUserId ());
+            @audience, @channel, @contactPersonId, @recipientLabel, @noticeFormReference, @ownerScopeConfirmed, @outcome, @note, auth.udfSessionUserId ());
         IF @notificationObligationId IS NOT NULL
         BEGIN
             DECLARE @task UNIQUEIDENTIFIER;
@@ -210,7 +235,9 @@ BEGIN
              WHERE personId = @personId AND labResultId = @labResultId AND recipientKind = @audience
                AND isDeleted = 0 AND completedActivityId IS NULL AND evaluationState = 'eligible' AND anchorDate <= @activityDate
                AND ((exposureCaseId IS NULL AND @exposureCaseId IS NULL) OR exposureCaseId = @exposureCaseId)
-               AND (notificationObligationId = @notificationObligationId OR @completeMatching = 1);
+               AND (notificationObligationId = @notificationObligationId OR (@completeMatching = 1 AND (COALESCE (JSON_VALUE (policySnapshotJson, '$.eligibilityMode'), 'threshold') = 'threshold'
+                 OR (JSON_VALUE(policySnapshotJson,'$.eligibilityMode')=(SELECT JSON_VALUE(picked.policySnapshotJson,'$.eligibilityMode') FROM dbo.notificationObligation AS picked WHERE picked.notificationObligationId=@notificationObligationId)
+                   AND dbo.udfMarylandEblConfirmed(labResultId,TRY_CONVERT(DECIMAL(18,6),JSON_VALUE(policySnapshotJson,'$.minimumValue')))=1))));
             IF NOT EXISTS (SELECT 1 FROM @targets WHERE id = @notificationObligationId)
             BEGIN
                 ;THROW 51422, N'Completed notification cannot precede receipt of this blood test. Nothing was saved.', 1;

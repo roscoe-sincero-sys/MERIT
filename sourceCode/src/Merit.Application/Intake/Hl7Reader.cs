@@ -174,6 +174,8 @@ public static class Hl7Reader
                         ["loinc"] = loinc, ["value"] = value, ["unit"] = observation.Component(6), ["sampleType"] = sampleType,
                         ["collectedDate"] = Date(First(group.Specimen?.Component(17), group.Request.Component(7), observation.Component(14))),
                         ["reportedDate"] = Date(First(group.Request.Component(22), msh.Text(7))),
+                        // Only an explicit final/corrected result-status date; never the message/collection fallback.
+                        ["finalResultDate"] = (status is "final" or "corrected") && (group.Request.Text(25) is "F" or "C") ? Date(group.Request.Component(22)) : null,
                         ["accessionNumber"] = First(group.Request.Component(3), group.Request.Component(2), group.Control?.Component(3)),
                         ["resultStatus"] = status, ["orderingProviderNpi"] = First(group.Request.Component(16), group.Control?.Component(12)),
                         ["labCliaNumber"] = ProviderIdentifiers.IsValidClia(performingClia) ? performingClia

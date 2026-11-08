@@ -105,7 +105,8 @@ BEGIN
         INSERT @want (tenantId, accessReason)
         SELECT DISTINCT c.owningTenantId, 'case'
           FROM dbo.exposureCase AS c
-         WHERE c.personId = @personId AND c.isDeleted = 0 AND c.caseStatus <> 'closed' AND c.owningTenantId <> @root;
+         WHERE c.personId = @personId AND c.isDeleted = 0 AND (c.caseStatus <> 'closed' OR EXISTS
+             (SELECT 1 FROM dbo.workTask AS w WHERE w.exposureCaseId=c.exposureCaseId AND w.queueCode='assessmentOwnerClosure' AND w.taskStatus='open' AND w.isDeleted=0)) AND c.owningTenantId <> @root;
 
         UPDATE pa SET isDeleted = 1
           FROM dbo.personAccess AS pa

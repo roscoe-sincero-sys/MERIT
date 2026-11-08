@@ -26,6 +26,9 @@ BEGIN
         ruleName                   NVARCHAR (120)    NOT NULL,
         analyteSpecimenId          UNIQUEIDENTIFIER  NOT NULL,
         population                 VARCHAR (10)      NOT NULL,
+        rulePurpose                VARCHAR (20)      NOT NULL CONSTRAINT DF_config_notificationRule_rulePurpose DEFAULT ('notification'),
+        eligibilityMode            VARCHAR (20)      NOT NULL CONSTRAINT DF_config_notificationRule_eligibilityMode DEFAULT ('threshold'),
+        requiredFieldsCsv          NVARCHAR (1000)   NULL,
         minimumAgeMonths           INT               NULL,
         maximumAgeMonths           INT               NULL,
         minimumValue               DECIMAL (18, 6)   NOT NULL,
@@ -61,6 +64,12 @@ GO
 -- 2. Additive columns. Each column is also added on its own when missing, so a table deployed by an
 --    earlier release converges on the current definition. A no-op on a fresh install.
 -- -------------------------------------------------------------------------------------------
+IF COL_LENGTH (N'config.notificationRule', N'rulePurpose') IS NULL
+    ALTER TABLE config.notificationRule ADD rulePurpose                VARCHAR (20)      NOT NULL CONSTRAINT DF_config_notificationRule_rulePurpose DEFAULT ('notification');
+IF COL_LENGTH (N'config.notificationRule', N'eligibilityMode') IS NULL
+    ALTER TABLE config.notificationRule ADD eligibilityMode            VARCHAR (20)      NOT NULL CONSTRAINT DF_config_notificationRule_eligibilityMode DEFAULT ('threshold');
+IF COL_LENGTH (N'config.notificationRule', N'requiredFieldsCsv') IS NULL
+    ALTER TABLE config.notificationRule ADD requiredFieldsCsv          NVARCHAR (1000)   NULL;
 IF COL_LENGTH (N'config.notificationRule', N'minimumAgeMonths') IS NULL
     ALTER TABLE config.notificationRule ADD minimumAgeMonths           INT               NULL;
 IF COL_LENGTH (N'config.notificationRule', N'maximumAgeMonths') IS NULL
@@ -76,9 +85,28 @@ GO
 -- -------------------------------------------------------------------------------------------
 -- 3. Check constraints. System-defined values and cross-column rules.
 -- -------------------------------------------------------------------------------------------
+IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_config_notificationRule_rulePurpose')
+BEGIN
+    ALTER TABLE config.notificationRule ADD CONSTRAINT CK_config_notificationRule_rulePurpose CHECK (rulePurpose IN ('notification','labReporting'));
+END;
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_config_notificationRule_eligibilityMode')
+BEGIN
+    ALTER TABLE config.notificationRule ADD CONSTRAINT CK_config_notificationRule_eligibilityMode CHECK (eligibilityMode IN ('threshold','mdEbl','mdOwner','mdAffectedOwner','mdReporting'));
+END;
+GO
+IF EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_config_notificationRule_recipientKind'
+               AND definition NOT LIKE N'%''owner''%')
+BEGIN
+    BEGIN TRANSACTION;
+    ALTER TABLE config.notificationRule DROP CONSTRAINT CK_config_notificationRule_recipientKind;
+    ALTER TABLE config.notificationRule WITH CHECK ADD CONSTRAINT CK_config_notificationRule_recipientKind CHECK (recipientKind IN ('patient','caregiver','owner','department'));
+    COMMIT TRANSACTION;
+END;
+GO
 IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_config_notificationRule_recipientKind')
 BEGIN
-    ALTER TABLE config.notificationRule ADD CONSTRAINT CK_config_notificationRule_recipientKind CHECK (recipientKind IN ('patient','caregiver'));
+    ALTER TABLE config.notificationRule ADD CONSTRAINT CK_config_notificationRule_recipientKind CHECK (recipientKind IN ('patient','caregiver','owner','department'));
 END;
 GO
 IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_config_notificationRule_triggerEvent')
@@ -215,6 +243,9 @@ EXEC util.uspSetObjectDescription @SchemaName = N'config', @ObjectType = N'TABLE
 EXEC util.uspSetObjectDescription @SchemaName = N'config', @ObjectType = N'TABLE', @ObjectName = N'notificationRule', @ColumnName = N'ruleName', @Description = N'Program''s name for this rule version.';
 EXEC util.uspSetObjectDescription @SchemaName = N'config', @ObjectType = N'TABLE', @ObjectName = N'notificationRule', @ColumnName = N'analyteSpecimenId', @Description = N'Analyte, specimen and canonical unit.';
 EXEC util.uspSetObjectDescription @SchemaName = N'config', @ObjectType = N'TABLE', @ObjectName = N'notificationRule', @ColumnName = N'population', @Description = N'all, child, adult, pregnant or unknown.';
+EXEC util.uspSetObjectDescription @SchemaName = N'config', @ObjectType = N'TABLE', @ObjectName = N'notificationRule', @ColumnName = N'rulePurpose', @Description = N'notification or labReporting: separate agency receipt and laboratory final-result clocks.';
+EXEC util.uspSetObjectDescription @SchemaName = N'config', @ObjectType = N'TABLE', @ObjectName = N'notificationRule', @ColumnName = N'eligibilityMode', @Description = N'threshold, mdEbl, mdOwner, mdAffectedOwner or mdReporting. Maryland notice criteria require explicit reviewed evidence.';
+EXEC util.uspSetObjectDescription @SchemaName = N'config', @ObjectType = N'TABLE', @ObjectName = N'notificationRule', @ColumnName = N'requiredFieldsCsv', @Description = N'Mapped source fields required by an approved laboratory reporting policy.';
 EXEC util.uspSetObjectDescription @SchemaName = N'config', @ObjectType = N'TABLE', @ObjectName = N'notificationRule', @ColumnName = N'minimumAgeMonths', @Description = N'Optional inclusive age minimum.';
 EXEC util.uspSetObjectDescription @SchemaName = N'config', @ObjectType = N'TABLE', @ObjectName = N'notificationRule', @ColumnName = N'maximumAgeMonths', @Description = N'Optional inclusive age maximum.';
 EXEC util.uspSetObjectDescription @SchemaName = N'config', @ObjectType = N'TABLE', @ObjectName = N'notificationRule', @ColumnName = N'minimumValue', @Description = N'Inclusive minimum canonical result.';

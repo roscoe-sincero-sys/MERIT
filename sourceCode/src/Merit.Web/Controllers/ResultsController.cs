@@ -47,7 +47,7 @@ public sealed class ResultsController(IClock clock, ResultService results, Perso
             var summary = await results.SaveManualAsync(new ResultEntryInput(personId, form.AnalyteId, form.AnalyteSpecimenId, form.ValueText,
                 form.Unit, form.SampleType, form.Speciation, form.Creatinine, form.CollectedDate, form.AnalyzedDate, form.ReportedDate,
                 form.TestMethod, form.LabOrganizationId, form.OrderingProviderId, form.AccessionNumber, form.ResultStatus,
-                form.ReasonForTest, form.PayerType), ct);
+                form.ReasonForTest, form.PayerType, form.FinalResultDate, form.DepartmentReceivedAt), ct);
             Response.Announce("Result saved. " + summary.CaseOutcome);
             var model = new ResultSavedModel(personId, summary);
             return Request.IsHtmx() ? PartialView("_SaveSummary", model) : View("Saved", model);

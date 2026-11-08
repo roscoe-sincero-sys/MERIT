@@ -567,6 +567,8 @@ public sealed class PregnancyFormModel
 
 public sealed class ResultFormModel
 {
+    public DateOnly? FinalResultDate { get; set; }
+    public DateTime? DepartmentReceivedAt { get; set; }
     public Guid PersonId { get; set; }
 
     public string PersonName { get; set; } = string.Empty;

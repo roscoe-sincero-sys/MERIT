@@ -1508,6 +1508,24 @@
     "type": "DATE",
     "hasDefault": true,
     "isOutput": false
+   },
+   {
+    "name": "rulePurpose",
+    "type": "VARCHAR (20)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "eligibilityMode",
+    "type": "VARCHAR (20)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "requiredFieldsCsv",
+    "type": "NVARCHAR (1000)",
+    "hasDefault": true,
+    "isOutput": false
    }
   ]
  },
@@ -3679,6 +3697,63 @@
   ]
  },
  {
+  "name": "dbo.uspListReceiptPolicyResults",
+  "kind": "read",
+  "grants": [
+   "meritWebRole",
+   "meritWorkerRole"
+  ],
+  "permission": null,
+  "params": [
+   {
+    "name": "notificationRuleId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "personId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "pageNumber",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
+  "name": "dbo.uspListReceiptWork",
+  "kind": "read",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": "task.view",
+  "params": [
+   {
+    "name": "personId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "pageNumber",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "workTaskId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
   "name": "dbo.uspListReporters",
   "kind": "read",
   "grants": [
@@ -3895,6 +3970,40 @@
   ]
  },
  {
+  "name": "dbo.uspReceiveMissingInformation",
+  "kind": "write",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": null,
+  "params": [
+   {
+    "name": "workTaskId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "receivedDate",
+    "type": "DATE",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "evidence",
+    "type": "NVARCHAR (1000)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "confirmed",
+    "type": "BIT",
+    "hasDefault": false,
+    "isOutput": false
+   }
+  ]
+ },
+ {
   "name": "dbo.uspReconcileNotifications",
   "kind": "write",
   "grants": [
@@ -3918,6 +4027,35 @@
    {
     "name": "personId",
     "type": "UNIQUEIDENTIFIER",
+    "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
+  "name": "dbo.uspReconcileReceiptQuality",
+  "kind": "write",
+  "grants": [
+   "meritWebRole",
+   "meritWorkerRole"
+  ],
+  "permission": null,
+  "params": [
+   {
+    "name": "labResultId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "stagingRowId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "recordReview",
+    "type": "BIT",
     "hasDefault": true,
     "isOutput": false
    }
@@ -4051,6 +4189,18 @@
    },
    {
     "name": "completeMatching",
+    "type": "BIT",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "noticeFormReference",
+    "type": "NVARCHAR (300)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "ownerScopeConfirmed",
     "type": "BIT",
     "hasDefault": true,
     "isOutput": false
@@ -4355,6 +4505,12 @@
     "name": "reason",
     "type": "NVARCHAR (500)",
     "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "criteriaConfirmed",
+    "type": "BIT",
+    "hasDefault": true,
     "isOutput": false
    }
   ]
@@ -6470,6 +6626,64 @@
    {
     "name": "note",
     "type": "NVARCHAR (1000)",
+    "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
+  "name": "dbo.uspVerifyLabReportingTimeline",
+  "kind": "write",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": "result.edit",
+  "params": [
+   {
+    "name": "personId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "labResultId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "finalResultDate",
+    "type": "DATE",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "evidence",
+    "type": "NVARCHAR (1000)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "eligibilityConfirmed",
+    "type": "BIT",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "applies",
+    "type": "BIT",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "sameDayChecked",
+    "type": "BIT",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "lateConfirmed",
+    "type": "BIT",
     "hasDefault": true,
     "isOutput": false
    }

@@ -41,13 +41,13 @@ public sealed class CareController(CareService care, PersonService people, IRefe
     [Authorize(Policy = Permissions.PersonEdit)]
     public async Task<IActionResult> Activity(Guid personId, Guid? caseId, Guid personActivityId, string activityType, DateOnly activityDate,
         string audience, string channel, string outcome, Guid? contactPersonId, string? recipientLabel, string? note,
-        Guid? labResultId, Guid? notificationObligationId, bool confirmed, bool completeMatching, CancellationToken ct)
+        Guid? labResultId, Guid? notificationObligationId, bool confirmed, bool completeMatching, string? noticeFormReference, bool ownerScopeConfirmed, CancellationToken ct)
     {
         try
         {
             if (!ModelState.IsValid) return await Workspace(personId, caseId, notificationObligationId, ct);
             var followUp = await care.RecordAsync(new(personActivityId, personId, activityType, activityDate, audience, channel, outcome,
-                contactPersonId, recipientLabel, note, caseId, labResultId, notificationObligationId, completeMatching), confirmed, ct);
+                contactPersonId, recipientLabel, note, caseId, labResultId, notificationObligationId, completeMatching, noticeFormReference, ownerScopeConfirmed), confirmed, ct);
             TempData["CareMessage"] = "Activity recorded. " + followUp;
             return RedirectToAction(nameof(Index), new { personId, caseId });
         }
@@ -122,9 +122,9 @@ public sealed class CareController(CareService care, PersonService people, IRefe
 
     [HttpPost("people/{personId:guid}/care/review")]
     [Authorize(Policy = Permissions.PersonEdit)]
-    public async Task<IActionResult> Review(Guid personId, Guid? caseId, Guid notificationObligationId, bool applies, string reason, CancellationToken ct)
+    public async Task<IActionResult> Review(Guid personId, Guid? caseId, Guid notificationObligationId, bool applies, string reason, bool criteriaConfirmed, CancellationToken ct)
     {
-        try { if (ModelState.IsValid) await care.ReviewAsync(personId, notificationObligationId, applies, reason, ct); }
+        try { if (ModelState.IsValid) await care.ReviewAsync(personId, notificationObligationId, applies, reason, ct, criteriaConfirmed); }
         catch (MeritException ex) when (FormError(ex)) { return await Workspace(personId, caseId, null, ct); }
         if (!ModelState.IsValid) return await Workspace(personId, caseId, null, ct);
         TempData["CareMessage"] = "Eligibility decision saved with your reason.";
@@ -155,6 +155,40 @@ public sealed class CareController(CareService care, PersonService people, IRefe
         return View("Notifications", new NotificationReportModel(result.Rows, result.Page, await care.SummaryAsync(ct)));
     }
 
+    [HttpGet("receipt-quality")]
+    [Authorize(Policy = Permissions.TaskView)]
+    public async Task<IActionResult> ReceiptQuality(Guid? personId, Guid? taskId, int page = 1, CancellationToken ct = default)
+        => await ReceiptPage(personId, page, ct, taskId);
+
+    private async Task<IActionResult> ReceiptPage(Guid? personId, int page, CancellationToken ct, Guid? taskId = null)
+    {
+        var result = await care.ReceiptWorkAsync(personId, page, ct, taskId);
+        return View("ReceiptQuality", new ReceiptWorkModel(result.Rows, result.Page, personId,
+            personId is Guid person ? await people.GetPageAsync(person, ct) : null));
+    }
+
+    [HttpPost("receipt-quality/received")]
+    [Authorize(Policy = Permissions.TaskView)]
+    public async Task<IActionResult> InformationReceived(Guid workTaskId, Guid? personId, DateOnly receivedDate, string evidence, bool confirmed, CancellationToken ct)
+    {
+        try { if (ModelState.IsValid) await care.ReceiveInformationAsync(workTaskId, receivedDate, evidence, confirmed, ct); }
+        catch (MeritException ex) when (FormError(ex)) { return await ReceiptPage(personId, 1, ct); }
+        if (!ModelState.IsValid) return await ReceiptPage(personId, 1, ct);
+        TempData["CareMessage"] = "Information receipt recorded with its actual date and source evidence.";
+        return RedirectToAction(nameof(ReceiptQuality), new { personId });
+    }
+
+    [HttpPost("receipt-quality/timeline")]
+    [Authorize(Policy = Permissions.ResultEdit)]
+    public async Task<IActionResult> VerifyTimeline(Guid personId, Guid labResultId, DateOnly? finalResultDate, string evidence, bool confirmed, bool applies, bool sameDayChecked, bool lateConfirmed, CancellationToken ct)
+    {
+        try { if (ModelState.IsValid) await care.VerifyTimelineAsync(personId, labResultId, finalResultDate, evidence, confirmed, ct, applies, sameDayChecked, lateConfirmed); }
+        catch (MeritException ex) when (FormError(ex)) { return await ReceiptPage(personId, 1, ct); }
+        if (!ModelState.IsValid) return await ReceiptPage(personId, 1, ct);
+        TempData["CareMessage"] = "Laboratory timeline verified; receipt quality was evaluated against approved reporting policies.";
+        return RedirectToAction(nameof(ReceiptQuality), new { personId });
+    }
+
     [HttpGet("notifications.csv")]
     [Authorize(Policy = Permissions.DataExport)]
     public async Task<IActionResult> Export(CancellationToken ct)
@@ -168,11 +202,18 @@ public sealed class CareController(CareService care, PersonService people, IRefe
 
     [HttpGet("config/notification-rules")]
     [Authorize(Policy = Permissions.ConfigEdit)]
-    public Task<IActionResult> Policies(CancellationToken ct) => PolicyPage(ct);
+    public Task<IActionResult> Policies(string? template, CancellationToken ct) => PolicyPage(ct, template);
 
-    private async Task<IActionResult> PolicyPage(CancellationToken ct)
+    private async Task<IActionResult> PolicyPage(CancellationToken ct, string? template = null)
     {
         var r = await reference.GetAsync(ct);
+        var defaults = MarylandPolicyDrafts.Get(template);
+        if (defaults.Count > 0)
+        {
+            var lead = r.Set.AnalyteSpecimens.FirstOrDefault(s => s.Specimen == "wholeBlood" && r.Analyte(s.AnalyteId)?.Code == "PB");
+            if (lead is not null) defaults["analyteSpecimenId"] = lead.AnalyteSpecimenId.ToString();
+        }
+        ViewData["PolicyDefaults"] = defaults;
         return View("Policies", new NotificationPolicyModel(await care.RulesAsync(ct), r.Set.AnalyteSpecimens.Where(s => s.IsActive)
             .Select(s => new SelectOption(s.AnalyteSpecimenId.ToString(), $"{r.Analyte(s.AnalyteId)?.DisplayName} / {s.Specimen} / {s.CanonicalUnit}")).ToList()));
     }
@@ -182,7 +223,7 @@ public sealed class CareController(CareService care, PersonService people, IRefe
     public async Task<IActionResult> SavePolicy(Guid notificationRuleId, string ruleName, Guid analyteSpecimenId, string population,
         decimal minimumValue, decimal? maximumValue, int? minimumAgeMonths, int? maximumAgeMonths, string recipientKind,
         int dueInDays, string dayBasis, string timeZoneId, string calendarName, string? holidays, DateOnly effectiveFrom,
-        DateOnly? effectiveTo, string approvalReference, bool approved, CancellationToken ct)
+        DateOnly? effectiveTo, string approvalReference, bool approved, string? rulePurpose, string? eligibilityMode, string? requiredFieldsCsv, CancellationToken ct)
     {
         try
         {
@@ -191,7 +232,7 @@ public sealed class CareController(CareService care, PersonService people, IRefe
             if (dates.Any(d => !DateOnly.TryParseExact(d, "yyyy-MM-dd", out _))) throw new ValidationException("holidays", "Enter holiday dates as YYYY-MM-DD, one per line.");
             await care.SaveRuleAsync(new(notificationRuleId, ruleName, analyteSpecimenId, population, minimumValue, recipientKind,
                 dueInDays, dayBasis, timeZoneId, calendarName, JsonSerializer.Serialize(dates.Distinct()), effectiveFrom,
-                approvalReference, minimumAgeMonths, maximumAgeMonths, maximumValue, effectiveTo), approved, ct);
+                approvalReference, minimumAgeMonths, maximumAgeMonths, maximumValue, effectiveTo, rulePurpose ?? "notification", eligibilityMode ?? "threshold", requiredFieldsCsv), approved, ct);
             TempData["CareMessage"] = "Approved rule activated for future results. Use Evaluate existing results to backfill received results in its effective period.";
             return RedirectToAction(nameof(Policies));
         }

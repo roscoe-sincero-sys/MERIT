@@ -113,6 +113,12 @@ BEGIN
             ;THROW 51422, N'Complete required notifications or record a justified applicability decision in the patient notification workspace before closing this case.', 1;
         END;
 
+        DECLARE @mdClosure BIT = CASE WHEN @closureReason='lostToFollowUp' AND EXISTS
+         (SELECT 1 FROM dbo.workTask WHERE exposureCaseId=@exposureCaseId AND queueCode='assessmentContact' AND isDeleted=0) THEN 1 ELSE 0 END;
+        IF @mdClosure=1 AND NULLIF(TRIM(@note),N'') IS NULL
+        BEGIN
+            ;THROW 51422, N'Document the Maryland scheduling contact attempts, first-class final letter, response date and discretionary closure decision before closing without an investigation.', 1;
+        END;
         IF @closedDate < @opened
         BEGIN
             ;THROW 51422, N'The closed date cannot be before the opened date.', 1;
@@ -134,7 +140,12 @@ BEGIN
         UPDATE dbo.workTask
            SET taskStatus = 'dismissed', completedUtc = SYSUTCDATETIME (), completedByUserId = auth.udfSessionUserId (),
                resolutionNote = N'Case closed.'
-         WHERE exposureCaseId = @exposureCaseId AND taskStatus = 'open' AND isDeleted = 0 AND queueCode <> 'notificationDue';
+         WHERE exposureCaseId = @exposureCaseId AND taskStatus = 'open' AND isDeleted = 0 AND queueCode NOT IN ('notificationDue','assessmentOwnerClosure');
+
+        IF @mdClosure=1 AND NOT EXISTS (SELECT 1 FROM dbo.workTask WHERE exposureCaseId=@exposureCaseId AND queueCode='assessmentOwnerClosure' AND taskStatus='open' AND isDeleted=0)
+            INSERT dbo.workTask (workTaskId,rootTenantId,owningTenantId,queueCode,title,detail,personId,exposureCaseId)
+            VALUES (NEWID (),@root,@owner,'assessmentOwnerClosure',N'Review/send property-owner case-closure letter',
+              N'COMAR 26.16.08.05D: verify primary-residence ownership. If not owned by caregiver/pregnant patient, send the owner a first-class letter explaining inability to contact and closure without an investigation. Complete with recipient, address and letter evidence; otherwise dismiss with the source-based ownership reason. No numeric deadline is inferred.',@personId,@exposureCaseId);
 
         EXEC dbo.uspRefreshPersonAccess @personId = @personId;
 

@@ -32,6 +32,8 @@ BEGIN
         channel                    VARCHAR (12)      NOT NULL,
         contactPersonId            UNIQUEIDENTIFIER  NULL,
         recipientLabel             NVARCHAR (200)    NULL,
+        noticeFormReference        NVARCHAR (300)    NULL,
+        ownerScopeConfirmed        BIT               NOT NULL CONSTRAINT DF_dbo_personActivity_ownerScopeConfirmed DEFAULT (0),
         outcome                    VARCHAR (30)      NOT NULL,
         note                       NVARCHAR (2000)   NULL,
         workerUserId               UNIQUEIDENTIFIER  NOT NULL,
@@ -64,6 +66,10 @@ IF COL_LENGTH (N'dbo.personActivity', N'contactPersonId') IS NULL
     ALTER TABLE dbo.personActivity ADD contactPersonId            UNIQUEIDENTIFIER  NULL;
 IF COL_LENGTH (N'dbo.personActivity', N'recipientLabel') IS NULL
     ALTER TABLE dbo.personActivity ADD recipientLabel             NVARCHAR (200)    NULL;
+IF COL_LENGTH (N'dbo.personActivity', N'noticeFormReference') IS NULL
+    ALTER TABLE dbo.personActivity ADD noticeFormReference        NVARCHAR (300)    NULL;
+IF COL_LENGTH (N'dbo.personActivity', N'ownerScopeConfirmed') IS NULL
+    ALTER TABLE dbo.personActivity ADD ownerScopeConfirmed        BIT               NOT NULL CONSTRAINT DF_dbo_personActivity_ownerScopeConfirmed DEFAULT (0);
 IF COL_LENGTH (N'dbo.personActivity', N'note') IS NULL
     ALTER TABLE dbo.personActivity ADD note                       NVARCHAR (2000)   NULL;
 IF COL_LENGTH (N'dbo.personActivity', N'isVoided') IS NULL
@@ -80,9 +86,18 @@ BEGIN
     ALTER TABLE dbo.personActivity ADD CONSTRAINT CK_dbo_personActivity_activityType CHECK (activityType IN ('contactAttempt','education','referral','medicalManagement','letter','note','notificationCompleted'));
 END;
 GO
+IF EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_dbo_personActivity_audience'
+               AND definition NOT LIKE N'%''owner''%')
+BEGIN
+    BEGIN TRANSACTION;
+    ALTER TABLE dbo.personActivity DROP CONSTRAINT CK_dbo_personActivity_audience;
+    ALTER TABLE dbo.personActivity WITH CHECK ADD CONSTRAINT CK_dbo_personActivity_audience CHECK (audience IN ('internal','patient','caregiver','provider','owner'));
+    COMMIT TRANSACTION;
+END;
+GO
 IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_dbo_personActivity_audience')
 BEGIN
-    ALTER TABLE dbo.personActivity ADD CONSTRAINT CK_dbo_personActivity_audience CHECK (audience IN ('internal','patient','caregiver','provider'));
+    ALTER TABLE dbo.personActivity ADD CONSTRAINT CK_dbo_personActivity_audience CHECK (audience IN ('internal','patient','caregiver','provider','owner'));
 END;
 GO
 IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_dbo_personActivity_channel')
@@ -223,7 +238,9 @@ EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', 
 EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'personActivity', @ColumnName = N'audience', @Description = N'internal, patient, caregiver or provider.';
 EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'personActivity', @ColumnName = N'channel', @Description = N'How contact occurred.';
 EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'personActivity', @ColumnName = N'contactPersonId', @Description = N'Patient or related recipient; required for notification evidence.';
-EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'personActivity', @ColumnName = N'recipientLabel', @Description = N'External provider/contact when not a person record.';
+EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'personActivity', @ColumnName = N'recipientLabel', @Description = N'External provider or property-owner recipients when not a related person record.';
+EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'personActivity', @ColumnName = N'noticeFormReference', @Description = N'Department-approved notice form/document reference for Maryland notice evidence.';
+EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'personActivity', @ColumnName = N'ownerScopeConfirmed', @Description = N'Actor confirmed all required property owners received the notice, with addresses and delivery details in the note.';
 EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'personActivity', @ColumnName = N'outcome', @Description = N'Attempt or completion outcome.';
 EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'personActivity', @ColumnName = N'note', @Description = N'Activity detail.';
 EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'personActivity', @ColumnName = N'workerUserId', @Description = N'Actual actor, resolved server-side.';

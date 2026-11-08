@@ -51,6 +51,7 @@ CREATE OR ALTER PROCEDURE dbo.uspReviewNotificationObligation
       , @notificationObligationId UNIQUEIDENTIFIER
       , @applies BIT
       , @reason NVARCHAR (500)
+      , @criteriaConfirmed BIT = 0
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -122,6 +123,18 @@ BEGIN
         BEGIN
             ;THROW 51422, N'Choose a pending obligation and record why it applies or does not apply.', 1;
         END;
+        IF @applies = 1 AND EXISTS (SELECT 1 FROM dbo.notificationObligation WHERE notificationObligationId = @notificationObligationId
+             AND COALESCE (JSON_VALUE (policySnapshotJson, '$.eligibilityMode'), 'threshold') <> 'threshold') AND @criteriaConfirmed <> 1
+        BEGIN
+            ;THROW 51422, N'Confirm the Maryland evidence checklist and document confirmation tests, recipient and property facts before marking this notice required.', 1;
+        END;
+        IF @applies = 1 AND EXISTS (SELECT 1 FROM dbo.notificationObligation WHERE notificationObligationId = @notificationObligationId
+            AND JSON_VALUE (policySnapshotJson, '$.eligibilityMode') IN ('mdEbl','mdOwner','mdAffectedOwner'))
+           AND EXISTS (SELECT 1 FROM dbo.notificationObligation AS o WHERE o.notificationObligationId=@notificationObligationId
+             AND dbo.udfMarylandEblConfirmed (o.labResultId,TRY_CONVERT(DECIMAL(18,6),JSON_VALUE(o.policySnapshotJson,'$.minimumValue')))=0)
+        BEGIN
+            ;THROW 51422, N'Maryland EBL confirmation requires a qualifying venous test or two qualifying capillary tests within 84 days with no discordant result. Verify age and source evidence; leave this review pending while confirmation is outstanding.', 1;
+        END;
         UPDATE dbo.notificationObligation SET evaluationState = CASE WHEN @applies = 1 THEN 'eligible' ELSE 'notApplicable' END,
             reviewReason = @reason WHERE notificationObligationId = @notificationObligationId;
         UPDATE dbo.workTask SET taskStatus = CASE WHEN @applies = 1 THEN 'open' ELSE 'dismissed' END,
@@ -129,6 +142,15 @@ BEGIN
             completedByUserId = CASE WHEN @applies = 0 THEN auth.udfSessionUserId () END,
             resolutionNote = CASE WHEN @applies = 0 THEN N'Explicit notification applicability review; see obligation reason.' END
          WHERE workTaskId = @task;
+        IF @applies = 1 AND EXISTS (SELECT 1 FROM dbo.notificationObligation WHERE notificationObligationId = @notificationObligationId
+            AND JSON_VALUE (policySnapshotJson, '$.eligibilityMode') = 'mdEbl' AND recipientKind IN ('patient','caregiver'))
+        BEGIN
+            INSERT dbo.workTask (workTaskId, rootTenantId, owningTenantId, queueCode, title, detail, personId, exposureCaseId, labResultId)
+            SELECT NEWID (), o.rootTenantId, o.owningTenantId, 'assessmentContact', N'Schedule environmental assessment',
+              N'COMAR 26.16.08.05: contact caregiver/patient for primary-residence assessment. Record two telephone attempts; if unsuccessful send a first-class final-attempt letter with a response date and required rights information. Record discretionary closure and any property-owner closure letter. No numeric scheduling deadline is inferred.',
+              o.personId, o.exposureCaseId, o.labResultId FROM dbo.notificationObligation AS o WHERE o.notificationObligationId = @notificationObligationId
+              AND NOT EXISTS (SELECT 1 FROM dbo.workTask WHERE labResultId = o.labResultId AND queueCode = 'assessmentContact' AND isDeleted = 0);
+        END;
 
         -- =========================================================================================
         -- ===== End of the procedure's own work. ===================================================

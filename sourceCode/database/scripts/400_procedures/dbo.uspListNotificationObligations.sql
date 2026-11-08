@@ -92,7 +92,7 @@ BEGIN
         SELECT a.*, p.lastName, p.firstName, c.caseNumber, r.collectedDate, r.receivedUtc, r.resultRowStatus,
                r.valueCanonical, r.operator, s.canonicalUnit, an.displayName AS analyteName, s.specimen,
                pa.activityDate AS evidenceDate, pa.channel AS evidenceChannel,
-               CONCAT (cp.lastName, N', ', cp.firstName) AS recipientName,
+               CASE WHEN pa.audience='owner' THEN pa.recipientLabel ELSE CONCAT (cp.lastName, N', ', cp.firstName) END AS recipientName,
                CAST (SYSUTCDATETIME () AT TIME ZONE 'UTC' AT TIME ZONE a.timeZoneId AS DATE) AS policyToday,
                COUNT (*) OVER () AS totalCount
           FROM dbo.notificationObligation AS a JOIN dbo.person AS p ON p.personId = a.personId

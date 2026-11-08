@@ -64,6 +64,9 @@ CREATE OR ALTER PROCEDURE config.uspSaveNotificationRule
       , @maximumAgeMonths INT = NULL
       , @maximumValue DECIMAL (18,6) = NULL
       , @effectiveTo DATE = NULL
+      , @rulePurpose VARCHAR (20) = 'notification'
+      , @eligibilityMode VARCHAR (20) = 'threshold'
+      , @requiredFieldsCsv NVARCHAR (1000) = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -110,7 +113,7 @@ BEGIN
         -- ===== The procedure's own work starts here. Everything above and below is boilerplate. ==
         -- =========================================================================================
 
-        IF @population NOT IN ('all','child','adult','pregnant','unknown') OR @recipientKind NOT IN ('patient','caregiver')
+        IF @population NOT IN ('all','child','adult','pregnant','unknown') OR @recipientKind NOT IN ('patient','caregiver','owner','department')
            OR @dueInDays NOT BETWEEN 1 AND 365 OR @dayBasis NOT IN ('calendar','business')
            OR @minimumValue < 0 OR @maximumValue <= @minimumValue OR @minimumAgeMonths < 0 OR @maximumAgeMonths < @minimumAgeMonths
            OR @effectiveTo < @effectiveFrom OR NULLIF (LTRIM (RTRIM (@ruleName)), N'') IS NULL
@@ -125,6 +128,23 @@ BEGIN
         BEGIN
             ;THROW 51422, N'Use valid explicit holiday dates and a supported policy time zone.', 1;
         END;
+        IF @rulePurpose NOT IN ('notification','labReporting') OR @eligibilityMode NOT IN ('threshold','mdEbl','mdOwner','mdAffectedOwner','mdReporting')
+           OR (@rulePurpose = 'labReporting' AND @recipientKind <> 'department') OR (@rulePurpose = 'notification' AND @recipientKind = 'department')
+           OR (@eligibilityMode IN ('mdOwner','mdAffectedOwner') AND @recipientKind <> 'owner')
+           OR EXISTS (SELECT 1 FROM STRING_SPLIT (@requiredFieldsCsv, ',') WHERE LEN (TRIM ([value])) NOT BETWEEN 1 AND 60 OR TRIM ([value]) LIKE '%[^a-zA-Z0-9_]%')
+        BEGIN
+            ;THROW 51422, N'Choose a supported policy purpose, recipient, eligibility checklist and mapped required fields.', 1;
+        END;
+        IF @eligibilityMode <> 'threshold' AND NOT EXISTS (SELECT 1 FROM config.analyteSpecimen AS s JOIN config.analyte AS a ON a.analyteId=s.analyteId
+            WHERE s.analyteSpecimenId=@analyteSpecimenId AND a.code='PB' AND s.specimen='wholeBlood' AND s.canonicalUnit='ug/dL')
+        BEGIN
+            ;THROW 51422, N'Maryland lead checklists apply to whole-blood lead in the canonical ug/dL unit.', 1;
+        END;
+        IF (@eligibilityMode='mdReporting' AND (@rulePurpose<>'labReporting' OR @maximumAgeMonths IS NULL OR @maximumAgeMonths>227))
+         OR (@eligibilityMode IN ('mdEbl','mdOwner','mdAffectedOwner') AND @rulePurpose<>'notification')
+        BEGIN
+            ;THROW 51422, N'Use the Maryland reporting age range (18 or younger) and keep laboratory and Department notice policies separate.', 1;
+        END;
         DECLARE @root UNIQUEIDENTIFIER = auth.udfSessionRootTenantId (), @owner UNIQUEIDENTIFIER = auth.udfSessionActingTenantId ();
         IF NOT EXISTS (SELECT 1 FROM auth.tenant WHERE tenantId = @owner AND rootTenantId = @root AND isActive = 1 AND isDeleted = 0)
            OR NOT EXISTS (SELECT 1 FROM config.analyteSpecimen WHERE analyteSpecimenId = @analyteSpecimenId AND isDeleted = 0)
@@ -138,10 +158,10 @@ BEGIN
             ;THROW 51422, N'An active version with this name overlaps the proposed period. Retire it or use a non-overlapping period.', 1;
         END;
         INSERT config.notificationRule (notificationRuleId, rootTenantId, owningTenantId, ruleName, analyteSpecimenId,
-            population, minimumAgeMonths, maximumAgeMonths, minimumValue, maximumValue, recipientKind, triggerEvent, dueInDays,
+            population, rulePurpose, eligibilityMode, requiredFieldsCsv, minimumAgeMonths, maximumAgeMonths, minimumValue, maximumValue, recipientKind, triggerEvent, dueInDays,
             dayBasis, timeZoneId, calendarName, holidayDatesJson, effectiveFrom, effectiveTo, approvalReference, approvedByUserId)
-        VALUES (@notificationRuleId, @root, @owner, @ruleName, @analyteSpecimenId, @population, @minimumAgeMonths, @maximumAgeMonths,
-            @minimumValue, @maximumValue, @recipientKind, 'receipt', @dueInDays, @dayBasis, @timeZoneId, @calendarName,
+        VALUES (@notificationRuleId, @root, @owner, @ruleName, @analyteSpecimenId, @population, @rulePurpose, @eligibilityMode, @requiredFieldsCsv, @minimumAgeMonths, @maximumAgeMonths,
+            @minimumValue, @maximumValue, @recipientKind, CASE WHEN @rulePurpose = 'labReporting' THEN 'report' ELSE 'receipt' END, @dueInDays, @dayBasis, @timeZoneId, @calendarName,
             @holidayDatesJson, @effectiveFrom, @effectiveTo, @approvalReference, auth.udfSessionUserId ());
 
         -- =========================================================================================

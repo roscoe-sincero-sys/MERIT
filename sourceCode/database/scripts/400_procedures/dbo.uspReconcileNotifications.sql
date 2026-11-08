@@ -110,15 +110,15 @@ BEGIN
                CAST (r.receivedUtc AT TIME ZONE 'UTC' AT TIME ZONE n.timeZoneId AS DATE) AS anchorDate,
                config.udfNotificationDueDate (CAST (r.receivedUtc AT TIME ZONE 'UTC' AT TIME ZONE n.timeZoneId AS DATE),
                    n.dueInDays, n.dayBasis, n.holidayDatesJson) AS dueDate,
-               CASE WHEN r.operator = '=' AND (n.population = 'all' OR n.population = r.population)
+               CASE WHEN n.eligibilityMode = 'threshold' AND n.recipientKind <> 'owner' AND r.operator = '=' AND (n.population = 'all' OR n.population = r.population)
                       AND ((n.minimumAgeMonths IS NULL AND n.maximumAgeMonths IS NULL) OR r.ageAtCollectionMonths IS NOT NULL)
                     THEN 'eligible' ELSE 'needsReview' END AS evaluationState,
-               (SELECT n.ruleName, n.population, n.minimumAgeMonths, n.maximumAgeMonths, n.minimumValue, n.maximumValue,
+               (SELECT n.ruleName, n.rulePurpose, n.eligibilityMode, n.population, n.minimumAgeMonths, n.maximumAgeMonths, n.minimumValue, n.maximumValue,
                        n.recipientKind, n.triggerEvent, n.dueInDays, n.dayBasis, n.timeZoneId, n.calendarName,
                        JSON_QUERY (n.holidayDatesJson) AS holidays, n.effectiveFrom, n.effectiveTo, n.approvalReference
                   FOR JSON PATH, WITHOUT_ARRAY_WRAPPER) AS policySnapshotJson
           INTO #new FROM dbo.labResult AS r JOIN config.notificationRule AS n ON n.rootTenantId = r.rootTenantId
-               AND n.analyteSpecimenId = r.analyteSpecimenId AND n.isActive = 1 AND n.isDeleted = 0
+               AND n.analyteSpecimenId = r.analyteSpecimenId AND n.isActive = 1 AND n.isDeleted = 0 AND n.rulePurpose = 'notification'
           OUTER APPLY (SELECT TOP (1) ec.exposureCaseId, ec.owningTenantId FROM dbo.exposureCase AS ec
                        JOIN config.analyteSpecimen AS s ON s.analyteSpecimenId = r.analyteSpecimenId
                       WHERE ec.personId = r.personId AND ec.analyteId = s.analyteId AND ec.isDeleted = 0

@@ -99,7 +99,9 @@ public sealed class ClassificationService(
             created.Add(task.Title);
         }
 
-        await care.ReconcileAsync(labResultId, null, null, ct).ConfigureAwait(false);
+        int notificationsCreated;
+        do { notificationsCreated = await care.ReconcileAsync(labResultId, null, null, ct).ConfigureAwait(false); } while (notificationsCreated == 500);
+        await care.ReconcileReceiptAsync(labResultId, null, ct).ConfigureAwait(false);
 
         return new ClassificationOutcome(population.Population, population.AgeMonths, decision, caseId, caseNumber, owner,
             before, created);

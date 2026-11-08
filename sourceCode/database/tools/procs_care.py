@@ -62,8 +62,11 @@ proc('config.uspSaveNotificationRule', 'write', """@notificationRuleId UNIQUEIDE
 , @minimumAgeMonths INT = NULL
 , @maximumAgeMonths INT = NULL
 , @maximumValue DECIMAL (18,6) = NULL
-, @effectiveTo DATE = NULL""", """
-IF @population NOT IN ('all','child','adult','pregnant','unknown') OR @recipientKind NOT IN ('patient','caregiver')
+, @effectiveTo DATE = NULL
+, @rulePurpose VARCHAR (20) = 'notification'
+, @eligibilityMode VARCHAR (20) = 'threshold'
+, @requiredFieldsCsv NVARCHAR (1000) = NULL""", """
+IF @population NOT IN ('all','child','adult','pregnant','unknown') OR @recipientKind NOT IN ('patient','caregiver','owner','department')
    OR @dueInDays NOT BETWEEN 1 AND 365 OR @dayBasis NOT IN ('calendar','business')
    OR @minimumValue < 0 OR @maximumValue <= @minimumValue OR @minimumAgeMonths < 0 OR @maximumAgeMonths < @minimumAgeMonths
    OR @effectiveTo < @effectiveFrom OR NULLIF (LTRIM (RTRIM (@ruleName)), N'') IS NULL
@@ -78,6 +81,23 @@ IF EXISTS (SELECT 1 FROM OPENJSON (@holidayDatesJson) WHERE [type] <> 1 OR TRY_C
 BEGIN
     ;THROW 51422, N'Use valid explicit holiday dates and a supported policy time zone.', 1;
 END;
+IF @rulePurpose NOT IN ('notification','labReporting') OR @eligibilityMode NOT IN ('threshold','mdEbl','mdOwner','mdAffectedOwner','mdReporting')
+   OR (@rulePurpose = 'labReporting' AND @recipientKind <> 'department') OR (@rulePurpose = 'notification' AND @recipientKind = 'department')
+   OR (@eligibilityMode IN ('mdOwner','mdAffectedOwner') AND @recipientKind <> 'owner')
+   OR EXISTS (SELECT 1 FROM STRING_SPLIT (@requiredFieldsCsv, ',') WHERE LEN (TRIM ([value])) NOT BETWEEN 1 AND 60 OR TRIM ([value]) LIKE '%[^a-zA-Z0-9_]%')
+BEGIN
+    ;THROW 51422, N'Choose a supported policy purpose, recipient, eligibility checklist and mapped required fields.', 1;
+END;
+IF @eligibilityMode <> 'threshold' AND NOT EXISTS (SELECT 1 FROM config.analyteSpecimen AS s JOIN config.analyte AS a ON a.analyteId=s.analyteId
+    WHERE s.analyteSpecimenId=@analyteSpecimenId AND a.code='PB' AND s.specimen='wholeBlood' AND s.canonicalUnit='ug/dL')
+BEGIN
+    ;THROW 51422, N'Maryland lead checklists apply to whole-blood lead in the canonical ug/dL unit.', 1;
+END;
+IF (@eligibilityMode='mdReporting' AND (@rulePurpose<>'labReporting' OR @maximumAgeMonths IS NULL OR @maximumAgeMonths>227))
+ OR (@eligibilityMode IN ('mdEbl','mdOwner','mdAffectedOwner') AND @rulePurpose<>'notification')
+BEGIN
+    ;THROW 51422, N'Use the Maryland reporting age range (18 or younger) and keep laboratory and Department notice policies separate.', 1;
+END;
 DECLARE @root UNIQUEIDENTIFIER = auth.udfSessionRootTenantId (), @owner UNIQUEIDENTIFIER = auth.udfSessionActingTenantId ();
 IF NOT EXISTS (SELECT 1 FROM auth.tenant WHERE tenantId = @owner AND rootTenantId = @root AND isActive = 1 AND isDeleted = 0)
    OR NOT EXISTS (SELECT 1 FROM config.analyteSpecimen WHERE analyteSpecimenId = @analyteSpecimenId AND isDeleted = 0)
@@ -91,10 +111,10 @@ BEGIN
     ;THROW 51422, N'An active version with this name overlaps the proposed period. Retire it or use a non-overlapping period.', 1;
 END;
 INSERT config.notificationRule (notificationRuleId, rootTenantId, owningTenantId, ruleName, analyteSpecimenId,
-    population, minimumAgeMonths, maximumAgeMonths, minimumValue, maximumValue, recipientKind, triggerEvent, dueInDays,
+    population, rulePurpose, eligibilityMode, requiredFieldsCsv, minimumAgeMonths, maximumAgeMonths, minimumValue, maximumValue, recipientKind, triggerEvent, dueInDays,
     dayBasis, timeZoneId, calendarName, holidayDatesJson, effectiveFrom, effectiveTo, approvalReference, approvedByUserId)
-VALUES (@notificationRuleId, @root, @owner, @ruleName, @analyteSpecimenId, @population, @minimumAgeMonths, @maximumAgeMonths,
-    @minimumValue, @maximumValue, @recipientKind, 'receipt', @dueInDays, @dayBasis, @timeZoneId, @calendarName,
+VALUES (@notificationRuleId, @root, @owner, @ruleName, @analyteSpecimenId, @population, @rulePurpose, @eligibilityMode, @requiredFieldsCsv, @minimumAgeMonths, @maximumAgeMonths,
+    @minimumValue, @maximumValue, @recipientKind, CASE WHEN @rulePurpose = 'labReporting' THEN 'report' ELSE 'receipt' END, @dueInDays, @dayBasis, @timeZoneId, @calendarName,
     @holidayDatesJson, @effectiveFrom, @effectiveTo, @approvalReference, auth.udfSessionUserId ());""", permission='config.edit',
     desc='Creates an approved receipt-based policy version; existing snapshots cannot be edited or silently recalculated.'),
 proc('config.uspRetireNotificationRule', 'write', '@notificationRuleId UNIQUEIDENTIFIER', """
@@ -127,15 +147,15 @@ SELECT TOP (500) """ + NEWID + """ AS notificationObligationId, """ + NEWID + ""
        CAST (r.receivedUtc AT TIME ZONE 'UTC' AT TIME ZONE n.timeZoneId AS DATE) AS anchorDate,
        config.udfNotificationDueDate (CAST (r.receivedUtc AT TIME ZONE 'UTC' AT TIME ZONE n.timeZoneId AS DATE),
            n.dueInDays, n.dayBasis, n.holidayDatesJson) AS dueDate,
-       CASE WHEN r.operator = '=' AND (n.population = 'all' OR n.population = r.population)
+       CASE WHEN n.eligibilityMode = 'threshold' AND n.recipientKind <> 'owner' AND r.operator = '=' AND (n.population = 'all' OR n.population = r.population)
               AND ((n.minimumAgeMonths IS NULL AND n.maximumAgeMonths IS NULL) OR r.ageAtCollectionMonths IS NOT NULL)
             THEN 'eligible' ELSE 'needsReview' END AS evaluationState,
-       (SELECT n.ruleName, n.population, n.minimumAgeMonths, n.maximumAgeMonths, n.minimumValue, n.maximumValue,
+       (SELECT n.ruleName, n.rulePurpose, n.eligibilityMode, n.population, n.minimumAgeMonths, n.maximumAgeMonths, n.minimumValue, n.maximumValue,
                n.recipientKind, n.triggerEvent, n.dueInDays, n.dayBasis, n.timeZoneId, n.calendarName,
                JSON_QUERY (n.holidayDatesJson) AS holidays, n.effectiveFrom, n.effectiveTo, n.approvalReference
           FOR JSON PATH, WITHOUT_ARRAY_WRAPPER) AS policySnapshotJson
   INTO #new FROM dbo.labResult AS r JOIN config.notificationRule AS n ON n.rootTenantId = r.rootTenantId
-       AND n.analyteSpecimenId = r.analyteSpecimenId AND n.isActive = 1 AND n.isDeleted = 0
+       AND n.analyteSpecimenId = r.analyteSpecimenId AND n.isActive = 1 AND n.isDeleted = 0 AND n.rulePurpose = 'notification'
   OUTER APPLY (SELECT TOP (1) ec.exposureCaseId, ec.owningTenantId FROM dbo.exposureCase AS ec
                JOIN config.analyteSpecimen AS s ON s.analyteSpecimenId = r.analyteSpecimenId
               WHERE ec.personId = r.personId AND ec.analyteId = s.analyteId AND ec.isDeleted = 0
@@ -179,7 +199,7 @@ END;
 SELECT a.*, p.lastName, p.firstName, c.caseNumber, r.collectedDate, r.receivedUtc, r.resultRowStatus,
        r.valueCanonical, r.operator, s.canonicalUnit, an.displayName AS analyteName, s.specimen,
        pa.activityDate AS evidenceDate, pa.channel AS evidenceChannel,
-       CONCAT (cp.lastName, N', ', cp.firstName) AS recipientName,
+       CASE WHEN pa.audience='owner' THEN pa.recipientLabel ELSE CONCAT (cp.lastName, N', ', cp.firstName) END AS recipientName,
        CAST (SYSUTCDATETIME () AT TIME ZONE 'UTC' AT TIME ZONE a.timeZoneId AS DATE) AS policyToday,
        COUNT (*) OVER () AS totalCount
   FROM dbo.notificationObligation AS a JOIN dbo.person AS p ON p.personId = a.personId
@@ -195,7 +215,7 @@ SELECT a.*, p.lastName, p.firstName, c.caseNumber, r.collectedDate, r.receivedUt
  ORDER BY CASE WHEN a.completedDate IS NULL AND a.evaluationState <> 'notApplicable' THEN 0 ELSE 1 END,
           a.dueDate, a.notificationObligationId OFFSET (@pageNumber - 1) * 50 ROWS FETCH NEXT 50 ROWS ONLY;""",
     desc='Scoped notification work and evidence, including source-result changes and immutable policy snapshots.'),
-proc('uspReviewNotificationObligation', 'write', '@personId UNIQUEIDENTIFIER\n, @notificationObligationId UNIQUEIDENTIFIER\n, @applies BIT\n, @reason NVARCHAR (500)',
+proc('uspReviewNotificationObligation', 'write', '@personId UNIQUEIDENTIFIER\n, @notificationObligationId UNIQUEIDENTIFIER\n, @applies BIT\n, @reason NVARCHAR (500)\n, @criteriaConfirmed BIT = 0',
     """DECLARE @exposureCaseId UNIQUEIDENTIFIER, @task UNIQUEIDENTIFIER;
 SELECT @exposureCaseId = exposureCaseId, @task = workTaskId FROM dbo.notificationObligation WITH (UPDLOCK, HOLDLOCK)
  WHERE notificationObligationId = @notificationObligationId AND personId = @personId AND isDeleted = 0 AND completedActivityId IS NULL;
@@ -204,13 +224,34 @@ IF @task IS NULL OR NULLIF (LTRIM (RTRIM (@reason)), N'') IS NULL
 BEGIN
     ;THROW 51422, N'Choose a pending obligation and record why it applies or does not apply.', 1;
 END;
+IF @applies = 1 AND EXISTS (SELECT 1 FROM dbo.notificationObligation WHERE notificationObligationId = @notificationObligationId
+     AND COALESCE (JSON_VALUE (policySnapshotJson, '$.eligibilityMode'), 'threshold') <> 'threshold') AND @criteriaConfirmed <> 1
+BEGIN
+    ;THROW 51422, N'Confirm the Maryland evidence checklist and document confirmation tests, recipient and property facts before marking this notice required.', 1;
+END;
+IF @applies = 1 AND EXISTS (SELECT 1 FROM dbo.notificationObligation WHERE notificationObligationId = @notificationObligationId
+    AND JSON_VALUE (policySnapshotJson, '$.eligibilityMode') IN ('mdEbl','mdOwner','mdAffectedOwner'))
+   AND EXISTS (SELECT 1 FROM dbo.notificationObligation AS o WHERE o.notificationObligationId=@notificationObligationId
+     AND dbo.udfMarylandEblConfirmed (o.labResultId,TRY_CONVERT(DECIMAL(18,6),JSON_VALUE(o.policySnapshotJson,'$.minimumValue')))=0)
+BEGIN
+    ;THROW 51422, N'Maryland EBL confirmation requires a qualifying venous test or two qualifying capillary tests within 84 days with no discordant result. Verify age and source evidence; leave this review pending while confirmation is outstanding.', 1;
+END;
 UPDATE dbo.notificationObligation SET evaluationState = CASE WHEN @applies = 1 THEN 'eligible' ELSE 'notApplicable' END,
     reviewReason = @reason WHERE notificationObligationId = @notificationObligationId;
 UPDATE dbo.workTask SET taskStatus = CASE WHEN @applies = 1 THEN 'open' ELSE 'dismissed' END,
     completedUtc = CASE WHEN @applies = 0 THEN SYSUTCDATETIME () END,
     completedByUserId = CASE WHEN @applies = 0 THEN auth.udfSessionUserId () END,
     resolutionNote = CASE WHEN @applies = 0 THEN N'Explicit notification applicability review; see obligation reason.' END
- WHERE workTaskId = @task;""", permission='person.edit', validate=PERSON,
+ WHERE workTaskId = @task;
+IF @applies = 1 AND EXISTS (SELECT 1 FROM dbo.notificationObligation WHERE notificationObligationId = @notificationObligationId
+    AND JSON_VALUE (policySnapshotJson, '$.eligibilityMode') = 'mdEbl' AND recipientKind IN ('patient','caregiver'))
+BEGIN
+    INSERT dbo.workTask (workTaskId, rootTenantId, owningTenantId, queueCode, title, detail, personId, exposureCaseId, labResultId)
+    SELECT NEWID (), o.rootTenantId, o.owningTenantId, 'assessmentContact', N'Schedule environmental assessment',
+      N'COMAR 26.16.08.05: contact caregiver/patient for primary-residence assessment. Record two telephone attempts; if unsuccessful send a first-class final-attempt letter with a response date and required rights information. Record discretionary closure and any property-owner closure letter. No numeric scheduling deadline is inferred.',
+      o.personId, o.exposureCaseId, o.labResultId FROM dbo.notificationObligation AS o WHERE o.notificationObligationId = @notificationObligationId
+      AND NOT EXISTS (SELECT 1 FROM dbo.workTask WHERE labResultId = o.labResultId AND queueCode = 'assessmentContact' AND isDeleted = 0);
+END;""", permission='person.edit', validate=PERSON,
     desc='Auditable applicability decision for an uncertain/corrected result; never counts an exclusion as completed notification.'),
 proc('uspWithdrawNotificationEvidence', 'write', '@personId UNIQUEIDENTIFIER\n, @notificationObligationId UNIQUEIDENTIFIER\n, @reason NVARCHAR (500)',
     """DECLARE @exposureCaseId UNIQUEIDENTIFIER, @task UNIQUEIDENTIFIER, @activity UNIQUEIDENTIFIER;
@@ -256,7 +297,9 @@ proc('uspRecordPatientActivity', 'write', """@personActivityId UNIQUEIDENTIFIER
 , @exposureCaseId UNIQUEIDENTIFIER = NULL
 , @labResultId UNIQUEIDENTIFIER = NULL
 , @notificationObligationId UNIQUEIDENTIFIER = NULL
-, @completeMatching BIT = 0""",
+, @completeMatching BIT = 0
+, @noticeFormReference NVARCHAR (300) = NULL
+, @ownerScopeConfirmed BIT = 0""",
     OWNER + """
 DECLARE @today DATE = auth.udfSessionToday ();
 IF @notificationObligationId IS NOT NULL
@@ -307,9 +350,32 @@ IF @activityType = 'notificationCompleted' AND EXISTS (SELECT 1 FROM dbo.labResu
 BEGIN
     ;THROW 51422, N'Notification cannot precede collection of the blood test.', 1;
 END;
-IF @activityType = 'notificationCompleted' AND (@outcome <> 'completed' OR @contactPersonId IS NULL OR @labResultId IS NULL OR @audience NOT IN ('patient','caregiver'))
+IF @activityType = 'notificationCompleted' AND (@outcome <> 'completed' OR (@contactPersonId IS NULL AND @audience <> 'owner') OR @labResultId IS NULL OR @audience NOT IN ('patient','caregiver','owner'))
 BEGIN
     ;THROW 51422, N'Completed notification requires a result, a recorded recipient, a delivery channel and a completed outcome.', 1;
+END;
+IF @activityType = 'notificationCompleted' AND @audience = 'owner' AND (@ownerScopeConfirmed <> 1 OR NULLIF (TRIM (@recipientLabel), N'') IS NULL)
+BEGIN
+    ;THROW 51422, N'Name the property-owner recipients and confirm that every required owner was notified. List property addresses and delivery details in the activity note; use the last actual delivery date.', 1;
+END;
+IF @notificationObligationId IS NOT NULL AND EXISTS (SELECT 1 FROM dbo.notificationObligation WHERE notificationObligationId = @notificationObligationId
+    AND COALESCE (JSON_VALUE (policySnapshotJson, '$.eligibilityMode'), 'threshold') <> 'threshold')
+BEGIN
+    IF EXISTS (SELECT 1 FROM dbo.notificationObligation AS o WHERE o.notificationObligationId=@notificationObligationId
+      AND dbo.udfMarylandEblConfirmed (o.labResultId,TRY_CONVERT(DECIMAL(18,6),JSON_VALUE(o.policySnapshotJson,'$.minimumValue')))=0)
+    BEGIN
+        ;THROW 51422, N'The Maryland confirmation evidence has changed or is insufficient. Review the source tests before completing delivery.', 1;
+    END;
+    IF NULLIF (TRIM (@noticeFormReference), N'') IS NULL
+    BEGIN
+        ;THROW 51422, N'Record the Department-approved notice form or attached document reference used for this Maryland notice.', 1;
+    END;
+    IF @audience = 'caregiver' AND NOT EXISTS (SELECT 1 FROM dbo.personRelationship WHERE personId = @personId AND relatedPersonId = @contactPersonId
+        AND isDeleted = 0 AND (startDate IS NULL OR startDate <= @activityDate) AND (endDate IS NULL OR endDate >= @activityDate)
+        AND (hasLegalCustody = 1 OR role IN ('parent','legalGuardian','fosterParent')))
+    BEGIN
+        ;THROW 51422, N'Maryland caregiver notice requires a recorded parent, guardian or legal responsibility; primary-contact status alone is insufficient.', 1;
+    END;
 END;
 IF EXISTS (SELECT 1 FROM dbo.caseActivity WHERE caseActivityId = @personActivityId)
 BEGIN
@@ -320,9 +386,9 @@ BEGIN
     ;THROW 51409, N'This activity was already submitted. Refresh the history before submitting another event.', 1;
 END;
 INSERT dbo.personActivity (personActivityId, rootTenantId, owningTenantId, personId, exposureCaseId, labResultId,
-    activityType, activityDate, audience, channel, contactPersonId, recipientLabel, outcome, note, workerUserId)
+    activityType, activityDate, audience, channel, contactPersonId, recipientLabel, noticeFormReference, ownerScopeConfirmed, outcome, note, workerUserId)
 VALUES (@personActivityId, @root, @owner, @personId, @exposureCaseId, @labResultId, @activityType, @activityDate,
-    @audience, @channel, @contactPersonId, @recipientLabel, @outcome, @note, auth.udfSessionUserId ());
+    @audience, @channel, @contactPersonId, @recipientLabel, @noticeFormReference, @ownerScopeConfirmed, @outcome, @note, auth.udfSessionUserId ());
 IF @notificationObligationId IS NOT NULL
 BEGIN
     DECLARE @task UNIQUEIDENTIFIER;
@@ -340,7 +406,9 @@ BEGIN
      WHERE personId = @personId AND labResultId = @labResultId AND recipientKind = @audience
        AND isDeleted = 0 AND completedActivityId IS NULL AND evaluationState = 'eligible' AND anchorDate <= @activityDate
        AND ((exposureCaseId IS NULL AND @exposureCaseId IS NULL) OR exposureCaseId = @exposureCaseId)
-       AND (notificationObligationId = @notificationObligationId OR @completeMatching = 1);
+       AND (notificationObligationId = @notificationObligationId OR (@completeMatching = 1 AND (COALESCE (JSON_VALUE (policySnapshotJson, '$.eligibilityMode'), 'threshold') = 'threshold'
+         OR (JSON_VALUE(policySnapshotJson,'$.eligibilityMode')=(SELECT JSON_VALUE(picked.policySnapshotJson,'$.eligibilityMode') FROM dbo.notificationObligation AS picked WHERE picked.notificationObligationId=@notificationObligationId)
+           AND dbo.udfMarylandEblConfirmed(labResultId,TRY_CONVERT(DECIMAL(18,6),JSON_VALUE(policySnapshotJson,'$.minimumValue')))=1))));
     IF NOT EXISTS (SELECT 1 FROM @targets WHERE id = @notificationObligationId)
     BEGIN
         ;THROW 51422, N'Completed notification cannot precede receipt of this blood test. Nothing was saved.', 1;

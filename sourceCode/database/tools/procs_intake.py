@@ -265,6 +265,8 @@ SELECT {NEWID}, s.rootTenantId, s.owningTenantId, @stagingRowId, j.reasonCode, j
   WITH (reasonCode VARCHAR (30), fieldName VARCHAR (60), reasonMessage NVARCHAR (500), reportedValue NVARCHAR (200)) AS j
   JOIN dbo.stagingRow AS s ON s.stagingRowId = @stagingRowId;
 
+IF @rowStatus = 'held' OR (@rowStatus = 'loaded' AND EXISTS (SELECT 1 FROM dbo.labResult WHERE labResultId=@labResultId AND resultRowStatus='valid' AND resultStatus IN ('final','corrected') AND isDeleted=0))
+    EXEC dbo.uspReconcileReceiptQuality @stagingRowId=@stagingRowId;
 SET @Comments = CONCAT (N'Row ', @rowStatus, N'.');
 """,
     },

@@ -28,6 +28,14 @@ BEGIN
         collectedDate              DATE              NOT NULL,
         analyzedDate               DATE              NULL,
         reportedDate               DATE              NULL,
+        reportingFinalDateVerified DATE              NULL,
+        reportingEligibilityVerified BIT               NOT NULL CONSTRAINT DF_dbo_labResult_reportingEligibilityVerified DEFAULT (0),
+        reportingPolicyExcluded    BIT               NOT NULL CONSTRAINT DF_dbo_labResult_reportingPolicyExcluded DEFAULT (0),
+        reportingSameDayChecked    BIT               NOT NULL CONSTRAINT DF_dbo_labResult_reportingSameDayChecked DEFAULT (0),
+        reportingLateConfirmed     BIT               NOT NULL CONSTRAINT DF_dbo_labResult_reportingLateConfirmed DEFAULT (0),
+        reportingVerifiedPolicyId  UNIQUEIDENTIFIER  NULL,
+        reportingVerifiedByUserId  UNIQUEIDENTIFIER  NULL,
+        reportingVerifiedUtc       DATETIME2 (3)     NULL,
         receivedUtc                DATETIME2 (3)     NOT NULL,
         resultStatus               VARCHAR (12)      NOT NULL,
         supersedesLabResultId      UNIQUEIDENTIFIER  NULL,
@@ -85,6 +93,22 @@ IF COL_LENGTH (N'dbo.labResult', N'analyzedDate') IS NULL
     ALTER TABLE dbo.labResult ADD analyzedDate               DATE              NULL;
 IF COL_LENGTH (N'dbo.labResult', N'reportedDate') IS NULL
     ALTER TABLE dbo.labResult ADD reportedDate               DATE              NULL;
+IF COL_LENGTH (N'dbo.labResult', N'reportingFinalDateVerified') IS NULL
+    ALTER TABLE dbo.labResult ADD reportingFinalDateVerified DATE              NULL;
+IF COL_LENGTH (N'dbo.labResult', N'reportingEligibilityVerified') IS NULL
+    ALTER TABLE dbo.labResult ADD reportingEligibilityVerified BIT               NOT NULL CONSTRAINT DF_dbo_labResult_reportingEligibilityVerified DEFAULT (0);
+IF COL_LENGTH (N'dbo.labResult', N'reportingPolicyExcluded') IS NULL
+    ALTER TABLE dbo.labResult ADD reportingPolicyExcluded    BIT               NOT NULL CONSTRAINT DF_dbo_labResult_reportingPolicyExcluded DEFAULT (0);
+IF COL_LENGTH (N'dbo.labResult', N'reportingSameDayChecked') IS NULL
+    ALTER TABLE dbo.labResult ADD reportingSameDayChecked    BIT               NOT NULL CONSTRAINT DF_dbo_labResult_reportingSameDayChecked DEFAULT (0);
+IF COL_LENGTH (N'dbo.labResult', N'reportingLateConfirmed') IS NULL
+    ALTER TABLE dbo.labResult ADD reportingLateConfirmed     BIT               NOT NULL CONSTRAINT DF_dbo_labResult_reportingLateConfirmed DEFAULT (0);
+IF COL_LENGTH (N'dbo.labResult', N'reportingVerifiedPolicyId') IS NULL
+    ALTER TABLE dbo.labResult ADD reportingVerifiedPolicyId  UNIQUEIDENTIFIER  NULL;
+IF COL_LENGTH (N'dbo.labResult', N'reportingVerifiedByUserId') IS NULL
+    ALTER TABLE dbo.labResult ADD reportingVerifiedByUserId  UNIQUEIDENTIFIER  NULL;
+IF COL_LENGTH (N'dbo.labResult', N'reportingVerifiedUtc') IS NULL
+    ALTER TABLE dbo.labResult ADD reportingVerifiedUtc       DATETIME2 (3)     NULL;
 IF COL_LENGTH (N'dbo.labResult', N'supersedesLabResultId') IS NULL
     ALTER TABLE dbo.labResult ADD supersedesLabResultId      UNIQUEIDENTIFIER  NULL;
 IF COL_LENGTH (N'dbo.labResult', N'valueReported') IS NULL
@@ -305,6 +329,14 @@ EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', 
 EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'labResult', @ColumnName = N'collectedDate', @Description = N'Collection date; on or after DOB and on or before reported and received.';
 EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'labResult', @ColumnName = N'analyzedDate', @Description = N'Analysis date, between collected and reported.';
 EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'labResult', @ColumnName = N'reportedDate', @Description = N'When the lab released the result.';
+EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'labResult', @ColumnName = N'reportingFinalDateVerified', @Description = N'Final-result date verified from original source by an authorized user; separate from lab-supplied JSON.';
+EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'labResult', @ColumnName = N'reportingEligibilityVerified', @Description = N'Staff verified reporting-policy eligibility.';
+EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'labResult', @ColumnName = N'reportingPolicyExcluded', @Description = N'Staff documented that the reporting policy does not apply.';
+EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'labResult', @ColumnName = N'reportingSameDayChecked', @Description = N'Staff checked the approved close-of-business cutoff for a due-date receipt.';
+EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'labResult', @ColumnName = N'reportingLateConfirmed', @Description = N'Staff confirmed due-date receipt after the approved cutoff.';
+EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'labResult', @ColumnName = N'reportingVerifiedPolicyId', @Description = N'Immutable policy version reviewed by staff; prevents carrying a cutoff/exclusion decision into another version.';
+EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'labResult', @ColumnName = N'reportingVerifiedByUserId', @Description = N'Server-resolved receipt reviewer.';
+EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'labResult', @ColumnName = N'reportingVerifiedUtc', @Description = N'Actual instant the receipt evidence was reviewed.';
 EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'labResult', @ColumnName = N'receivedUtc', @Description = N'When the agency received it; taken from the intake batch.';
 EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'labResult', @ColumnName = N'resultStatus', @Description = N'preliminary, final, corrected or cancelled, as the lab sent it.';
 EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'labResult', @ColumnName = N'supersedesLabResultId', @Description = N'Earlier result this corrected or cancelled result replaces.';
