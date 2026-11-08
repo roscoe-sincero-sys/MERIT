@@ -13,6 +13,7 @@
 <h1>Patient follow-up and documents</h1>
 <p><strong>@Model.Person.Header.Person.LastName, @Model.Person.Header.Person.FirstName</strong> · @(c.CaseId is null ? "All accessible patient and case records" : "This case only")</p>
 <p><a href="/receipt-quality?personId=@c.PersonId">Laboratory reporting and missing-information history</a></p>
+<p><a href="/people/@c.PersonId/care/testing">Blood lead screening, confirmation and follow-up testing plan</a></p>
 <nav aria-label="Patient follow-up"><a href="#notifications">Notification deadlines</a> · <a href="#activity">Activity history</a> · <a href="#documents">Documents</a> · <a href="/notifications">All notification deadlines</a></nav>
 @if(TempData["CareMessage"] is string message) { <div class="usa-alert usa-alert--success" role="status"><p>@message</p></div> }
 @if(!ViewData.ModelState.IsValid) { <div class="usa-alert usa-alert--error" role="alert"><h2>Changes were not saved</h2><div asp-validation-summary="All"></div><p>Correct the fields below. For documents, choose the file again.</p></div> }

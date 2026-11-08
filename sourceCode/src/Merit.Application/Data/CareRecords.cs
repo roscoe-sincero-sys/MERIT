@@ -133,6 +133,10 @@ public sealed record NotificationSummaryRow(string Status, int ObligationCount);
 
 public interface ICareData
 {
+    Task<IReadOnlyList<TestingPlanRow>> TestingPlansAsync(Guid personId, CancellationToken ct);
+    Task SaveTestingPlanAsync(TestingPlanSave plan, CancellationToken ct);
+    Task ResolveTestingPlanAsync(Guid personId, Guid workTaskId, string evidence, bool confirmed, Guid? completedLabResultId, bool dismiss, CancellationToken ct);
+    Task ReconcileTestingAsync(Guid labResultId, CancellationToken ct);
     Task ReconcileReceiptAsync(Guid? labResultId, Guid? stagingRowId, CancellationToken ct);
     Task<IReadOnlyList<ReceiptWorkRow>> ReceiptWorkAsync(Guid? personId, int pageNumber, CancellationToken ct, Guid? workTaskId = null);
     Task ReceiveInformationAsync(Guid workTaskId, DateOnly receivedDate, string evidence, bool confirmed, CancellationToken ct);
@@ -152,6 +156,34 @@ public interface ICareData
     Task<IReadOnlyList<NotificationRuleRow>> RulesAsync(CancellationToken ct);
     Task SaveRuleAsync(NotificationRuleSave row, CancellationToken ct);
     Task RetireRuleAsync(Guid notificationRuleId, CancellationToken ct);
+}
+
+public sealed record TestingPlanSave(Guid WorkTaskId, Guid PersonId, string PlanKind, string Evidence, bool ClinicianConfirmed,
+    Guid? ExposureCaseId = null, Guid? LabResultId = null, DateOnly? TargetDate = null, bool RemediationConfirmed = false);
+
+public sealed class TestingPlanRow
+{
+    public Guid WorkTaskId { get; init; }
+    public Guid? ExposureCaseId { get; init; }
+    public Guid? LabResultId { get; init; }
+    public string QueueCode { get; init; } = "";
+    public string Title { get; init; } = "";
+    public string Detail { get; init; } = "";
+    public string TaskStatus { get; init; } = "";
+    public DateOnly? DueDate { get; init; }
+    public bool IsUrgent { get; init; }
+    public DateTime? CompletedUtc { get; init; }
+    public string? ResolutionNote { get; init; }
+    public string? TestingPlanJson { get; init; }
+    public Guid? CompletedResultId
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(TestingPlanJson)) return null;
+            using var json = System.Text.Json.JsonDocument.Parse(TestingPlanJson);
+            return json.RootElement.TryGetProperty("completedResultId", out var value) && value.TryGetGuid(out var id) ? id : null;
+        }
+    }
 }
 
 public sealed record ReceiptResultRow(Guid LabResultId);

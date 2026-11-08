@@ -160,6 +160,36 @@ public sealed class CareController(CareService care, PersonService people, IRefe
     public async Task<IActionResult> ReceiptQuality(Guid? personId, Guid? taskId, int page = 1, CancellationToken ct = default)
         => await ReceiptPage(personId, page, ct, taskId);
 
+    [HttpGet("people/{personId:guid}/care/testing")]
+    [Authorize(Policy = Permissions.TaskView)]
+    public async Task<IActionResult> Testing(Guid personId, CancellationToken ct)
+        => View("Testing", new TestingPlanModel(await people.GetPageAsync(personId, ct), await care.TestingPlansAsync(personId, ct)));
+
+    [HttpPost("people/{personId:guid}/care/testing")]
+    [Authorize(Policy = Permissions.PersonEdit)]
+    [Authorize(Policy = Permissions.TaskEdit)]
+    public async Task<IActionResult> SaveTesting(Guid personId, Guid workTaskId, string planKind, string evidence, bool clinicianConfirmed,
+        Guid? exposureCaseId, Guid? labResultId, DateOnly? targetDate, bool remediationConfirmed, CancellationToken ct)
+    {
+        try { if (ModelState.IsValid) await care.SaveTestingPlanAsync(new(workTaskId, personId, planKind, evidence, clinicianConfirmed, exposureCaseId, labResultId, targetDate, remediationConfirmed), ct); }
+        catch (MeritException ex) when (FormError(ex)) { return await Testing(personId, ct); }
+        if (!ModelState.IsValid) return await Testing(personId, ct);
+        TempData["CareMessage"] = "Reviewed testing plan saved. Initial draws and previous plans remain in history.";
+        return RedirectToAction(nameof(Testing), new { personId });
+    }
+
+    [HttpPost("people/{personId:guid}/care/testing/resolve")]
+    [Authorize(Policy = Permissions.PersonEdit)]
+    [Authorize(Policy = Permissions.TaskEdit)]
+    public async Task<IActionResult> ResolveTesting(Guid personId, Guid workTaskId, string evidence, bool confirmed, Guid? completedLabResultId, bool dismiss, CancellationToken ct)
+    {
+        try { if (ModelState.IsValid) await care.ResolveTestingPlanAsync(personId, workTaskId, evidence, confirmed, completedLabResultId, dismiss, ct); }
+        catch (MeritException ex) when (FormError(ex)) { return await Testing(personId, ct); }
+        if (!ModelState.IsValid) return await Testing(personId, ct);
+        TempData["CareMessage"] = "Testing outcome recorded. Review the new venous result and choose the next clinician-approved follow-up interval.";
+        return RedirectToAction(nameof(Testing), new { personId });
+    }
+
     private async Task<IActionResult> ReceiptPage(Guid? personId, int page, CancellationToken ct, Guid? taskId = null)
     {
         var result = await care.ReceiptWorkAsync(personId, page, ct, taskId);

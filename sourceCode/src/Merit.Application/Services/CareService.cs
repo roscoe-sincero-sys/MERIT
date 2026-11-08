@@ -124,6 +124,27 @@ public sealed class CareService(ICareData data, IWorkData work, AuditService aud
         session.Require(Permissions.PersonEdit);
         return await EvaluateAsync(null, personId, ct).ConfigureAwait(false);
     }
+    public async Task<IReadOnlyList<TestingPlanRow>> TestingPlansAsync(Guid personId, CancellationToken ct)
+    {
+        session.Require(Permissions.PersonView); session.Require(Permissions.TaskView);
+        var rows = await data.TestingPlansAsync(personId, ct).ConfigureAwait(false);
+        await audit.ListedAsync("testingPlan", rows.Count, ct).ConfigureAwait(false);
+        return rows;
+    }
+    public async Task SaveTestingPlanAsync(TestingPlanSave plan, CancellationToken ct)
+    {
+        session.Require(Permissions.PersonEdit); session.Require(Permissions.TaskEdit);
+        var v = new Validator(); v.Required("evidence", plan.Evidence, "Clinical/source evidence").MaxLength("evidence", plan.Evidence, 1000, "Clinical/source evidence"); v.ThrowIfInvalid();
+        await data.SaveTestingPlanAsync(plan, ct).ConfigureAwait(false);
+        await audit.CreatedAsync("testingPlan", plan.WorkTaskId, ct).ConfigureAwait(false);
+    }
+    public async Task ResolveTestingPlanAsync(Guid personId, Guid id, string evidence, bool confirmed, Guid? resultId, bool dismiss, CancellationToken ct)
+    {
+        session.Require(Permissions.PersonEdit); session.Require(Permissions.TaskEdit);
+        var v = new Validator(); v.Required("evidence", evidence, "Source evidence").MaxLength("evidence", evidence, 1000, "Source evidence"); v.ThrowIfInvalid();
+        await data.ResolveTestingPlanAsync(personId, id, evidence, confirmed, resultId, dismiss, ct).ConfigureAwait(false);
+        await audit.ChangedAsync("testingPlan", id, ct).ConfigureAwait(false);
+    }
     public async Task<int> EvaluateAsync(Guid? ruleId, Guid? personId, CancellationToken ct)
     {
         int total = 0, count;
@@ -131,7 +152,11 @@ public sealed class CareService(ICareData data, IWorkData work, AuditService aud
         for (int page = 1; ; page++)
         {
             var rows = await data.ReceiptResultsAsync(ruleId, personId, page, ct).ConfigureAwait(false);
-            foreach (var row in rows) await data.ReconcileReceiptAsync(row.LabResultId, null, ct).ConfigureAwait(false);
+            foreach (var row in rows)
+            {
+                await data.ReconcileReceiptAsync(row.LabResultId, null, ct).ConfigureAwait(false);
+                await data.ReconcileTestingAsync(row.LabResultId, ct).ConfigureAwait(false);
+            }
             if (rows.Count < 200) break;
         }
         return total;

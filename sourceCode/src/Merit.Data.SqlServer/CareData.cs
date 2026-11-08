@@ -4,6 +4,14 @@ namespace Merit.Data.SqlServer;
 
 public sealed class CareData(Db db) : ICareData
 {
+    public Task<IReadOnlyList<TestingPlanRow>> TestingPlansAsync(Guid personId, CancellationToken ct)
+        => db.QueryAsync<TestingPlanRow>("dbo.uspListTestingPlans", new { personId }, ct);
+    public Task SaveTestingPlanAsync(TestingPlanSave plan, CancellationToken ct)
+        => db.ExecuteAsync("dbo.uspSaveTestingPlan", plan, ct);
+    public Task ResolveTestingPlanAsync(Guid personId, Guid workTaskId, string evidence, bool confirmed, Guid? completedLabResultId, bool dismiss, CancellationToken ct)
+        => db.ExecuteAsync("dbo.uspResolveTestingPlan", new { personId, workTaskId, evidence, confirmed, completedLabResultId, dismiss }, ct);
+    public Task ReconcileTestingAsync(Guid labResultId, CancellationToken ct)
+        => db.ExecuteAsync("dbo.uspReconcileTestingReview", new { labResultId }, ct);
     public Task ReconcileReceiptAsync(Guid? labResultId, Guid? stagingRowId, CancellationToken ct)
         => db.ExecuteAsync("dbo.uspReconcileReceiptQuality", new { labResultId, stagingRowId }, ct);
     public Task<IReadOnlyList<ReceiptWorkRow>> ReceiptWorkAsync(Guid? personId, int pageNumber, CancellationToken ct, Guid? workTaskId = null)

@@ -3782,6 +3782,22 @@
   ]
  },
  {
+  "name": "dbo.uspListTestingPlans",
+  "kind": "read",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": "person.view",
+  "params": [
+   {
+    "name": "personId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   }
+  ]
+ },
+ {
   "name": "dbo.uspListWorkTasks",
   "kind": "read",
   "grants": [
@@ -4057,6 +4073,23 @@
     "name": "recordReview",
     "type": "BIT",
     "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
+  "name": "dbo.uspReconcileTestingReview",
+  "kind": "write",
+  "grants": [
+   "meritWebRole",
+   "meritWorkerRole"
+  ],
+  "permission": null,
+  "params": [
+   {
+    "name": "labResultId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
     "isOutput": false
    }
   ]
@@ -4470,6 +4503,52 @@
    {
     "name": "nameKey",
     "type": "NVARCHAR (120)",
+    "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
+  "name": "dbo.uspResolveTestingPlan",
+  "kind": "write",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": "person.edit",
+  "params": [
+   {
+    "name": "personId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "workTaskId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "evidence",
+    "type": "NVARCHAR(1000)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "confirmed",
+    "type": "BIT",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "completedLabResultId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "dismiss",
+    "type": "BIT",
     "hasDefault": true,
     "isOutput": false
    }
@@ -6179,6 +6258,70 @@
     "name": "rowsJson",
     "type": "NVARCHAR (MAX)",
     "hasDefault": false,
+    "isOutput": false
+   }
+  ]
+ },
+ {
+  "name": "dbo.uspSaveTestingPlan",
+  "kind": "write",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": "person.edit",
+  "params": [
+   {
+    "name": "workTaskId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "personId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "planKind",
+    "type": "VARCHAR (20)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "evidence",
+    "type": "NVARCHAR (1000)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "clinicianConfirmed",
+    "type": "BIT",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "exposureCaseId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "labResultId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "targetDate",
+    "type": "DATE",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "remediationConfirmed",
+    "type": "BIT",
+    "hasDefault": true,
     "isOutput": false
    }
   ]

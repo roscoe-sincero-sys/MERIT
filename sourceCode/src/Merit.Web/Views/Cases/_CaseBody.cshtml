@@ -197,6 +197,7 @@
                 <details class="merit-details" id="case-close-details" data-preserve-open open="@(draft.Form == "close")">
                 <summary>Close case&hellip;</summary>
                 <p id="close-consequence">Closing dismisses routine case tasks. Required notification evidence must be resolved first. A Maryland unreachable-family closure requires documented contact/letter evidence and retains a property-owner closure-letter review task until resolved.</p>
+                <p>For Maryland childhood blood lead cases closed below level, <a href="/people/@c.PersonId/care/testing">review testing and remediation readiness</a> first. The latest two consecutive low tests must be at least three calendar months apart, and clinical testing plans must be resolved.</p>
                 <form class="usa-form" id="case-close-form" hx-post="/cases/@c.ExposureCaseId/close" hx-target="#case-body" hx-swap="outerHTML" hx-confirm="Close this case? Unsaved entries in other sections will be discarded when editing closes.">
                     <input type="hidden" name="rowVersion" value="@draft.Value("close", "rowVersion", rv)" />
                     <div class="merit-form-row">

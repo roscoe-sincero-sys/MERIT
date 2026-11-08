@@ -39,6 +39,7 @@ BEGIN
         completedUtc               DATETIME2 (3)     NULL,
         completedByUserId          UNIQUEIDENTIFIER  NULL,
         resolutionNote             NVARCHAR (1000)   NULL,
+        testingPlanJson            NVARCHAR (MAX)    NULL,
         rowVersion                 ROWVERSION        NOT NULL,
 
         -- Standard audit columns. Soft delete only. Convention: DF_<schema>_<tableName>_<fieldName>.
@@ -87,6 +88,8 @@ IF COL_LENGTH (N'dbo.workTask', N'completedByUserId') IS NULL
     ALTER TABLE dbo.workTask ADD completedByUserId          UNIQUEIDENTIFIER  NULL;
 IF COL_LENGTH (N'dbo.workTask', N'resolutionNote') IS NULL
     ALTER TABLE dbo.workTask ADD resolutionNote             NVARCHAR (1000)   NULL;
+IF COL_LENGTH (N'dbo.workTask', N'testingPlanJson') IS NULL
+    ALTER TABLE dbo.workTask ADD testingPlanJson            NVARCHAR (MAX)    NULL;
 IF COL_LENGTH (N'dbo.workTask', N'rowVersion') IS NULL
     ALTER TABLE dbo.workTask ADD rowVersion ROWVERSION NOT NULL;
 GO
@@ -97,6 +100,11 @@ GO
 IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_dbo_workTask_taskStatus')
 BEGIN
     ALTER TABLE dbo.workTask ADD CONSTRAINT CK_dbo_workTask_taskStatus CHECK (taskStatus IN ('open', 'done', 'dismissed'));
+END;
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_dbo_workTask_testingPlanJson')
+BEGIN
+    ALTER TABLE dbo.workTask ADD CONSTRAINT CK_dbo_workTask_testingPlanJson CHECK (testingPlanJson IS NULL OR ISJSON (testingPlanJson) = 1);
 END;
 GO
 
@@ -235,6 +243,7 @@ EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', 
 EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'workTask', @ColumnName = N'completedUtc', @Description = N'UTC time completed or dismissed.';
 EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'workTask', @ColumnName = N'completedByUserId', @Description = N'Staff member who completed or dismissed it.';
 EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'workTask', @ColumnName = N'resolutionNote', @Description = N'What was decided.';
+EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'workTask', @ColumnName = N'testingPlanJson', @Description = N'Server-written Maryland testing-plan version, source anchors and clinical review evidence.';
 EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'workTask', @ColumnName = N'rowVersion', @Description = N'Optimistic concurrency token. The application passes back the value it read; a save whose value no longer matches is rejected.';
 EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'workTask', @ColumnName = N'isDeleted', @Description = N'Soft-delete flag. 1 = deleted, 0 = active. This database performs no hard deletes; all reads must filter isDeleted = 0.';
 EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'workTask', @ColumnName = N'deletedBy', @Description = N'Login or application user that soft-deleted the row. Stamped by trg_au_updt_workTask when isDeleted transitions 0 -> 1. Meaningful only when isDeleted = 1.';

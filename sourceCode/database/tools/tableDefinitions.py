@@ -1315,6 +1315,7 @@ TABLES = [
             c("completedUtc", "DATETIME2 (3)", "UTC time completed or dismissed."),
             c("completedByUserId", UUID, "Staff member who completed or dismissed it."),
             c("resolutionNote", "NVARCHAR (1000)", "What was decided."),
+            c("testingPlanJson", "NVARCHAR (MAX)", "Server-written Maryland testing-plan version, source anchors and clinical review evidence.", check="testingPlanJson IS NULL OR ISJSON (testingPlanJson) = 1"),
             ROW_VERSION,
         ],
         "fks": [("personId", "dbo.person", "personId"), ("exposureCaseId", "dbo.exposureCase", "exposureCaseId"),

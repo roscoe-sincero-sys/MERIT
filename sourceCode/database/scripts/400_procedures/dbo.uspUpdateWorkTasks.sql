@@ -113,9 +113,9 @@ BEGIN
                      WHERE TRY_CAST ([value] AS UNIQUEIDENTIFIER) IS NOT NULL;
 
         IF @action IN ('complete','dismiss','reopen') AND EXISTS
-            (SELECT 1 FROM @ids AS i JOIN dbo.workTask AS w ON w.workTaskId = i.workTaskId WHERE w.queueCode IN ('notificationDue','receiptFinding','missingInformation','labReportingReview') AND w.isDeleted = 0)
+            (SELECT 1 FROM @ids AS i JOIN dbo.workTask AS w ON w.workTaskId = i.workTaskId WHERE w.queueCode IN ('notificationDue','receiptFinding','missingInformation','labReportingReview','testingFollowUp','testingDischarge') AND w.isDeleted = 0)
         BEGIN
-            ;THROW 51422, N'Use the notification or laboratory receipt review workspace to record evidence. Detection history and pending information requests cannot be changed by bulk actions. No tasks were changed.', 1;
+            ;THROW 51422, N'Use the patient notification, laboratory receipt or testing-plan workspace to record evidence. Detection history and pending information requests cannot be changed by bulk actions. No tasks were changed.', 1;
         END;
 
         IF @action IN ('complete','dismiss') AND NULLIF(TRIM(@note),N'') IS NULL AND EXISTS

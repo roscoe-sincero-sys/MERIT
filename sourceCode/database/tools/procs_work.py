@@ -10,7 +10,7 @@ QUEUE_NAMES = """('unmatchedResult', N'Unmatched results'), ('unknownCode', N'Un
         ('populationReview', N'Population unknown (no DOB)'), ('deceasedReview', N'Deceased: close open cases'),
         ('siteReview', N'Other sites to review'), ('investigationRequest', N'Investigation requests'),
         ('prenatalNotification', N'Prenatal provider notifications'), ('newbornTesting', N'Newborn testing'),
-        ('receiptFinding', N'Laboratory receipt findings'), ('missingInformation', N'Missing information received'), ('labReportingReview', N'Laboratory reporting review'), ('assessmentContact', N'Environmental assessment scheduling'), ('assessmentOwnerClosure', N'Property-owner closure letters'), ('notificationDue', N'Patient/caregiver notification deadlines'), ('letterDue', N'Letters to send'), ('actionLevel', N'Action level follow-up'),
+        ('testingReview', N'Blood lead testing review'), ('testingFollowUp', N'Blood lead testing plans'), ('testingDischarge', N'Below-level closure reviews'), ('receiptFinding', N'Laboratory receipt findings'), ('missingInformation', N'Missing information received'), ('labReportingReview', N'Laboratory reporting review'), ('assessmentContact', N'Environmental assessment scheduling'), ('assessmentOwnerClosure', N'Property-owner closure letters'), ('notificationDue', N'Patient/caregiver notification deadlines'), ('letterDue', N'Letters to send'), ('actionLevel', N'Action level follow-up'),
         ('matchReview', N'Person match review (supervisor)')"""
 
 PROCS = [
@@ -227,9 +227,9 @@ INSERT @ids SELECT DISTINCT TRY_CAST ([value] AS UNIQUEIDENTIFIER) FROM OPENJSON
              WHERE TRY_CAST ([value] AS UNIQUEIDENTIFIER) IS NOT NULL;
 
 IF @action IN ('complete','dismiss','reopen') AND EXISTS
-    (SELECT 1 FROM @ids AS i JOIN dbo.workTask AS w ON w.workTaskId = i.workTaskId WHERE w.queueCode IN ('notificationDue','receiptFinding','missingInformation','labReportingReview') AND w.isDeleted = 0)
+    (SELECT 1 FROM @ids AS i JOIN dbo.workTask AS w ON w.workTaskId = i.workTaskId WHERE w.queueCode IN ('notificationDue','receiptFinding','missingInformation','labReportingReview','testingFollowUp','testingDischarge') AND w.isDeleted = 0)
 BEGIN
-    ;THROW 51422, N'Use the notification or laboratory receipt review workspace to record evidence. Detection history and pending information requests cannot be changed by bulk actions. No tasks were changed.', 1;
+    ;THROW 51422, N'Use the patient notification, laboratory receipt or testing-plan workspace to record evidence. Detection history and pending information requests cannot be changed by bulk actions. No tasks were changed.', 1;
 END;
 
 IF @action IN ('complete','dismiss') AND NULLIF(TRIM(@note),N'') IS NULL AND EXISTS

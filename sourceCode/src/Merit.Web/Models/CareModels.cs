@@ -8,3 +8,4 @@ public sealed record NotificationPolicyModel(IReadOnlyList<NotificationRuleRow> 
 public sealed record NotificationReportModel(IReadOnlyList<NotificationRow> Rows, int Page, IReadOnlyList<NotificationSummaryRow> Summary);
 public sealed record CarePagingModel(string Root, Guid? CaseId, string Key, int Page, int Total, string Label);
 public sealed record ReceiptWorkModel(IReadOnlyList<ReceiptWorkRow> Rows, int Page, Guid? PersonId, Merit.Application.Services.PersonPage? Person);
+public sealed record TestingPlanModel(PersonPage Person, IReadOnlyList<TestingPlanRow> Plans);
