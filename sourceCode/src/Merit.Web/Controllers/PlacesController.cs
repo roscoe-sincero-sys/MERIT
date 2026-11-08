@@ -175,7 +175,8 @@ public sealed class PlacesController(IClock clock, PlaceService places, PersonSe
     [Authorize(Policy = Permissions.PersonEdit)]
     public async Task<IActionResult> End(Guid personId, Guid personLocationId, DateOnly? endDate, CancellationToken ct)
     {
-        await places.EndPlaceAsync(personId, personLocationId, endDate ?? clock.Today, ct);
+        if (endDate is null) throw new ValidationException("endDate", "Choose the end date explicitly; leaving it blank does not mean today.");
+        await places.EndPlaceAsync(personId, personLocationId, endDate.Value, ct);
         Response.Announce("Place ended.");
         return PartialView("_Places", await builder.PlacesAsync(personId, await places.GetPlacesAsync(personId, ct), true, ct));
     }

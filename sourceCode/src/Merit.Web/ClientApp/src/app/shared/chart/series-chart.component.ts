@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, input, signal } from '@angular/core';
+import { afterRenderEffect, afterNextRender, ChangeDetectionStrategy, Component, computed, DestroyRef, ElementRef, inject, input, signal, viewChild } from '@angular/core';
 
 export interface ChartSeries {
   /** Identity of the series; its colour comes from its position in colorKeys, never from its rank in the data. */
@@ -31,23 +31,23 @@ interface Hover {
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <figure class="chart">
-      @if (shown().length > 1) {
+      @if (shown().length > 0) {
         <ul class="legend" aria-label="Legend">
           @for (s of shown(); track s.key) {
             <li><span class="swatch" [class.line]="kind() === 'line'" [style.background]="color(s.key)"></span>{{ s.label }}</li>
           }
         </ul>
       }
-      <div class="plot" (mouseleave)="hover.set(null)">
-        <svg [attr.viewBox]="'0 0 ' + W + ' ' + H" role="img" [attr.aria-label]="ariaLabel()">
+      <div class="plot" #plot (mouseleave)="hover.set(null)">
+        <svg [attr.viewBox]="'0 0 ' + W() + ' ' + H" role="img" [attr.aria-label]="ariaLabel()">
           @for (t of yTicks(); track t.value) {
-            <line class="grid" [attr.x1]="L" [attr.x2]="W - R" [attr.y1]="t.y" [attr.y2]="t.y" />
-            <text class="tick" [attr.x]="L - 6" [attr.y]="t.y + 4" text-anchor="end">{{ t.label }}</text>
+            <line class="grid" [attr.x1]="L()" [attr.x2]="W() - R()" [attr.y1]="t.y" [attr.y2]="t.y" />
+            <text class="tick" [attr.x]="L() - 6" [attr.y]="t.y + 4" text-anchor="end">{{ t.label }}</text>
           }
-          <line class="axis" [attr.x1]="L" [attr.x2]="W - R" [attr.y1]="H - B" [attr.y2]="H - B" />
+          <line class="axis" [attr.x1]="L()" [attr.x2]="W() - R()" [attr.y1]="H - B" [attr.y2]="H - B" />
           @for (c of categories(); track $index; let i = $index) {
             @if (showCategoryLabel(i)) {
-              <text class="tick" [attr.x]="cx(i)" [attr.y]="H - B + 16" text-anchor="middle">{{ short(c) }}</text>
+              <text class="tick" [attr.x]="cx(i)" [attr.y]="H - B + 16" [attr.text-anchor]="i === 0 ? 'start' : i === categories().length - 1 ? 'end' : 'middle'">{{ short(c) }}</text>
             }
           }
 
@@ -61,7 +61,7 @@ interface Hover {
                 }
               }
             }
-            @if (shown().length <= 4) {
+            @if (shown().length <= 4 && W() >= 600) {
               @for (d of directLabels(); track d.key) { <text class="direct" [attr.x]="d.x" [attr.y]="d.y">{{ d.label }}</text> }
             }
             @for (c of categories(); track $index; let i = $index) {
@@ -81,7 +81,7 @@ interface Hover {
           }
         </svg>
         @if (hover(); as h) {
-          <div class="tooltip" role="status" [style.left.%]="(h.x / W) * 100" [style.top.%]="(h.y / H) * 100">
+          <div class="tooltip" #tooltipBox role="status" [style.left.%]="(h.x / W()) * 100" [style.top.%]="(h.y / H) * 100">
             <strong>{{ h.category }}</strong>
             @for (r of h.rows; track r.label) {
               <div><span class="swatch" [style.background]="r.color"></span>{{ r.label }}: {{ r.value }}</div>
@@ -101,16 +101,16 @@ interface Hover {
     svg { width: 100%; height: auto; display: block; overflow: visible; }
     .grid { stroke: #e6e6e6; stroke-width: 1; }
     .axis { stroke: #a9aeb1; stroke-width: 1; }
-    .tick { font-size: 11px; fill: #565c65; }
-    .direct { font-size: 11px; fill: #1b1b1b; }
+    .tick { font-size: 13px; fill: #565c65; }
+    .direct { font-size: 13px; fill: #1b1b1b; }
     .series-line { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
     .marker { stroke: #fcfcfb; stroke-width: 2; }
     .crosshair { stroke: #71767a; stroke-width: 1; stroke-dasharray: 3 3; }
     .hit { fill: transparent; cursor: crosshair; }
     .hit:focus, .bar:focus { outline: 3px solid #2491ff; }
     .bar { cursor: pointer; }
-    .tooltip { position: absolute; transform: translate(-50%, calc(-100% - 12px)); pointer-events: none; background: #fff; color: #1b1b1b;
-               border: 1px solid #a9aeb1; border-radius: 4px; padding: .35rem .5rem; font-size: .85rem; white-space: nowrap;
+    .tooltip { position: absolute; pointer-events: none; background: #fff; color: #1b1b1b;
+               border: 1px solid #a9aeb1; border-radius: 4px; padding: .35rem .5rem; font-size: .85rem; white-space:normal; width:max-content; max-width:calc(100% - 16px); max-height:calc(100% - 16px); overflow:auto;
                box-shadow: 0 2px 6px rgba(0,0,0,.15); z-index: 1; }
   `,
 })
@@ -123,10 +123,28 @@ export class SeriesChartComponent {
   readonly valueLabel = input('Value');
   readonly percent = input(false);
 
-  protected readonly W = 720;
+  protected readonly W = signal(720);
+  private readonly plot = viewChild.required<ElementRef<HTMLElement>>('plot');
+  private readonly tooltipBox = viewChild<ElementRef<HTMLElement>>('tooltipBox');
+  constructor() {
+    afterRenderEffect(() => {
+      const h = this.hover(), box = this.tooltipBox()?.nativeElement;
+      if (!h || !box) return;
+      box.style.left = `${Math.max(8, Math.min(h.x - box.offsetWidth/2, this.W() - box.offsetWidth - 8))}px`;
+      const above = h.y - box.offsetHeight - 12;
+      box.style.top = `${Math.max(8,Math.min(above >= 8 ? above : h.y + 12,this.H - box.offsetHeight - 8))}px`;
+    });
+    const destroy = inject(DestroyRef);
+    afterNextRender(() => {
+      const plot = this.plot().nativeElement;
+      const measure = () => this.W.set(Math.max(200, Math.floor(plot.clientWidth)));
+      measure(); const observer = new ResizeObserver(measure); observer.observe(plot);
+      destroy.onDestroy(() => observer.disconnect());
+    });
+  }
   protected readonly H = 300;
-  protected readonly L = 48;
-  protected readonly R = 90;
+  protected readonly L = computed(() => Math.min(this.W() * 0.4, Math.max(48, this.format(this.max()).length * 7 + 12)));
+  protected readonly R = computed(() => this.W() < 600 ? 16 : 90);
   protected readonly T = 12;
   protected readonly B = 28;
   protected readonly hover = signal<Hover | null>(null);
@@ -140,19 +158,19 @@ export class SeriesChartComponent {
     return this.percent() ? Math.max(100, m) : niceCeiling(m);
   });
 
-  protected readonly step = computed(() => (this.W - this.L - this.R) / Math.max(this.categories().length, 1));
+  protected readonly step = computed(() => (this.W() - this.L() - this.R()) / Math.max(this.categories().length, 1));
 
   protected readonly yTicks = computed(() => {
     const max = this.max();
     const integers = this.shown().every(s => s.values.every(v => v === null || Number.isInteger(v)));
     if (integers) {
       // Counts step in whole numbers (1, 2, 5, 10 ...), never 1.25 or 2.5 (issue #166).
-      const raw = max / 5;
+      const raw = max / (this.W() < 480 ? 3 : 5);
       const power = 10 ** Math.floor(Math.log10(raw));
       const step = Math.max(1, [1, 2, 5, 10].map(m => m * power).find(s => s >= raw) ?? 10 * power);
       return Array.from({ length: Math.floor(max / step) + 1 }, (_, i) => i * step).map(v => ({ value: v, y: this.y(v), label: this.format(v) }));
     }
-    return [0, 0.25, 0.5, 0.75, 1].map(f => ({ value: f * max, y: this.y(f * max), label: this.format(f * max) }));
+    return (this.W() < 480 ? [0, 0.5, 1] : [0, 0.25, 0.5, 0.75, 1]).map(f => ({ value: f * max, y: this.y(f * max), label: this.format(f * max) }));
   });
 
   /** Series names at the end of each line, nudged apart so two lines ending together do not overprint. */
@@ -177,7 +195,7 @@ export class SeriesChartComponent {
   }
 
   protected cx(i: number): number {
-    return this.L + this.step() * (i + 0.5);
+    return this.L() + this.step() * (i + 0.5);
   }
 
   protected y(v: number): number {
@@ -215,12 +233,12 @@ export class SeriesChartComponent {
 
   protected showCategoryLabel(i: number): boolean {
     const n = this.categories().length;
-    const every = Math.ceil(n / 12);
-    return i % every === 0 || i === n - 1;
+    const count = Math.min(n, Math.max(2, Math.floor((this.W() - this.L() - this.R()) / 100)));
+    return n <= 1 || Array.from({length:count}, (_, k) => Math.round(k * (n - 1) / (count - 1))).includes(i);
   }
 
   protected short(c: string): string {
-    return c.length > 14 ? c.slice(0, 13) + '…' : c;
+    return c.length > (this.W() < 480 ? 9 : 14) ? c.slice(0, this.W() < 480 ? 8 : 13) + '…' : c;
   }
 
   protected hoverAt(i: number): void {

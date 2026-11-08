@@ -79,7 +79,8 @@ export class ReportsStore {
             </div>
             <merit-series-chart [kind]="r.chart.kind" [categories]="chart().categories" [series]="chart().series"
                                 [colorKeys]="chart().colorKeys" [valueLabel]="label(r, measureKey())" [percent]="isPercent(r, measureKey())" />
-            <div class="scroll" tabindex="0" role="region" aria-labelledby="table-caption">
+            <p><a href="#report-numbers">Show the numbers</a></p>
+            <div id="report-numbers" class="scroll" tabindex="0" role="region" aria-labelledby="table-caption">
               <table class="usa-table usa-table--borderless usa-table--compact usa-table--striped">
                 <caption id="table-caption">{{ r.title }}, {{ display.date(r.fromDate) }} to {{ display.date(r.toDate) }}</caption>
                 <thead><tr>@for (c of r.columns; track c.key) { <th scope="col" [class.num]="c.kind === 'number' || c.kind === 'percent'">{{ c.label }}</th> }</tr></thead>

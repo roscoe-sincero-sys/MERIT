@@ -935,6 +935,7 @@ public sealed record ExtractsModel(IReadOnlyList<ExtractRunRow> Runs, bool AnyRu
 /// <summary>The audit log's filters, bound from the query string, so a filtered view is a link (issue #45).</summary>
 public sealed class AuditFilterModel
 {
+    public int PageSize { get; set; } = 100;
     public Guid? UserId { get; set; }
 
     public Guid? EntityId { get; set; }
@@ -964,6 +965,7 @@ public sealed class AuditFilterModel
             }
         }
 
+        if (PageSize != 100) Add("pageSize", PageSize.ToString(System.Globalization.CultureInfo.InvariantCulture));
         Add("userId", UserId?.ToString());
         Add("entityId", EntityId?.ToString());
         Add("action", Action);

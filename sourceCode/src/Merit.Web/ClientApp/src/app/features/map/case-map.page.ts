@@ -59,7 +59,8 @@ export class CaseMapStore {
       </div>
     }
 
-    <h2>Cases on this map</h2>
+    <p><a href="#map-cases">Show the cases and numbers</a></p>
+    <h2 id="map-cases" tabindex="-1">Cases on this map</h2>
     <div class="scroll" tabindex="0" role="region" aria-label="Cases on this map, as a table">
       <table class="usa-table usa-table--borderless usa-table--compact">
         <thead><tr><th scope="col">Case</th><th scope="col">Person</th><th scope="col">Classification</th><th scope="col">Opened</th><th scope="col">Address</th><th scope="col">Located</th></tr></thead>

@@ -9,7 +9,17 @@ public sealed partial class PatientCareTests
     [SqlFact]
     public async Task HomePrioritizesImportForClerksAndFollowUpForCaseManagers()
     {
-        var clerk=await fixture.SignedInAsync("intake");
+        // FirstSignInTests owns enrollment of the seeded intake account. Keep this check independent of test order.
+        await using var account=await SyntheticAccount.CreateAsync(fixture.Factory,"homeclerk");
+        await account.ScalarAsync<int>("""
+            INSERT auth.userAssignment(userAssignmentId,appUserId,roleId,tenantId,includeDescendants,accessLevel,startDate)
+            SELECT NEWID(),@id,r.roleId,u.homeTenantId,1,'full','2020-01-01'
+              FROM auth.role r JOIN auth.appUser u ON u.rootTenantId=r.rootTenantId AND u.appUserId=@id
+             WHERE r.roleCode='intakeClerk' AND r.isDeleted=0;
+            SELECT 0;
+            """);
+        using var clerk=fixture.Anonymous();
+        await account.SignInAsync(clerk,MeritFixture.Password);
         var home=await clerk.Http.GetStringAsync("/");
         var start=home[home.IndexOf("<section class=\"merit-section\" aria-labelledby=\"start-heading\">",StringComparison.Ordinal)..];
         start=start[..start.IndexOf("</section>",StringComparison.Ordinal)];

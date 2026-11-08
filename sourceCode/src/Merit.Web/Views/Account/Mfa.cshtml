@@ -34,7 +34,7 @@
             <div class="usa-form-group">
                 <label class="usa-label" asp-for="Code">@(Model.UseRecoveryCode ? "Recovery code" : "Six-digit code from your authenticator app")</label>
                 <div class="usa-hint" id="code-hint">@(Model.UseRecoveryCode ? "Enter an unused ten-character recovery code. You can include or omit its hyphen." : "Or enter one of your ten-character recovery codes.")</div>
-                <input class="usa-input usa-input--medium" asp-for="Code" autofocus="@(ViewData.ModelState.IsValid && !emailFirst)" autocomplete="one-time-code" inputmode="text" aria-describedby="code-hint" required />
+                <input class="usa-input usa-input--medium" asp-for="Code" autofocus="@(ViewData.ModelState.IsValid && !emailFirst)" autocomplete="one-time-code" inputmode="@(Model.UseRecoveryCode ? "text" : "numeric")" aria-describedby="code-hint" required />
             </div>
             <button class="usa-button @(emailFirst ? "usa-button--outline" : "")" type="submit">@(Model.UseRecoveryCode ? "Use recovery code and sign in" : "Verify and sign in")</button>
         </form>

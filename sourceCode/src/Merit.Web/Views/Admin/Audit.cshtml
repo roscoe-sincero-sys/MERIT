@@ -7,7 +7,7 @@
     int last = first + Model.Events.Count - 1;
 }
 <partial name="_Breadcrumbs" model='(IReadOnlyList<BreadcrumbItem>)[new("Home", "/"), new("Audit history")]' />
-<h1>Audit log</h1>
+<h1 data-audit-page-size="@Model.PageSize">Audit log</h1>
 <p class="merit-meta">The tamper-evident ledger of views, changes and exports. It holds IDs, actions, users and times only.</p>
 
 @* Filters (issue #45): who, what, which record, when. A GET form, so a filtered view is a link. *@
@@ -46,6 +46,10 @@
         <label class="usa-label" for="entityId">Record id</label>
         <input class="usa-input" id="entityId" name="entityId" value="@f.EntityId" />
     </div>
+    <div class="usa-form-group">
+        <label class="usa-label" for="pageSize">Events per page</label>
+        <select class="usa-select" name="pageSize" id="pageSize"><option value="25" selected="@(f.PageSize==25)">25</option><option value="100" selected="@(f.PageSize==100)">100</option></select>
+    </div>
     <div class="usa-form-group merit-audit-filters__actions">
         <button class="usa-button" type="submit">Search</button>
         @if (f.IsFiltered) { <a class="usa-button usa-button--unstyled" href="/admin/audit">Clear filters</a> }
@@ -64,8 +68,8 @@
 </div>
 @if (Model.Events.Count > 0)
 {
-    <div class="merit-table-wrap" tabindex="0" role="region" aria-label="Audit events; scroll sideways for more columns">
-        <table class="usa-table usa-table--borderless usa-table--compact">
+    <div class="merit-table-wrap merit-phone-table-wrap" tabindex="0" role="region" aria-label="Audit events; scroll sideways for more columns">
+        <table data-phone-cards role="table" class="usa-table usa-table--borderless usa-table--compact">
             <caption class="usa-sr-only">Audit events</caption>
             <thead><tr><th scope="col">When</th><th scope="col">User</th><th scope="col">Action</th><th scope="col">Record</th><th scope="col">Rows</th>
                 @if (Model.ShowAddress) { <th scope="col">Address</th> }</tr></thead>
@@ -100,6 +104,6 @@
     <nav aria-label="Audit log pages" class="merit-pager">
         @if (f.Page > 1) { <a class="usa-button usa-button--outline" href="/admin/audit@(f.Query(f.Page - 1))">Newer</a> }
         <span>Page @f.Page of @Model.PageCount</span>
-        @if (f.Page < Model.PageCount) { <a class="usa-button usa-button--outline" href="/admin/audit@(f.Query(f.Page + 1))">Older</a> }
+        @if (f.Page < Model.PageCount) { <a class="usa-button usa-button--outline" href="/admin/audit@(f.Query(f.Page + 1))">@(Model.PageSize==25 ? "Next 25 events" : "Older")</a> }
     </nav>
 }
