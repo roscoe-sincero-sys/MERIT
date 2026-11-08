@@ -741,3 +741,87 @@ BEGIN
         ADD CONSTRAINT FK_auth_passwordReset_auth_appUser FOREIGN KEY (appUserId) REFERENCES auth.appUser (appUserId);
 END;
 GO
+IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_dbo_personActivity_dbo_person_personId')
+BEGIN
+    ALTER TABLE dbo.personActivity
+        ADD CONSTRAINT FK_dbo_personActivity_dbo_person_personId FOREIGN KEY (personId) REFERENCES dbo.person (personId);
+END;
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_dbo_personActivity_dbo_exposureCase')
+BEGIN
+    ALTER TABLE dbo.personActivity
+        ADD CONSTRAINT FK_dbo_personActivity_dbo_exposureCase FOREIGN KEY (exposureCaseId) REFERENCES dbo.exposureCase (exposureCaseId);
+END;
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_dbo_personActivity_dbo_labResult')
+BEGIN
+    ALTER TABLE dbo.personActivity
+        ADD CONSTRAINT FK_dbo_personActivity_dbo_labResult FOREIGN KEY (labResultId) REFERENCES dbo.labResult (labResultId);
+END;
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_dbo_personActivity_dbo_person_contactPersonId')
+BEGIN
+    ALTER TABLE dbo.personActivity
+        ADD CONSTRAINT FK_dbo_personActivity_dbo_person_contactPersonId FOREIGN KEY (contactPersonId) REFERENCES dbo.person (personId);
+END;
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_dbo_personDocument_dbo_person')
+BEGIN
+    ALTER TABLE dbo.personDocument
+        ADD CONSTRAINT FK_dbo_personDocument_dbo_person FOREIGN KEY (personId) REFERENCES dbo.person (personId);
+END;
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_dbo_personDocument_dbo_exposureCase')
+BEGIN
+    ALTER TABLE dbo.personDocument
+        ADD CONSTRAINT FK_dbo_personDocument_dbo_exposureCase FOREIGN KEY (exposureCaseId) REFERENCES dbo.exposureCase (exposureCaseId);
+END;
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_dbo_personDocument_dbo_personDocument')
+BEGIN
+    ALTER TABLE dbo.personDocument
+        ADD CONSTRAINT FK_dbo_personDocument_dbo_personDocument FOREIGN KEY (supersedesDocumentId) REFERENCES dbo.personDocument (personDocumentId);
+END;
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_config_notificationRule_config_analyteSpecimen')
+BEGIN
+    ALTER TABLE config.notificationRule
+        ADD CONSTRAINT FK_config_notificationRule_config_analyteSpecimen FOREIGN KEY (analyteSpecimenId) REFERENCES config.analyteSpecimen (analyteSpecimenId);
+END;
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_dbo_notificationObligation_dbo_person')
+BEGIN
+    ALTER TABLE dbo.notificationObligation
+        ADD CONSTRAINT FK_dbo_notificationObligation_dbo_person FOREIGN KEY (personId) REFERENCES dbo.person (personId);
+END;
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_dbo_notificationObligation_dbo_exposureCase')
+BEGIN
+    ALTER TABLE dbo.notificationObligation
+        ADD CONSTRAINT FK_dbo_notificationObligation_dbo_exposureCase FOREIGN KEY (exposureCaseId) REFERENCES dbo.exposureCase (exposureCaseId);
+END;
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_dbo_notificationObligation_dbo_labResult')
+BEGIN
+    ALTER TABLE dbo.notificationObligation
+        ADD CONSTRAINT FK_dbo_notificationObligation_dbo_labResult FOREIGN KEY (labResultId) REFERENCES dbo.labResult (labResultId);
+END;
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_dbo_notificationObligation_config_notificationRule')
+BEGIN
+    ALTER TABLE dbo.notificationObligation
+        ADD CONSTRAINT FK_dbo_notificationObligation_config_notificationRule FOREIGN KEY (notificationRuleId) REFERENCES config.notificationRule (notificationRuleId);
+END;
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_dbo_notificationObligation_dbo_workTask')
+BEGIN
+    ALTER TABLE dbo.notificationObligation
+        ADD CONSTRAINT FK_dbo_notificationObligation_dbo_workTask FOREIGN KEY (workTaskId) REFERENCES dbo.workTask (workTaskId);
+END;
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_dbo_notificationObligation_dbo_personActivity')
+BEGIN
+    ALTER TABLE dbo.notificationObligation
+        ADD CONSTRAINT FK_dbo_notificationObligation_dbo_personActivity FOREIGN KEY (completedActivityId) REFERENCES dbo.personActivity (personActivityId);
+END;
+GO

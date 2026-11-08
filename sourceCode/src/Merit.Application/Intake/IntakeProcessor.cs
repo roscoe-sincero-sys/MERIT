@@ -359,6 +359,12 @@ public sealed partial class IntakeProcessor(
             reportedFields.Remove("hl7PatientIdentifiersJson");
             reportedSnapshot = JsonSerializer.Serialize(reportedFields);
         }
+        if (Get("finalResultDate") is string finalText)
+        {
+            var finalSnapshot = JsonSerializer.Deserialize<Dictionary<string, string?>>(reportedSnapshot) ?? [];
+            finalSnapshot["finalResultDateCanonical"] = ParseDate(finalText, formats)?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+            reportedSnapshot = JsonSerializer.Serialize(finalSnapshot);
+        }
         Guid resultId = TimeOrderedId.New();
         await results.SaveLabResultAsync(new LabResultSave
         {

@@ -4,6 +4,7 @@
 }
 <partial name="_ReturnToList" />
 <partial name="_Header" model="Model" />
+<p><a class="usa-button usa-button--outline" href="/people/@Model.Person.PersonId/care">Patient activities, notification deadlines and documents</a></p>
 <partial name="_AuditLink" model='(Model.Person.PersonId, "person")' />
 
 @* Sections in the order the person's population gives them; every section stays visible with an empty state. *@

@@ -77,5 +77,9 @@
         // merit.js restores edited sibling fields before this listener; retain their original baseline.
         capture();
     });
+    document.addEventListener('merit:formSaved', event => {
+        const form = event.target;
+        if (form.matches?.(selector)) { baseline.set(form.id, value(form)); forced.delete(form.id); }
+    });
     capture();
 })();

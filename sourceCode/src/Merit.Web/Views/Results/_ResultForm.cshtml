@@ -13,6 +13,20 @@
         @Html.AntiForgeryToken()
         @FormErrors.RequiredNote
         <div class="merit-form-row">
+            <div class="@state.GroupClass("FinalResultDate")">
+                <label class="usa-label" for="FinalResultDate">Laboratory final-result date (if known)</label>
+                @state.ErrorMessage("FinalResultDate")
+                <input class="usa-input" id="FinalResultDate" name="FinalResultDate" type="date" value="@Options.Iso(Model.FinalResultDate)" />
+                <p class="usa-hint">Use the actual final-result date on the report. Leave blank if unknown; collection and analysis dates do not establish it.</p>
+            </div>
+            <div class="@state.GroupClass("DepartmentReceivedAt")">
+                <label class="usa-label" for="DepartmentReceivedAt">Department received at (if earlier than entry)</label>
+                @state.ErrorMessage("DepartmentReceivedAt")
+                <input class="usa-input" id="DepartmentReceivedAt" name="DepartmentReceivedAt" type="datetime-local" value="@Model.DepartmentReceivedAt?.ToString("yyyy-MM-ddTHH:mm")" />
+                <p class="usa-hint">@Clock.Zone.DisplayName. Blank records receipt now. Record when the Department actually received the test, including fax/paper received before data entry.</p>
+            </div>
+        </div>
+        <div class="merit-form-row">
             <div class="@state.GroupClass("AnalyteId")">
                 <label class="usa-label" for="AnalyteId">Analyte @FormErrors.RequiredMark</label>
                 @state.ErrorMessage("AnalyteId")

@@ -37,7 +37,7 @@ import { ContextPanelComponent } from '../../shared/context-panel.component';
       </nav>
       <section [attr.aria-label]="store.currentQueueName()">
         <h2>{{ store.currentQueueName() }}</h2>
-        <p class="merit-meta">Queue counts show open tasks.</p>
+        <p class="merit-meta">Queue counts show open tasks. Notification tasks require recorded delivery evidence; use the patient notification workspace to complete or review them. <a href="/notifications">Notification deadlines and compliance</a> / <a href="/receipt-quality">Laboratory receipt quality</a></p>
         <div class="filters">
           <label class="usa-label" for="status">Status</label>
           <select class="usa-select" id="status" [value]="store.status()" [disabled]="busy()" (change)="setStatus($event)">
@@ -61,7 +61,7 @@ import { ContextPanelComponent } from '../../shared/context-panel.component';
           </select>
           <button class="usa-button usa-button--outline" type="button" [disabled]="store.selected().size === 0 || !assignee() || store.loading() || busy()" (click)="bulk('assign', assignee())">Assign</button>
           <button class="usa-button" type="button" [disabled]="store.selected().size === 0 || store.loading() || busy()" (click)="bulk('complete')">Complete</button>
-          <div class="stacked"><label class="usa-label" for="dismiss-reason">Reason for dismissal</label><input class="usa-input" id="dismiss-reason" maxlength="1000" [value]="dismissReason()" [disabled]="busy()" (input)="dismissReason.set($any($event.target).value)" /></div>
+          <div class="stacked"><label class="usa-label" for="dismiss-reason">Completion evidence / reason for dismissal</label><input class="usa-input" id="dismiss-reason" maxlength="1000" [value]="dismissReason()" [disabled]="busy()" (input)="dismissReason.set($any($event.target).value)" /></div>
           <button class="usa-button usa-button--secondary" type="button" [disabled]="store.selected().size === 0 || store.loading() || busy()" (click)="bulk('dismiss')">Dismiss</button>
           } @else {
             <button class="usa-button" type="button" [disabled]="store.selected().size === 0 || store.loading() || busy()" (click)="bulk('reopen')">Reopen selected</button>
@@ -106,7 +106,7 @@ export class QueuesPage implements OnInit {
 
   protected readonly columns: GridColumn<WorkTaskDto>[] = [
     // The detail reads under its task rather than in a squeezed column of its own (issue #154).
-    { key: 'title', label: 'Task', sortable: true, cell: t => t.title, badge: t => (t.isUrgent ? 'Urgent' : null), subtext: t => t.detail },
+    { key: 'title', label: 'Task', sortable: true, cell: t => t.title, badge: t => (t.isUrgent ? 'Urgent' : null), subtext: t => t.detail, link: t => ['testingReview','testingFollowUp','testingDischarge'].includes(t.queueCode) && t.personId ? `/people/${t.personId}/care/testing#plan-${t.workTaskId}` : t.queueCode === 'notificationDue' && t.personId ? `/people/${t.personId}/care?caseId=${t.exposureCaseId ?? ''}#notifications` : ['receiptFinding','missingInformation','labReportingReview'].includes(t.queueCode) ? `/receipt-quality?taskId=${t.workTaskId}${t.personId ? '&personId=' + t.personId : ''}#task-${t.workTaskId}` : null },
     { key: 'queueCode', label: 'Queue', sortable: true, phoneHidden: true, cell: t => this.queueName(t.queueCode) },
     { key: 'person', label: 'Person', nowrap: true, cell: t => t.personName ?? '', link: t => (t.personId && t.personName ? this.view.detail(`/people/${t.personId}`) : null) },
     { key: 'case', label: 'Case', nowrap: true, cell: t => t.caseNumber ?? '', link: t => (t.exposureCaseId ? this.view.detail(`/cases/${t.exposureCaseId}`) : null) },
@@ -205,7 +205,7 @@ export class QueuesPage implements OnInit {
     this.busy.set(true);
     const to = this.assigneeName();
     this.store.error.set(null);
-    this.api.bulkTasks({ taskIds: ids, action, assignToUserId: assignTo ?? null, note: action === 'dismiss' ? this.dismissReason().trim() : null }).subscribe({
+    this.api.bulkTasks({ taskIds: ids, action, assignToUserId: assignTo ?? null, note: action === 'dismiss' || action === 'complete' ? this.dismissReason().trim() || null : null }).subscribe({
       next: r => {
         // Say what happened and, for an assignment, to whom.
         const tasks = r.updated === 1 ? '1 task' : `${r.updated} tasks`;

@@ -1,0 +1,15 @@
+@model NotificationReportModel
+@inject ICurrentSession Session
+@{ ViewData["Title"] = "Completed notification compliance"; }
+<h1>Completed notification compliance</h1>
+<p>These are receipt-based obligations from approved threshold rules. General case follow-up and unsuccessful contact attempts are not completed notification. Each matching rule is counted separately. Missing policy configuration or unevaluated results are not proof of compliance.</p>
+@if(Session.Has(Permissions.ConfigEdit)) { <p><a href="/config/notification-rules">Manage approved notification rules</a></p> }
+@if(Session.Has(Permissions.DataExport)) { <p><a class="usa-button usa-button--outline" href="/notifications.csv">Export all accessible obligations (CSV)</a></p> }
+<ul>@foreach(var s in Model.Summary) { <li><strong>@s.Status: @s.ObligationCount</strong></li> }</ul>
+<p>@(Model.Rows.FirstOrDefault()?.TotalCount ?? 0) accessible obligations. Pending work appears first, earliest deadline first.</p>
+@if(Model.Rows.Count == 0) { <p>No obligations on this page. Check program configuration and evaluation status before reporting compliance.</p> }
+<div class="usa-table-container--scrollable" tabindex="0" role="region" aria-label="Notification obligations">
+<table class="usa-table"><caption>Notification deadlines and completed delivery evidence</caption><thead><tr><th scope="col">Patient / case</th><th scope="col">Rule / recipient</th><th scope="col">Receipt / due date</th><th scope="col">Status</th><th scope="col">Completed evidence</th></tr></thead><tbody>
+@foreach(var r in Model.Rows) { <tr><th scope="row"><a href="/people/@r.PersonId/care?caseId=@r.ExposureCaseId#notifications">@r.LastName, @r.FirstName</a><br />@(r.CaseNumber ?? "Patient only")</th><td>@r.RuleName<br />@r.RecipientKind</td><td>@r.AnchorDate → @r.DueDate<br />@r.TimeZoneId</td><td>@r.Status @if(r.ResultRowStatus != "valid") { <strong>Source result: @r.ResultRowStatus; review needed</strong> }</td><td>@r.CompletedDate<br />@r.RecipientName<br />@r.EvidenceChannel</td></tr> }
+</tbody></table></div>
+<partial name="_CarePaging" model='new CarePagingModel("/notifications", null, "page", Model.Page, Model.Rows.FirstOrDefault()?.TotalCount ?? 0, "notification")' />

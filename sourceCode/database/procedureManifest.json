@@ -1328,6 +1328,15 @@
   ]
  },
  {
+  "name": "config.uspListNotificationRules",
+  "kind": "read",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": "config.edit",
+  "params": []
+ },
+ {
   "name": "config.uspListSubJurisdictionBoundaries",
   "kind": "read",
   "grants": [
@@ -1345,6 +1354,22 @@
   ],
   "permission": null,
   "params": []
+ },
+ {
+  "name": "config.uspRetireNotificationRule",
+  "kind": "write",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": "config.edit",
+  "params": [
+   {
+    "name": "notificationRuleId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   }
+  ]
  },
  {
   "name": "config.uspSaveAnalyte",
@@ -1370,6 +1395,136 @@
     "name": "sortOrder",
     "type": "INT",
     "hasDefault": false,
+    "isOutput": false
+   }
+  ]
+ },
+ {
+  "name": "config.uspSaveNotificationRule",
+  "kind": "write",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": "config.edit",
+  "params": [
+   {
+    "name": "notificationRuleId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "ruleName",
+    "type": "NVARCHAR (120)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "analyteSpecimenId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "population",
+    "type": "VARCHAR (10)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "minimumValue",
+    "type": "DECIMAL (18,6)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "recipientKind",
+    "type": "VARCHAR (12)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "dueInDays",
+    "type": "INT",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "dayBasis",
+    "type": "VARCHAR (12)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "timeZoneId",
+    "type": "VARCHAR (100)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "calendarName",
+    "type": "NVARCHAR (120)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "holidayDatesJson",
+    "type": "NVARCHAR (MAX)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "effectiveFrom",
+    "type": "DATE",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "approvalReference",
+    "type": "NVARCHAR (300)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "minimumAgeMonths",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "maximumAgeMonths",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "maximumValue",
+    "type": "DECIMAL (18,6)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "effectiveTo",
+    "type": "DATE",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "rulePurpose",
+    "type": "VARCHAR (20)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "eligibilityMode",
+    "type": "VARCHAR (20)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "requiredFieldsCsv",
+    "type": "NVARCHAR (1000)",
+    "hasDefault": true,
     "isOutput": false
    }
   ]
@@ -2690,6 +2845,28 @@
   ]
  },
  {
+  "name": "dbo.uspGetPatientDocument",
+  "kind": "read",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": "document.view",
+  "params": [
+   {
+    "name": "personId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "personDocumentId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   }
+  ]
+ },
+ {
   "name": "dbo.uspGetPerson",
   "kind": "read",
   "grants": [
@@ -2952,6 +3129,40 @@
     "name": "employmentId",
     "type": "UNIQUEIDENTIFIER",
     "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
+  "name": "dbo.uspLinkPatientRecord",
+  "kind": "write",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": "person.edit",
+  "params": [
+   {
+    "name": "personId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "exposureCaseId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "recordId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "recordKind",
+    "type": "VARCHAR (12)",
+    "hasDefault": false,
     "isOutput": false
    }
   ]
@@ -3402,6 +3613,147 @@
   ]
  },
  {
+  "name": "dbo.uspListNotificationObligations",
+  "kind": "read",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": "person.view",
+  "params": [
+   {
+    "name": "personId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "exposureCaseId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "pageNumber",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
+  "name": "dbo.uspListPatientActivity",
+  "kind": "read",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": "person.view",
+  "params": [
+   {
+    "name": "personId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "exposureCaseId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "pageNumber",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
+  "name": "dbo.uspListPatientDocuments",
+  "kind": "read",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": "document.view",
+  "params": [
+   {
+    "name": "personId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "exposureCaseId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "pageNumber",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
+  "name": "dbo.uspListReceiptPolicyResults",
+  "kind": "read",
+  "grants": [
+   "meritWebRole",
+   "meritWorkerRole"
+  ],
+  "permission": null,
+  "params": [
+   {
+    "name": "notificationRuleId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "personId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "pageNumber",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
+  "name": "dbo.uspListReceiptWork",
+  "kind": "read",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": "task.view",
+  "params": [
+   {
+    "name": "personId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "pageNumber",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "workTaskId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
   "name": "dbo.uspListReporters",
   "kind": "read",
   "grants": [
@@ -3425,6 +3777,22 @@
     "name": "maxRows",
     "type": "INT",
     "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
+  "name": "dbo.uspListTestingPlans",
+  "kind": "read",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": "person.view",
+  "params": [
+   {
+    "name": "personId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
     "isOutput": false
    }
   ]
@@ -3508,6 +3876,15 @@
     "isOutput": false
    }
   ]
+ },
+ {
+  "name": "dbo.uspNotificationComplianceSummary",
+  "kind": "read",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": "person.view",
+  "params": []
  },
  {
   "name": "dbo.uspOpenExposureCase",
@@ -3609,6 +3986,115 @@
   ]
  },
  {
+  "name": "dbo.uspReceiveMissingInformation",
+  "kind": "write",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": null,
+  "params": [
+   {
+    "name": "workTaskId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "receivedDate",
+    "type": "DATE",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "evidence",
+    "type": "NVARCHAR (1000)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "confirmed",
+    "type": "BIT",
+    "hasDefault": false,
+    "isOutput": false
+   }
+  ]
+ },
+ {
+  "name": "dbo.uspReconcileNotifications",
+  "kind": "write",
+  "grants": [
+   "meritWebRole",
+   "meritWorkerRole"
+  ],
+  "permission": null,
+  "params": [
+   {
+    "name": "labResultId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "notificationRuleId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "personId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
+  "name": "dbo.uspReconcileReceiptQuality",
+  "kind": "write",
+  "grants": [
+   "meritWebRole",
+   "meritWorkerRole"
+  ],
+  "permission": null,
+  "params": [
+   {
+    "name": "labResultId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "stagingRowId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "recordReview",
+    "type": "BIT",
+    "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
+  "name": "dbo.uspReconcileTestingReview",
+  "kind": "write",
+  "grants": [
+   "meritWebRole",
+   "meritWorkerRole"
+  ],
+  "permission": null,
+  "params": [
+   {
+    "name": "labResultId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   }
+  ]
+ },
+ {
   "name": "dbo.uspRecordMatchDecision",
   "kind": "write",
   "grants": [
@@ -3643,6 +4129,112 @@
    {
     "name": "note",
     "type": "NVARCHAR (500)",
+    "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
+  "name": "dbo.uspRecordPatientActivity",
+  "kind": "write",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": "person.edit",
+  "params": [
+   {
+    "name": "personActivityId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "personId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "activityType",
+    "type": "VARCHAR (30)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "activityDate",
+    "type": "DATE",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "audience",
+    "type": "VARCHAR (12)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "channel",
+    "type": "VARCHAR (12)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "outcome",
+    "type": "VARCHAR (30)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "contactPersonId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "recipientLabel",
+    "type": "NVARCHAR (200)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "note",
+    "type": "NVARCHAR (2000)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "exposureCaseId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "labResultId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "notificationObligationId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "completeMatching",
+    "type": "BIT",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "noticeFormReference",
+    "type": "NVARCHAR (300)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "ownerScopeConfirmed",
+    "type": "BIT",
     "hasDefault": true,
     "isOutput": false
    }
@@ -3911,6 +4503,92 @@
    {
     "name": "nameKey",
     "type": "NVARCHAR (120)",
+    "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
+  "name": "dbo.uspResolveTestingPlan",
+  "kind": "write",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": "person.edit",
+  "params": [
+   {
+    "name": "personId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "workTaskId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "evidence",
+    "type": "NVARCHAR(1000)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "confirmed",
+    "type": "BIT",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "completedLabResultId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "dismiss",
+    "type": "BIT",
+    "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
+  "name": "dbo.uspReviewNotificationObligation",
+  "kind": "write",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": "person.edit",
+  "params": [
+   {
+    "name": "personId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "notificationObligationId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "applies",
+    "type": "BIT",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "reason",
+    "type": "NVARCHAR (500)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "criteriaConfirmed",
+    "type": "BIT",
     "hasDefault": true,
     "isOutput": false
    }
@@ -4887,6 +5565,94 @@
   ]
  },
  {
+  "name": "dbo.uspSavePatientDocument",
+  "kind": "write",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": "document.edit",
+  "params": [
+   {
+    "name": "personDocumentId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "personId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "title",
+    "type": "NVARCHAR (200)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "fileName",
+    "type": "NVARCHAR (200)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "contentType",
+    "type": "VARCHAR (100)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "category",
+    "type": "VARCHAR (30)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "documentDate",
+    "type": "DATE",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "source",
+    "type": "NVARCHAR (200)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "contentHash",
+    "type": "BINARY (32)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "content",
+    "type": "VARBINARY (MAX)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "description",
+    "type": "NVARCHAR (1000)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "exposureCaseId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "supersedesDocumentId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
   "name": "dbo.uspSavePerson",
   "kind": "write",
   "grants": [
@@ -5497,6 +6263,70 @@
   ]
  },
  {
+  "name": "dbo.uspSaveTestingPlan",
+  "kind": "write",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": "person.edit",
+  "params": [
+   {
+    "name": "workTaskId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "personId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "planKind",
+    "type": "VARCHAR (20)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "evidence",
+    "type": "NVARCHAR (1000)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "clinicianConfirmed",
+    "type": "BIT",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "exposureCaseId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "labResultId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "targetDate",
+    "type": "DATE",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "remediationConfirmed",
+    "type": "BIT",
+    "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
   "name": "dbo.uspSearch",
   "kind": "write",
   "grants": [
@@ -5940,6 +6770,92 @@
     "name": "note",
     "type": "NVARCHAR (1000)",
     "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
+  "name": "dbo.uspVerifyLabReportingTimeline",
+  "kind": "write",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": "result.edit",
+  "params": [
+   {
+    "name": "personId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "labResultId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "finalResultDate",
+    "type": "DATE",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "evidence",
+    "type": "NVARCHAR (1000)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "eligibilityConfirmed",
+    "type": "BIT",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "applies",
+    "type": "BIT",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "sameDayChecked",
+    "type": "BIT",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "lateConfirmed",
+    "type": "BIT",
+    "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
+  "name": "dbo.uspWithdrawNotificationEvidence",
+  "kind": "write",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": "person.edit",
+  "params": [
+   {
+    "name": "personId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "notificationObligationId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "reason",
+    "type": "NVARCHAR (500)",
+    "hasDefault": false,
     "isOutput": false
    }
   ]

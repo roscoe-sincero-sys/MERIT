@@ -1,0 +1,6 @@
+@model CarePagingModel
+<nav aria-label="@Model.Label pages">
+@if(Model.Page > 1) { <a href="@Model.Root?caseId=@Model.CaseId&amp;@(Model.Key)=@(Model.Page - 1)">Previous @Model.Label page</a> }
+<span>Page @Model.Page · @Model.Total records</span>
+@if(Model.Page * 50 < Model.Total) { <a href="@Model.Root?caseId=@Model.CaseId&amp;@(Model.Key)=@(Model.Page + 1)">Next @Model.Label page</a> }
+</nav>

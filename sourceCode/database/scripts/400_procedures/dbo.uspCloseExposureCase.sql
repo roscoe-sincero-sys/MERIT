@@ -107,6 +107,44 @@ BEGIN
         SELECT @personId = personId, @root = rootTenantId, @owner = owningTenantId, @opened = openedDate
           FROM dbo.exposureCase WHERE exposureCaseId = @exposureCaseId;
 
+        IF EXISTS (SELECT 1 FROM dbo.notificationObligation WITH (UPDLOCK, HOLDLOCK)
+                    WHERE exposureCaseId = @exposureCaseId AND isDeleted = 0 AND completedActivityId IS NULL AND evaluationState <> 'notApplicable')
+        BEGIN
+            ;THROW 51422, N'Complete required notifications or record a justified applicability decision in the patient notification workspace before closing this case.', 1;
+        END;
+
+        DECLARE @mdClosure BIT = CASE WHEN @closureReason='lostToFollowUp' AND EXISTS
+         (SELECT 1 FROM dbo.workTask WHERE exposureCaseId=@exposureCaseId AND queueCode='assessmentContact' AND isDeleted=0) THEN 1 ELSE 0 END;
+        IF @mdClosure=1 AND NULLIF(TRIM(@note),N'') IS NULL
+        BEGIN
+            ;THROW 51422, N'Document the Maryland scheduling contact attempts, first-class final letter, response date and discretionary closure decision before closing without an investigation.', 1;
+        END;
+        IF @closureReason='belowLevelOnRetest' AND EXISTS
+         (SELECT 1 FROM dbo.exposureCase AS c JOIN config.analyte AS a ON a.analyteId=c.analyteId
+          JOIN dbo.labResult AS q ON q.labResultId=c.qualifyingLabResultId
+          WHERE c.exposureCaseId=@exposureCaseId AND a.code='PB' AND q.ageAtCollectionMonths BETWEEN 0 AND 71
+          AND (UPPER(config.udfReceiptField(q.reportedSnapshotJson,NULL,'state'))='MD'
+            OR EXISTS(SELECT 1 FROM dbo.workTask WHERE personId=@personId AND isDeleted=0 AND testingPlanJson IS NOT NULL)))
+        BEGIN
+            DECLARE @low TABLE(id UNIQUEIDENTIFIER,draw DATE,value DECIMAL(18,6),op VARCHAR(4));
+            INSERT @low SELECT TOP(2) r.labResultId,r.collectedDate,r.valueCanonical,r.operator FROM dbo.labResult AS r
+             JOIN config.analyteSpecimen AS s ON s.analyteSpecimenId=r.analyteSpecimenId JOIN config.analyte AS a ON a.analyteId=s.analyteId
+             WHERE r.personId=@personId AND r.isDeleted=0 AND r.resultRowStatus='valid' AND r.resultStatus IN ('final','corrected')
+              AND a.code='PB' AND s.specimen='wholeBlood' AND s.canonicalUnit=N'ug/dL'
+              AND r.collectedDate>=(SELECT q.collectedDate FROM dbo.exposureCase AS c JOIN dbo.labResult AS q ON q.labResultId=c.qualifyingLabResultId WHERE c.exposureCaseId=@exposureCaseId)
+             ORDER BY r.collectedDate DESC,r.labResultId;
+            IF (SELECT COUNT(*) FROM @low)<>2 OR EXISTS(SELECT 1 FROM @low WHERE value IS NULL OR op IS NULL OR NOT ((op='=' AND value<3.5) OR (op='<' AND value<=3.5)))
+              OR (SELECT MAX(draw) FROM @low)<DATEADD(MONTH,3,(SELECT MIN(draw) FROM @low)) OR (SELECT MAX(draw) FROM @low)>@closedDate
+              OR NOT EXISTS(SELECT 1 FROM dbo.workTask AS w WHERE w.personId=@personId AND w.exposureCaseId=@exposureCaseId
+               AND w.queueCode='testingDischarge' AND w.taskStatus='done' AND w.isDeleted=0 AND JSON_VALUE(w.testingPlanJson,'$.remediationConfirmed')='true'
+               AND TRY_CONVERT(UNIQUEIDENTIFIER,JSON_VALUE(w.testingPlanJson,'$.anchorResultId')) IN (SELECT id FROM @low)
+               AND TRY_CONVERT(UNIQUEIDENTIFIER,JSON_VALUE(w.testingPlanJson,'$.previousLowResultId')) IN (SELECT id FROM @low))
+              OR EXISTS(SELECT 1 FROM dbo.workTask WHERE personId=@personId AND queueCode='testingFollowUp' AND taskStatus='open' AND isDeleted=0
+               AND JSON_VALUE(testingPlanJson,'$.kind') IN ('confirmation','early','later'))
+            BEGIN
+                ;THROW 51422, N'Maryland below-level closure requires reviewed completed remediation, the latest two consecutive low tests at least three calendar months apart, and resolved clinical testing plans. Record readiness in the patient testing-plan workspace.', 1;
+            END;
+        END;
         IF @closedDate < @opened
         BEGIN
             ;THROW 51422, N'The closed date cannot be before the opened date.', 1;
@@ -128,7 +166,12 @@ BEGIN
         UPDATE dbo.workTask
            SET taskStatus = 'dismissed', completedUtc = SYSUTCDATETIME (), completedByUserId = auth.udfSessionUserId (),
                resolutionNote = N'Case closed.'
-         WHERE exposureCaseId = @exposureCaseId AND taskStatus = 'open' AND isDeleted = 0;
+         WHERE exposureCaseId = @exposureCaseId AND taskStatus = 'open' AND isDeleted = 0 AND queueCode NOT IN ('notificationDue','assessmentOwnerClosure');
+
+        IF @mdClosure=1 AND NOT EXISTS (SELECT 1 FROM dbo.workTask WHERE exposureCaseId=@exposureCaseId AND queueCode='assessmentOwnerClosure' AND taskStatus='open' AND isDeleted=0)
+            INSERT dbo.workTask (workTaskId,rootTenantId,owningTenantId,queueCode,title,detail,personId,exposureCaseId)
+            VALUES (NEWID (),@root,@owner,'assessmentOwnerClosure',N'Review/send property-owner case-closure letter',
+              N'COMAR 26.16.08.05D: verify primary-residence ownership. If not owned by caregiver/pregnant patient, send the owner a first-class letter explaining inability to contact and closure without an investigation. Complete with recipient, address and letter evidence; otherwise dismiss with the source-based ownership reason. No numeric deadline is inferred.',@personId,@exposureCaseId);
 
         EXEC dbo.uspRefreshPersonAccess @personId = @personId;
 

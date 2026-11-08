@@ -1,0 +1,40 @@
+@model ReceiptWorkModel
+@inject ICurrentSession Session
+@{ ViewData["Title"] = "Laboratory receipt quality";
+string V(string key, string fallback = "") => ViewData.ModelState.TryGetValue(key, out var e) ? e.AttemptedValue ?? fallback : fallback;
+}
+<h1>Laboratory receipt quality</h1>
+@if(Model.PersonId is not null) { <p><a href="/people/@Model.PersonId/care">Back to patient follow-up</a> · <a href="/receipt-quality">All accessible receipt-quality tasks</a></p> }
+<p>Laboratory reporting starts at the final-result event; Department notification starts at Department receipt. A late-report detection is a completed finding dated when it was identified, not an overdue MDE notification task.</p>
+<p>Missing-information detection is completed when identified. <strong>Missing Information Received</strong> stays pending until staff record actual receipt or verify the original source. After receipt, apply corrections and release the linked held record. Missing mapped fields do not prove the laboratory omitted information. Verify conditional pregnancy, Medicaid, distinct draw-site and Department-specific requirements.</p>
+@if(TempData["CareMessage"] is string message) { <div class="usa-alert usa-alert--success" role="status"><p>@message</p></div> }
+@if(!ViewData.ModelState.IsValid) { <div class="usa-alert usa-alert--error" role="alert"><h2>Review was not saved</h2><div asp-validation-summary="All"></div></div> }
+@if(Model.Rows.Count == 0) { <p>No receipt-quality tasks on this page. Verify that applicable laboratory reporting policies have been configured and evaluated; this empty list does not establish reporting compliance.</p> }
+@foreach(var w in Model.Rows) {
+<article class="merit-section" id="task-@w.WorkTaskId"><h2>@w.Title — @Options.Humanize(w.TaskStatus)</h2>
+<p class="care-note">@w.Detail</p><p>Identified @Clock.ToLocal(w.CreatedDateUtc).ToString("yyyy-MM-dd HH:mm") (@Clock.Zone.DisplayName).</p>
+@if(w.CompletedUtc is DateTime done) { <p>Completed @Clock.ToLocal(done).ToString(w.QueueCode == "missingInformation" ? "yyyy-MM-dd" : "yyyy-MM-dd HH:mm"). @w.ResolutionNote</p> }
+@if(w.DueDate is not null) { <p>Laboratory reporting due date: @w.DueDate. Same-day close-of-business timing requires original-source review; dates alone do not establish it.</p> }
+<p>@if(w.PersonId is not null) { <a href="/receipt-quality?personId=@w.PersonId">Patient reporting review</a> } @if(w.LabResultId is not null) { <a href="/results/@w.LabResultId">Source result</a> } @if(w.IntakeBatchId is not null) { <a href="/app/held?batch=@w.IntakeBatchId">Source batch / held records</a> }</p>
+@if(w.QueueCode == "missingInformation" && w.TaskStatus == "open" && (Session.Has(Permissions.PersonEdit) || Session.Has(Permissions.IntakeUpload))) {
+<form asp-antiforgery="true" method="post" action="/receipt-quality/received" class="usa-form" id="receive-@w.WorkTaskId" data-unsaved-work>
+<input type="hidden" name="workTaskId" value="@w.WorkTaskId" /><input type="hidden" name="personId" value="@Model.PersonId" />
+<label class="usa-label" for="received-@w.WorkTaskId">Actual information receipt date</label><input class="usa-input" type="date" name="receivedDate" id="received-@w.WorkTaskId" required value="@V("receivedDate")" />
+<label class="usa-label" for="evidence-@w.WorkTaskId">Source evidence and fields verified</label><textarea class="usa-textarea" name="evidence" id="evidence-@w.WorkTaskId" required maxlength="1000">@V("evidence")</textarea>
+<div class="usa-checkbox"><input class="usa-checkbox__input" id="confirmed-@w.WorkTaskId" type="checkbox" name="confirmed" value="true" required /><label class="usa-checkbox__label" for="confirmed-@w.WorkTaskId">All requested information was actually received or verified complete in the original source.</label></div>
+<button class="usa-button">Record Missing Information Received</button></form>
+}
+</article>
+}
+<nav aria-label="Receipt quality pages">@if(Model.Page > 1) { <a href="/receipt-quality?personId=@Model.PersonId&amp;page=@(Model.Page-1)">Previous page</a> }<span>Page @Model.Page · @(Model.Rows.FirstOrDefault()?.TotalCount ?? 0) records</span>@if(Model.Page*50 < (Model.Rows.FirstOrDefault()?.TotalCount ?? 0)) { <a href="/receipt-quality?personId=@Model.PersonId&amp;page=@(Model.Page+1)">Next page</a> }</nav>
+@if(Model.Person is not null && Session.Has(Permissions.ResultEdit)) {
+<section class="merit-section"><h2>Verify a laboratory final-result date</h2><p>Use the original report and verify that the patient falls within the approved reporting policy, including Maryland residence and age where applicable. This records new verification evidence while retaining the original mapped final-result field.</p>
+<form asp-antiforgery="true" method="post" action="/receipt-quality/timeline" class="usa-form" id="verify-lab-timeline" data-unsaved-work><input type="hidden" name="personId" value="@Model.PersonId" />
+<label class="usa-label" for="labResultId">Source blood test</label><select class="usa-select" name="labResultId" id="labResultId" required><option value="">Choose a result</option>@foreach(var r in Model.Person.Results) { <option value="@r.LabResultId" selected="@(V("labResultId") == r.LabResultId.ToString())">@r.CollectedDate · @r.AnalyteName · @r.ValueCanonical @r.UnitCanonical</option> }</select>
+<label class="usa-label" for="timeline-applies">Reporting-policy decision</label><select class="usa-select" id="timeline-applies" name="applies"><option value="true">Policy applies; verify final-result date</option><option value="false">Not applicable; record source-based reason</option></select>
+<label class="usa-label" for="finalResultDate">Actual final-result date (required when applicable)</label><input class="usa-input" type="date" name="finalResultDate" id="finalResultDate" value="@V("finalResultDate")" />
+<label class="usa-label" for="timeline-evidence">Report/document reference and eligibility evidence</label><textarea class="usa-textarea" name="evidence" id="timeline-evidence" required maxlength="1000">@V("evidence")</textarea>
+<div class="usa-checkbox"><input class="usa-checkbox__input" type="checkbox" name="sameDayChecked" id="same-day-checked" value="true" /><label class="usa-checkbox__label" for="same-day-checked">For receipt on the due date: I verified the program's approved close-of-business cutoff and source receipt timestamp.</label></div>
+<div class="usa-checkbox"><input class="usa-checkbox__input" type="checkbox" name="lateConfirmed" id="late-confirmed" value="true" /><label class="usa-checkbox__label" for="late-confirmed">That same-day receipt was after the verified cutoff. I recorded the timestamp, cutoff and source in the evidence.</label></div>
+<div class="usa-checkbox"><input class="usa-checkbox__input" type="checkbox" name="confirmed" id="timeline-confirmed" value="true" required /><label class="usa-checkbox__label" for="timeline-confirmed">I verified the reporting-policy decision and, when applicable, the actual final-result date against original source evidence.</label></div><button class="usa-button">Verify date and evaluate laboratory reporting</button></form></section>
+}

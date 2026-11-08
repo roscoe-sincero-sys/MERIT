@@ -20,6 +20,7 @@
             <span class="merit-badge merit-badge--@c.Population">@Options.Population(c.Population)</span>
         </p>
     </div>
+    <p><a class="usa-button usa-button--outline" href="/people/@c.PersonId/care?caseId=@c.ExposureCaseId">Case activities, notification deadlines and documents</a></p>
     @if (Model.Message is not null)
     {
         <div class="usa-alert usa-alert--info usa-alert--slim" role="status"><div class="usa-alert__body"><p class="usa-alert__text">@Model.Message</p></div></div>
@@ -72,7 +73,9 @@
                     {
                         <li>@if (t.IsUrgent) { <span class="merit-badge merit-badge--urgent">Urgent</span> } <strong>@t.Title</strong>
                             @(t.DueDate is null ? "" : "· due " + Options.Date(t.DueDate)) <div class="merit-meta">@t.Detail</div>
-                            @if (t.CanEdit) { <form hx-post="/cases/@c.ExposureCaseId/tasks/@t.WorkTaskId" hx-target="#case-body" hx-swap="outerHTML">
+                            @if(t.QueueCode == "notificationDue") { <a href="/people/@c.PersonId/care?caseId=@c.ExposureCaseId#notifications">Record notification evidence</a> }
+                            else if(t.QueueCode == "assessmentOwnerClosure") { <a href="/app/queues?queue=assessmentOwnerClosure">Record closure-letter evidence or ownership exemption in the queue</a> }
+                            else if (t.CanEdit) { <form hx-post="/cases/@c.ExposureCaseId/tasks/@t.WorkTaskId" hx-target="#case-body" hx-swap="outerHTML">
                                 <button class="usa-button usa-button--unstyled" type="submit" name="action" value="assignToMe">Assign to me</button>
                                 <button class="usa-button usa-button--unstyled" type="submit" name="action" value="complete">Complete task</button>
                             </form> }
@@ -140,7 +143,7 @@
             <ol class="usa-list usa-list--unstyled">
                 @foreach (var a in Model.Detail.Activities)
                 {
-                    <li class="margin-bottom-1"><strong>@Options.Date(a.ActivityDate)</strong> &middot; @Options.Humanize(a.ActivityType)@(a.Outcome is null ? "" : " · " + Options.Humanize(a.Outcome))
+                    <li class="margin-bottom-1">@if(a.IsVoided) { <strong>Withdrawn evidence: @a.VoidReason</strong> } <strong>@Options.Date(a.ActivityDate)</strong> &middot; @Options.Humanize(a.ActivityType)@(a.Outcome is null ? "" : " · " + Options.Humanize(a.Outcome))
                         @if (a.ContactLastName is not null) { <span>&middot; with @a.ContactFirstName @a.ContactLastName</span> }
                         <span class="merit-meta">&middot; @a.WorkerName</span><div>@a.Note</div></li>
                 }
@@ -193,7 +196,8 @@
                 <h2 id="close-heading">Close case</h2>
                 <details class="merit-details" id="case-close-details" data-preserve-open open="@(draft.Form == "close")">
                 <summary>Close case&hellip;</summary>
-                <p id="close-consequence">Closing ends follow-up: the case's open tasks are dismissed and the case cannot be edited until someone reopens it with a reason.</p>
+                <p id="close-consequence">Closing dismisses routine case tasks. Required notification evidence must be resolved first. A Maryland unreachable-family closure requires documented contact/letter evidence and retains a property-owner closure-letter review task until resolved.</p>
+                <p>For Maryland childhood blood lead cases closed below level, <a href="/people/@c.PersonId/care/testing">review testing and remediation readiness</a> first. The latest two consecutive low tests must be at least three calendar months apart, and clinical testing plans must be resolved.</p>
                 <form class="usa-form" id="case-close-form" hx-post="/cases/@c.ExposureCaseId/close" hx-target="#case-body" hx-swap="outerHTML" hx-confirm="Close this case? Unsaved entries in other sections will be discarded when editing closes.">
                     <input type="hidden" name="rowVersion" value="@draft.Value("close", "rowVersion", rv)" />
                     <div class="merit-form-row">

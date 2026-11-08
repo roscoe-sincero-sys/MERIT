@@ -1282,6 +1282,138 @@ BEGIN
     SET @Changes = @Changes + 1;
     EXEC (N'ALTER SECURITY POLICY auth.tenantIsolationPolicy ADD BLOCK PREDICATE auth.tvfRootWritePredicate (rootTenantId, isDeleted) ON dbo.matchExclusion AFTER UPDATE;');
 END;
+IF NOT EXISTS (SELECT 1
+                 FROM sys.security_predicates AS sp
+                 JOIN sys.security_policies   AS p ON p.object_id = sp.object_id
+                WHERE p.name = N'tenantIsolationPolicy'
+                  AND sp.target_object_id = OBJECT_ID (N'dbo.personActivity')
+                  AND sp.predicate_type_desc = N'FILTER'
+                  AND (REPLACE (sp.operation_desc, N'_', N' ') = NULL OR (NULL IS NULL AND sp.operation_desc IS NULL)))
+BEGIN
+    SET @Changes = @Changes + 1;
+    EXEC (N'ALTER SECURITY POLICY auth.tenantIsolationPolicy ADD FILTER PREDICATE auth.tvfPersonPredicate (rootTenantId, owningTenantId, personId) ON dbo.personActivity;');
+END;
+IF NOT EXISTS (SELECT 1
+                 FROM sys.security_predicates AS sp
+                 JOIN sys.security_policies   AS p ON p.object_id = sp.object_id
+                WHERE p.name = N'tenantIsolationPolicy'
+                  AND sp.target_object_id = OBJECT_ID (N'dbo.personActivity')
+                  AND sp.predicate_type_desc = N'BLOCK'
+                  AND (REPLACE (sp.operation_desc, N'_', N' ') = N'AFTER INSERT' OR (N'AFTER INSERT' IS NULL AND sp.operation_desc IS NULL)))
+BEGIN
+    SET @Changes = @Changes + 1;
+    EXEC (N'ALTER SECURITY POLICY auth.tenantIsolationPolicy ADD BLOCK PREDICATE auth.tvfPersonWritePredicate (rootTenantId, owningTenantId, personId, isDeleted) ON dbo.personActivity AFTER INSERT;');
+END;
+IF NOT EXISTS (SELECT 1
+                 FROM sys.security_predicates AS sp
+                 JOIN sys.security_policies   AS p ON p.object_id = sp.object_id
+                WHERE p.name = N'tenantIsolationPolicy'
+                  AND sp.target_object_id = OBJECT_ID (N'dbo.personActivity')
+                  AND sp.predicate_type_desc = N'BLOCK'
+                  AND (REPLACE (sp.operation_desc, N'_', N' ') = N'AFTER UPDATE' OR (N'AFTER UPDATE' IS NULL AND sp.operation_desc IS NULL)))
+BEGIN
+    SET @Changes = @Changes + 1;
+    EXEC (N'ALTER SECURITY POLICY auth.tenantIsolationPolicy ADD BLOCK PREDICATE auth.tvfPersonWritePredicate (rootTenantId, owningTenantId, personId, isDeleted) ON dbo.personActivity AFTER UPDATE;');
+END;
+IF NOT EXISTS (SELECT 1
+                 FROM sys.security_predicates AS sp
+                 JOIN sys.security_policies   AS p ON p.object_id = sp.object_id
+                WHERE p.name = N'tenantIsolationPolicy'
+                  AND sp.target_object_id = OBJECT_ID (N'dbo.personDocument')
+                  AND sp.predicate_type_desc = N'FILTER'
+                  AND (REPLACE (sp.operation_desc, N'_', N' ') = NULL OR (NULL IS NULL AND sp.operation_desc IS NULL)))
+BEGIN
+    SET @Changes = @Changes + 1;
+    EXEC (N'ALTER SECURITY POLICY auth.tenantIsolationPolicy ADD FILTER PREDICATE auth.tvfPersonPredicate (rootTenantId, owningTenantId, personId) ON dbo.personDocument;');
+END;
+IF NOT EXISTS (SELECT 1
+                 FROM sys.security_predicates AS sp
+                 JOIN sys.security_policies   AS p ON p.object_id = sp.object_id
+                WHERE p.name = N'tenantIsolationPolicy'
+                  AND sp.target_object_id = OBJECT_ID (N'dbo.personDocument')
+                  AND sp.predicate_type_desc = N'BLOCK'
+                  AND (REPLACE (sp.operation_desc, N'_', N' ') = N'AFTER INSERT' OR (N'AFTER INSERT' IS NULL AND sp.operation_desc IS NULL)))
+BEGIN
+    SET @Changes = @Changes + 1;
+    EXEC (N'ALTER SECURITY POLICY auth.tenantIsolationPolicy ADD BLOCK PREDICATE auth.tvfPersonWritePredicate (rootTenantId, owningTenantId, personId, isDeleted) ON dbo.personDocument AFTER INSERT;');
+END;
+IF NOT EXISTS (SELECT 1
+                 FROM sys.security_predicates AS sp
+                 JOIN sys.security_policies   AS p ON p.object_id = sp.object_id
+                WHERE p.name = N'tenantIsolationPolicy'
+                  AND sp.target_object_id = OBJECT_ID (N'dbo.personDocument')
+                  AND sp.predicate_type_desc = N'BLOCK'
+                  AND (REPLACE (sp.operation_desc, N'_', N' ') = N'AFTER UPDATE' OR (N'AFTER UPDATE' IS NULL AND sp.operation_desc IS NULL)))
+BEGIN
+    SET @Changes = @Changes + 1;
+    EXEC (N'ALTER SECURITY POLICY auth.tenantIsolationPolicy ADD BLOCK PREDICATE auth.tvfPersonWritePredicate (rootTenantId, owningTenantId, personId, isDeleted) ON dbo.personDocument AFTER UPDATE;');
+END;
+IF NOT EXISTS (SELECT 1
+                 FROM sys.security_predicates AS sp
+                 JOIN sys.security_policies   AS p ON p.object_id = sp.object_id
+                WHERE p.name = N'tenantIsolationPolicy'
+                  AND sp.target_object_id = OBJECT_ID (N'config.notificationRule')
+                  AND sp.predicate_type_desc = N'FILTER'
+                  AND (REPLACE (sp.operation_desc, N'_', N' ') = NULL OR (NULL IS NULL AND sp.operation_desc IS NULL)))
+BEGIN
+    SET @Changes = @Changes + 1;
+    EXEC (N'ALTER SECURITY POLICY auth.tenantIsolationPolicy ADD FILTER PREDICATE auth.tvfRootPredicate (rootTenantId) ON config.notificationRule;');
+END;
+IF NOT EXISTS (SELECT 1
+                 FROM sys.security_predicates AS sp
+                 JOIN sys.security_policies   AS p ON p.object_id = sp.object_id
+                WHERE p.name = N'tenantIsolationPolicy'
+                  AND sp.target_object_id = OBJECT_ID (N'config.notificationRule')
+                  AND sp.predicate_type_desc = N'BLOCK'
+                  AND (REPLACE (sp.operation_desc, N'_', N' ') = N'AFTER INSERT' OR (N'AFTER INSERT' IS NULL AND sp.operation_desc IS NULL)))
+BEGIN
+    SET @Changes = @Changes + 1;
+    EXEC (N'ALTER SECURITY POLICY auth.tenantIsolationPolicy ADD BLOCK PREDICATE auth.tvfRootWritePredicate (rootTenantId, isDeleted) ON config.notificationRule AFTER INSERT;');
+END;
+IF NOT EXISTS (SELECT 1
+                 FROM sys.security_predicates AS sp
+                 JOIN sys.security_policies   AS p ON p.object_id = sp.object_id
+                WHERE p.name = N'tenantIsolationPolicy'
+                  AND sp.target_object_id = OBJECT_ID (N'config.notificationRule')
+                  AND sp.predicate_type_desc = N'BLOCK'
+                  AND (REPLACE (sp.operation_desc, N'_', N' ') = N'AFTER UPDATE' OR (N'AFTER UPDATE' IS NULL AND sp.operation_desc IS NULL)))
+BEGIN
+    SET @Changes = @Changes + 1;
+    EXEC (N'ALTER SECURITY POLICY auth.tenantIsolationPolicy ADD BLOCK PREDICATE auth.tvfRootWritePredicate (rootTenantId, isDeleted) ON config.notificationRule AFTER UPDATE;');
+END;
+IF NOT EXISTS (SELECT 1
+                 FROM sys.security_predicates AS sp
+                 JOIN sys.security_policies   AS p ON p.object_id = sp.object_id
+                WHERE p.name = N'tenantIsolationPolicy'
+                  AND sp.target_object_id = OBJECT_ID (N'dbo.notificationObligation')
+                  AND sp.predicate_type_desc = N'FILTER'
+                  AND (REPLACE (sp.operation_desc, N'_', N' ') = NULL OR (NULL IS NULL AND sp.operation_desc IS NULL)))
+BEGIN
+    SET @Changes = @Changes + 1;
+    EXEC (N'ALTER SECURITY POLICY auth.tenantIsolationPolicy ADD FILTER PREDICATE auth.tvfPersonPredicate (rootTenantId, owningTenantId, personId) ON dbo.notificationObligation;');
+END;
+IF NOT EXISTS (SELECT 1
+                 FROM sys.security_predicates AS sp
+                 JOIN sys.security_policies   AS p ON p.object_id = sp.object_id
+                WHERE p.name = N'tenantIsolationPolicy'
+                  AND sp.target_object_id = OBJECT_ID (N'dbo.notificationObligation')
+                  AND sp.predicate_type_desc = N'BLOCK'
+                  AND (REPLACE (sp.operation_desc, N'_', N' ') = N'AFTER INSERT' OR (N'AFTER INSERT' IS NULL AND sp.operation_desc IS NULL)))
+BEGIN
+    SET @Changes = @Changes + 1;
+    EXEC (N'ALTER SECURITY POLICY auth.tenantIsolationPolicy ADD BLOCK PREDICATE auth.tvfPersonWritePredicate (rootTenantId, owningTenantId, personId, isDeleted) ON dbo.notificationObligation AFTER INSERT;');
+END;
+IF NOT EXISTS (SELECT 1
+                 FROM sys.security_predicates AS sp
+                 JOIN sys.security_policies   AS p ON p.object_id = sp.object_id
+                WHERE p.name = N'tenantIsolationPolicy'
+                  AND sp.target_object_id = OBJECT_ID (N'dbo.notificationObligation')
+                  AND sp.predicate_type_desc = N'BLOCK'
+                  AND (REPLACE (sp.operation_desc, N'_', N' ') = N'AFTER UPDATE' OR (N'AFTER UPDATE' IS NULL AND sp.operation_desc IS NULL)))
+BEGIN
+    SET @Changes = @Changes + 1;
+    EXEC (N'ALTER SECURITY POLICY auth.tenantIsolationPolicy ADD BLOCK PREDICATE auth.tvfPersonWritePredicate (rootTenantId, owningTenantId, personId, isDeleted) ON dbo.notificationObligation AFTER UPDATE;');
+END;
 
 ALTER SECURITY POLICY auth.tenantIsolationPolicy WITH (STATE = ON);
 
