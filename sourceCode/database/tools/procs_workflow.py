@@ -40,9 +40,11 @@ proc('config.uspSaveWorkflowDefinition','write','''@workflowDefinitionId UNIQUEI
 , @minimumContactAttempts INT = 0
 , @allowWaiver BIT = 0
 , @effectiveTo DATE = NULL
+, @routingPolicy VARCHAR(24) = 'patientOwner'
 , @versionStamp VARCHAR(16) = NULL''', '''
 IF NULLIF(TRIM(@name),N'') IS NULL OR NULLIF(TRIM(@description),N'') IS NULL OR @version<1
  OR @triggerEvent NOT IN ('patientReview','receivedResult','caseOpened') OR @population NOT IN ('all','child','adult','pregnant')
+ OR @routingPolicy NOT IN ('patientOwner','servingJurisdiction','definitionAgency')
  OR @completionKind NOT IN ('internal','contact','delivery') OR @dayBasis NOT IN ('calendar','business')
  OR @minimumContactAttempts NOT BETWEEN 0 AND 20 OR @closureReason NOT IN ('all','belowLevelOnRetest','lostToFollowUp','movedOutOfState','declined','deceased','duplicate','other')
  OR (@dueInDays IS NOT NULL AND @dueInDays NOT BETWEEN 0 AND 365) OR (@recurrenceDays IS NOT NULL AND @recurrenceDays NOT BETWEEN 1 AND 365)
@@ -73,7 +75,7 @@ BEGIN
     UPDATE config.workflowDefinition SET name=@name,version=@version,description=@description,triggerEvent=@triggerEvent,population=@population,
      completionKind=@completionKind,effectiveFrom=@effectiveFrom,effectiveTo=@effectiveTo,timeZoneId=@timeZoneId,evidenceFieldsJson=@evidenceFieldsJson,
      analyteSpecimenId=@analyteSpecimenId,minimumAgeMonths=@minimumAgeMonths,maximumAgeMonths=@maximumAgeMonths,minimumValue=@minimumValue,maximumValue=@maximumValue,
-     requiresEligibilityReview=@requiresEligibilityReview,assignmentRoleCode=@assignmentRoleCode,dueInDays=@dueInDays,recurrenceDays=@recurrenceDays,dayBasis=@dayBasis,
+     requiresEligibilityReview=@requiresEligibilityReview,assignmentRoleCode=@assignmentRoleCode,routingPolicy=@routingPolicy,dueInDays=@dueInDays,recurrenceDays=@recurrenceDays,dayBasis=@dayBasis,
      holidayDatesJson=@holidayDatesJson,blocksClosure=@blocksClosure,closureReason=@closureReason,minimumContactAttempts=@minimumContactAttempts,allowWaiver=@allowWaiver
     WHERE workflowDefinitionId=@workflowDefinitionId AND definitionStatus='draft' AND owningTenantId=auth.udfSessionActingTenantId()
      AND CONVERT(VARCHAR(16),CAST(rowVersion AS BINARY(8)),2)=@versionStamp;
@@ -85,10 +87,10 @@ END
 ELSE
     INSERT config.workflowDefinition(workflowDefinitionId,rootTenantId,owningTenantId,name,version,description,triggerEvent,population,completionKind,effectiveFrom,effectiveTo,
      timeZoneId,evidenceFieldsJson,analyteSpecimenId,minimumAgeMonths,maximumAgeMonths,minimumValue,maximumValue,requiresEligibilityReview,assignmentRoleCode,
-     dueInDays,recurrenceDays,dayBasis,holidayDatesJson,blocksClosure,closureReason,minimumContactAttempts,allowWaiver)
+     dueInDays,recurrenceDays,dayBasis,holidayDatesJson,blocksClosure,closureReason,minimumContactAttempts,allowWaiver,routingPolicy)
     VALUES(@workflowDefinitionId,auth.udfSessionRootTenantId(),auth.udfSessionActingTenantId(),@name,@version,@description,@triggerEvent,@population,@completionKind,@effectiveFrom,@effectiveTo,
      @timeZoneId,@evidenceFieldsJson,@analyteSpecimenId,@minimumAgeMonths,@maximumAgeMonths,@minimumValue,@maximumValue,@requiresEligibilityReview,@assignmentRoleCode,
-     @dueInDays,@recurrenceDays,@dayBasis,@holidayDatesJson,@blocksClosure,@closureReason,@minimumContactAttempts,@allowWaiver);
+     @dueInDays,@recurrenceDays,@dayBasis,@holidayDatesJson,@blocksClosure,@closureReason,@minimumContactAttempts,@allowWaiver,@routingPolicy);
 ''',permission='config.edit'),
 proc('config.uspPreviewWorkflowDefinition','read','''@workflowDefinitionId UNIQUEIDENTIFIER
 , @personId UNIQUEIDENTIFIER
@@ -98,7 +100,8 @@ IF NOT EXISTS(SELECT 1 FROM config.workflowDefinition WHERE workflowDefinitionId
 BEGIN
     ;THROW 51404, N'The draft or sample patient is not accessible.', 1;
 END;
-SELECT personId,exposureCaseId,labResultId,anchorDate,evaluationState,explanation FROM config.tvfWorkflowEligibility(@workflowDefinitionId,@personId,@exposureCaseId,NULL);
+SELECT personId,exposureCaseId,labResultId,anchorDate,evaluationState,explanation,
+ (SELECT tenantName FROM auth.tenant WHERE tenantId=e.targetOwner) AS responsibleAgency FROM config.tvfWorkflowEligibility(@workflowDefinitionId,@personId,@exposureCaseId,NULL) e;
 ''',permission='config.edit'),
 proc('config.uspPublishWorkflowDefinition','write','''@workflowDefinitionId UNIQUEIDENTIFIER
 , @versionStamp VARCHAR(16)
@@ -209,6 +212,16 @@ proc('uspCreateAdHocWork','write','''@workTaskId UNIQUEIDENTIFIER
 , @completionKind VARCHAR(12)
 , @exposureCaseId UNIQUEIDENTIFIER = NULL
 , @dueDate DATE = NULL''', PERSON+CASE_WRITE+OWNER+'''
+IF @exposureCaseId IS NULL
+BEGIN
+ SET @owner=dbo.udfPatientWorkOwner(@personId);
+ IF NOT EXISTS(SELECT 1 FROM auth.tvfTenantWritePredicate(@root,@owner,0)) SET @owner=auth.udfSessionActingTenantId();
+END;
+IF USER_NAME()<>N'dbo' AND NOT EXISTS(SELECT 1 FROM auth.tvfSessionWritePermission('person.edit') w WHERE w.tenantId=@owner
+ AND (w.tenantId=(SELECT owningTenantId FROM dbo.person WHERE personId=@personId) OR EXISTS(SELECT 1 FROM dbo.personAccess pa WHERE pa.personId=@personId AND pa.tenantId=w.tenantId AND pa.isDeleted=0)))
+BEGIN
+ ;THROW 51403,N'Patient editing authority is required in the responsible agency.',1;
+END;
 IF auth.udfHasPermission(N'task.edit')=0 OR @completionKind NOT IN ('internal','contact','delivery') OR NULLIF(TRIM(@title),N'') IS NULL OR NULLIF(TRIM(@description),N'') IS NULL
  OR EXISTS(SELECT 1 FROM dbo.person WHERE personId=@personId AND mergedIntoPersonId IS NOT NULL)
 BEGIN
@@ -244,6 +257,14 @@ BEGIN
     ;THROW 51404, N'The open patient task is not available. Work without a patient is handled in the queue.', 1;
 END;
 ''' + PERSON + CASE_WRITE + '''
+IF @queue IN ('programTask','workflowReview') AND USER_NAME()<>N'dbo' AND
+ (NOT EXISTS(SELECT 1 FROM auth.tvfSessionWritePermission('person.edit') WHERE tenantId=@owner)
+ OR NOT EXISTS(SELECT 1 FROM auth.tvfSessionWritePermission('task.edit') WHERE tenantId=@owner)
+ OR (@exposureCaseId IS NOT NULL AND NOT EXISTS(SELECT 1 FROM auth.tvfSessionWritePermission('case.edit') WHERE tenantId=@owner))
+ OR (@action='waive' AND NOT EXISTS(SELECT 1 FROM auth.tvfSessionWritePermission('workflow.waive') WHERE tenantId=@owner)))
+BEGIN
+ ;THROW 51403,N'This profile cannot change program work in the responsible agency.',1;
+END;
 IF @queue IN ('notificationDue','receiptFinding','missingInformation','labReportingReview','testingFollowUp','testingDischarge')
 BEGIN
     ;THROW 51422, N'This task has a dedicated notification, receipt, testing or closure-letter evidence workflow. Use its original workspace.', 1;
@@ -307,7 +328,10 @@ BEGIN
 END;
 IF @action='transfer' AND (@transferCaseId IS NULL OR @transferCaseId=@exposureCaseId OR NOT EXISTS
  (SELECT 1 FROM dbo.exposureCase AS c WHERE c.exposureCaseId=@transferCaseId AND c.personId=@personId AND c.caseStatus<>'closed' AND c.isDeleted=0
- AND EXISTS(SELECT 1 FROM auth.tvfTenantWritePredicate(c.rootTenantId,c.owningTenantId,c.isDeleted))))
+ AND EXISTS(SELECT 1 FROM auth.tvfTenantWritePredicate(c.rootTenantId,c.owningTenantId,c.isDeleted))
+ AND (@queue NOT IN ('programTask','workflowReview') OR USER_NAME()=N'dbo' OR
+ (EXISTS(SELECT 1 FROM auth.tvfSessionWritePermission('task.edit') WHERE tenantId=c.owningTenantId)
+ AND EXISTS(SELECT 1 FROM auth.tvfSessionWritePermission('case.edit') WHERE tenantId=c.owningTenantId)))))
 BEGIN
     ;THROW 51422, N'Choose a different active case for this patient within your write scope. The receiving task will remain open.', 1;
 END;

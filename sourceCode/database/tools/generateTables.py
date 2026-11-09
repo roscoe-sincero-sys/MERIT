@@ -358,6 +358,9 @@ GO
         if kind == "tenant":
             filt = "auth.tvfTenantPredicate (rootTenantId, owningTenantId)"
             block = "auth.tvfTenantWritePredicate (rootTenantId, owningTenantId, isDeleted)"
+        elif kind == "correction":
+            filt = "auth.tvfContactCorrectionPredicate (rootTenantId, owningTenantId, personId, caregiverId)"
+            block = "auth.tvfContactCorrectionWritePredicate (rootTenantId, owningTenantId, personId, caregiverId, isDeleted)"
         elif kind in ("person","contact"):
             predicate = "tvfRelatedContactPredicate" if kind == "contact" else "tvfPersonPredicate"
             filt = f"auth.{predicate} (rootTenantId, owningTenantId, {t['personCol']})"

@@ -855,3 +855,21 @@ BEGIN
         ADD CONSTRAINT FK_dbo_caseResultLink_dbo_caseActivity FOREIGN KEY (openingActivityId) REFERENCES dbo.caseActivity (caseActivityId);
 END;
 GO
+IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_dbo_contactCorrection_dbo_person_personId')
+BEGIN
+    ALTER TABLE dbo.contactCorrection
+        ADD CONSTRAINT FK_dbo_contactCorrection_dbo_person_personId FOREIGN KEY (personId) REFERENCES dbo.person (personId);
+END;
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_dbo_contactCorrection_dbo_person_caregiverId')
+BEGIN
+    ALTER TABLE dbo.contactCorrection
+        ADD CONSTRAINT FK_dbo_contactCorrection_dbo_person_caregiverId FOREIGN KEY (caregiverId) REFERENCES dbo.person (personId);
+END;
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_dbo_contactCorrection_auth_tenant')
+BEGIN
+    ALTER TABLE dbo.contactCorrection
+        ADD CONSTRAINT FK_dbo_contactCorrection_auth_tenant FOREIGN KEY (responsibleTenantId) REFERENCES auth.tenant (tenantId);
+END;
+GO

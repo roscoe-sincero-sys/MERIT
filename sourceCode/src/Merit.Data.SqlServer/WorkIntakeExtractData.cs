@@ -211,6 +211,7 @@ public static class DataServiceCollectionExtensions
         services.AddScoped<ICaseData, CaseData>();
         services.AddScoped<ICareData, CareData>();
         services.AddScoped<IWorkflowData, WorkflowData>();
+        services.AddScoped<IContactCorrectionData, ContactCorrectionData>();
         services.AddScoped<IWorkData, WorkData>();
         services.AddScoped<IScreenUsageData, ScreenUsageData>();
         services.AddScoped<IIntakeData, IntakeData>();

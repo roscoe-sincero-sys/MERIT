@@ -4,6 +4,7 @@
 string V(string k,string fallback="") => ViewData.ModelState.TryGetValue(k,out var e) ? e.AttemptedValue ?? fallback : fallback; }
 <p><a href="/people/@p.PersonId">Back to patient</a> · <a href="/people/@p.PersonId/care#activity">Activity and documents</a></p>
 <h1>Patient work checklist</h1><div class="workspace-context"><strong>@p.LastName, @p.FirstName</strong> · @p.Dob</div>
+@if(Session.Has(Permissions.PersonEdit)) { <p><a href="/contact-corrections?personId=@p.PersonId">Caregiver contact correction requests and outcomes</a></p> }
 @if(p.MergedIntoPersonId is Guid canonical) { <p>This patient record was merged. <a href="/people/@canonical/work">Open the current patient's work checklist</a>. Historical work remains available here.</p> }
 @if(TempData["WorkMessage"] is string message) { <div class="usa-alert usa-alert--success" role="status"><p>@message</p></div> }
 @if(!ViewData.ModelState.IsValid) { <div class="usa-alert usa-alert--error" role="alert"><h2>Task was not saved</h2><div asp-validation-summary="All"></div></div> }

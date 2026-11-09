@@ -1,0 +1,37 @@
+@model Merit.Web.Controllers.ContactCorrectionsModel
+@{ ViewData["Title"] = "Caregiver contact corrections"; }
+<h1>Caregiver contact corrections</h1>
+<p>Request a correction without creating another caregiver or gaining access to their medical records. The caregiver's owning team reviews and applies it through the existing contact and residence forms.</p>
+@if(Model.PatientContext) { <p><a href="/people/@Model.Request.PersonId">Back to patient</a> · <a href="/contact-corrections">My accessible correction requests</a></p> }
+@if(TempData["CorrectionMessage"] is string message) { <div role="status" class="usa-alert usa-alert--success"><p>@message</p></div> }
+@if(!ViewData.ModelState.IsValid) { <div role="alert" class="usa-alert usa-alert--error"><h2>Correction was not saved</h2><div asp-validation-summary="All"></div></div> }
+@if(Model.PatientContext && Model.Request.CaregiverId != Guid.Empty) {
+<section class="merit-section"><h2>Request a contact correction</h2>
+<form method="post" action="/contact-corrections" class="usa-form" data-unsaved-work>
+@Html.AntiForgeryToken()<input type="hidden" asp-for="Request.PersonId" /><input type="hidden" asp-for="Request.CaregiverId" />
+<label class="usa-label" asp-for="Request.ContactType">Contact to correct</label><select class="usa-select" asp-for="Request.ContactType"><option value="phone">Phone</option><option value="email">Email</option><option value="address">Mailing residence address</option></select>
+<label class="usa-label" asp-for="Request.ProposedValue">Proposed phone, email or street address</label><input class="usa-input" asp-for="Request.ProposedValue" required maxlength="200" />
+<details><summary>City, state and ZIP (required for an address)</summary>
+<label class="usa-label" asp-for="Request.City">City</label><input class="usa-input" asp-for="Request.City" maxlength="80" />
+<label class="usa-label" asp-for="Request.State">Two-letter state</label><input class="usa-input" asp-for="Request.State" maxlength="2" />
+<label class="usa-label" asp-for="Request.Zip5">Five-digit ZIP</label><input class="usa-input" asp-for="Request.Zip5" maxlength="5" inputmode="numeric" /></details>
+<label class="usa-label" asp-for="Request.SourceNote">Source evidence and which existing contact needs correction</label><textarea class="usa-textarea" asp-for="Request.SourceNote" required maxlength="1000"></textarea>
+<p>Describe how you verified the change, and identify any outdated number or address the owner should remove or end. An active caregiver relationship is required to submit.</p>
+<button class="usa-button">Send correction request</button></form></section>
+}
+<h2>Requests and review history</h2>
+@if(Model.Rows.Count == 0) { <p>No accessible requests. Use “Request contact correction” in the patient's Relationships section to submit one.</p> }
+@foreach(var r in Model.Rows) {
+<article class="merit-section" id="request-@r.ContactCorrectionId"><h3>@r.CaregiverName — @Options.Humanize(r.RequestStatus)</h3>
+<p>Patient: @r.PatientName · Responsible team: <strong>@r.ResponsibleAgency</strong></p>
+<p>Proposed @r.ContactType: <strong>@r.ProposedValue @r.City @r.State @r.Zip5</strong></p><p class="care-note">Source: @r.SourceNote</p>
+@if(r.ReviewNote is not null) { <p class="care-note">Review: @r.ReviewNote</p> }
+@if(r.CanReview && r.RequestStatus == "pending") {
+<p><a href="/people/@r.CaregiverId" target="_blank" rel="noopener">Open caregiver and apply the verified correction (new tab)</a>. Remove or end outdated contact details where appropriate, then return here. Applied status requires matching current contact/address evidence.</p>
+<form method="post" action="/contact-corrections/@r.ContactCorrectionId/review" class="usa-form">
+@Html.AntiForgeryToken()<input type="hidden" name="rowVersion" value="@Options.Hex(r.RowVersion)" />
+@if(Model.PatientContext) { <input type="hidden" name="personId" value="@Model.Request.PersonId" /> }
+<label class="usa-label" for="status-@r.ContactCorrectionId">Review outcome</label><select class="usa-select" id="status-@r.ContactCorrectionId" name="requestStatus"><option value="applied">Applied and verified in caregiver record</option><option value="rejected">Rejected — explain why</option></select>
+<label class="usa-label" for="note-@r.ContactCorrectionId">Review evidence and disposition of outdated contacts</label><textarea class="usa-textarea" id="note-@r.ContactCorrectionId" name="reviewNote" required maxlength="1000"></textarea><button class="usa-button">Record review</button></form>
+}</article>
+}

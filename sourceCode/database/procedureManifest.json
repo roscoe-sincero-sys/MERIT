@@ -1969,6 +1969,12 @@
     "isOutput": false
    },
    {
+    "name": "routingPolicy",
+    "type": "VARCHAR(24)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
     "name": "versionStamp",
     "type": "VARCHAR(16)",
     "hasDefault": true,
@@ -3648,6 +3654,22 @@
   ]
  },
  {
+  "name": "dbo.uspListContactCorrections",
+  "kind": "read",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": "person.edit",
+  "params": [
+   {
+    "name": "personId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
   "name": "dbo.uspListExposureCases",
   "kind": "read",
   "grants": [
@@ -5016,6 +5038,70 @@
   ]
  },
  {
+  "name": "dbo.uspRequestContactCorrection",
+  "kind": "write",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": "person.edit",
+  "params": [
+   {
+    "name": "contactCorrectionId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "personId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "caregiverId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "contactType",
+    "type": "VARCHAR(12)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "proposedValue",
+    "type": "NVARCHAR(200)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "sourceNote",
+    "type": "NVARCHAR(1000)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "city",
+    "type": "NVARCHAR(80)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "state",
+    "type": "VARCHAR(2)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "zip5",
+    "type": "VARCHAR(5)",
+    "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
   "name": "dbo.uspResolveExtractFindingPersons",
   "kind": "read",
   "grants": [
@@ -5190,6 +5276,40 @@
     "name": "transferCaseId",
     "type": "UNIQUEIDENTIFIER",
     "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
+  "name": "dbo.uspReviewContactCorrection",
+  "kind": "write",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": "person.edit",
+  "params": [
+   {
+    "name": "contactCorrectionId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "requestStatus",
+    "type": "VARCHAR(12)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "reviewNote",
+    "type": "NVARCHAR(1000)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "rowVersion",
+    "type": "BINARY(8)",
+    "hasDefault": false,
     "isOutput": false
    }
   ]

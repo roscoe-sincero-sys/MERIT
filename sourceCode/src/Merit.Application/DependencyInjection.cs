@@ -46,6 +46,7 @@ public static class DependencyInjection
         services.AddScoped<CaseService>();
         services.AddScoped<CareService>();
         services.AddScoped<WorkflowService>();
+        services.AddScoped<ContactCorrectionService>();
         services.AddScoped<InvestigationService>();
         services.AddScoped<QueueService>();
         services.AddScoped<ConfigService>();

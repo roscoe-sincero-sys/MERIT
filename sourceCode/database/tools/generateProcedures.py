@@ -34,7 +34,7 @@ sys.path.insert(0, str(HERE))
 OUT = HERE.parent / "scripts" / "400_procedures"
 AUTHOR = "MERIT build"
 CREATE_DATE = "2026-10-24"
-MODULES = ["procs_auth", "procs_config", "procs_person", "procs_places", "procs_results", "procs_cases",
+MODULES = ["procs_corrections", "procs_auth", "procs_config", "procs_person", "procs_places", "procs_results", "procs_cases",
            "procs_work", "procs_intake", "procs_extracts", "procs_setup", "procs_review", "procs_mfa", "procs_password", "procs_signin", "procs_usage", "procs_care", "procs_receipt", "procs_testing", "procs_workflow"]
 
 PROLOGUE = """-- SET XACT_ABORT ON sits ABOVE the header block deliberately: sys.sql_modules stores only the batch containing

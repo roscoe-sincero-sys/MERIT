@@ -73,6 +73,7 @@ CREATE OR ALTER PROCEDURE config.uspSaveWorkflowDefinition
       , @minimumContactAttempts INT = 0
       , @allowWaiver BIT = 0
       , @effectiveTo DATE = NULL
+      , @routingPolicy VARCHAR(24) = 'patientOwner'
       , @versionStamp VARCHAR(16) = NULL
 AS
 BEGIN
@@ -122,6 +123,7 @@ BEGIN
 
         IF NULLIF(TRIM(@name),N'') IS NULL OR NULLIF(TRIM(@description),N'') IS NULL OR @version<1
          OR @triggerEvent NOT IN ('patientReview','receivedResult','caseOpened') OR @population NOT IN ('all','child','adult','pregnant')
+         OR @routingPolicy NOT IN ('patientOwner','servingJurisdiction','definitionAgency')
          OR @completionKind NOT IN ('internal','contact','delivery') OR @dayBasis NOT IN ('calendar','business')
          OR @minimumContactAttempts NOT BETWEEN 0 AND 20 OR @closureReason NOT IN ('all','belowLevelOnRetest','lostToFollowUp','movedOutOfState','declined','deceased','duplicate','other')
          OR (@dueInDays IS NOT NULL AND @dueInDays NOT BETWEEN 0 AND 365) OR (@recurrenceDays IS NOT NULL AND @recurrenceDays NOT BETWEEN 1 AND 365)
@@ -152,7 +154,7 @@ BEGIN
             UPDATE config.workflowDefinition SET name=@name,version=@version,description=@description,triggerEvent=@triggerEvent,population=@population,
              completionKind=@completionKind,effectiveFrom=@effectiveFrom,effectiveTo=@effectiveTo,timeZoneId=@timeZoneId,evidenceFieldsJson=@evidenceFieldsJson,
              analyteSpecimenId=@analyteSpecimenId,minimumAgeMonths=@minimumAgeMonths,maximumAgeMonths=@maximumAgeMonths,minimumValue=@minimumValue,maximumValue=@maximumValue,
-             requiresEligibilityReview=@requiresEligibilityReview,assignmentRoleCode=@assignmentRoleCode,dueInDays=@dueInDays,recurrenceDays=@recurrenceDays,dayBasis=@dayBasis,
+             requiresEligibilityReview=@requiresEligibilityReview,assignmentRoleCode=@assignmentRoleCode,routingPolicy=@routingPolicy,dueInDays=@dueInDays,recurrenceDays=@recurrenceDays,dayBasis=@dayBasis,
              holidayDatesJson=@holidayDatesJson,blocksClosure=@blocksClosure,closureReason=@closureReason,minimumContactAttempts=@minimumContactAttempts,allowWaiver=@allowWaiver
             WHERE workflowDefinitionId=@workflowDefinitionId AND definitionStatus='draft' AND owningTenantId=auth.udfSessionActingTenantId()
              AND CONVERT(VARCHAR(16),CAST(rowVersion AS BINARY(8)),2)=@versionStamp;
@@ -164,10 +166,10 @@ BEGIN
         ELSE
             INSERT config.workflowDefinition(workflowDefinitionId,rootTenantId,owningTenantId,name,version,description,triggerEvent,population,completionKind,effectiveFrom,effectiveTo,
              timeZoneId,evidenceFieldsJson,analyteSpecimenId,minimumAgeMonths,maximumAgeMonths,minimumValue,maximumValue,requiresEligibilityReview,assignmentRoleCode,
-             dueInDays,recurrenceDays,dayBasis,holidayDatesJson,blocksClosure,closureReason,minimumContactAttempts,allowWaiver)
+             dueInDays,recurrenceDays,dayBasis,holidayDatesJson,blocksClosure,closureReason,minimumContactAttempts,allowWaiver,routingPolicy)
             VALUES(@workflowDefinitionId,auth.udfSessionRootTenantId(),auth.udfSessionActingTenantId(),@name,@version,@description,@triggerEvent,@population,@completionKind,@effectiveFrom,@effectiveTo,
              @timeZoneId,@evidenceFieldsJson,@analyteSpecimenId,@minimumAgeMonths,@maximumAgeMonths,@minimumValue,@maximumValue,@requiresEligibilityReview,@assignmentRoleCode,
-             @dueInDays,@recurrenceDays,@dayBasis,@holidayDatesJson,@blocksClosure,@closureReason,@minimumContactAttempts,@allowWaiver);
+             @dueInDays,@recurrenceDays,@dayBasis,@holidayDatesJson,@blocksClosure,@closureReason,@minimumContactAttempts,@allowWaiver,@routingPolicy);
 
         -- =========================================================================================
         -- ===== End of the procedure's own work. ===================================================

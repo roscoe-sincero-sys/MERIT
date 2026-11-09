@@ -20,6 +20,7 @@ public class WorkflowDefinitionSave
     public decimal? MaximumValue { get; set; }
     public bool RequiresEligibilityReview { get; set; }
     public string? AssignmentRoleCode { get; set; }
+    public string RoutingPolicy { get; set; } = "servingJurisdiction";
     public int? DueInDays { get; set; }
     public int? RecurrenceDays { get; set; }
     public string DayBasis { get; set; } = "calendar";
@@ -36,7 +37,7 @@ public sealed class WorkflowDefinitionRow : WorkflowDefinitionSave
     public string ScopeName { get; init; } = "";
     public string? ApprovalReference { get; init; }
 }
-public sealed record WorkflowPreviewRow(Guid PersonId, Guid? ExposureCaseId, Guid? LabResultId, DateOnly? AnchorDate, string EvaluationState, string Explanation);
+public sealed record WorkflowPreviewRow(Guid PersonId, Guid? ExposureCaseId, Guid? LabResultId, DateOnly? AnchorDate, string EvaluationState, string Explanation, string? ResponsibleAgency = null);
 public sealed record WorkflowPatientRow(Guid PersonId);
 public sealed record WorkflowSourceRow(Guid? LabResultId, Guid? ExposureCaseId);
 public sealed record EvidenceField(string Key, string Label, string Type, bool Required);

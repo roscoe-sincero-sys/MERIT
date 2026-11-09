@@ -5,7 +5,7 @@ GO
 ObjectName: dbo.udfPatientWorkOwner
 Author: MERIT build
 CreateDate: 2026-11-08
-Description: Current serving jurisdiction for patient-only clinical work, with the visible patient owner as fallback.
+Description: Current serving jurisdiction for patient-only work, with the visible patient owner as fallback.
 Requirements: Scoped person/residence tables and active jurisdiction membership.
 Notes: No elevated execution or arbitrary caller-supplied tenant. Overlapping jurisdictions are resolved deterministically.
 Example Usage: SELECT dbo.udfPatientWorkOwner(@personId);
