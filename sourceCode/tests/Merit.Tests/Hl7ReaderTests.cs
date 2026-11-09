@@ -5,6 +5,27 @@ namespace Merit.Tests;
 
 public sealed class Hl7ReaderTests
 {
+    [Theory]
+    [InlineData("2.3.1")]
+    [InlineData("2.5.1")]
+    public void PreservesMultipleCaregiversAndStructuredContactComponents(string version)
+    {
+        string nk1=Segment("NK1",(1,"1"),(2,"Guardian^Grace"),(4,"20 Caregiver St^^Towson^MD^21204"),(5,"^PRN^PH^grace@example.test^^410^5550199"));
+        string next=Segment("NK1",(1,"2"),(2,"Second^Sam"),(5,"4105550123"));
+        var message=Message(version).Replace("OBR|",nk1+"\r"+next+"\rOBR|",StringComparison.Ordinal);
+        var row=Assert.Single(Hl7Reader.Read(message));
+        var contacts=JsonSerializer.Deserialize<Dictionary<string,string>[]>(row["guardianContactsJson"]!)!;
+        Assert.Equal(2,contacts.Length);
+        Assert.Equal("Guardian, Grace",contacts[0]["guardianName"]);
+        Assert.Equal("4105550199",contacts[0]["guardianPhone"]);
+        Assert.Equal("grace@example.test",contacts[0]["guardianEmail"]);
+        Assert.Equal("Towson",contacts[0]["guardianCity"]);
+        Assert.Equal("MD",contacts[0]["guardianState"]);
+        Assert.Equal("21204",contacts[0]["guardianZip5"]);
+        Assert.Equal("Second, Sam",contacts[1]["guardianName"]);
+        Assert.Equal("Test Clinician",row["providerName"]);
+    }
+
     private static string Segment(string name, params (int Field, string Value)[] values)
     {
         var fields = new string[values.Max(v => v.Field) + 1];

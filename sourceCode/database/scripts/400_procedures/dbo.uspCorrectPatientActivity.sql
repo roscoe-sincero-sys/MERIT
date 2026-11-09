@@ -105,6 +105,11 @@ BEGIN
         BEGIN
             ;THROW 51404, N'The patient was not found, or you do not have access to it.', 1;
         END;
+        IF NOT EXISTS(SELECT 1 FROM dbo.person p CROSS APPLY auth.tvfPersonPredicate(p.rootTenantId,p.owningTenantId,p.personId) scope WHERE p.personId=@personId)
+        BEGIN
+            ;THROW 51403,N'Clinical patient access is required; related caregiver contact access does not include clinical work.',1;
+        END;
+
         DECLARE @case UNIQUEIDENTIFIER,@found BIT=0;
         IF @sourceKind='patient' SELECT @case=exposureCaseId,@found=1 FROM dbo.personActivity WITH(UPDLOCK,HOLDLOCK) WHERE personActivityId=@activityId AND personId=@personId AND isDeleted=0 AND isVoided=0;
         IF @sourceKind='case' SELECT @case=a.exposureCaseId,@found=1 FROM dbo.caseActivity AS a WITH(UPDLOCK,HOLDLOCK) JOIN dbo.exposureCase AS c ON c.exposureCaseId=a.exposureCaseId

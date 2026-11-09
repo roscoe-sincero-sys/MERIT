@@ -144,7 +144,7 @@ BEGIN
          MIN(CASE WHEN r.verifiedDate IS NOT NULL AND r.verifiedDate<=@today THEN 1 ELSE 0 END) AS allVerified
          FROM dbo.personRelationship r
          WHERE r.personId=w.personId AND r.isDeleted=0 AND (r.startDate IS NULL OR r.startDate<=@today)
-         AND (r.endDate IS NULL OR r.endDate>=@today)
+         AND (r.endDate IS NULL OR r.endDate>@today)
          AND (r.hasLegalCustody=1 OR r.isPrimaryContact=1 OR r.role IN ('parent','legalGuardian','fosterParent','caregiver'))) rel
         LEFT JOIN dbo.person contact ON contact.personId=CASE WHEN @contacts=1 AND EXISTS(SELECT 1 FROM @contactTenants ct WHERE ct.tenantId=w.owningTenantId) THEN
          CASE WHEN rel.primaryCount=1 AND rel.primaryVerified=1 THEN TRY_CONVERT(UNIQUEIDENTIFIER,rel.primaryKey)

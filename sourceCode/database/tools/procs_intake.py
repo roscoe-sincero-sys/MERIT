@@ -10,6 +10,52 @@ SELECT COUNT (*) AS totalCount,
 """
 
 PROCS = [
+    dict(schema='dbo',name='uspListIntakeFormats',kind='read',grants=WEB,ticket='250',permission='intake.configure',params='',key='NULL',
+         desc='Current-root laboratory formats and earlier versions for authorized configuration.',body="""
+SELECT p.*,o.organizationName AS senderName,o.cliaNumber AS senderClia FROM dbo.intakeProfile p
+ JOIN dbo.organization o ON o.organizationId=p.senderOrganizationId AND o.isDeleted=0
+ WHERE p.rootTenantId=auth.udfSessionRootTenantId() AND p.isDeleted=0 ORDER BY p.profileName,p.profileVersion DESC;
+"""),
+    dict(schema='dbo',name='uspListIntakeSenders',kind='read',grants=WEB,ticket='250',permission='intake.configure',params='',key='NULL',
+         desc='Laboratories in the active agency for sender format configuration.',body="""
+SELECT o.organizationId,o.organizationName,o.cliaNumber FROM dbo.organization o
+ WHERE o.rootTenantId=auth.udfSessionRootTenantId() AND o.isDeleted=0 AND EXISTS
+ (SELECT 1 FROM dbo.organizationType t WHERE t.organizationId=o.organizationId AND t.organizationTypeCode='laboratory' AND t.isDeleted=0)
+ ORDER BY o.organizationName;
+"""),
+    dict(schema='dbo',name='uspPersistIntakeIdentifiers',kind='write',grants=WORKER,ticket='255',permission='intake.upload',
+         desc='Persists only identifiers parsed from an authorized HL7 staging row for its matched patient. Does not grant identifier display rights.',
+         params='@stagingRowId UNIQUEIDENTIFIER\n, @personId UNIQUEIDENTIFIER',key="CONCAT(N'stagingRowId=',@stagingRowId,N', personId=',@personId)",body="""
+IF auth.udfHasPermission(N'person.edit')=0
+BEGIN
+    ;THROW 51403,N'Patient editing permission is required for intake.',1;
+END;
+DECLARE @json NVARCHAR(MAX),@corrections NVARCHAR(MAX),@root UNIQUEIDENTIFIER,@owner UNIQUEIDENTIFIER;
+SELECT @json=s.parsedJson,@corrections=s.correctedJson,@root=s.rootTenantId FROM dbo.stagingRow s JOIN dbo.intakeBatch b ON b.intakeBatchId=s.intakeBatchId
+ JOIN dbo.intakeProfile f ON f.intakeProfileId=b.intakeProfileId
+ WHERE s.stagingRowId=@stagingRowId AND s.isDeleted=0 AND f.fileType='hl7' AND b.isDeleted=0;
+SELECT @owner=owningTenantId FROM dbo.person WHERE personId=@personId AND rootTenantId=@root AND isDeleted=0
+ AND (personId=TRY_CONVERT(UNIQUEIDENTIFIER,JSON_VALUE(@corrections,'$.matchPersonId'))
+ OR (dob=TRY_CONVERT(DATE,COALESCE(JSON_VALUE(@corrections,'$.dob'),JSON_VALUE(@json,'$.dob'))) AND EXISTS(SELECT 1 FROM dbo.personAlias a WHERE a.personId=@personId AND a.isDeleted=0
+  AND (a.lastName=COALESCE(JSON_VALUE(@corrections,'$.lastName'),JSON_VALUE(@json,'$.lastName'))
+    OR (JSON_VALUE(@corrections,'$.lastName') IS NULL AND a.lastNameKey=JSON_VALUE(@json,'$.hl7PatientLastNameKey')))
+  AND (COALESCE(a.firstName,N'')=COALESCE(JSON_VALUE(@corrections,'$.firstName'),JSON_VALUE(@json,'$.firstName'),N'')
+    OR (JSON_VALUE(@corrections,'$.firstName') IS NULL AND a.firstNameKey=JSON_VALUE(@json,'$.hl7PatientFirstNameKey'))))));
+IF @owner IS NULL OR @json IS NULL
+BEGIN
+    ;THROW 51404,N'The source row and matched patient are unavailable.',1;
+END;
+INSERT dbo.personIdentifier(personIdentifierId,rootTenantId,owningTenantId,personId,identifierType,identifierValue,assigningFacility,source,reportedDate)
+SELECT NEWID(),@root,@owner,@personId,j.kind,j.val,j.authority,'labReport',COALESCE(TRY_CONVERT(DATE,JSON_VALUE(@json,'$.reportedDate')),TRY_CONVERT(DATE,JSON_VALUE(@json,'$.collectedDate')))
+FROM (SELECT DISTINCT kind,val,authority FROM OPENJSON((SELECT ids FROM OPENJSON(@json) WITH(ids NVARCHAR(MAX) '$.hl7PatientIdentifiersJson')))
+ WITH(kind VARCHAR(20) '$.Type',val NVARCHAR(60) '$.Value',authority NVARCHAR(120) '$.Authority')) j
+WHERE j.kind IN('mrn','medicaid','other') AND NULLIF(j.val,N'') IS NOT NULL AND NOT EXISTS
+ (SELECT 1 FROM dbo.personIdentifier i WHERE i.personId=@personId AND i.identifierType=j.kind AND i.identifierValue=j.val
+ AND COALESCE(i.assigningFacility,N'')=COALESCE(j.authority,N'') AND i.isDeleted=0);
+DECLARE @count INT=@@ROWCOUNT;
+IF @count>0 INSERT logs.auditEvent(appUserId,rootTenantId,eventAction,entityType,entityId,recordCount)
+ VALUES(auth.udfSessionUserId(),@root,'create','intakeIdentifiers',@personId,@count);
+"""),
     {
         "schema": "dbo", "name": "uspGetHeldSummary", "kind": "read", "grants": WEB, "ticket": "#71 #72",
         "permission": "result.release_hold",
@@ -67,7 +113,24 @@ SELECT p.intakeProfileId, p.senderOrganizationId, o.organizationName AS senderNa
         "key": "CONCAT (N'intakeProfileId=', @intakeProfileId, N', previousProfileId=', @previousProfileId)",
         "body": """
 DECLARE @root UNIQUEIDENTIFIER = auth.udfSessionRootTenantId ();
-DECLARE @version INT = COALESCE ((SELECT profileVersion FROM dbo.intakeProfile WHERE intakeProfileId = @previousProfileId), 0) + 1;
+IF NOT EXISTS(SELECT 1 FROM dbo.organization o WHERE o.organizationId=@senderOrganizationId AND o.rootTenantId=@root AND o.isDeleted=0)
+BEGIN
+    ;THROW 51404,N'The laboratory is unavailable in this agency.',1;
+END;
+IF @fileType NOT IN('hl7','csv','tsv','pipe') OR ISJSON(@columnMapJson)<>1 OR @headerRow<1
+BEGIN
+    ;THROW 51422,N'Choose a supported file type, header row and field mapping.',1;
+END;
+DECLARE @version INT=1;
+IF @previousProfileId IS NOT NULL
+BEGIN
+    SELECT @version=profileVersion+1 FROM dbo.intakeProfile WITH(UPDLOCK,HOLDLOCK)
+     WHERE intakeProfileId=@previousProfileId AND rootTenantId=@root AND senderOrganizationId=@senderOrganizationId AND isActive=1 AND isDeleted=0;
+    IF @version=1
+    BEGIN
+        ;THROW 51409,N'This format changed or belongs to another laboratory. Reload the current version; create a separate format for another laboratory.',1;
+    END;
+END;
 
 UPDATE dbo.intakeProfile SET isActive = 0 WHERE intakeProfileId = @previousProfileId AND isActive = 1;
 

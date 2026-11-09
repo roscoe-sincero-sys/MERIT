@@ -43,11 +43,11 @@ public sealed class PersonPageBuilder(IClock clock, IReferenceDataProvider refer
         int column = page.CurrentPopulation switch { "adult" => 1, "pregnant" => 2, _ => 0 };
         var person = page.Header.Person;
         bool showPregnancy = !(person.Sex == "male" && page.Pregnancies.Count == 0);
-        var sections = Order.Where(kv => kv.Key != "pregnancy" || showPregnancy)
+        var sections = Order.Where(kv => !person.ContactOnlyAccess || kv.Key=="places").Where(kv => kv.Key != "pregnancy" || showPregnancy)
             .Select(kv => new PersonSection(kv.Key, Titles[kv.Key], kv.Value[column]))
             .OrderBy(s => s.Order).ToList();
 
-        bool canEdit = session.Has(Permissions.PersonEdit) && person.MergedIntoPersonId is null;
+        bool canEdit = session.Has(Permissions.PersonEdit) && !person.ContactOnlyAccess && person.MergedIntoPersonId is null;
         var refData = await reference.GetAsync(ct);
         return new PersonPageModel(page, sections,
             Relationships(person.PersonId, page.Relationships, canEdit, page.CurrentPopulation),
@@ -57,7 +57,7 @@ public sealed class PersonPageBuilder(IClock clock, IReferenceDataProvider refer
             new EmploymentModel(person.PersonId, page.Employment, canEdit),
             new SourcesModel(person.PersonId, page.ExposureSources, canEdit, refData.Choices("exposureSourceType")),
             new PregnancyModel(person.PersonId, page.Pregnancies, canEdit, showPregnancy, person.Sex == "male"),
-            canEdit, session.Has(Permissions.ResultEdit), session.Has(Permissions.PersonViewIdentifiers));
+            canEdit, !person.ContactOnlyAccess && session.Has(Permissions.ResultEdit), !person.ContactOnlyAccess && session.Has(Permissions.PersonViewIdentifiers));
     }
 
     public RelationshipsModel Relationships(Guid personId, IReadOnlyList<RelationshipRow> rows, bool canEdit, string population)

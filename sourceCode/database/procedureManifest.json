@@ -1135,6 +1135,12 @@
     "type": "VARCHAR (64)",
     "hasDefault": true,
     "isOutput": false
+   },
+   {
+    "name": "seedThresholds",
+    "type": "BIT",
+    "hasDefault": true,
+    "isOutput": false
    }
   ]
  },
@@ -1322,6 +1328,12 @@
    {
     "name": "timeZone",
     "type": "VARCHAR (64)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "seedThresholds",
+    "type": "BIT",
     "hasDefault": true,
     "isOutput": false
    }
@@ -3831,6 +3843,15 @@
   ]
  },
  {
+  "name": "dbo.uspListIntakeFormats",
+  "kind": "read",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": "intake.configure",
+  "params": []
+ },
+ {
   "name": "dbo.uspListIntakeProfiles",
   "kind": "read",
   "grants": [
@@ -3838,6 +3859,15 @@
    "meritWorkerRole"
   ],
   "permission": "intake.upload",
+  "params": []
+ },
+ {
+  "name": "dbo.uspListIntakeSenders",
+  "kind": "read",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": "intake.configure",
   "params": []
  },
  {
@@ -4445,6 +4475,28 @@
    {
     "name": "rowVersion",
     "type": "BINARY (8)",
+    "hasDefault": false,
+    "isOutput": false
+   }
+  ]
+ },
+ {
+  "name": "dbo.uspPersistIntakeIdentifiers",
+  "kind": "write",
+  "grants": [
+   "meritWorkerRole"
+  ],
+  "permission": "intake.upload",
+  "params": [
+   {
+    "name": "stagingRowId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "personId",
+    "type": "UNIQUEIDENTIFIER",
     "hasDefault": false,
     "isOutput": false
    }

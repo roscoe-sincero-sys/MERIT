@@ -94,6 +94,7 @@ BEGIN
 
         SELECT p.personId, p.rootTenantId, p.lastName, p.firstName, p.middleName, p.dob, p.dobVerified, p.sex, p.ethnicity,
                p.preferredLanguage, p.deceasedDate, p.mergedIntoPersonId, p.isPlaceholderName, p.rowVersion,
+               CAST(CASE WHEN EXISTS(SELECT 1 FROM auth.tvfPersonPredicate(p.rootTenantId,p.owningTenantId,p.personId)) THEN 0 ELSE 1 END AS BIT) AS contactOnlyAccess,
                cur.countyFips AS currentCountyFips, cur.countyName AS currentCountyName, cur.locationId AS currentPrimaryLocationId,
                CAST (CASE WHEN EXISTS (SELECT 1 FROM dbo.labResult AS r WHERE r.personId = p.personId AND r.isDeleted = 0)
                           THEN 0 ELSE 1 END AS BIT) AS isContactOnly,

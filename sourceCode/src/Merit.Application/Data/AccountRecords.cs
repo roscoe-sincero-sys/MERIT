@@ -383,4 +383,4 @@ public sealed record NewCounty(string Fips, string Name, string Type = "county")
 /// <summary>What the database needs to create a tenant. A data root also gets its roles, settings and counties.</summary>
 public sealed record TenantCreate(string TenantCode, string TenantName, string TenantType, string ParentTenantCode, string? StatePostalCode,
                                   string? StateFips, IReadOnlyList<string> CountyFips, IReadOnlyList<NewCounty> NewCounties,
-                                  string? TimeZone = null);
+                                  string? TimeZone = null, DateOnly? EffectiveFrom = null, bool SeedThresholds = true);

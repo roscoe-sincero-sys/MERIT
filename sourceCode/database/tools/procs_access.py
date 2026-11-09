@@ -190,8 +190,10 @@ INSERT auth.sessionScope (sessionScopeId, appUserId, rootTenantId, actingTenantI
                           isPlatformAdmin, expiresUtc)
 VALUES (@sessionScopeId, @appUserId, @root, @acting, @userProfileId, @viewAsUserId, @isPlatformAdmin, @expiresUtc);
 
-INSERT auth.sessionScopeTenant (sessionScopeTenantId, sessionScopeId, tenantId, accessLevel)
-SELECT {NEWID}, @sessionScopeId, tenantId, {LEVEL.format('accessRank')} FROM @tenants;
+INSERT auth.sessionScopeTenant (sessionScopeTenantId, sessionScopeId, tenantId, accessLevel, canReadRelatedContacts)
+SELECT {NEWID}, @sessionScopeId, tenantId, {LEVEL.format('accessRank')},
+ CASE WHEN EXISTS(SELECT 1 FROM @x x WHERE x.tenantId=t.tenantId AND x.permissionCode='person.edit' AND x.grantRank>=2) THEN 1 ELSE 0 END
+FROM @tenants t;
 
 INSERT auth.sessionScopeRoot (sessionScopeRootId, sessionScopeId, rootTenantId, accessLevel)
 SELECT {NEWID}, @sessionScopeId, r.rootTenantId, {LEVEL.format('r.accessRank')}

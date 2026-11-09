@@ -51,11 +51,12 @@ CREATE OR ALTER PROCEDURE config.uspInstallRootTenant
       , @tenantName       NVARCHAR (120)
       , @statePostalCode  CHAR (2) = NULL
       , @stateFips        CHAR (2) = NULL
-      , @effectiveFrom    DATE = '2026-01-01'
+      , @effectiveFrom    DATE = NULL
       , @tenantType       VARCHAR (30) = 'state'
       , @parentTenantCode VARCHAR (30) = NULL
       , @countiesJson     NVARCHAR (MAX) = N'[]'
       , @timeZone         VARCHAR (64) = NULL
+      , @seedThresholds   BIT = 1
 WITH EXECUTE AS OWNER
 AS
 BEGIN
@@ -99,6 +100,7 @@ BEGIN
         -- =========================================================================================
 
         DECLARE @root UNIQUEIDENTIFIER = CAST (HASHBYTES ('MD5', CONCAT (N'tenant:', @tenantCode)) AS UNIQUEIDENTIFIER);
+        SET @effectiveFrom=COALESCE(@effectiveFrom,auth.udfSessionToday());
         DECLARE @parent UNIQUEIDENTIFIER = COALESCE ((SELECT tenantId FROM auth.tenant WHERE tenantCode = @parentTenantCode
                                                                                         AND isDeleted = 0),
                                                      CAST (HASHBYTES ('MD5', N'tenant:PLATFORM') AS UNIQUEIDENTIFIER));
@@ -141,7 +143,7 @@ BEGIN
           ('caseManager', N'Case manager', 0, 0, 'person.view,person.edit,result.view,result.edit,case.view,case.open,case.edit,investigation.edit,task.view,task.edit,data.export,document.view,document.edit'),
           ('investigator', N'Investigator', 0, 0, 'person.view,person.edit,result.view,case.view,investigation.edit,task.view,task.edit,document.view,document.edit'),
           ('occupationalInvestigator', N'Occupational investigator', 0, 0, 'person.view,person.edit,result.view,result.edit,case.view,case.open,case.edit,investigation.edit,task.view,task.edit,data.export,document.view,document.edit'),
-          ('supervisor', N'Supervisor', 0, 0, 'person.view,person.edit,person.view_identifiers,person.merge,result.view,result.edit,result.release_hold,case.view,case.open,case.edit,investigation.edit,task.view,task.edit,intake.upload,registry.edit,data.export,extract.run,extract.submit,audit.view,usage.view,document.view,document.edit'),
+          ('supervisor', N'Supervisor', 0, 0, 'person.view,person.edit,person.view_identifiers,person.merge,result.view,result.edit,result.release_hold,case.view,case.open,case.edit,investigation.edit,task.view,task.edit,workflow.waive,intake.upload,registry.edit,data.export,extract.run,extract.submit,audit.view,usage.view,document.view,document.edit'),
           ('epidemiologist', N'Epidemiologist (de-identified)', 0, 1, 'person.view,result.view,case.view,task.view,data.export,extract.run'),
           ('administrator', N'Administrator (users and configuration)', 1, 0, 'tenant.administer,tenant.create,config.edit,registry.edit,intake.configure,matching.configure,audit.view,usage.view,person.view,result.view,case.view,task.view'),
           ('userAdministrator', N'User administrator (accounts and access only)', 1, 0, 'tenant.administer,audit.view');
@@ -227,7 +229,7 @@ BEGIN
                t.thresholdType, t.actionCodeId, t.dueIntervalDays, t.lowerValue, t.upperValue, N'ug/dL', '>=', @effectiveFrom,
                t.authority, t.isActive
           FROM @th AS t
-         WHERE @pbBlood IS NOT NULL
+         WHERE @pbBlood IS NOT NULL AND @seedThresholds=1
            AND NOT EXISTS (SELECT 1 FROM config.threshold AS x
                             WHERE x.thresholdId = CAST (HASHBYTES ('MD5', CONCAT (N'threshold:', @tenantCode, N':', t.rowKey)) AS UNIQUEIDENTIFIER));
 

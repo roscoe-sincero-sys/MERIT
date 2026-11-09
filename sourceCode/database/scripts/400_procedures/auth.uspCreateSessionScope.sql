@@ -215,8 +215,10 @@ BEGIN
                                   isPlatformAdmin, expiresUtc)
         VALUES (@sessionScopeId, @appUserId, @root, @acting, @userProfileId, @viewAsUserId, @isPlatformAdmin, @expiresUtc);
 
-        INSERT auth.sessionScopeTenant (sessionScopeTenantId, sessionScopeId, tenantId, accessLevel)
-        SELECT CAST (CAST (NEWID () AS BINARY (10)) + CAST (DATEDIFF_BIG (MILLISECOND, '19700101', SYSUTCDATETIME ()) AS BINARY (6)) AS UNIQUEIDENTIFIER), @sessionScopeId, tenantId, CASE accessRank WHEN 3 THEN 'full' WHEN 2 THEN 'write' ELSE 'read' END FROM @tenants;
+        INSERT auth.sessionScopeTenant (sessionScopeTenantId, sessionScopeId, tenantId, accessLevel, canReadRelatedContacts)
+        SELECT CAST (CAST (NEWID () AS BINARY (10)) + CAST (DATEDIFF_BIG (MILLISECOND, '19700101', SYSUTCDATETIME ()) AS BINARY (6)) AS UNIQUEIDENTIFIER), @sessionScopeId, tenantId, CASE accessRank WHEN 3 THEN 'full' WHEN 2 THEN 'write' ELSE 'read' END,
+         CASE WHEN EXISTS(SELECT 1 FROM @x x WHERE x.tenantId=t.tenantId AND x.permissionCode='person.edit' AND x.grantRank>=2) THEN 1 ELSE 0 END
+        FROM @tenants t;
 
         INSERT auth.sessionScopeRoot (sessionScopeRootId, sessionScopeId, rootTenantId, accessLevel)
         SELECT CAST (CAST (NEWID () AS BINARY (10)) + CAST (DATEDIFF_BIG (MILLISECOND, '19700101', SYSUTCDATETIME ()) AS BINARY (6)) AS UNIQUEIDENTIFIER), @sessionScopeId, r.rootTenantId, CASE r.accessRank WHEN 3 THEN 'full' WHEN 2 THEN 'write' ELSE 'read' END

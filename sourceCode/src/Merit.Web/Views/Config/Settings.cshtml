@@ -4,6 +4,8 @@
 }
 <partial name="_ConfigNav" model='"settings"' />
 <h1>Jurisdiction settings</h1>
+@inject ICurrentSession Session
+@if(Session.Has(Permissions.IntakeConfigure)) { <p><a href="/config/intake-formats">Configure laboratory import formats</a></p> }
 <p class="merit-meta">Anything that differs between jurisdictions is a setting rather than code. Each change is effective-dated and audited; "NOTSET" marks a value the specification says must be set at install.</p>
 <div id="settings-table">
     <partial name="_SettingsTable" model="Model" />

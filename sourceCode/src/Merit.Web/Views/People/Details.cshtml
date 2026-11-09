@@ -5,11 +5,12 @@
 }
 <partial name="_Breadcrumbs" model='(IReadOnlyList<BreadcrumbItem>)[new("People", "/search"), new("Patient")]' />
 <partial name="_Header" model="Model" />
-<p><a class="usa-button usa-button--outline" href="/people/@Model.Person.PersonId/care">Patient activities, notification deadlines and documents</a></p>
+@if(Model.Person.ContactOnlyAccess) { <p role="status">Caregiver contact details are available through this patient's relationship. Clinical records require separate access.</p> }
+else { <p><a class="usa-button usa-button--outline" href="/people/@Model.Person.PersonId/care">Patient activities, notification deadlines and documents</a></p> }
 <div class="workspace-context" aria-label="Patient context"><strong>@Model.FullName</strong> | @Model.Person.Dob</div>
-<nav class="workspace-sections" aria-label="Patient sections"><a href="#section-results">Lab results</a><a href="#section-cases">Cases and history</a><a href="/people/@Model.Person.PersonId/care#activity">Activity</a><a href="/people/@Model.Person.PersonId/care#documents">Documents</a>@foreach(var item in Model.Sections.Where(s => s.Key != "results" && s.Key != "cases")) { <a href="#section-@item.Key">@item.Title</a> }</nav>
-<partial name="_AuditLink" model='(Model.Person.PersonId, "person")' />
-@if(Session.Has(Permissions.TaskView)) {
+<nav class="workspace-sections" aria-label="Patient sections">@if(!Model.Person.ContactOnlyAccess) { <a href="#section-results">Lab results</a><a href="#section-cases">Cases and history</a><a href="/people/@Model.Person.PersonId/care#activity">Activity</a><a href="/people/@Model.Person.PersonId/care#documents">Documents</a> }@foreach(var item in Model.Sections.Where(s => s.Key != "results" && s.Key != "cases")) { <a href="#section-@item.Key">@item.Title</a> }</nav>
+@if(!Model.Person.ContactOnlyAccess) { <partial name="_AuditLink" model='(Model.Person.PersonId, "person")' /> }
+@if(Session.Has(Permissions.TaskView) && !Model.Person.ContactOnlyAccess) {
     ViewData["TestingPersonId"] = Model.Person.PersonId;
     <partial name="_TestingSummary" model="Model.TestingPlans" />
     <p><a href="/people/@Model.Person.PersonId/care/testing">Review testing plans and history</a> · <a href="/testing">Clinical testing outreach roster</a></p>

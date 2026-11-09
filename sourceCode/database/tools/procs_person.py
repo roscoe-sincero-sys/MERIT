@@ -153,6 +153,7 @@ DECLARE @today DATE = auth.udfSessionToday ();
 
 SELECT p.personId, p.rootTenantId, p.lastName, p.firstName, p.middleName, p.dob, p.dobVerified, p.sex, p.ethnicity,
        p.preferredLanguage, p.deceasedDate, p.mergedIntoPersonId, p.isPlaceholderName, p.rowVersion,
+       CAST(CASE WHEN EXISTS(SELECT 1 FROM auth.tvfPersonPredicate(p.rootTenantId,p.owningTenantId,p.personId)) THEN 0 ELSE 1 END AS BIT) AS contactOnlyAccess,
        cur.countyFips AS currentCountyFips, cur.countyName AS currentCountyName, cur.locationId AS currentPrimaryLocationId,
        CAST (CASE WHEN EXISTS (SELECT 1 FROM dbo.labResult AS r WHERE r.personId = p.personId AND r.isDeleted = 0)
                   THEN 0 ELSE 1 END AS BIT) AS isContactOnly,
@@ -407,7 +408,7 @@ BEGIN
 
     INSERT dbo.person (personId, rootTenantId, owningTenantId, lastName, firstName, middleName, lastNameKey, firstNameKey,
                        isPlaceholderName, dob, dobVerified, sex, ethnicity, preferredLanguage, deceasedDate)
-    VALUES (@personId, @root, @root, @lastName, @firstName, @middleName, @lastNameKey, @firstNameKey,
+    VALUES (@personId, @root, COALESCE(@acting,@root), @lastName, @firstName, @middleName, @lastNameKey, @firstNameKey,
             @isPlaceholderName, @dob, @dobVerified, @sex, @ethnicity, @preferredLanguage, @deceasedDate);
 
     IF @acting IS NOT NULL AND @acting <> @root
@@ -643,7 +644,8 @@ BEGIN
        SET role = @role, isPrimaryContact = @isPrimaryContact, hasLegalCustody = @hasLegalCustody,
            startDate = @startDate, endDate = @endDate, source = @source, verifiedDate = @verifiedDate,
            isDeleted = @isDeleted
-     WHERE personRelationshipId = @personRelationshipId AND isDeleted = 0 AND rowVersion = @rowVersion;
+     WHERE personRelationshipId = @personRelationshipId AND personId = @personId AND relatedPersonId = @relatedPersonId
+       AND isDeleted = 0 AND rowVersion = @rowVersion;
     {CONCURRENCY.replace(chr(10), chr(10) + '    ')}
 END
 ELSE

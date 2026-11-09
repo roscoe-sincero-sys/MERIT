@@ -34,6 +34,14 @@
                             <td>
                                 @if (Model.CanEdit && !r.IsInverse && r.EndDate is null)
                                 {
+                                    <details><summary>Verify or update caregiver</summary>
+                                    <form method="post" action="/people/@Model.PersonId/relationships/@r.PersonRelationshipId/verify" hx-post="/people/@Model.PersonId/relationships/@r.PersonRelationshipId/verify" hx-target="#section-relationships" hx-swap="outerHTML">
+                                    @Html.AntiForgeryToken()<input type="hidden" name="rowVersion" value="@Options.Hex(r.RowVersion)" />
+                                    <label class="usa-label" for="role-@r.PersonRelationshipId">Verified relationship</label><select class="usa-select" id="role-@r.PersonRelationshipId" name="role">@foreach(var role in new[] {"caregiver","parent","legalGuardian","fosterParent"}) { <option value="@role" selected="@(r.Role==role)">@Options.Humanize(role)</option> }</select>
+                                    <div class="usa-checkbox"><input class="usa-checkbox__input" type="checkbox" id="primary-@r.PersonRelationshipId" name="primary" value="true" checked="@r.IsPrimaryContact" /><label class="usa-checkbox__label" for="primary-@r.PersonRelationshipId">Primary contact</label></div>
+                                    <div class="usa-checkbox"><input class="usa-checkbox__input" type="checkbox" id="custody-@r.PersonRelationshipId" name="legalCustody" value="true" checked="@r.HasLegalCustody" /><label class="usa-checkbox__label" for="custody-@r.PersonRelationshipId">Legal custody has been verified</label></div>
+                                    <div class="usa-checkbox"><input class="usa-checkbox__input" type="checkbox" id="confirmed-@r.PersonRelationshipId" name="confirmed" value="true" required /><label class="usa-checkbox__label" for="confirmed-@r.PersonRelationshipId">I verified identity, relationship and contact information.</label></div>
+                                    <button class="usa-button" type="submit">Save verified relationship</button></form></details>
                                     <button class="usa-button usa-button--unstyled" type="button" hx-post="/people/@Model.PersonId/relationships/@r.PersonRelationshipId/end"
                                             hx-target="#section-relationships" hx-swap="outerHTML" data-confirm="End this relationship today?">End</button>
                                 }

@@ -105,7 +105,24 @@ BEGIN
         -- =========================================================================================
 
         DECLARE @root UNIQUEIDENTIFIER = auth.udfSessionRootTenantId ();
-        DECLARE @version INT = COALESCE ((SELECT profileVersion FROM dbo.intakeProfile WHERE intakeProfileId = @previousProfileId), 0) + 1;
+        IF NOT EXISTS(SELECT 1 FROM dbo.organization o WHERE o.organizationId=@senderOrganizationId AND o.rootTenantId=@root AND o.isDeleted=0)
+        BEGIN
+            ;THROW 51404,N'The laboratory is unavailable in this agency.',1;
+        END;
+        IF @fileType NOT IN('hl7','csv','tsv','pipe') OR ISJSON(@columnMapJson)<>1 OR @headerRow<1
+        BEGIN
+            ;THROW 51422,N'Choose a supported file type, header row and field mapping.',1;
+        END;
+        DECLARE @version INT=1;
+        IF @previousProfileId IS NOT NULL
+        BEGIN
+            SELECT @version=profileVersion+1 FROM dbo.intakeProfile WITH(UPDLOCK,HOLDLOCK)
+             WHERE intakeProfileId=@previousProfileId AND rootTenantId=@root AND senderOrganizationId=@senderOrganizationId AND isActive=1 AND isDeleted=0;
+            IF @version=1
+            BEGIN
+                ;THROW 51409,N'This format changed or belongs to another laboratory. Reload the current version; create a separate format for another laboratory.',1;
+            END;
+        END;
 
         UPDATE dbo.intakeProfile SET isActive = 0 WHERE intakeProfileId = @previousProfileId AND isActive = 1;
 

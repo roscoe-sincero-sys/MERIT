@@ -18,6 +18,9 @@
         </select></div>
     @if (root)
     {
+        <label class="usa-label" for="EffectiveFrom">Configuration starts on</label><input class="usa-input" type="date" id="EffectiveFrom" name="EffectiveFrom" value="@((Model.EffectiveFrom ?? Clock.Today).ToString("yyyy-MM-dd"))" required />
+        <p>Choose the earliest policy period you will configure. Existing records and later settings retain their own effective dates.</p>
+        <div class="usa-checkbox"><input class="usa-checkbox__input" type="checkbox" id="SeedThresholds" name="SeedThresholds" value="true" checked="@Model.SeedThresholds" /><label class="usa-checkbox__label" for="SeedThresholds">Install shipped reference thresholds for review. Leave clear to start with no thresholds and configure approved program rules.</label></div>
         <div class="usa-form-group"><label class="usa-label" for="StatePostalCode">Postal code</label>
             <div class="usa-hint" id="postal-hint">Two letters; needed for a state or tribe (used on the federal extracts).</div>
             <input class="usa-input usa-input--small" id="StatePostalCode" name="StatePostalCode" value="@Model.StatePostalCode" maxlength="2" aria-describedby="postal-hint" /></div>

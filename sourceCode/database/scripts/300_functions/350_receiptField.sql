@@ -33,7 +33,13 @@ BEGIN
     DECLARE @value NVARCHAR (4000);
     IF EXISTS (SELECT 1 FROM OPENJSON (COALESCE (@patch,N'{}')) WHERE [key]=@field)
         SET @value = JSON_VALUE (@patch,CONCAT ('$.',@field));
-    ELSE SET @value = JSON_VALUE (@original,CONCAT ('$.',@field));
+    ELSE
+    BEGIN
+        DECLARE @alias VARCHAR(60)=CASE @field WHEN 'zip' THEN 'zip5' WHEN 'county' THEN 'countyFips' WHEN 'clia' THEN 'labCliaNumber' ELSE @field END;
+        IF EXISTS(SELECT 1 FROM OPENJSON(COALESCE(@patch,N'{}')) WHERE [key]=@alias)
+            SET @value=JSON_VALUE(@patch,CONCAT('$.',@alias));
+        ELSE SET @value=COALESCE(JSON_VALUE(@original,CONCAT('$.',@field)),JSON_VALUE(@original,CONCAT('$.',@alias)));
+    END;
     RETURN NULLIF (TRIM (@value),N'');
 END;
 GO

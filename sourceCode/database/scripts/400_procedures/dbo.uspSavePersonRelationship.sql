@@ -121,7 +121,8 @@ BEGIN
                SET role = @role, isPrimaryContact = @isPrimaryContact, hasLegalCustody = @hasLegalCustody,
                    startDate = @startDate, endDate = @endDate, source = @source, verifiedDate = @verifiedDate,
                    isDeleted = @isDeleted
-             WHERE personRelationshipId = @personRelationshipId AND isDeleted = 0 AND rowVersion = @rowVersion;
+             WHERE personRelationshipId = @personRelationshipId AND personId = @personId AND relatedPersonId = @relatedPersonId
+               AND isDeleted = 0 AND rowVersion = @rowVersion;
             IF @@ROWCOUNT = 0
             BEGIN
                 ;THROW 51409, N'This record was changed by someone else, or is no longer available. Reload it and try again.', 1;

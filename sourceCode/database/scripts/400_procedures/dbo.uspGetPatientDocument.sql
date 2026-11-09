@@ -88,6 +88,10 @@ BEGIN
         BEGIN
             ;THROW 51404, N'The patient was not found, or you do not have access to it.', 1;
         END;
+        IF NOT EXISTS(SELECT 1 FROM dbo.person p CROSS APPLY auth.tvfPersonPredicate(p.rootTenantId,p.owningTenantId,p.personId) scope WHERE p.personId=@personId)
+        BEGIN
+            ;THROW 51403,N'Clinical patient access is required; related caregiver contact access does not include clinical work.',1;
+        END;
 
         -- =========================================================================================
         -- ===== The procedure's own work starts here. Everything above and below is boilerplate. ==

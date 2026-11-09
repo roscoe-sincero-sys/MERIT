@@ -102,6 +102,7 @@ public sealed class Db(IOptions<MeritDatabaseOptions> options, ICurrentSession s
     private static Exception Map(SqlException ex) => ex.Number switch
     {
         51403 => new PermissionDeniedException(ex.Message, ex),
+        33504 => new PermissionDeniedException("This profile cannot change records owned outside its authorized scope.", ex),
         51404 => new NotFoundException(ex.Message, ex),
         51409 => new ConcurrencyException(ex.Message, ex),
         51422 => new BusinessRuleException(ex.Message, ex),

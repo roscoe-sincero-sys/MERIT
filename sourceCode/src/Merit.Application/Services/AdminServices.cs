@@ -296,7 +296,8 @@ public sealed class AdminService(IClock clock, IAccountData accounts, AccountSer
         v.ThrowIfInvalid();
 
         var create = new TenantCreate(code, input.TenantName!.Trim(), type, parent.TenantCode, postal, stateFips, countyFips, newCounties,
-            TenantRules.CreatesDataRoot(parent.TenantType) ? timeZone ?? JurisdictionTimeZones.Default : null);
+            TenantRules.CreatesDataRoot(parent.TenantType) ? timeZone ?? JurisdictionTimeZones.Default : null,
+            input.EffectiveFrom ?? clock.Today, input.SeedThresholds);
         return TenantRules.CreatesDataRoot(parent.TenantType)
             ? await accounts.CreateRootTenantAsync(create, ct).ConfigureAwait(false)
             : await accounts.CreateChildTenantAsync(create, ct).ConfigureAwait(false);
@@ -337,7 +338,8 @@ public sealed class AdminService(IClock clock, IAccountData accounts, AccountSer
 
 /// <summary>The Add tenant form. County FIPS codes are those the tenant serves; new counties are added to the data root.</summary>
 public sealed record TenantInput(Guid? ParentTenantId, string? TenantCode, string? TenantName, string? TenantType, string? StatePostalCode,
-                                 string? StateFips, string? CountyFipsList, string? NewCounties, string? TimeZone = null);
+                                 string? StateFips, string? CountyFipsList, string? NewCounties, string? TimeZone = null,
+                                 DateOnly? EffectiveFrom = null, bool SeedThresholds = true);
 
 /// <summary>Server-side type-ahead for organizations, providers, locations and products.</summary>
 public sealed class LookupService(IPlaceData places, ICurrentSession session)
