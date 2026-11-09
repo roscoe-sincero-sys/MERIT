@@ -38,6 +38,7 @@ BEGIN
         completionKind             VARCHAR (12)      NOT NULL,
         evidenceFieldsJson         NVARCHAR (MAX)    NOT NULL CONSTRAINT DF_config_workflowDefinition_evidenceFieldsJson DEFAULT (N'[]'),
         assignmentRoleCode         VARCHAR (40)      NULL,
+        routingPolicy              VARCHAR (24)      NOT NULL CONSTRAINT DF_config_workflowDefinition_routingPolicy DEFAULT ('patientOwner'),
         dueInDays                  INT               NULL,
         recurrenceDays             INT               NULL,
         dayBasis                   VARCHAR (12)      NOT NULL CONSTRAINT DF_config_workflowDefinition_dayBasis DEFAULT ('calendar'),
@@ -90,6 +91,8 @@ IF COL_LENGTH (N'config.workflowDefinition', N'evidenceFieldsJson') IS NULL
     ALTER TABLE config.workflowDefinition ADD evidenceFieldsJson         NVARCHAR (MAX)    NOT NULL CONSTRAINT DF_config_workflowDefinition_evidenceFieldsJson DEFAULT (N'[]');
 IF COL_LENGTH (N'config.workflowDefinition', N'assignmentRoleCode') IS NULL
     ALTER TABLE config.workflowDefinition ADD assignmentRoleCode         VARCHAR (40)      NULL;
+IF COL_LENGTH (N'config.workflowDefinition', N'routingPolicy') IS NULL
+    ALTER TABLE config.workflowDefinition ADD routingPolicy              VARCHAR (24)      NOT NULL CONSTRAINT DF_config_workflowDefinition_routingPolicy DEFAULT ('patientOwner');
 IF COL_LENGTH (N'config.workflowDefinition', N'dueInDays') IS NULL
     ALTER TABLE config.workflowDefinition ADD dueInDays                  INT               NULL;
 IF COL_LENGTH (N'config.workflowDefinition', N'recurrenceDays') IS NULL
@@ -149,6 +152,11 @@ GO
 IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_config_workflowDefinition_evidenceFieldsJson')
 BEGIN
     ALTER TABLE config.workflowDefinition ADD CONSTRAINT CK_config_workflowDefinition_evidenceFieldsJson CHECK (ISJSON(evidenceFieldsJson)=1);
+END;
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_config_workflowDefinition_routingPolicy')
+BEGIN
+    ALTER TABLE config.workflowDefinition ADD CONSTRAINT CK_config_workflowDefinition_routingPolicy CHECK (routingPolicy IN ('patientOwner','servingJurisdiction','definitionAgency'));
 END;
 GO
 IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_config_workflowDefinition_dayBasis')
@@ -288,6 +296,7 @@ EXEC util.uspSetObjectDescription @SchemaName = N'config', @ObjectType = N'TABLE
 EXEC util.uspSetObjectDescription @SchemaName = N'config', @ObjectType = N'TABLE', @ObjectName = N'workflowDefinition', @ColumnName = N'completionKind', @Description = N'internal, contact or delivery.';
 EXEC util.uspSetObjectDescription @SchemaName = N'config', @ObjectType = N'TABLE', @ObjectName = N'workflowDefinition', @ColumnName = N'evidenceFieldsJson', @Description = N'Up to ten named typed evidence fields.';
 EXEC util.uspSetObjectDescription @SchemaName = N'config', @ObjectType = N'TABLE', @ObjectName = N'workflowDefinition', @ColumnName = N'assignmentRoleCode', @Description = N'Suggested accountable role; does not grant access or select an arbitrary worker.';
+EXEC util.uspSetObjectDescription @SchemaName = N'config', @ObjectType = N'TABLE', @ObjectName = N'workflowDefinition', @ColumnName = N'routingPolicy', @Description = N'Patient-only routing: patientOwner (legacy), servingJurisdiction or definitionAgency. Cases retain case ownership.';
 EXEC util.uspSetObjectDescription @SchemaName = N'config', @ObjectType = N'TABLE', @ObjectName = N'workflowDefinition', @ColumnName = N'dueInDays', @Description = N'Days from the source event; null means no invented deadline.';
 EXEC util.uspSetObjectDescription @SchemaName = N'config', @ObjectType = N'TABLE', @ObjectName = N'workflowDefinition', @ColumnName = N'recurrenceDays', @Description = N'After actual completion, create the next occurrence; null means once.';
 EXEC util.uspSetObjectDescription @SchemaName = N'config', @ObjectType = N'TABLE', @ObjectName = N'workflowDefinition', @ColumnName = N'dayBasis', @Description = N'calendar or business.';

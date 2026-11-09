@@ -1775,6 +1775,7 @@ TABLES += [
        c("completionKind", "VARCHAR (12)", "internal, contact or delivery.", null=False, check="completionKind IN ('internal','contact','delivery')"),
        c("evidenceFieldsJson", "NVARCHAR (MAX)", "Up to ten named typed evidence fields.", null=False, default="N'[]'", check="ISJSON(evidenceFieldsJson)=1"),
        c("assignmentRoleCode", "VARCHAR (40)", "Suggested accountable role; does not grant access or select an arbitrary worker."),
+       c("routingPolicy", "VARCHAR (24)", "Patient-only routing: patientOwner (legacy), servingJurisdiction or definitionAgency. Cases retain case ownership.", null=False, default="'patientOwner'", check="routingPolicy IN ('patientOwner','servingJurisdiction','definitionAgency')"),
        c("dueInDays", "INT", "Days from the source event; null means no invented deadline."), c("recurrenceDays", "INT", "After actual completion, create the next occurrence; null means once."),
        c("dayBasis", "VARCHAR (12)", "calendar or business.", null=False, default="'calendar'", check="dayBasis IN ('calendar','business')"),
        c("timeZoneId", "VARCHAR (100)", "Approved source-event time zone.", null=False), c("holidayDatesJson", "NVARCHAR (MAX)", "Explicit approved nonworking dates.", null=False, default="N'[]'", check="ISJSON(holidayDatesJson)=1"),
@@ -1798,3 +1799,20 @@ TABLES += [{"schema":"dbo", "name":"caseResultLink", "rls":"person", "personCol"
  "fks":[("personId","dbo.person","personId"),("exposureCaseId","dbo.exposureCase","exposureCaseId"),
         ("labResultId","dbo.labResult","labResultId"),("openingActivityId","dbo.caseActivity","caseActivityId")],
  "indexes":[{"name":"UX_dbo_caseResultLink_case_result","cols":"exposureCaseId, labResultId","unique":True}]}]
+
+TABLES += [{"schema":"dbo","name":"contactCorrection","rls":"correction","personCol":"personId",
+ "desc":"Patient-scoped caregiver contact correction requests. Owners apply changes through existing caregiver forms; evidence and original values are retained.",
+ "cols":[c("contactCorrectionId",UUID,"Request identifier.",null=False),*tenant_cols(),
+ c("personId",UUID,"Authorized patient linking this request.",null=False),c("caregiverId",UUID,"Caregiver whose contacts require correction.",null=False),
+ c("caregiverName","NVARCHAR (140)","Caregiver name at request creation; request history survives an ended relationship.",null=False),
+ c("responsibleTenantId",UUID,"Caregiver record owner at request creation.",null=False),
+ c("contactType","VARCHAR (12)","phone, email or address.",null=False,check="contactType IN ('phone','email','address')"),
+ c("proposedValue","NVARCHAR (200)","Proposed phone/email, or street for an address.",null=False),
+ c("city","NVARCHAR (80)","Proposed address city."),c("state","VARCHAR (2)","Proposed address state."),c("zip5","VARCHAR (5)","Proposed address ZIP."),
+ c("sourceNote","NVARCHAR (1000)","Requester source evidence.",null=False),
+ c("beforeJson","NVARCHAR (MAX)","Contact and residence values visible when requested.",null=False,check="ISJSON(beforeJson)=1"),
+ c("afterJson","NVARCHAR (MAX)","Values verified by the reviewer after applying changes."),
+ c("requestStatus","VARCHAR (12)","pending, applied or rejected.",null=False,default="'pending'",check="requestStatus IN ('pending','applied','rejected')"),
+ c("reviewNote","NVARCHAR (1000)","Reviewer explanation and application evidence."),c("reviewedByUserId",UUID,"Reviewer."),c("reviewedUtc","DATETIME2 (3)","Actual review time."),ROW_VERSION],
+ "fks":[("personId","dbo.person","personId"),("caregiverId","dbo.person","personId"),("responsibleTenantId","auth.tenant","tenantId")],
+ "indexes":[{"name":"IX_dbo_contactCorrection_owner_status","cols":"responsibleTenantId, requestStatus"},{"name":"IX_dbo_contactCorrection_patient","cols":"personId"}]}]

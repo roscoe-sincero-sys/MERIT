@@ -124,6 +124,16 @@ BEGIN
         SELECT @root = rootTenantId, @owner = owningTenantId FROM dbo.person WHERE personId = @personId;
         IF @exposureCaseId IS NOT NULL SELECT @owner = owningTenantId FROM dbo.exposureCase WHERE exposureCaseId = @exposureCaseId;
 
+        IF @exposureCaseId IS NULL
+        BEGIN
+         SET @owner=dbo.udfPatientWorkOwner(@personId);
+         IF NOT EXISTS(SELECT 1 FROM auth.tvfTenantWritePredicate(@root,@owner,0)) SET @owner=auth.udfSessionActingTenantId();
+        END;
+        IF USER_NAME()<>N'dbo' AND NOT EXISTS(SELECT 1 FROM auth.tvfSessionWritePermission('person.edit') w WHERE w.tenantId=@owner
+         AND (w.tenantId=(SELECT owningTenantId FROM dbo.person WHERE personId=@personId) OR EXISTS(SELECT 1 FROM dbo.personAccess pa WHERE pa.personId=@personId AND pa.tenantId=w.tenantId AND pa.isDeleted=0)))
+        BEGIN
+         ;THROW 51403,N'Patient editing authority is required in the responsible agency.',1;
+        END;
         IF auth.udfHasPermission(N'task.edit')=0 OR @completionKind NOT IN ('internal','contact','delivery') OR NULLIF(TRIM(@title),N'') IS NULL OR NULLIF(TRIM(@description),N'') IS NULL
          OR EXISTS(SELECT 1 FROM dbo.person WHERE personId=@personId AND mergedIntoPersonId IS NOT NULL)
         BEGIN

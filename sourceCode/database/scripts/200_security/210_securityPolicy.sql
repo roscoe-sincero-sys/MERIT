@@ -1480,6 +1480,39 @@ BEGIN
     SET @Changes = @Changes + 1;
     EXEC (N'ALTER SECURITY POLICY auth.tenantIsolationPolicy ADD BLOCK PREDICATE auth.tvfPersonWritePredicate (rootTenantId, owningTenantId, personId, isDeleted) ON dbo.caseResultLink AFTER UPDATE;');
 END;
+IF NOT EXISTS (SELECT 1
+                 FROM sys.security_predicates AS sp
+                 JOIN sys.security_policies   AS p ON p.object_id = sp.object_id
+                WHERE p.name = N'tenantIsolationPolicy'
+                  AND sp.target_object_id = OBJECT_ID (N'dbo.contactCorrection')
+                  AND sp.predicate_type_desc = N'FILTER'
+                  AND (REPLACE (sp.operation_desc, N'_', N' ') = NULL OR (NULL IS NULL AND sp.operation_desc IS NULL)))
+BEGIN
+    SET @Changes = @Changes + 1;
+    EXEC (N'ALTER SECURITY POLICY auth.tenantIsolationPolicy ADD FILTER PREDICATE auth.tvfContactCorrectionPredicate (rootTenantId, owningTenantId, personId, caregiverId) ON dbo.contactCorrection;');
+END;
+IF NOT EXISTS (SELECT 1
+                 FROM sys.security_predicates AS sp
+                 JOIN sys.security_policies   AS p ON p.object_id = sp.object_id
+                WHERE p.name = N'tenantIsolationPolicy'
+                  AND sp.target_object_id = OBJECT_ID (N'dbo.contactCorrection')
+                  AND sp.predicate_type_desc = N'BLOCK'
+                  AND (REPLACE (sp.operation_desc, N'_', N' ') = N'AFTER INSERT' OR (N'AFTER INSERT' IS NULL AND sp.operation_desc IS NULL)))
+BEGIN
+    SET @Changes = @Changes + 1;
+    EXEC (N'ALTER SECURITY POLICY auth.tenantIsolationPolicy ADD BLOCK PREDICATE auth.tvfContactCorrectionWritePredicate (rootTenantId, owningTenantId, personId, caregiverId, isDeleted) ON dbo.contactCorrection AFTER INSERT;');
+END;
+IF NOT EXISTS (SELECT 1
+                 FROM sys.security_predicates AS sp
+                 JOIN sys.security_policies   AS p ON p.object_id = sp.object_id
+                WHERE p.name = N'tenantIsolationPolicy'
+                  AND sp.target_object_id = OBJECT_ID (N'dbo.contactCorrection')
+                  AND sp.predicate_type_desc = N'BLOCK'
+                  AND (REPLACE (sp.operation_desc, N'_', N' ') = N'AFTER UPDATE' OR (N'AFTER UPDATE' IS NULL AND sp.operation_desc IS NULL)))
+BEGIN
+    SET @Changes = @Changes + 1;
+    EXEC (N'ALTER SECURITY POLICY auth.tenantIsolationPolicy ADD BLOCK PREDICATE auth.tvfContactCorrectionWritePredicate (rootTenantId, owningTenantId, personId, caregiverId, isDeleted) ON dbo.contactCorrection AFTER UPDATE;');
+END;
 
 ALTER SECURITY POLICY auth.tenantIsolationPolicy WITH (STATE = ON);
 

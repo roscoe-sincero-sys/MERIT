@@ -19,13 +19,16 @@ AS RETURN
 WITH source AS
 (
  SELECT d.*,p.personId,p.dob,c.exposureCaseId,c.analyteId AS caseAnalyteId,c.population AS casePopulation,r.labResultId,r.collectedDate,r.operator,r.valueCanonical,r.population AS reportedPopulation,
-  COALESCE(c.owningTenantId,p.owningTenantId) AS targetOwner,
+  COALESCE(c.owningTenantId,CASE d.routingPolicy WHEN 'definitionAgency' THEN d.owningTenantId
+   WHEN 'servingJurisdiction' THEN CASE WHEN EXISTS(SELECT 1 FROM auth.tvfTenantWritePredicate(p.rootTenantId,dbo.udfPatientWorkOwner(p.personId),0))
+    THEN dbo.udfPatientWorkOwner(p.personId) ELSE auth.udfSessionActingTenantId() END ELSE p.owningTenantId END) AS targetOwner,
   CASE d.triggerEvent WHEN 'receivedResult' THEN CAST(r.receivedUtc AT TIME ZONE 'UTC' AT TIME ZONE d.timeZoneId AS DATE)
    WHEN 'caseOpened' THEN c.openedDate ELSE auth.udfSessionToday() END AS anchorDate,
   CASE WHEN d.triggerEvent='receivedResult' THEN r.ageAtCollectionMonths
    ELSE DATEDIFF(MONTH,p.dob,COALESCE(CASE WHEN d.triggerEvent='caseOpened' THEN c.openedDate END,auth.udfSessionToday()))
     - CASE WHEN DAY(COALESCE(CASE WHEN d.triggerEvent='caseOpened' THEN c.openedDate END,auth.udfSessionToday()))<DAY(p.dob) THEN 1 ELSE 0 END END AS ageMonths
  FROM config.workflowDefinition AS d JOIN dbo.person AS p ON p.personId=@personId AND p.isDeleted=0 AND p.mergedIntoPersonId IS NULL
+ CROSS APPLY auth.tvfPersonPredicate(p.rootTenantId,p.owningTenantId,p.personId) clinicalAccess
  LEFT JOIN dbo.exposureCase AS c ON c.exposureCaseId=@exposureCaseId AND c.personId=p.personId AND c.isDeleted=0
  OUTER APPLY(SELECT TOP(1) r.* FROM dbo.labResult AS r WHERE r.personId=p.personId AND r.isDeleted=0
   AND r.resultRowStatus='valid' AND r.resultStatus IN ('final','corrected')
@@ -46,6 +49,10 @@ WITH source AS
 ), decision AS
 (
  SELECT *,CASE
+  WHEN USER_NAME()<>N'dbo' AND NOT EXISTS(SELECT 1 FROM auth.tvfSessionWritePermission('config.edit') w WHERE w.tenantId=targetOwner)
+   AND NOT EXISTS(SELECT 1 FROM auth.tvfSessionWritePermission('person.edit') w WHERE w.tenantId=targetOwner
+    AND (w.tenantId=(SELECT owningTenantId FROM dbo.person WHERE personId=grouped.personId) OR EXISTS(SELECT 1 FROM dbo.personAccess pa WHERE pa.personId=grouped.personId AND pa.tenantId=w.tenantId AND pa.isDeleted=0)))
+   THEN N'Outside this profile''s write authority for the responsible agency.'
   WHEN NOT EXISTS(SELECT 1 FROM auth.tenantClosure WHERE ancestorTenantId=owningTenantId AND descendantTenantId=targetOwner AND isDeleted=0) THEN N'Outside the definition agency and descendants.'
   WHEN @labResultId IS NOT NULL AND labResultId IS NULL THEN N'The source result does not match this substance/sample definition.'
   WHEN triggerEvent='caseOpened' AND analyteSpecimenId IS NOT NULL AND caseAnalyteId IS NOT NULL AND NOT EXISTS

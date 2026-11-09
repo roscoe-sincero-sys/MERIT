@@ -137,6 +137,14 @@ BEGIN
         BEGIN
             ;THROW 51403, N'Case edit permission is required for case-associated records.', 1;
         END;
+        IF @queue IN ('programTask','workflowReview') AND USER_NAME()<>N'dbo' AND
+         (NOT EXISTS(SELECT 1 FROM auth.tvfSessionWritePermission('person.edit') WHERE tenantId=@owner)
+         OR NOT EXISTS(SELECT 1 FROM auth.tvfSessionWritePermission('task.edit') WHERE tenantId=@owner)
+         OR (@exposureCaseId IS NOT NULL AND NOT EXISTS(SELECT 1 FROM auth.tvfSessionWritePermission('case.edit') WHERE tenantId=@owner))
+         OR (@action='waive' AND NOT EXISTS(SELECT 1 FROM auth.tvfSessionWritePermission('workflow.waive') WHERE tenantId=@owner)))
+        BEGIN
+         ;THROW 51403,N'This profile cannot change program work in the responsible agency.',1;
+        END;
         IF @queue IN ('notificationDue','receiptFinding','missingInformation','labReportingReview','testingFollowUp','testingDischarge')
         BEGIN
             ;THROW 51422, N'This task has a dedicated notification, receipt, testing or closure-letter evidence workflow. Use its original workspace.', 1;
@@ -200,7 +208,10 @@ BEGIN
         END;
         IF @action='transfer' AND (@transferCaseId IS NULL OR @transferCaseId=@exposureCaseId OR NOT EXISTS
          (SELECT 1 FROM dbo.exposureCase AS c WHERE c.exposureCaseId=@transferCaseId AND c.personId=@personId AND c.caseStatus<>'closed' AND c.isDeleted=0
-         AND EXISTS(SELECT 1 FROM auth.tvfTenantWritePredicate(c.rootTenantId,c.owningTenantId,c.isDeleted))))
+         AND EXISTS(SELECT 1 FROM auth.tvfTenantWritePredicate(c.rootTenantId,c.owningTenantId,c.isDeleted))
+         AND (@queue NOT IN ('programTask','workflowReview') OR USER_NAME()=N'dbo' OR
+         (EXISTS(SELECT 1 FROM auth.tvfSessionWritePermission('task.edit') WHERE tenantId=c.owningTenantId)
+         AND EXISTS(SELECT 1 FROM auth.tvfSessionWritePermission('case.edit') WHERE tenantId=c.owningTenantId)))))
         BEGIN
             ;THROW 51422, N'Choose a different active case for this patient within your write scope. The receiving task will remain open.', 1;
         END;

@@ -45,6 +45,7 @@
         <li><a href="/" aria-current="@Current("/")">Home</a></li>
         <li><a href="/app/queues" aria-current="@Current("/app/queues")">Work queues</a></li>
     }
+    @if(CurrentSession.Has(Permissions.PersonEdit)) { <li><a href="/contact-corrections" aria-current="@Current("/contact-corrections")">Contact corrections</a></li> }
     @if (CurrentSession.Has(Permissions.PersonView))
     {
         <li><a href="/search" aria-current="@Current("/search")" data-current-prefixes="@Also("/search")">People</a></li>

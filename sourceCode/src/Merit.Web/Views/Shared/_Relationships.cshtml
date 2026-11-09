@@ -34,6 +34,7 @@
                             <td>
                                 @if (Model.CanEdit && !r.IsInverse && r.EndDate is null)
                                 {
+                                    <p><a href="/contact-corrections?personId=@Model.PersonId&amp;caregiverId=@r.OtherPersonId">Request contact correction</a></p>
                                     <details><summary>Verify or update caregiver</summary>
                                     <form method="post" action="/people/@Model.PersonId/relationships/@r.PersonRelationshipId/verify" hx-post="/people/@Model.PersonId/relationships/@r.PersonRelationshipId/verify" hx-target="#section-relationships" hx-swap="outerHTML">
                                     @Html.AntiForgeryToken()<input type="hidden" name="rowVersion" value="@Options.Hex(r.RowVersion)" />

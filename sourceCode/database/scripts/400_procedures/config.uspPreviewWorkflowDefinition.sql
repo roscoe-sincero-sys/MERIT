@@ -90,7 +90,8 @@ BEGIN
         BEGIN
             ;THROW 51404, N'The draft or sample patient is not accessible.', 1;
         END;
-        SELECT personId,exposureCaseId,labResultId,anchorDate,evaluationState,explanation FROM config.tvfWorkflowEligibility(@workflowDefinitionId,@personId,@exposureCaseId,NULL);
+        SELECT personId,exposureCaseId,labResultId,anchorDate,evaluationState,explanation,
+         (SELECT tenantName FROM auth.tenant WHERE tenantId=e.targetOwner) AS responsibleAgency FROM config.tvfWorkflowEligibility(@workflowDefinitionId,@personId,@exposureCaseId,NULL) e;
 
         -- =========================================================================================
         -- ===== End of the procedure's own work. ===================================================
