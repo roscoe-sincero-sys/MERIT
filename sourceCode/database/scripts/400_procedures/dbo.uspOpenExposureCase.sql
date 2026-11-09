@@ -120,9 +120,10 @@ BEGIN
               JOIN dbo.location AS l ON l.locationId = pl.locationId
               JOIN config.subJurisdiction AS sj ON sj.rootTenantId = l.rootTenantId AND sj.countyFips = l.countyFips
               JOIN auth.tenantJurisdiction AS tj ON tj.subJurisdictionId = sj.subJurisdictionId AND tj.isDeleted = 0
-              JOIN auth.tenant AS t ON t.tenantId = tj.tenantId AND t.tenantType = 'localHealthDepartment' AND t.isActive = 1
+              JOIN auth.tenant AS t ON t.tenantId = tj.tenantId AND t.tenantType = 'jurisdiction' AND t.isActive = 1 AND t.isDeleted=0
              WHERE pl.personId = @personId AND pl.isDeleted = 0 AND pl.role = 'residence' AND pl.isPrimary = 1
-               AND pl.startDate <= @today AND (pl.endDate IS NULL OR pl.endDate >= @today);
+               AND pl.startDate <= @today AND (pl.endDate IS NULL OR pl.endDate >= @today)
+             ORDER BY t.tenantCode;
         END
         ELSE IF @population = 'adult'
         BEGIN

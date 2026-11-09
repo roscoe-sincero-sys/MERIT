@@ -51,11 +51,12 @@ CREATE OR ALTER PROCEDURE config.uspCreateRootTenant
       , @tenantName       NVARCHAR (120)
       , @statePostalCode  CHAR (2) = NULL
       , @stateFips        CHAR (2) = NULL
-      , @effectiveFrom    DATE = '2026-01-01'
+      , @effectiveFrom    DATE = NULL
       , @tenantType       VARCHAR (30) = 'state'
       , @parentTenantCode VARCHAR (30) = NULL
       , @countiesJson     NVARCHAR (MAX) = N'[]'
       , @timeZone         VARCHAR (64) = NULL
+      , @seedThresholds   BIT = 1
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -138,7 +139,7 @@ BEGIN
 
         EXEC config.uspInstallRootTenant @tenantCode = @tenantCode, @tenantName = @tenantName, @statePostalCode = @statePostalCode,
              @stateFips = @stateFips, @effectiveFrom = @effectiveFrom, @tenantType = @tenantType,
-             @parentTenantCode = @parentTenantCode, @countiesJson = @countiesJson, @timeZone = @timeZone;
+             @parentTenantCode = @parentTenantCode, @countiesJson = @countiesJson, @timeZone = @timeZone, @seedThresholds=@seedThresholds;
 
         SET @Comments = N'Root tenant created.';
 

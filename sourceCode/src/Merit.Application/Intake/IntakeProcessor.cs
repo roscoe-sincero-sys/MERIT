@@ -162,7 +162,8 @@ public sealed partial class IntakeProcessor(
                 held++;
                 LogRowHeld(logger, row.StagingRowId, ex.GetType().Name);
                 await intake.CompleteRowAsync(row.StagingRowId, "held", null,
-                    [new HoldReason("uncertainMatch", null, ex.Message, null)], false, ct).ConfigureAwait(false);
+                    [new HoldReason(ex is Errors.PermissionDeniedException ? "permissionDenied" : "uncertainMatch", null,
+                        ex is Errors.PermissionDeniedException ? "The initiating profile lacks permission required for this import. Ask an administrator to review the sender and account setup. " + ex.Message : ex.Message, null)], false, ct).ConfigureAwait(false);
             }
         }
 
@@ -334,13 +335,20 @@ public sealed partial class IntakeProcessor(
             MatchKeys.NameKey(lastName)!, MatchKeys.NameKey(firstName),
             MatchKeys.IsPlaceholderName(firstName) ? "placeholder" : "asReported", "labReport", null, collected!.Value), ct).ConfigureAwait(false);
 
-        if (profile.FileType == "hl7" && Get("hl7PatientIdentifiersJson") is { } identifiersJson)
-            foreach (var identifier in JsonSerializer.Deserialize<Hl7PatientIdentifier[]>(identifiersJson) ?? [])
-                await persons.SaveIdentifierAsync(TimeOrderedId.New(), personId.Value, identifier.Type, identifier.Value,
-                    identifier.Authority, "labReport", reported ?? collected.Value, false, ct).ConfigureAwait(false);
+        if (profile.FileType == "hl7" && Get("hl7PatientIdentifiersJson") is not null)
+            await intake.PersistIdentifiersAsync(row.StagingRowId,personId.Value,ct).ConfigureAwait(false);
+
+        if(Get("phone")?.Trim() is string phone && phone.Length<=200 && phone.Count(char.IsAsciiDigit) is >=10 and <=15)
+        {
+            var header=await persons.GetPersonAsync(personId.Value,ct).ConfigureAwait(false);
+            if(!header.ContactMethods.Any(m=>m.ContactType=="phone" && m.ContactValue==phone))
+                await personService.SaveContactMethodAsync(personId.Value,null,"phone",phone,false,false,ct).ConfigureAwait(false);
+        }
 
         Guid? reportedLocationId = await HandleAddressAsync(personId.Value, f, collected.Value, config, ct).ConfigureAwait(false);
-        await HandleGuardianAsync(personId.Value, Get("guardianName"), dob, ct).ConfigureAwait(false);
+        var guardians=Get("guardianContactsJson") is string guardianJson
+            ? JsonSerializer.Deserialize<Dictionary<string,string?>[]>(guardianJson) ?? [] : [f];
+        foreach(var guardian in guardians) await HandleGuardianAsync(personId.Value,guardian,collected.Value,config,ct).ConfigureAwait(false);
 
         Guid? providerId = null;
         // The same normalization as the registry, so a formatted NPI in the file still links (issue #12).
@@ -482,8 +490,9 @@ public sealed partial class IntakeProcessor(
     /// A guardian on the report becomes a contact-only person with an unverified relationship; a guardian value that
     /// looks like an organization (an employer typed into the guardian field) goes to review instead.
     /// </summary>
-    private async Task HandleGuardianAsync(Guid personId, string? guardian, DateOnly? dob, CancellationToken ct)
+    private async Task HandleGuardianAsync(Guid personId, Dictionary<string,string?> fields, DateOnly collected, JurisdictionSettings config, CancellationToken ct)
     {
+        string? guardian=fields.GetValueOrDefault("guardianName");
         if (string.IsNullOrWhiteSpace(guardian))
         {
             return;
@@ -509,16 +518,34 @@ public sealed partial class IntakeProcessor(
             (first, last) = parts.Length > 1 ? (string.Join(' ', parts[..^1]), parts[^1]) : (string.Empty, parts[0]);
         }
 
+        async Task Review() => await work.CreateTaskAsync(new WorkTaskCreate(TimeOrderedId.New(),"crossLink","Verify laboratory caregiver details",
+            "Verify reported caregiver identity, relationship and contact information against the source. Laboratory reporting does not establish legal custody. Update and verify the relationship in the patient workspace.",personId,null,null,null,null,false,clock.Today.AddDays(7)),ct);
+        if(string.IsNullOrWhiteSpace(last)) { await Review(); return; }
         var existing = await persons.GetRelationshipsAsync(personId, ct).ConfigureAwait(false);
-        if (existing.Any(r => MatchKeys.NameKey(r.OtherLastName) == MatchKeys.NameKey(last)
-                              && MatchKeys.NameKey(r.OtherFirstName) == MatchKeys.NameKey(first)))
+        var matches=existing.Where(r=>!r.IsInverse && r.EndDate is null && MatchKeys.NameKey(r.OtherLastName)==MatchKeys.NameKey(last) && MatchKeys.NameKey(r.OtherFirstName)==MatchKeys.NameKey(first)).ToList();
+        if(matches.Count==0)
         {
-            return;
+            await personService.AddRelationshipAsync(new RelationshipInput(personId, null, last, string.IsNullOrEmpty(first) ? null : first,
+                null, null, "caregiver", false, false, null, "labReport"), ct).ConfigureAwait(false);
+            matches=(await persons.GetRelationshipsAsync(personId,ct)).Where(r=>!r.IsInverse && r.EndDate is null && MatchKeys.NameKey(r.OtherLastName)==MatchKeys.NameKey(last) && MatchKeys.NameKey(r.OtherFirstName)==MatchKeys.NameKey(first)).ToList();
         }
-
-        _ = dob;
-        await personService.AddRelationshipAsync(new RelationshipInput(personId, null, last, string.IsNullOrEmpty(first) ? null : first,
-            null, null, "legalGuardian", false, false, null, "labReport"), ct).ConfigureAwait(false);
+        if(matches.Count!=1) { await Review(); return; }
+        var related=matches[0].OtherPersonId;
+        var header=await persons.GetPersonAsync(related,ct).ConfigureAwait(false);
+        foreach(var (key,type) in new[] {("guardianPhone","phone"),("guardianEmail","email")})
+        {
+            var value=fields.GetValueOrDefault(key)?.Trim();
+            if(string.IsNullOrWhiteSpace(value) || header.ContactMethods.Any(m=>m.ContactType==type && m.ContactValue==value)) continue;
+            bool valid=value.Length<=200 && (type=="phone" ? value.Count(char.IsAsciiDigit) is >=10 and <=15 : value.Contains('@',StringComparison.Ordinal) && !value.Contains(' ',StringComparison.Ordinal));
+            if(valid) await personService.SaveContactMethodAsync(related,null,type,value,false,false,ct).ConfigureAwait(false);
+        }
+        if(!string.IsNullOrWhiteSpace(fields.GetValueOrDefault("guardianAddressLine1")) && !string.IsNullOrWhiteSpace(fields.GetValueOrDefault("guardianCity")))
+        {
+            var address=new Dictionary<string,string?> { ["addressLine1"]=fields.GetValueOrDefault("guardianAddressLine1"),["city"]=fields.GetValueOrDefault("guardianCity"),
+                ["state"]=fields.GetValueOrDefault("guardianState"),["zip5"]=fields.GetValueOrDefault("guardianZip5") };
+            await HandleAddressAsync(related,address,collected,config,ct).ConfigureAwait(false);
+        }
+        if(matches[0].VerifiedDate is null) await Review();
     }
 
     private static DateOnly? ParseDate(string? text, string[] formats)

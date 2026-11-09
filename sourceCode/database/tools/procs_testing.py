@@ -30,6 +30,12 @@ proc('uspSaveTestingPlan','write','''@workTaskId UNIQUEIDENTIFIER
 , @remediationConfirmed BIT = 0
 , @currentGuidanceConfirmed BIT = 0
 , @currentGuidanceReason NVARCHAR(1000) = NULL''', PERSON + CASE_WRITE + OWNER + '''
+IF @exposureCaseId IS NULL
+BEGIN
+ SET @owner=dbo.udfPatientWorkOwner(@personId);
+ IF USER_NAME()<>N'dbo' AND NOT EXISTS(SELECT 1 FROM auth.sessionScopeTenant WHERE sessionScopeId=TRY_CAST(SESSION_CONTEXT(N'scopeKey') AS UNIQUEIDENTIFIER) AND tenantId=@owner AND accessLevel IN('write','full') AND isDeleted=0)
+  SET @owner=auth.udfSessionActingTenantId();
+END;
 IF auth.udfHasPermission(N'task.edit')=0 OR @clinicianConfirmed<>1 OR NULLIF(TRIM(@evidence),N'') IS NULL
 BEGIN
     ;THROW 51422, N'Confirm Maryland applicability, source history and the clinician-approved plan; include its evidence.', 1;
@@ -214,10 +220,12 @@ BEGIN
 END;
 DECLARE @person UNIQUEIDENTIFIER,@root UNIQUEIDENTIFIER,@owner UNIQUEIDENTIFIER,@value DECIMAL(18,6),@md BIT;
 SELECT @person=r.personId,@root=r.rootTenantId,@owner=r.owningTenantId,@value=r.valueCanonical,
- @md=CASE WHEN UPPER(config.udfReceiptField(r.reportedSnapshotJson,NULL,'state'))='MD' THEN 1 ELSE 0 END
+ @md=CASE WHEN UPPER(config.udfReceiptField(r.reportedSnapshotJson,NULL,'state'))='MD'
+ OR EXISTS(SELECT 1 FROM auth.tenant t WHERE t.tenantId=r.rootTenantId AND t.statePostalCode='MD' AND t.isDeleted=0) THEN 1 ELSE 0 END
 FROM dbo.labResult AS r JOIN config.analyteSpecimen AS s ON s.analyteSpecimenId=r.analyteSpecimenId JOIN config.analyte AS a ON a.analyteId=s.analyteId
 WHERE r.labResultId=@labResultId AND r.resultRowStatus='valid' AND r.resultStatus IN ('final','corrected') AND r.isDeleted=0
  AND a.code='PB' AND s.specimen='wholeBlood' AND s.canonicalUnit=N'ug/dL' AND r.ageAtCollectionMonths BETWEEN 6 AND 71;
+SET @owner=dbo.udfPatientWorkOwner(@person);
 IF @person IS NOT NULL AND (@md=1 OR EXISTS(SELECT 1 FROM dbo.workTask WHERE personId=@person AND testingPlanJson IS NOT NULL AND isDeleted=0))
 BEGIN
     DECLARE @lock INT;
@@ -301,7 +309,7 @@ OUTER APPLY(SELECT COUNT(DISTINCT r.relatedPersonId) AS contactCount,
  MIN(CASE WHEN r.verifiedDate IS NOT NULL AND r.verifiedDate<=@today THEN 1 ELSE 0 END) AS allVerified
  FROM dbo.personRelationship r
  WHERE r.personId=w.personId AND r.isDeleted=0 AND (r.startDate IS NULL OR r.startDate<=@today)
- AND (r.endDate IS NULL OR r.endDate>=@today)
+ AND (r.endDate IS NULL OR r.endDate>@today)
  AND (r.hasLegalCustody=1 OR r.isPrimaryContact=1 OR r.role IN ('parent','legalGuardian','fosterParent','caregiver'))) rel
 LEFT JOIN dbo.person contact ON contact.personId=CASE WHEN @contacts=1 AND EXISTS(SELECT 1 FROM @contactTenants ct WHERE ct.tenantId=w.owningTenantId) THEN
  CASE WHEN rel.primaryCount=1 AND rel.primaryVerified=1 THEN TRY_CONVERT(UNIQUEIDENTIFIER,rel.primaryKey)

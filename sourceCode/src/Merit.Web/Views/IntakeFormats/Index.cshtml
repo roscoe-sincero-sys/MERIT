@@ -1,0 +1,31 @@
+@model Merit.Web.Controllers.IntakeFormatModel
+@using Merit.Application.Intake
+@{
+    ViewData["Title"]="Laboratory import formats";
+}
+<h1>Laboratory import formats</h1>
+<p>Configure each laboratory's file layout before staff upload results. Updating a format creates a new version; earlier batches retain the format used when received.</p>
+<p><a href="/reporters">Register a laboratory</a> · <a href="/config/settings">Agency settings</a></p>
+@if(TempData["FormatMessage"] is string message) { <div class="usa-alert usa-alert--success" role="status"><p>@message</p></div> }
+@if(!ViewData.ModelState.IsValid) { <div class="usa-alert usa-alert--error" role="alert"><h2>Format was not saved</h2><div asp-validation-summary="All"></div></div> }
+<section class="merit-section"><h2>Configured formats and versions</h2>
+@if(Model.Formats.Count==0) { <p>No formats configured. Register the laboratory, then add its HL7 or spreadsheet format below.</p> }
+<ul>@foreach(var row in Model.Formats) { <li>@row.SenderName — @row.ProfileName · @row.FileType.ToUpperInvariant() · version @row.ProfileVersion · @(row.IsActive?"Available for upload":"Earlier version") @if(row.IsActive) { <a href="/config/intake-formats/@row.IntakeProfileId">Create updated version</a> }</li> }</ul></section>
+<section class="merit-section"><h2>@(Model.PreviousProfileId is null?"Add a format":"Create updated version")</h2>
+@if(Model.Senders.Count==0) { <p><a href="/reporters">Register a laboratory</a> before configuring its format.</p> }
+else {
+<form method="post" action="/config/intake-formats" class="usa-form merit-form--wide" data-unsaved-work>
+@Html.AntiForgeryToken()<input type="hidden" asp-for="PreviousProfileId" />
+<label class="usa-label" asp-for="SenderOrganizationId">Laboratory</label><select class="usa-select" asp-for="SenderOrganizationId">@foreach(var sender in Model.Senders) { <option value="@sender.OrganizationId">@sender.OrganizationName (@sender.CliaNumber)</option> }</select>
+<label class="usa-label" asp-for="ProfileName">Format name</label><input class="usa-input" asp-for="ProfileName" required maxlength="120" />
+<label class="usa-label" asp-for="FileType">File format</label><select class="usa-select" asp-for="FileType"><option value="hl7">HL7 result messages (2.3.1 or 2.5.1)</option><option value="csv">Comma-separated spreadsheet export</option><option value="tsv">Tab-separated text</option><option value="pipe">Pipe-separated text</option></select>
+<p>HL7 fields use the standard message layout. The column/header settings below apply only to separated text files. Use the laboratory's sample to check its exact column names and dates.</p>
+<label class="usa-label" asp-for="HeaderRow">Header row number</label><input class="usa-input" asp-for="HeaderRow" type="number" min="1" max="100" />
+<label class="usa-label" asp-for="DateFormats">Accepted date formats</label><input class="usa-input" asp-for="DateFormats" maxlength="200" /><p class="usa-hint">Examples: yyyy-MM-dd, MM/dd/yyyy. Separate alternatives with commas.</p>
+<label class="usa-label" asp-for="HeaderSignature">Expected header sample (optional)</label><textarea class="usa-textarea" asp-for="HeaderSignature" maxlength="2000"></textarea>
+<details open="@(Model.FileType!="hl7")"><summary>Spreadsheet columns</summary><fieldset class="usa-fieldset"><legend class="usa-legend">Column mapping</legend><p>Enter the exact file column for each field you receive. For separated text, last name, birth date, test code, result value and collection date are required. Laboratory-supplied caregiver details require staff verification after import. Values use MERIT's standard codes, such as female/male/unknown, venous/capillary/unknown and final/preliminary/corrected/cancelled.</p>
+@foreach(var field in IntakeFormatService.Fields) { <label class="usa-label" for="col-@field.Key">@field.Value</label><input class="usa-input" id="col-@field.Key" name="Columns[@field.Key]" value="@Model.Columns.GetValueOrDefault(field.Key)" maxlength="200" /> }
+</fieldset></details><button class="usa-button" type="submit">Save laboratory format</button>
+@if(Model.PreviousProfileId is not null) { <a href="/config/intake-formats">Cancel update</a> }
+</form> }
+</section>

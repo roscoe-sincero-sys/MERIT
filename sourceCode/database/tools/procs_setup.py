@@ -18,11 +18,12 @@ PROCS = [
 , @tenantName       NVARCHAR (120)
 , @statePostalCode  CHAR (2) = NULL
 , @stateFips        CHAR (2) = NULL
-, @effectiveFrom    DATE = '2026-01-01'
+, @effectiveFrom    DATE = NULL
 , @tenantType       VARCHAR (30) = 'state'
 , @parentTenantCode VARCHAR (30) = NULL
 , @countiesJson     NVARCHAR (MAX) = N'[]'
-, @timeZone         VARCHAR (64) = NULL""",
+, @timeZone         VARCHAR (64) = NULL
+, @seedThresholds   BIT = 1""",
         "key": "CONCAT (N'tenantCode=', @tenantCode)",
         "notes": "Core installer: runs as its owner and is granted to no role, because it seeds the new root's shared "
                  "rows, which row-level security would hide from a platform administrator. Reached only through "
@@ -31,6 +32,7 @@ PROCS = [
                  "a number to run; an administrator replaces them on the settings screen. Returns the root tenant id.",
         "body": f"""
 DECLARE @root UNIQUEIDENTIFIER = {k("CONCAT (N'tenant:', @tenantCode)")};
+SET @effectiveFrom=COALESCE(@effectiveFrom,auth.udfSessionToday());
 DECLARE @parent UNIQUEIDENTIFIER = COALESCE ((SELECT tenantId FROM auth.tenant WHERE tenantCode = @parentTenantCode
                                                                                 AND isDeleted = 0),
                                              {k("N'tenant:PLATFORM'")});
@@ -73,7 +75,7 @@ INSERT @roles VALUES
   ('caseManager', N'Case manager', 0, 0, 'person.view,person.edit,result.view,result.edit,case.view,case.open,case.edit,investigation.edit,task.view,task.edit,data.export,document.view,document.edit'),
   ('investigator', N'Investigator', 0, 0, 'person.view,person.edit,result.view,case.view,investigation.edit,task.view,task.edit,document.view,document.edit'),
   ('occupationalInvestigator', N'Occupational investigator', 0, 0, 'person.view,person.edit,result.view,result.edit,case.view,case.open,case.edit,investigation.edit,task.view,task.edit,data.export,document.view,document.edit'),
-  ('supervisor', N'Supervisor', 0, 0, 'person.view,person.edit,person.view_identifiers,person.merge,result.view,result.edit,result.release_hold,case.view,case.open,case.edit,investigation.edit,task.view,task.edit,intake.upload,registry.edit,data.export,extract.run,extract.submit,audit.view,usage.view,document.view,document.edit'),
+  ('supervisor', N'Supervisor', 0, 0, 'person.view,person.edit,person.view_identifiers,person.merge,result.view,result.edit,result.release_hold,case.view,case.open,case.edit,investigation.edit,task.view,task.edit,workflow.waive,intake.upload,registry.edit,data.export,extract.run,extract.submit,audit.view,usage.view,document.view,document.edit'),
   ('epidemiologist', N'Epidemiologist (de-identified)', 0, 1, 'person.view,result.view,case.view,task.view,data.export,extract.run'),
   ('administrator', N'Administrator (users and configuration)', 1, 0, 'tenant.administer,tenant.create,config.edit,registry.edit,intake.configure,matching.configure,audit.view,usage.view,person.view,result.view,case.view,task.view'),
   ('userAdministrator', N'User administrator (accounts and access only)', 1, 0, 'tenant.administer,audit.view');
@@ -159,7 +161,7 @@ SELECT {k("CONCAT (N'threshold:', @tenantCode, N':', t.rowKey)")}, @root, @pbBlo
        t.thresholdType, t.actionCodeId, t.dueIntervalDays, t.lowerValue, t.upperValue, N'ug/dL', '>=', @effectiveFrom,
        t.authority, t.isActive
   FROM @th AS t
- WHERE @pbBlood IS NOT NULL
+ WHERE @pbBlood IS NOT NULL AND @seedThresholds=1
    AND NOT EXISTS (SELECT 1 FROM config.threshold AS x
                     WHERE x.thresholdId = {k("CONCAT (N'threshold:', @tenantCode, N':', t.rowKey)")});
 
@@ -321,11 +323,12 @@ PROCS += [
 , @tenantName       NVARCHAR (120)
 , @statePostalCode  CHAR (2) = NULL
 , @stateFips        CHAR (2) = NULL
-, @effectiveFrom    DATE = '2026-01-01'
+, @effectiveFrom    DATE = NULL
 , @tenantType       VARCHAR (30) = 'state'
 , @parentTenantCode VARCHAR (30) = NULL
 , @countiesJson     NVARCHAR (MAX) = N'[]'
-, @timeZone         VARCHAR (64) = NULL""",
+, @timeZone         VARCHAR (64) = NULL
+, @seedThresholds   BIT = 1""",
         "key": "CONCAT (N'tenantCode=', @tenantCode, N', parentTenantCode=', @parentTenantCode, N', tenantType=', @tenantType)",
         "notes": "Returns the root tenant id. The inserts run in config.uspInstallRootTenant.",
         "validate": CODE_RULE + """
@@ -357,7 +360,7 @@ END;""",
         "body": """
 EXEC config.uspInstallRootTenant @tenantCode = @tenantCode, @tenantName = @tenantName, @statePostalCode = @statePostalCode,
      @stateFips = @stateFips, @effectiveFrom = @effectiveFrom, @tenantType = @tenantType,
-     @parentTenantCode = @parentTenantCode, @countiesJson = @countiesJson, @timeZone = @timeZone;
+     @parentTenantCode = @parentTenantCode, @countiesJson = @countiesJson, @timeZone = @timeZone, @seedThresholds=@seedThresholds;
 
 SET @Comments = N'Root tenant created.';
 """,

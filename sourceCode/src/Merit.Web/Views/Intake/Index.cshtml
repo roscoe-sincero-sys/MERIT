@@ -25,6 +25,7 @@ else if (Model.Message is not null)
     {
         <div class="usa-alert usa-alert--info"><div class="usa-alert__body">
             <h3 class="usa-alert__heading">No laboratory import formats are configured for this agency</h3>
+            @if(Session.Has(Permissions.IntakeConfigure)) { <p><a href="/config/intake-formats">Configure a laboratory format</a></p> }
             <p class="usa-alert__text">Contact your MERIT administrator to set up the laboratory sender and its file layout. Include the laboratory name and the type of file you receive. Upload becomes available after setup.</p>
             <p>If you work for more than one agency, <a href="/account/profiles">check your working agency in My profiles</a>.</p>
         </div></div>

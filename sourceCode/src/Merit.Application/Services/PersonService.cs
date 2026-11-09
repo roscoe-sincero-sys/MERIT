@@ -264,6 +264,16 @@ public sealed class PersonService(
         await audit.ChangedAsync("person", personId, ct).ConfigureAwait(false);
     }
 
+    public async Task VerifyRelationshipAsync(Guid personId,Guid relationshipId,bool confirmed,bool primary,bool legalCustody,string role,byte[]? version,CancellationToken ct)
+    {
+        session.Require(Permissions.PersonEdit);
+        if(!confirmed) throw new ValidationException("confirmed","Verify the caregiver identity, relationship and contact information before confirming.");
+        var rel=(await data.GetRelationshipsAsync(personId,ct)).FirstOrDefault(r=>r.PersonRelationshipId==relationshipId && !r.IsInverse && r.EndDate is null) ?? throw new NotFoundException();
+        if(role is not ("parent" or "legalGuardian" or "fosterParent" or "caregiver")) throw new ValidationException("role","Choose the verified caregiver relationship.");
+        await data.SaveRelationshipAsync(new(relationshipId,personId,rel.OtherPersonId,role,primary,legalCustody,rel.StartDate,null,"interview",clock.Today,false,version),ct);
+        await audit.ChangedAsync("personRelationship",relationshipId,ct);
+    }
+
     public async Task SaveEmploymentAsync(EmploymentInput input, CancellationToken ct = default)
     {
         session.Require(Permissions.PersonEdit);

@@ -49,7 +49,7 @@ public sealed class PeopleController(IClock clock, PersonService people, PersonP
     public async Task<IActionResult> Details(Guid id, Guid? analyteId, CancellationToken ct)
     {
         var model = await builder.BuildAsync(await people.GetPageAsync(id, ct), analyteId, ct);
-        if (session.Has(Permissions.TaskView)) model = model with { TestingPlans = await care.TestingPlansAsync(id, ct) };
+        if (session.Has(Permissions.TaskView) && !model.Person.ContactOnlyAccess) model = model with { TestingPlans = await care.TestingPlansAsync(id, ct) };
         return View("Details", model);
     }
 
@@ -197,6 +197,14 @@ public sealed class PeopleController(IClock clock, PersonService people, PersonP
         await people.EndRelationshipAsync(id, relationshipId, clock.Today, ct);
         Response.Announce("Relationship ended.");
         return await SectionAsync(id, "_Relationships", m => m.Relationships, ct, forcePartial: true);
+    }
+
+    [HttpPost("{id:guid}/relationships/{relationshipId:guid}/verify")]
+    [Authorize(Policy=Permissions.PersonEdit)]
+    public async Task<IActionResult> VerifyRelationship(Guid id,Guid relationshipId,bool confirmed,bool primary,bool legalCustody,string role,string rowVersion,CancellationToken ct)
+    {
+        await people.VerifyRelationshipAsync(id,relationshipId,confirmed,primary,legalCustody,role,Options.FromHex(rowVersion),ct);
+        return await SectionAsync(id,"_Relationships",m=>m.Relationships,ct,forcePartial:true);
     }
 
     // ------------------------------------------------------------------------------------------ employment

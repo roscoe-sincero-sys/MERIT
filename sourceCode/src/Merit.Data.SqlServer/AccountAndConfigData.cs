@@ -236,6 +236,7 @@ public sealed class AccountData(Db db) : IAccountData
         {
             tenantCode = t.TenantCode, tenantName = t.TenantName, statePostalCode = t.StatePostalCode, stateFips = t.StateFips,
             tenantType = t.TenantType, parentTenantCode = t.ParentTenantCode, countiesJson = CountiesJson(t.NewCounties), timeZone = t.TimeZone,
+            effectiveFrom=t.EffectiveFrom, seedThresholds=t.SeedThresholds,
         }, ct).ConfigureAwait(false);
 
     public async Task<Guid> CreateChildTenantAsync(TenantCreate t, CancellationToken ct = default)

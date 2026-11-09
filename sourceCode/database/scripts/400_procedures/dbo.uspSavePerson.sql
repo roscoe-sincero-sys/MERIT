@@ -146,7 +146,7 @@ BEGIN
 
             INSERT dbo.person (personId, rootTenantId, owningTenantId, lastName, firstName, middleName, lastNameKey, firstNameKey,
                                isPlaceholderName, dob, dobVerified, sex, ethnicity, preferredLanguage, deceasedDate)
-            VALUES (@personId, @root, @root, @lastName, @firstName, @middleName, @lastNameKey, @firstNameKey,
+            VALUES (@personId, @root, COALESCE(@acting,@root), @lastName, @firstName, @middleName, @lastNameKey, @firstNameKey,
                     @isPlaceholderName, @dob, @dobVerified, @sex, @ethnicity, @preferredLanguage, @deceasedDate);
 
             IF @acting IS NOT NULL AND @acting <> @root

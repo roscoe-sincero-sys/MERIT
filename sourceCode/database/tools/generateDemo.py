@@ -216,7 +216,7 @@ GO
 -- ======================================================================================== part 1: jurisdiction
 EXEC config.uspCreateRootTenant @tenantCode = N'{ROOT_CODE}', @tenantName = N'Maryland Lead and Metals Program (demo)',
      @statePostalCode = 'MD', @stateFips = '24', @tenantType = 'state',
-     @timeZone = 'Eastern Standard Time';
+     @timeZone = 'Eastern Standard Time', @effectiveFrom = '2026-01-01';
 GO
 
 DECLARE @root UNIQUEIDENTIFIER = (SELECT tenantId FROM auth.tenant WHERE tenantCode = N'{ROOT_CODE}');
@@ -486,11 +486,16 @@ GO
      @analyteId = {h('analyte:PB')}, @population = 'child',
      @classification = 'suspect', @qualifyingLabResultId = {g('result:mia-cap')}, @workflowTemplate = 'childResidential',
      @openedDate = '2026-08-09';
-EXEC dbo.uspCreateWorkTask @workTaskId = {g('task:mia-confirm')}, @queueCode = 'confirmatoryTest',
-     @title = N'Confirmatory venous test due', @detail = N'Capillary 7.2 ug/dL on 2026-08-05: confirm within 3 months.',
-     @personId = {g('person:mia')}, @exposureCaseId = {g('case:mia')}, @labResultId = {g('result:mia-cap')},
-     @dueDate = '2026-11-03';
-EXEC dbo.uspUpdateWorkTasks @workTaskIdsJson = N'["{bare(g('task:mia-confirm'))}"]', @action = 'complete', @note = N'Venous result received.';
+-- Historical synthetic fixture, installed only by dbo with IncludeDemoData. Runtime clinical evidence guards remain enabled.
+IF NOT EXISTS(SELECT 1 FROM dbo.workTask WHERE workTaskId={g('task:mia-confirm')})
+INSERT dbo.workTask(workTaskId,rootTenantId,owningTenantId,personId,exposureCaseId,labResultId,queueCode,title,detail,dueDate,
+ taskStatus,completedUtc,resolutionNote,testingPlanJson)
+SELECT {g('task:mia-confirm')},rootTenantId,owningTenantId,personId,exposureCaseId,{g('result:mia-cap')},'testingFollowUp',
+ N'Completed confirmatory venous test',N'Synthetic historical confirmation; original capillary draw and actual venous completion are retained.',
+ '2026-10-28','done','2026-10-18T12:00:00',N'Synthetic actual venous result received.',
+ (SELECT 'MDH-2025-03' AS policyVersion,'confirmation' AS kind,'2026-08-05' AS anchorDate,
+ {g('result:mia-cap')} AS anchorResultId,{g('result:mia-ven')} AS completedResultId,'demoHistoricalFixture' AS policyPurpose FOR JSON PATH,WITHOUT_ARRAY_WRAPPER)
+FROM dbo.exposureCase WHERE exposureCaseId={g('case:mia')};
 EXEC dbo.uspAttachResultToCase @exposureCaseId = {g('case:mia')}, @labResultId = {g('result:mia-ven')},
      @computedClassification = 'confirmed', @isHighest = 0;
 EXEC dbo.uspCreateCaseFollowUpTasks @exposureCaseId = {g('case:mia')};

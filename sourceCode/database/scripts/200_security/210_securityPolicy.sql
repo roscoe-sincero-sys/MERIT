@@ -169,7 +169,7 @@ IF NOT EXISTS (SELECT 1
                   AND (REPLACE (sp.operation_desc, N'_', N' ') = NULL OR (NULL IS NULL AND sp.operation_desc IS NULL)))
 BEGIN
     SET @Changes = @Changes + 1;
-    EXEC (N'ALTER SECURITY POLICY auth.tenantIsolationPolicy ADD FILTER PREDICATE auth.tvfPersonPredicate (rootTenantId, owningTenantId, personId) ON dbo.person;');
+    EXEC (N'ALTER SECURITY POLICY auth.tenantIsolationPolicy ADD FILTER PREDICATE auth.tvfRelatedContactPredicate (rootTenantId, owningTenantId, personId) ON dbo.person;');
 END;
 IF NOT EXISTS (SELECT 1
                  FROM sys.security_predicates AS sp
@@ -301,7 +301,7 @@ IF NOT EXISTS (SELECT 1
                   AND (REPLACE (sp.operation_desc, N'_', N' ') = NULL OR (NULL IS NULL AND sp.operation_desc IS NULL)))
 BEGIN
     SET @Changes = @Changes + 1;
-    EXEC (N'ALTER SECURITY POLICY auth.tenantIsolationPolicy ADD FILTER PREDICATE auth.tvfPersonPredicate (rootTenantId, owningTenantId, personId) ON dbo.personContactMethod;');
+    EXEC (N'ALTER SECURITY POLICY auth.tenantIsolationPolicy ADD FILTER PREDICATE auth.tvfRelatedContactPredicate (rootTenantId, owningTenantId, personId) ON dbo.personContactMethod;');
 END;
 IF NOT EXISTS (SELECT 1
                  FROM sys.security_predicates AS sp
@@ -598,7 +598,7 @@ IF NOT EXISTS (SELECT 1
                   AND (REPLACE (sp.operation_desc, N'_', N' ') = NULL OR (NULL IS NULL AND sp.operation_desc IS NULL)))
 BEGIN
     SET @Changes = @Changes + 1;
-    EXEC (N'ALTER SECURITY POLICY auth.tenantIsolationPolicy ADD FILTER PREDICATE auth.tvfPersonPredicate (rootTenantId, owningTenantId, personId) ON dbo.personLocation;');
+    EXEC (N'ALTER SECURITY POLICY auth.tenantIsolationPolicy ADD FILTER PREDICATE auth.tvfRelatedContactPredicate (rootTenantId, owningTenantId, personId) ON dbo.personLocation;');
 END;
 IF NOT EXISTS (SELECT 1
                  FROM sys.security_predicates AS sp

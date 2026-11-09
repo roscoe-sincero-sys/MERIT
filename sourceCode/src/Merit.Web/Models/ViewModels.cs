@@ -998,6 +998,8 @@ public sealed record AngularHostModel(IReadOnlyList<string> Scripts, IReadOnlyLi
 /// <summary>The tenant tree and the Add tenant form; the type, code and county fields depend on the chosen parent.</summary>
 public sealed class TenantFormModel
 {
+    public DateOnly? EffectiveFrom { get; set; }
+    public bool SeedThresholds { get; set; }
     public Guid? ParentTenantId { get; set; }
 
     public string? TenantCode { get; set; }

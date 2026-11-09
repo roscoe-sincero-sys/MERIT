@@ -111,7 +111,12 @@ BEGIN
         IF NOT EXISTS (SELECT 1 FROM dbo.person WHERE personId = @personId AND isDeleted = 0)
         BEGIN
             ;THROW 51404, N'The patient was not found, or you do not have access to it.', 1;
-        END;IF @exposureCaseId IS NOT NULL AND (auth.udfHasPermission (N'case.view') = 0 OR NOT EXISTS
+        END;
+        IF NOT EXISTS(SELECT 1 FROM dbo.person p CROSS APPLY auth.tvfPersonPredicate(p.rootTenantId,p.owningTenantId,p.personId) scope WHERE p.personId=@personId)
+        BEGIN
+            ;THROW 51403,N'Clinical patient access is required; related caregiver contact access does not include clinical work.',1;
+        END;
+        IF @exposureCaseId IS NOT NULL AND (auth.udfHasPermission (N'case.view') = 0 OR NOT EXISTS
             (SELECT 1 FROM dbo.exposureCase WHERE exposureCaseId = @exposureCaseId AND personId = @personId AND isDeleted = 0))
         BEGIN
             ;THROW 51404, N'The case was not found for this patient, or is outside your access.', 1;
@@ -123,6 +128,12 @@ BEGIN
         SELECT @root = rootTenantId, @owner = owningTenantId FROM dbo.person WHERE personId = @personId;
         IF @exposureCaseId IS NOT NULL SELECT @owner = owningTenantId FROM dbo.exposureCase WHERE exposureCaseId = @exposureCaseId;
 
+        IF @exposureCaseId IS NULL
+        BEGIN
+         SET @owner=dbo.udfPatientWorkOwner(@personId);
+         IF USER_NAME()<>N'dbo' AND NOT EXISTS(SELECT 1 FROM auth.sessionScopeTenant WHERE sessionScopeId=TRY_CAST(SESSION_CONTEXT(N'scopeKey') AS UNIQUEIDENTIFIER) AND tenantId=@owner AND accessLevel IN('write','full') AND isDeleted=0)
+          SET @owner=auth.udfSessionActingTenantId();
+        END;
         IF auth.udfHasPermission(N'task.edit')=0 OR @clinicianConfirmed<>1 OR NULLIF(TRIM(@evidence),N'') IS NULL
         BEGIN
             ;THROW 51422, N'Confirm Maryland applicability, source history and the clinician-approved plan; include its evidence.', 1;

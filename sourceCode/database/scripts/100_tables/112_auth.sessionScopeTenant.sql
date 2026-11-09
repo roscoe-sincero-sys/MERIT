@@ -24,6 +24,7 @@ BEGIN
         sessionScopeId             UNIQUEIDENTIFIER  NOT NULL,
         tenantId                   UNIQUEIDENTIFIER  NOT NULL,
         accessLevel                VARCHAR (10)      NOT NULL CONSTRAINT DF_auth_sessionScopeTenant_accessLevel DEFAULT ('read'),
+        canReadRelatedContacts     BIT               NOT NULL CONSTRAINT DF_auth_sessionScopeTenant_canReadRelatedContacts DEFAULT (0),
 
         -- Standard audit columns. Soft delete only. Convention: DF_<schema>_<tableName>_<fieldName>.
         isDeleted       BIT             NOT NULL CONSTRAINT DF_auth_sessionScopeTenant_isDeleted       DEFAULT (0),
@@ -45,6 +46,8 @@ GO
 -- -------------------------------------------------------------------------------------------
 IF COL_LENGTH (N'auth.sessionScopeTenant', N'accessLevel') IS NULL
     ALTER TABLE auth.sessionScopeTenant ADD accessLevel                VARCHAR (10)      NOT NULL CONSTRAINT DF_auth_sessionScopeTenant_accessLevel DEFAULT ('read');
+IF COL_LENGTH (N'auth.sessionScopeTenant', N'canReadRelatedContacts') IS NULL
+    ALTER TABLE auth.sessionScopeTenant ADD canReadRelatedContacts     BIT               NOT NULL CONSTRAINT DF_auth_sessionScopeTenant_canReadRelatedContacts DEFAULT (0);
 GO
 
 -- -------------------------------------------------------------------------------------------
@@ -159,6 +162,7 @@ EXEC util.uspSetObjectDescription @SchemaName = N'auth', @ObjectType = N'TABLE',
 EXEC util.uspSetObjectDescription @SchemaName = N'auth', @ObjectType = N'TABLE', @ObjectName = N'sessionScopeTenant', @ColumnName = N'sessionScopeId', @Description = N'The session scope.';
 EXEC util.uspSetObjectDescription @SchemaName = N'auth', @ObjectType = N'TABLE', @ObjectName = N'sessionScopeTenant', @ColumnName = N'tenantId', @Description = N'A tenant the scope covers.';
 EXEC util.uspSetObjectDescription @SchemaName = N'auth', @ObjectType = N'TABLE', @ObjectName = N'sessionScopeTenant', @ColumnName = N'accessLevel', @Description = N'read, write or full (write plus soft delete) for this tenant''s records.';
+EXEC util.uspSetObjectDescription @SchemaName = N'auth', @ObjectType = N'TABLE', @ObjectName = N'sessionScopeTenant', @ColumnName = N'canReadRelatedContacts', @Description = N'Contact projection permitted by person.edit at this tenant in the clipped active profile; never a global permission union.';
 EXEC util.uspSetObjectDescription @SchemaName = N'auth', @ObjectType = N'TABLE', @ObjectName = N'sessionScopeTenant', @ColumnName = N'isDeleted', @Description = N'Soft-delete flag. 1 = deleted, 0 = active. This database performs no hard deletes; all reads must filter isDeleted = 0.';
 EXEC util.uspSetObjectDescription @SchemaName = N'auth', @ObjectType = N'TABLE', @ObjectName = N'sessionScopeTenant', @ColumnName = N'deletedBy', @Description = N'Login or application user that soft-deleted the row. Stamped by trg_au_updt_sessionScopeTenant when isDeleted transitions 0 -> 1. Meaningful only when isDeleted = 1.';
 EXEC util.uspSetObjectDescription @SchemaName = N'auth', @ObjectType = N'TABLE', @ObjectName = N'sessionScopeTenant', @ColumnName = N'deletedDateUtc', @Description = N'UTC timestamp of the soft delete, stamped by trg_au_updt_sessionScopeTenant with the same instant as modifiedDateUtc. Meaningful only when isDeleted = 1.';

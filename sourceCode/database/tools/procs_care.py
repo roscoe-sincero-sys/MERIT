@@ -5,7 +5,12 @@ PERSON = """IF auth.udfHasPermission (N'person.view') = 0
 BEGIN
     ;THROW 51403, N'Patient view permission is required.', 1;
 END;
-""" + not_found('@personId', 'dbo.person', 'personId', 'The patient')
+""" + not_found('@personId', 'dbo.person', 'personId', 'The patient') + """
+IF NOT EXISTS(SELECT 1 FROM dbo.person p CROSS APPLY auth.tvfPersonPredicate(p.rootTenantId,p.owningTenantId,p.personId) scope WHERE p.personId=@personId)
+BEGIN
+    ;THROW 51403,N'Clinical patient access is required; related caregiver contact access does not include clinical work.',1;
+END;
+"""
 CASE_READ = """IF @exposureCaseId IS NOT NULL AND (auth.udfHasPermission (N'case.view') = 0 OR NOT EXISTS
     (SELECT 1 FROM dbo.exposureCase WHERE exposureCaseId = @exposureCaseId AND personId = @personId AND isDeleted = 0))
 BEGIN

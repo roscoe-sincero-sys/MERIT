@@ -42,7 +42,7 @@ public sealed class ClassificationService(
                                                            ClassifiableResult result, CancellationToken ct = default)
     {
         var refData = await reference.GetAsync(ct).ConfigureAwait(false);
-        var config = await settings.GetAsync(ct).ConfigureAwait(false);
+        var config = await settings.GetAsOfAsync(result.CollectedDate,ct).ConfigureAwait(false);
         var specimen = refData.Specimen(analyteSpecimenId) ?? throw new InvalidOperationException("Unknown analyte specimen.");
         var analyte = refData.Analyte(specimen.AnalyteId) ?? throw new InvalidOperationException("Unknown analyte.");
 
@@ -132,7 +132,6 @@ public sealed class ClassificationService(
     public async Task<IReadOnlyList<string>> RerunForPersonAsync(Guid personId, CancellationToken ct = default)
     {
         var refData = await reference.GetAsync(ct).ConfigureAwait(false);
-        var config = await settings.GetAsync(ct).ConfigureAwait(false);
         var all = await persons.GetResultsAsync(personId, null, ct).ConfigureAwait(false);
         var changes = new List<string>();
 
@@ -142,6 +141,7 @@ public sealed class ClassificationService(
             var episodes = ctx.Episodes.Select(e => new PregnancyEpisode(e.StartDate, e.ExpectedEndDate, e.ActualEndDate)).ToList();
             foreach (var r in analyteGroup)
             {
+                var config = await settings.GetAsOfAsync(r.CollectedDate,ct).ConfigureAwait(false);
                 var pop = PopulationRules.Derive(ctx.Person?.Dob, r.CollectedDate, episodes, config.AdultAgeCutoffYears,
                     config.PregnancyMaxWeeks);
                 if (pop.Population.ToCode() != r.Population)
@@ -162,6 +162,7 @@ public sealed class ClassificationService(
             Guid? strongestResult = null;
             foreach (var r in analyteGroup.Where(r => r.ResultStatus is "final" or "corrected").OrderBy(r => r.CollectedDate))
             {
+                var config = await settings.GetAsOfAsync(r.CollectedDate,ct).ConfigureAwait(false);
                 var pop = PopulationRules.Derive(ctx.Person?.Dob, r.CollectedDate, episodes, config.AdultAgeCutoffYears,
                     config.PregnancyMaxWeeks);
                 var rules = await thresholds.GetRulesAsync(r.AnalyteSpecimenId, r.CollectedDate, ct).ConfigureAwait(false);

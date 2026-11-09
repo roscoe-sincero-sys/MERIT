@@ -74,6 +74,7 @@ public sealed record SearchResults(IReadOnlyList<SearchPersonRow> Persons, IRead
 
 public sealed class PersonRow
 {
+    public bool ContactOnlyAccess {get;init;}
     public Guid PersonId { get; init; }
 
     public Guid RootTenantId { get; init; }

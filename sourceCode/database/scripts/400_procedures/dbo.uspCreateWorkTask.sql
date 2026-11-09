@@ -111,7 +111,7 @@ BEGIN
 
         DECLARE @root UNIQUEIDENTIFIER = auth.udfSessionRootTenantId ();
         DECLARE @owner UNIQUEIDENTIFIER = COALESCE ((SELECT owningTenantId FROM dbo.exposureCase WHERE exposureCaseId = @exposureCaseId),
-                                                    @owningTenantId, auth.udfSessionActingTenantId ());
+                                                    @owningTenantId, dbo.udfPatientWorkOwner(@personId), auth.udfSessionActingTenantId ());
 
         IF NOT EXISTS (SELECT 1 FROM dbo.workTask
                         WHERE queueCode = @queueCode AND taskStatus = 'open' AND isDeleted = 0 AND title = @title

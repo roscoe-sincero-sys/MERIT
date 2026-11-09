@@ -107,6 +107,11 @@ BEGIN
         BEGIN
             ;THROW 51404, N'The patient was not found, or you do not have access to it.', 1;
         END;
+        IF NOT EXISTS(SELECT 1 FROM dbo.person p CROSS APPLY auth.tvfPersonPredicate(p.rootTenantId,p.owningTenantId,p.personId) scope WHERE p.personId=@personId)
+        BEGIN
+            ;THROW 51403,N'Clinical patient access is required; related caregiver contact access does not include clinical work.',1;
+        END;
+
         IF auth.udfHasPermission(N'person.edit')=0 OR auth.udfHasPermission(N'task.edit')=0 OR @confirmed<>1 OR NULLIF(TRIM(@evidence),N'') IS NULL
         BEGIN
             ;THROW 51422, N'Confirm the actual test or clinical reason and provide source evidence.', 1;

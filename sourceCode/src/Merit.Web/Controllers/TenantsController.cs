@@ -34,11 +34,12 @@ public sealed class TenantsController(AdminService admin, ConfigService config, 
     [Authorize(Policy = Permissions.TenantCreate)]
     public async Task<IActionResult> Create(TenantFormModel form, CancellationToken ct)
     {
+        if(!ModelState.IsValid) return View("Index",await FormAsync(form,ct));
         if (form.CountySelection) form.CountyFipsList = string.Join(',', form.SelectedCountyFips.Distinct());
         try
         {
             await admin.CreateTenantAsync(new TenantInput(form.ParentTenantId, form.TenantCode, form.TenantName, form.TenantType,
-                form.StatePostalCode, form.StateFips, form.CountyFipsList, form.NewCounties, form.TimeZone), ct);
+                form.StatePostalCode, form.StateFips, form.CountyFipsList, form.NewCounties, form.TimeZone, form.EffectiveFrom, form.SeedThresholds), ct);
         }
         catch (ValidationException ex)
         {

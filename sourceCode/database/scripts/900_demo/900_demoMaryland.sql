@@ -21,7 +21,7 @@ GO
 -- ======================================================================================== part 1: jurisdiction
 EXEC config.uspCreateRootTenant @tenantCode = N'MD-LEAD', @tenantName = N'Maryland Lead and Metals Program (demo)',
      @statePostalCode = 'MD', @stateFips = '24', @tenantType = 'state',
-     @timeZone = 'Eastern Standard Time';
+     @timeZone = 'Eastern Standard Time', @effectiveFrom = '2026-01-01';
 GO
 
 DECLARE @root UNIQUEIDENTIFIER = (SELECT tenantId FROM auth.tenant WHERE tenantCode = N'MD-LEAD');
@@ -178,7 +178,7 @@ INSERT @users VALUES
 
 INSERT auth.appUser (appUserId, rootTenantId, homeTenantId, userName, displayName, email, passwordHash, securityStamp)
 SELECT CAST (HASHBYTES ('MD5', N'user:' + u.userName) AS UNIQUEIDENTIFIER), h.rootTenantId, h.tenantId, u.userName,
-       u.displayName, u.userName + N'@merit.example', N'AQAAAAIAAYagAAAAEBtnQ45avu60Os0QX7se8uW89aagEDmHFhBDFi+b5Ctnn8rfqVQQTq0+pgzIEdACXw==', NEWID ()
+       u.displayName, u.userName + N'@merit.example', N'AQAAAAIAAYagAAAAEKAV3/egN7IlaYBgyjbEKegzavAjWQpVIO2PAiznTiw6Ee2PPw/89U/N31zrMUaU3w==', NEWID ()
   FROM @users AS u
   JOIN auth.tenant AS h ON h.tenantCode = u.homeTenantCode
  WHERE NOT EXISTS (SELECT 1 FROM auth.appUser AS x WHERE x.userName = u.userName AND x.isDeleted = 0);
@@ -335,11 +335,16 @@ EXEC dbo.uspOpenExposureCase @exposureCaseId = '7088531f-cd57-638b-5dfe-da9558fc
      @analyteId = 'c47d0c0a-ceef-8112-7289-7e3cb078861d', @population = 'child',
      @classification = 'suspect', @qualifyingLabResultId = '0984ddad-c7e6-d2f4-ed9e-fb7471f17a51', @workflowTemplate = 'childResidential',
      @openedDate = '2026-08-09';
-EXEC dbo.uspCreateWorkTask @workTaskId = '2aac7847-0b79-6be5-7c9e-87e8437f6a40', @queueCode = 'confirmatoryTest',
-     @title = N'Confirmatory venous test due', @detail = N'Capillary 7.2 ug/dL on 2026-08-05: confirm within 3 months.',
-     @personId = '54328b0a-2b01-40e8-71fe-7171624bb44e', @exposureCaseId = '7088531f-cd57-638b-5dfe-da9558fcb2a8', @labResultId = '0984ddad-c7e6-d2f4-ed9e-fb7471f17a51',
-     @dueDate = '2026-11-03';
-EXEC dbo.uspUpdateWorkTasks @workTaskIdsJson = N'["2aac7847-0b79-6be5-7c9e-87e8437f6a40"]', @action = 'complete', @note = N'Venous result received.';
+-- Historical synthetic fixture, installed only by dbo with IncludeDemoData. Runtime clinical evidence guards remain enabled.
+IF NOT EXISTS(SELECT 1 FROM dbo.workTask WHERE workTaskId='2aac7847-0b79-6be5-7c9e-87e8437f6a40')
+INSERT dbo.workTask(workTaskId,rootTenantId,owningTenantId,personId,exposureCaseId,labResultId,queueCode,title,detail,dueDate,
+ taskStatus,completedUtc,resolutionNote,testingPlanJson)
+SELECT '2aac7847-0b79-6be5-7c9e-87e8437f6a40',rootTenantId,owningTenantId,personId,exposureCaseId,'0984ddad-c7e6-d2f4-ed9e-fb7471f17a51','testingFollowUp',
+ N'Completed confirmatory venous test',N'Synthetic historical confirmation; original capillary draw and actual venous completion are retained.',
+ '2026-10-28','done','2026-10-18T12:00:00',N'Synthetic actual venous result received.',
+ (SELECT 'MDH-2025-03' AS policyVersion,'confirmation' AS kind,'2026-08-05' AS anchorDate,
+ '0984ddad-c7e6-d2f4-ed9e-fb7471f17a51' AS anchorResultId,'acb108ed-8b32-a69e-d027-ed8b9736a3f2' AS completedResultId,'demoHistoricalFixture' AS policyPurpose FOR JSON PATH,WITHOUT_ARRAY_WRAPPER)
+FROM dbo.exposureCase WHERE exposureCaseId='7088531f-cd57-638b-5dfe-da9558fcb2a8';
 EXEC dbo.uspAttachResultToCase @exposureCaseId = '7088531f-cd57-638b-5dfe-da9558fcb2a8', @labResultId = 'acb108ed-8b32-a69e-d027-ed8b9736a3f2',
      @computedClassification = 'confirmed', @isHighest = 0;
 EXEC dbo.uspCreateCaseFollowUpTasks @exposureCaseId = '7088531f-cd57-638b-5dfe-da9558fcb2a8';

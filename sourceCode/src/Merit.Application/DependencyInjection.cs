@@ -53,6 +53,7 @@ public static class DependencyInjection
         services.AddScoped<LookupService>();
         services.AddScoped<RegistryService>();
         services.AddScoped<IntakeService>();
+        services.AddScoped<IntakeFormatService>();
         services.AddScoped<IntakeProcessor>();
         services.AddScoped<ExtractService>();
         services.AddScoped<MatchReviewService>();

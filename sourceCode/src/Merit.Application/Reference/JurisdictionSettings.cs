@@ -66,25 +66,25 @@ public sealed class JurisdictionSettings
 public interface ISettingsProvider
 {
     Task<JurisdictionSettings> GetAsync(CancellationToken ct = default);
+    Task<JurisdictionSettings> GetAsOfAsync(DateOnly date, CancellationToken ct = default) => GetAsync(ct);
 
     void Invalidate();
 }
 
-public sealed class SettingsProvider(IConfigData data, IMemoryCache cache, ICurrentSession session) : ISettingsProvider
+public sealed class SettingsProvider(IConfigData data, IMemoryCache cache, ICurrentSession session, IClock clock) : ISettingsProvider
 {
-    public async Task<JurisdictionSettings> GetAsync(CancellationToken ct = default)
+    public Task<JurisdictionSettings> GetAsync(CancellationToken ct = default) => GetAsOfAsync(clock.Today,ct);
+    public async Task<JurisdictionSettings> GetAsOfAsync(DateOnly date, CancellationToken ct = default)
     {
         string key = $"merit:settings:{session.RootTenantId}";
-        if (cache.TryGetValue(key, out JurisdictionSettings? cached) && cached is not null)
+        if (!cache.TryGetValue(key, out IReadOnlyList<SettingRow>? rows) || rows is null)
         {
-            return cached;
+            rows = await data.GetSettingsAsync(null, true, ct).ConfigureAwait(false);
+            cache.Set(key, rows, TimeSpan.FromMinutes(2));
         }
-
-        var rows = await data.GetSettingsAsync(null, false, ct).ConfigureAwait(false);
-        var values = rows.GroupBy(r => r.SettingKey, StringComparer.Ordinal)
+        var values = rows.Where(r => r.EffectiveFrom<=date && (r.EffectiveTo is null || r.EffectiveTo>=date)).GroupBy(r => r.SettingKey, StringComparer.Ordinal)
             .ToDictionary(g => g.Key, g => g.OrderByDescending(r => r.EffectiveFrom).First().SettingValue, StringComparer.Ordinal);
         var settings = new JurisdictionSettings(values);
-        cache.Set(key, settings, TimeSpan.FromMinutes(2));
         return settings;
     }
 

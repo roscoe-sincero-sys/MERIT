@@ -122,4 +122,92 @@ public sealed partial class PatientCareTests
         }
         finally { await CleanTesting(c, person); }
     }
+
+    [SqlFact]
+    public async Task Scenario243ManualEntryAndLocalHealthDepartmentWorkflows()
+    {
+        await using var c = new SqlConnection(TestEnvironment.AdminConnectionString()); await c.OpenAsync();
+        var person = await TestingPatient(c, "2023-01-01");
+        var caregiver = await TestingPatient(c, "1992-01-01");
+        var location = Guid.NewGuid();
+        var relationship = Guid.NewGuid();
+        string accession = "S243-MAN-" + Guid.NewGuid().ToString("N");
+        Guid? manualResult = null;
+        try
+        {
+            // Place the child in Baltimore County (FIPS 005) and refresh LHD personAccess.
+            await Sql(c, """
+                INSERT dbo.location (locationId, rootTenantId, owningTenantId, addressLine1, city, state, zip5, countyFips, addressKey)
+                SELECT @loc, rootTenantId, owningTenantId, N'100 County Way', N'Towson', 'MD', '21204', '005', CONVERT(NVARCHAR(36), @loc)
+                FROM dbo.person WHERE personId = @person;
+                INSERT dbo.personLocation (personLocationId, rootTenantId, owningTenantId, personId, locationId, role, isPrimary, startDate, source)
+                SELECT NEWID(), rootTenantId, owningTenantId, @person, @loc, 'residence', 1, '2023-01-01', 'selfReport'
+                FROM dbo.person WHERE personId = @person;
+                INSERT dbo.personContactMethod (personContactMethodId, rootTenantId, owningTenantId, personId, contactType, contactValue)
+                SELECT NEWID(), rootTenantId, owningTenantId, @caregiver, 'phone', N'+14105550123'
+                FROM dbo.person WHERE personId = @caregiver;
+                INSERT dbo.personRelationship (personRelationshipId, rootTenantId, owningTenantId, personId, relatedPersonId, role, isPrimaryContact, source, verifiedDate)
+                SELECT @rel, rootTenantId, owningTenantId, @person, @caregiver, 'legalGuardian', 1, 'selfReport', '2025-03-01'
+                FROM dbo.person WHERE personId = @person;
+                EXEC dbo.uspRefreshPersonAccess @personId = @person;
+                """, ("@person", person), ("@caregiver", caregiver), ("@loc", location), ("@rel", relationship));
+
+            // Child receives chart access. Caregiver receives contact-only projection, never chart access.
+            Assert.Equal(1, await Sql(c, "SELECT COUNT(*) FROM dbo.personAccess WHERE personId=@person AND tenantId=@county",
+                ("@person", person), ("@county", fixture.Ids.BaltimoreCountyTenantId)));
+            Assert.Equal(0, await Sql(c, "SELECT COUNT(*) FROM dbo.personAccess WHERE personId=@caregiver AND tenantId=@county",
+                ("@caregiver", caregiver), ("@county", fixture.Ids.BaltimoreCountyTenantId)));
+
+            // Manual entry uses root agency metadata to create the Maryland testing-review task.
+            var supervisor = await fixture.SignedInAsync("supervisor");
+            await supervisor.Http.GetStringAsync($"/people/{person}/results/new");
+            var specimen = (Guid)(await Sql(c, "SELECT analyteSpecimenId FROM dbo.labResult WHERE labResultId=@id", ("@id", fixture.Ids.MiaLabResultId)))!;
+            var analyte = await Sql(c, "SELECT analyteId FROM config.analyteSpecimen WHERE analyteSpecimenId=@id", ("@id", specimen));
+            var lab = await Sql(c, "SELECT labOrganizationId FROM dbo.labResult WHERE labResultId=@id", ("@id", fixture.Ids.MiaLabResultId));
+            using var saved = await supervisor.NoRedirect.PostAsync($"/people/{person}/results", Form(
+                ("AnalyteId", analyte), ("AnalyteSpecimenId", specimen), ("ValueText", "6"), ("Unit", "ug/dL"),
+                ("SampleType", "venous"), ("CollectedDate", "2026-03-01"), ("ReportedDate", "2026-03-03"),
+                ("DepartmentReceivedAt", "2026-03-03T10:00"), ("FinalResultDate", "2026-03-03"), ("LabOrganizationId", lab),
+                ("AccessionNumber", accession), ("ResultStatus", "final")));
+            Assert.Equal(HttpStatusCode.OK, saved.StatusCode);
+            manualResult = (Guid?)(await Sql(c, "SELECT labResultId FROM dbo.labResult WHERE personId=@id AND accessionNumber=@acc", ("@id", person), ("@acc", accession)));
+            Assert.NotNull(manualResult);
+            Assert.Equal(1, await Sql(c, "SELECT COUNT(*) FROM dbo.workTask WHERE personId=@person AND queueCode='testingReview'", ("@person", person)));
+
+            Assert.Equal(fixture.Ids.BaltimoreCountyTenantId,
+                await Sql(c, "SELECT owningTenantId FROM dbo.exposureCase WHERE personId=@person", ("@person", person)));
+
+            var countyUser = await fixture.SignedInAsync("cmbaltco");
+            var newPersonPage = await countyUser.Http.GetStringAsync("/people/new");
+            var caregiverPage = await countyUser.Http.GetStringAsync($"/people/{caregiver}");
+            Assert.Contains("Caregiver contact details", caregiverPage,StringComparison.Ordinal);
+            Assert.DoesNotContain("Review testing plans", caregiverPage,StringComparison.Ordinal);
+            string name = "CountyCreated" + Guid.NewGuid().ToString("N")[..12];
+            using var created = await countyUser.NoRedirect.PostAsync("/people/new", MeritClient.Form(newPersonPage,
+                ("FirstName", "County"), ("LastName", name), ("Dob", "2024-05-01"), ("Sex", "female")));
+            Assert.Equal(HttpStatusCode.Redirect, created.StatusCode);
+            var createdId=(Guid)(await Sql(c,"SELECT personId FROM dbo.person WHERE lastName=@n",("@n",name)))!;
+            Assert.Equal(fixture.Ids.BaltimoreCountyTenantId,await Sql(c,"SELECT owningTenantId FROM dbo.person WHERE personId=@id",("@id",createdId)));
+            await Sql(c,"DELETE dbo.personMatchKey WHERE personId=@id; DELETE dbo.personAlias WHERE personId=@id",("@id",createdId));
+            await CleanTesting(c,createdId);
+
+        }
+        finally
+        {
+            await Sql(c, """
+                DELETE dbo.notificationObligation WHERE labResultId IN (SELECT labResultId FROM dbo.labResult WHERE personId=@person);
+                DELETE dbo.workTask WHERE personId=@person;
+                DELETE dbo.caseResultLink WHERE personId=@person;
+                DELETE dbo.caseActivity WHERE exposureCaseId IN (SELECT exposureCaseId FROM dbo.exposureCase WHERE personId=@person);
+                DELETE dbo.exposureCase WHERE personId=@person;
+                DELETE dbo.personRelationship WHERE personRelationshipId=@rel;
+                DELETE dbo.personContactMethod WHERE personId=@caregiver;
+                DELETE dbo.personLocation WHERE personId=@person;
+                DELETE dbo.location WHERE locationId=@loc;
+                """, ("@person", person), ("@caregiver", caregiver), ("@rel", relationship), ("@loc", location));
+            await CleanReview(c, manualResult is Guid r ? [r] : [], []);
+            await CleanTesting(c, person);
+            await CleanTesting(c, caregiver);
+        }
+    }
 }

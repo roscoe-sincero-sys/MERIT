@@ -81,6 +81,14 @@ public sealed class IntakeData(Db db) : IIntakeData
     public Task<IReadOnlyList<IntakeProfileListRow>> ListProfilesAsync(CancellationToken ct = default)
         => db.QueryAsync<IntakeProfileListRow>("dbo.uspListIntakeProfiles", null, ct);
 
+    public Task PersistIdentifiersAsync(Guid stagingRowId, Guid personId, CancellationToken ct = default)
+        => db.ExecuteAsync("dbo.uspPersistIntakeIdentifiers",new {stagingRowId,personId},ct);
+    public Task<IReadOnlyList<IntakeProfileRow>> ListFormatsAsync(CancellationToken ct = default)
+        => db.QueryAsync<IntakeProfileRow>("dbo.uspListIntakeFormats",null,ct);
+    public Task<IReadOnlyList<Merit.Application.Intake.IntakeSenderRow>> ListIntakeSendersAsync(CancellationToken ct = default)
+        => db.QueryAsync<Merit.Application.Intake.IntakeSenderRow>("dbo.uspListIntakeSenders",null,ct);
+    public Task SaveFormatAsync(Merit.Application.Intake.IntakeFormatSave row,CancellationToken ct = default)
+        => db.ExecuteAsync("dbo.uspSaveIntakeProfile",row,ct);
     public Task<IntakeProfileRow?> GetProfileAsync(Guid intakeProfileId, CancellationToken ct = default)
         => db.QuerySingleAsync<IntakeProfileRow>("dbo.uspGetIntakeProfile", new { intakeProfileId }, ct);
 

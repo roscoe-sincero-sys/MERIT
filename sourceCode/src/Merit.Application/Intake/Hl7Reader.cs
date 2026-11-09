@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Merit.Domain.Text;
 using Merit.Domain.Identifiers;
 
 namespace Merit.Application.Intake;
@@ -69,6 +70,7 @@ public static class Hl7Reader
             && !string.Equals(sendingFacility, senderClia, StringComparison.OrdinalIgnoreCase)) Fail("MSH-4 laboratory does not match the selected sender profile.");
 
         Segment? patient = null, orc = null;
+        List<Segment> guardians=[];
         Order? order = null;
         var orders = new List<Order>();
         int patients = 0;
@@ -81,14 +83,18 @@ public static class Hl7Reader
                 case "PID":
                     if (patient is not null && (order is null || order.Patient != patient)) Fail("PID has no associated OBR/OBX group.");
                     patient = segment;
+                    guardians=[];
                     order = null;
                     orc = null;
                     patients++;
                     break;
                 case "ORC": orc = segment; break;
+                case "NK1":
+                    if(patient is null) Fail("NK1 requires a preceding PID.");
+                    guardians.Add(segment); break;
                 case "OBR":
                     if (patient is null) Fail("OBR requires a preceding PID.");
-                    order = new Order(patient!, segment, orc);
+                    order = new Order(patient!, segment, orc,guardians);
                     orders.Add(order);
                     break;
                 case "OBX":
@@ -164,10 +170,21 @@ public static class Hl7Reader
                     var sampleType = specimen?.ToUpperInvariant() switch { "BLDV" or "VEN" => "venous", "BLDC" or "CAP" => "capillary", _ => "unknown" };
                     var performingClia = observation.Component(23, 10);
                     var county = Address(8);
+                    static string Phone(Segment s,int field) => !string.IsNullOrWhiteSpace(s.Component(field)) ? s.Component(field) : s.Component(field,6)+s.Component(field,7);
+                    var contacts=group.Guardians.Select(g=>new Dictionary<string,string?>
+                    {
+                        ["guardianName"]=g.Component(2)+", "+g.Component(2,2),["guardianPhone"]=Phone(g,5),["guardianEmail"]=g.Component(5,4),
+                        ["guardianAddressLine1"]=g.Component(4),["guardianCity"]=g.Component(4,3),["guardianState"]=g.Component(4,4),["guardianZip5"]=g.Component(4,5),
+                    }).Where(g=>!string.IsNullOrWhiteSpace(g["guardianName"]?.Replace(",","",StringComparison.Ordinal))).ToArray();
                     var fields = new Dictionary<string, string?>(StringComparer.Ordinal)
                     {
                         ["lastName"] = syntax.Value(RawName(0).Split(syntax.Subcomponent)[0]), ["firstName"] = Name(1), ["middleName"] = Name(2),
                         ["dob"] = Date(pid.Component(7)), ["sex"] = pid.Text(8) switch { "M" => "male", "F" => "female", _ => "unknown" },
+                        ["phone"]=Phone(pid,13),["race"]=pid.Component(10),["ethnicity"]=pid.Component(22),
+                        ["guardianContactsJson"]=JsonSerializer.Serialize(contacts),
+                        ["guardianName"]=contacts.FirstOrDefault()?.GetValueOrDefault("guardianName"),["guardianPhone"]=contacts.FirstOrDefault()?.GetValueOrDefault("guardianPhone"),
+                        ["providerName"]=string.Join(' ',new[] {group.Request.Component(16,3),group.Request.Component(16,2)}.Where(v=>!string.IsNullOrWhiteSpace(v))),
+                        ["labName"]=observation.Component(23),
                         ["addressLine1"] = syntax.Value(RawAddress(0).Split(syntax.Subcomponent)[0]), ["addressUnit"] = Address(1),
                         ["city"] = Address(2), ["state"] = Address(3), ["zip5"] = Address(4).Split('-')[0],
                         ["countyFips"] = county.Length == 5 && county.All(char.IsAsciiDigit) ? county[2..] : county,
@@ -189,6 +206,8 @@ public static class Hl7Reader
                         ["hl7ObservationKey"] = observationKey,
                         ["hl7OrderIndex"] = orderIndex.ToString(CultureInfo.InvariantCulture), ["hl7ObservationIndex"] = observationIndex.ToString(CultureInfo.InvariantCulture),
                         ["hl7PatientIdentifiersJson"] = JsonSerializer.Serialize(identifiers),
+                        ["hl7PatientLastNameKey"]=MatchKeys.NameKey(syntax.Value(RawName(0).Split(syntax.Subcomponent)[0])),
+                        ["hl7PatientFirstNameKey"]=MatchKeys.NameKey(Name(1)),
                         ["hl7PatientNames"] = pid.Raw(5), ["hl7PatientAddresses"] = pid.Raw(11), ["hl7SpecimenId"] = group.Specimen?.Raw(2),
                         ["hl7SpecimenType"] = specimen,
                     };
@@ -206,11 +225,12 @@ public static class Hl7Reader
     private static string Date(string value) => value.Length >= 8 && DateOnly.TryParseExact(value[..8], "yyyyMMdd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date)
         ? date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) : value;
 
-    private sealed class Order(Segment patient, Segment request, Segment? control)
+    private sealed class Order(Segment patient, Segment request, Segment? control,IReadOnlyList<Segment> guardians)
     {
         public Segment Patient { get; } = patient;
         public Segment Request { get; } = request;
         public Segment? Control { get; } = control;
+        public IReadOnlyList<Segment> Guardians {get;}=guardians;
         public Segment? Specimen { get; set; }
         public List<Segment> Observations { get; } = [];
     }

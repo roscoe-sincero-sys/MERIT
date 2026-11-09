@@ -261,6 +261,7 @@ TABLES = [
             c("tenantId", UUID, "A tenant the scope covers.", null=False),
             c("accessLevel", "VARCHAR (10)", "read, write or full (write plus soft delete) for this tenant's records.",
               null=False, default="'read'", check="accessLevel IN ('read', 'write', 'full')"),
+            c("canReadRelatedContacts", "BIT", "Contact projection permitted by person.edit at this tenant in the clipped active profile; never a global permission union.", null=False, default="0"),
         ],
         "fks": [("sessionScopeId", "auth.sessionScope", "sessionScopeId"), ("tenantId", "auth.tenant", "tenantId")],
         "indexes": [{"name": "UX_auth_sessionScopeTenant_sessionScopeId_tenantId", "cols": "sessionScopeId, tenantId",
@@ -486,7 +487,7 @@ TABLES = [
     },
     # ------------------------------------------------------------------------------------------------ people
     {
-        "schema": "dbo", "name": "person", "rls": "person", "personCol": "personId",
+        "schema": "dbo", "name": "person", "rls": "contact", "personCol": "personId",
         "desc": "One person registry for children and adults. Identity only: no address, guardian or employer fields. "
                 "Owned by the root tenant and seen by jurisdiction through dbo.personAccess.",
         "cols": [
@@ -587,7 +588,7 @@ TABLES = [
         "indexes": [{"name": "UX_dbo_personRace_personId_raceCode", "cols": "personId, raceCode", "unique": True}],
     },
     {
-        "schema": "dbo", "name": "personContactMethod", "rls": "person", "personCol": "personId",
+        "schema": "dbo", "name": "personContactMethod", "rls": "contact", "personCol": "personId",
         "desc": "Phone numbers and email addresses for a person.",
         "cols": [
             c("personContactMethodId", UUID, "Surrogate key.", null=False),
@@ -789,7 +790,7 @@ TABLES = [
                                        "(CASE WHEN ownerOrganizationId IS NULL THEN 0 ELSE 1 END) = 1")],
     },
     {
-        "schema": "dbo", "name": "personLocation", "rls": "person", "personCol": "personId",
+        "schema": "dbo", "name": "personLocation", "rls": "contact", "personCol": "personId",
         "desc": "Where a person lives or spends time, by role and date range. One primary residence at a time is enforced by "
                 "dbo.uspSavePersonLocation under row locks. Workplaces live on dbo.employment instead.",
         "cols": [

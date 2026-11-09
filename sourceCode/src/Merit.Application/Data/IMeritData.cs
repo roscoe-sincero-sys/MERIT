@@ -309,6 +309,10 @@ public interface IWorkData
 
 public interface IIntakeData
 {
+    Task<IReadOnlyList<IntakeProfileRow>> ListFormatsAsync(CancellationToken ct = default);
+    Task<IReadOnlyList<Merit.Application.Intake.IntakeSenderRow>> ListIntakeSendersAsync(CancellationToken ct = default);
+    Task SaveFormatAsync(Merit.Application.Intake.IntakeFormatSave row,CancellationToken ct = default);
+    Task PersistIdentifiersAsync(Guid stagingRowId, Guid personId, CancellationToken ct = default);
     Task<int> CorrectHeldGroupAsync(string reason, string? reportedValue, Guid? sender, Guid? batch, string field,
         string? value, IReadOnlyList<Guid>? selectedIds, CancellationToken ct = default);
     Task<IReadOnlyList<IntakeProfileListRow>> ListProfilesAsync(CancellationToken ct = default);
