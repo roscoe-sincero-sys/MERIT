@@ -11,8 +11,10 @@
 @Html.AntiForgeryToken()<input type="hidden" asp-for="Request.PersonId" /><input type="hidden" asp-for="Request.CaregiverId" />
 <label class="usa-label" asp-for="Request.ContactType">Contact to correct</label><select class="usa-select" asp-for="Request.ContactType"><option value="phone">Phone</option><option value="email">Email</option><option value="address">Mailing residence address</option></select>
 <label class="usa-label" asp-for="Request.ProposedValue">Proposed phone, email or street address</label><input class="usa-input" asp-for="Request.ProposedValue" required maxlength="200" />
-<details><summary>City, state and ZIP (required for an address)</summary>
+<details open="@(Model.Request.ContactType == "address")"><summary>Address details: city, state, ZIP and apartment / unit</summary>
 <label class="usa-label" asp-for="Request.City">City</label><input class="usa-input" asp-for="Request.City" maxlength="80" />
+<label class="usa-label" asp-for="Request.UnitAction">Apartment / unit instruction</label><select class="usa-select" asp-for="Request.UnitAction" aria-describedby="unit-help"><option value="unspecified">Not part of this correction</option><option value="set">Set or replace apartment / unit</option><option value="remove">No apartment / unit (remove any current unit)</option></select>
+<label class="usa-label" asp-for="Request.Unit">Proposed apartment / unit</label><input class="usa-input" asp-for="Request.Unit" maxlength="30" aria-describedby="unit-help" /><p id="unit-help">Enter a unit only for set/replace. To remove an existing unit, choose no apartment/unit and leave the field blank. Not part of this correction makes no claim about the current unit.</p>
 <label class="usa-label" asp-for="Request.State">Two-letter state</label><input class="usa-input" asp-for="Request.State" maxlength="2" />
 <label class="usa-label" asp-for="Request.Zip5">Five-digit ZIP</label><input class="usa-input" asp-for="Request.Zip5" maxlength="5" inputmode="numeric" /></details>
 <label class="usa-label" asp-for="Request.SourceNote">Source evidence and which existing contact needs correction</label><textarea class="usa-textarea" asp-for="Request.SourceNote" required maxlength="1000"></textarea>
@@ -25,6 +27,7 @@
 <article class="merit-section" id="request-@r.ContactCorrectionId"><h3>@r.CaregiverName — @Options.Humanize(r.RequestStatus)</h3>
 <p>Patient: @r.PatientName · Responsible team: <strong>@r.ResponsibleAgency</strong></p>
 <p>Proposed @r.ContactType: <strong>@r.ProposedValue @r.City @r.State @r.Zip5</strong></p><p class="care-note">Source: @r.SourceNote</p>
+@if(r.ContactType == "address") { <p>Apartment / unit: <strong>@(r.UnitAction == "set" ? r.Unit : r.UnitAction == "remove" ? "None — remove any current unit" : "Not specified by this request")</strong></p> }
 @if(r.ReviewNote is not null) { <p class="care-note">Review: @r.ReviewNote</p> }
 @if(r.CanReview && r.RequestStatus == "pending") {
 <p><a href="/people/@r.CaregiverId" target="_blank" rel="noopener">Open caregiver and apply the verified correction (new tab)</a>. Remove or end outdated contact details where appropriate, then return here. Applied status requires matching current contact/address evidence.</p>

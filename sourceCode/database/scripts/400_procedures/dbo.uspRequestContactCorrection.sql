@@ -56,6 +56,9 @@ CREATE OR ALTER PROCEDURE dbo.uspRequestContactCorrection
       , @city NVARCHAR(80) = NULL
       , @state VARCHAR(2) = NULL
       , @zip5 VARCHAR(5) = NULL
+      , @unitAction VARCHAR(12) = 'unspecified'
+      , @unit NVARCHAR(30) = NULL
+      , @proposedAddressKey NVARCHAR(300) = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -120,12 +123,18 @@ BEGIN
          ;THROW 51403,N'An active caregiver relationship and clinical contact access to this patient are required.',1;
         END;
         IF @contactType NOT IN('phone','email','address') OR NULLIF(TRIM(@proposedValue),N'') IS NULL OR NULLIF(TRIM(@sourceNote),N'') IS NULL
+         OR @unitAction IS NULL OR @unitAction NOT IN('unspecified','set','remove')
+         OR (@contactType<>'address' AND (@unitAction<>'unspecified' OR @unit IS NOT NULL OR @proposedAddressKey IS NOT NULL))
+         OR (@unitAction='set' AND NULLIF(TRIM(@unit),N'') IS NULL)
+         OR (@unitAction<>'set' AND @unit IS NOT NULL)
+         OR (@unitAction='unspecified' AND @proposedAddressKey IS NOT NULL)
+         OR (@unitAction IN('set','remove') AND NULLIF(@proposedAddressKey,N'') IS NULL)
          OR (@contactType='address' AND (NULLIF(TRIM(@city),N'') IS NULL OR @state IS NULL OR @zip5 IS NULL OR LEN(@state)<>2 OR LEN(@zip5)<>5 OR @zip5 LIKE '%[^0-9]%'))
         BEGIN
          ;THROW 51422,N'Provide the proposed contact details and their source; addresses require city, state and ZIP.',1;
         END;
-        INSERT dbo.contactCorrection(contactCorrectionId,rootTenantId,owningTenantId,personId,caregiverId,caregiverName,responsibleTenantId,contactType,proposedValue,sourceNote,city,state,zip5,beforeJson)
-        VALUES(@contactCorrectionId,@root,@owner,@personId,@caregiverId,@name,@responsible,@contactType,@proposedValue,@sourceNote,@city,@state,@zip5,(SELECT (SELECT contactType,contactValue,isPreferred FROM dbo.personContactMethod WHERE personId=@caregiverId AND isDeleted=0 FOR JSON PATH) AS methods,
+        INSERT dbo.contactCorrection(contactCorrectionId,rootTenantId,owningTenantId,personId,caregiverId,caregiverName,responsibleTenantId,contactType,proposedValue,sourceNote,city,state,zip5,unitAction,unit,proposedAddressKey,beforeJson)
+        VALUES(@contactCorrectionId,@root,@owner,@personId,@caregiverId,@name,@responsible,@contactType,@proposedValue,@sourceNote,@city,@state,@zip5,@unitAction,@unit,@proposedAddressKey,(SELECT (SELECT contactType,contactValue,isPreferred FROM dbo.personContactMethod WHERE personId=@caregiverId AND isDeleted=0 FOR JSON PATH) AS methods,
          (SELECT l.addressLine1,l.unit,l.city,l.state,l.zip5,pl.isPrimary,pl.startDate,pl.endDate FROM dbo.personLocation pl
          JOIN dbo.location l ON l.locationId=pl.locationId AND l.isDeleted=0 WHERE pl.personId=@caregiverId AND pl.isDeleted=0 FOR JSON PATH) AS addresses FOR JSON PATH,WITHOUT_ARRAY_WRAPPER));
         INSERT logs.auditEvent(appUserId,rootTenantId,eventAction,entityType,entityId)
