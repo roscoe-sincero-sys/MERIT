@@ -1,0 +1,10 @@
+I want to create a new project with milestones with MERIT.  Give the project an appropriate and description.  If appropriate, Use Kanban template.  Find an alternative if it is not.
+
+Issues #202, #203, #204 belong to milestone A.  Give A an appropriate title/name and description.
+
+Issues #205, #206, #207, #213, #218, belong to milestone B.  Give B an appropriate title/name and description.
+
+
+
+
+
