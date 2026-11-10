@@ -99,6 +99,11 @@ public sealed class Scenario243ContinuousTests(MeritFixture fixture, ITestOutput
             Assert.Contains("No laboratory import formats",await clerk.Client.Http.GetStringAsync("/intake"),StringComparison.Ordinal);
             var hl7=await Profile(admin.Client,"hl7"); var csv=await Profile(admin.Client,"csv");
             var rule2020=await Configure(admin.Client,2020,"5",10);
+            var previewHigh2020=await Person(clerk.Client,"PreviewHigh2020"+suffix,"2018-01-01");
+            var previewLow2020=await Person(clerk.Client,"PreviewLow2020"+suffix,"2018-01-02");
+            await Manual(clerk.Client,previewHigh2020,2020,"6",suffix+"-preview-high-old");
+            await Manual(clerk.Client,previewLow2020,2020,"4",suffix+"-preview-low-old");
+            var program2020=await ProgramRule(admin.Client,2020,"5",7,previewHigh2020,previewLow2020);
             var imported2020=await Upload(clerk.Client,clerk.Id,hl7,Hl7("Old"+suffix,"6"),"old.hl7","2020-08-03T10:00");
             Assert.Equal(1,(int)(await Sql("SELECT COUNT(*) FROM dbo.personIdentifier WHERE identifierValue=@value",("@value","Old"+suffix)))!);
             Assert.Equal(1,(int)(await Sql("SELECT COUNT(*) FROM dbo.personRelationship rel JOIN dbo.labResult r ON r.personId=rel.personId JOIN dbo.personContactMethod m ON m.personId=rel.relatedPersonId WHERE r.labResultId=@id AND m.contactValue='4105550199' AND rel.verifiedDate IS NULL",("@id",imported2020.Result)))!);
@@ -109,6 +114,12 @@ public sealed class Scenario243ContinuousTests(MeritFixture fixture, ITestOutput
             var importedCase=(Guid)(await Sql("SELECT exposureCaseId FROM dbo.exposureCase WHERE qualifyingLabResultId=@result",("@result",imported2020.Result)))!;
             Assert.Equal(lhd,await Sql("SELECT owningTenantId FROM dbo.exposureCase WHERE exposureCaseId=@id",("@id",importedCase)));
             using(var localCase=await localManager.Client.Http.GetAsync($"/cases/{importedCase}")) Assert.Equal(HttpStatusCode.OK,localCase.StatusCode);
+            var programTask2020=(Guid)(await Sql("SELECT workTaskId FROM dbo.workTask WHERE workflowDefinitionId=@rule AND labResultId=@result",("@rule",program2020),("@result",imported2020.Result)))!;
+            Assert.Equal(new DateTime(2020,8,10),await Sql("SELECT dueDate FROM dbo.workTask WHERE workTaskId=@id",("@id",programTask2020)));
+            Assert.Equal(lhd,await Sql("SELECT owningTenantId FROM dbo.workTask WHERE workTaskId=@id",("@id",programTask2020)));
+            using(var localTask=await localManager.Client.Http.GetAsync($"/work/tasks/{programTask2020}")) Assert.Equal(HttpStatusCode.OK,localTask.StatusCode);
+            string programSnapshot2020=(string)(await Sql("SELECT workflowSnapshotJson FROM dbo.workTask WHERE workTaskId=@id",("@id",programTask2020)))!;
+            Record("PASS: approved synthetic 2020 program version generated county-owned work due 2020-08-10 from the imported result; the new LHD user can open it.");
             Record("PASS: county-resident imported case routes to the LHD and is accessible to its case manager.");
             var oldPatient=await Person(clerk.Client,"Manual2020"+suffix,"2018-01-01");
             var manual2020=await Manual(clerk.Client,oldPatient,2020,"6",suffix+"-manual-old"); await Check(manual2020,rule2020,"2020-08-17",1);
@@ -119,13 +130,48 @@ public sealed class Scenario243ContinuousTests(MeritFixture fixture, ITestOutput
 
             await SetDate(new DateOnly(2025,3,3));
             var rule2025=await Configure(admin.Client,2025,"3.5",10);
+            var previewHigh2025=await Person(clerk.Client,"PreviewHigh2025"+suffix,"2023-01-01");
+            var previewLow2025=await Person(clerk.Client,"PreviewLow2025"+suffix,"2023-01-02");
+            await Manual(clerk.Client,previewHigh2025,2025,"4",suffix+"-preview-high-new");
+            await Manual(clerk.Client,previewLow2025,2025,"3",suffix+"-preview-low-new");
+            var program2025=await ProgramRule(admin.Client,2025,"3.5",5,previewHigh2025,previewLow2025);
             var imported2025=await Upload(clerk.Client,clerk.Id,csv,$"lastName,firstName,dob,sex,loinc,value,unit,collectedDate,reportedDate,accessionNumber,sampleType\r\nNew{suffix},Ada{suffix},2023-01-01,female,77307-7,4,ug/dL,2025-03-01,2025-03-03,CSV-{suffix},venous\r\n","new.csv","2025-03-03T10:00");
             await Check(imported2025.Result!.Value,rule2025,"2025-03-17",1);
             var newPatient=await Person(clerk.Client,"Manual2025"+suffix,"2023-01-02");
             var manual2025=await Manual(clerk.Client,newPatient,2025,"4",suffix+"-manual-new"); await Check(manual2025,rule2025,"2025-03-17",1);
+            Assert.Equal(new DateTime(2025,3,8),await Sql("SELECT dueDate FROM dbo.workTask WHERE workflowDefinitionId=@rule AND labResultId=@result",("@rule",program2025),("@result",imported2025.Result)));
+            Assert.Equal(new DateTime(2025,3,8),await Sql("SELECT dueDate FROM dbo.workTask WHERE workflowDefinitionId=@rule AND labResultId=@result",("@rule",program2025),("@result",manual2025)));
+            Assert.Equal(programSnapshot2020,await Sql("SELECT workflowSnapshotJson FROM dbo.workTask WHERE workTaskId=@id",("@id",programTask2020)));
+            Assert.Equal(new DateTime(2020,8,10),await Sql("SELECT dueDate FROM dbo.workTask WHERE workTaskId=@id",("@id",programTask2020)));
+            Record("PASS: synthetic 2025 program version generated CSV/manual work due 2025-03-08; the 2020 program snapshot and target remained unchanged.");
             Assert.Equal(priorSnapshot,await Sql("SELECT policySnapshotJson FROM dbo.notificationObligation WHERE notificationRuleId=@rule AND labResultId=@result",("@rule",rule2020),("@result",manual2020)));
             Assert.Equal(new DateTime(2020,8,17),await Sql("SELECT dueDate FROM dbo.notificationObligation WHERE notificationRuleId=@rule AND labResultId=@result",("@rule",rule2020),("@result",manual2020)));
             Record("PASS: same Maryland tenant changed to 2025 rules; CSV and manual 4 ug/dL now create cases/tasks due 2025-03-17. Original 2020 obligation snapshot and target remain unchanged.");
+
+            // PR #239 templates: the administrator activates the shipped Maryland drafts through the real form.
+            var templates=new Dictionary<string,Guid>();
+            foreach(var key in new[] {"mdChild","mdOwnerChild","mdLabElevated","mdLabBelow"}) templates[key]=await Template(admin.Client,key);
+            var tplCsv=await Upload(clerk.Client,clerk.Id,csv,$"lastName,firstName,dob,sex,loinc,value,unit,collectedDate,reportedDate,accessionNumber,sampleType\r\nTpl{suffix},Ada{suffix},2023-01-03,female,77307-7,4,ug/dL,2025-03-01,2025-03-03,TPL-{suffix},venous\r\n","tpl.csv","2025-03-03T10:00");
+            var tplHigh=await Person(clerk.Client,"TplHigh"+suffix,"2023-01-04");
+            var tplManualHigh=await Manual(clerk.Client,tplHigh,2025,"4",suffix+"-tpl-high");
+            var tplLow=await Person(clerk.Client,"TplLow"+suffix,"2023-01-05");
+            var tplManualLow=await Manual(clerk.Client,tplLow,2025,"3",suffix+"-tpl-low");
+            async Task<int> Obligations(Guid result,Guid rule)=>(int)(await Sql("SELECT COUNT(*) FROM dbo.notificationObligation n JOIN dbo.workTask w ON w.workTaskId=n.workTaskId WHERE n.labResultId=@id AND n.notificationRuleId=@rule AND n.evaluationState='needsReview' AND n.dueDate='2025-03-17' AND w.taskStatus='open'",("@id",result),("@rule",rule)))!;
+            async Task<string> Receipt(Guid result,string queue)=>(await Sql("SELECT STRING_AGG(CONCAT(taskStatus,'|',detail),' ;; ') FROM dbo.workTask WHERE labResultId=@id AND queueCode=@queue AND isDeleted=0",("@id",result),("@queue",queue)))?.ToString() ?? "";
+            foreach(var result in new[] {tplCsv.Result!.Value,tplManualHigh})
+            {
+                Assert.Equal(1,await Obligations(result,templates["mdChild"])); Assert.Equal(1,await Obligations(result,templates["mdOwnerChild"]));
+                Assert.Contains("open|",await Receipt(result,"labReportingReview"),StringComparison.Ordinal);
+            }
+            Assert.Equal(0,await Obligations(tplManualLow,templates["mdChild"])); Assert.Equal(0,await Obligations(tplManualLow,templates["mdOwnerChild"]));
+            Assert.Contains("open|",await Receipt(tplManualLow,"labReportingReview"),StringComparison.Ordinal);
+            Record("PASS: PR #239 drafts (child caregiver notice, residence-owner notice, elevated and below-reference lab reporting) were activated from the draft links. Qualifying 2025 CSV/manual results created review-gated caregiver and owner obligations due 2025-03-17; 3 ug/dL created none. All three results opened laboratory-reporting timeline review instead of assuming a final-result date or Maryland eligibility.");
+            Assert.DoesNotContain("dob",await Receipt(tplCsv.Result!.Value,"missingInformation"),StringComparison.Ordinal);
+            string manualMissing=await Receipt(tplManualHigh,"missingInformation");
+            // #262 (manual-entry report completeness) is tracked separately; record the observed state so this replay stays valid before and after that fix.
+            bool flagsKnownDemographics=manualMissing.Contains("open|",StringComparison.Ordinal) && manualMissing.Contains("lastName",StringComparison.Ordinal) && manualMissing.Contains("dob",StringComparison.Ordinal);
+            Record(flagsKnownDemographics ? "GAP #262: manual entry under the lab-reporting drafts opens 'Missing Information Received' listing firstName/lastName/dob already on the patient record; the CSV comparison result does not."
+                : "#262 CHECK: manual entry under the lab-reporting drafts no longer opens a missing-information task for name/DOB held on the patient record.");
 
             await manager.Client.Http.GetStringAsync($"/people/{oldPatient}/care/testing");
             using(var rejected=await manager.Client.NoRedirect.PostAsync($"/people/{oldPatient}/care/testing",Form(("workTaskId",Guid.NewGuid()),("planKind","early"),("labResultId",manual2020),("evidence","Historical policy replay, not current treatment"),("clinicianConfirmed","true"))))
@@ -218,6 +264,34 @@ public sealed class Scenario243ContinuousTests(MeritFixture fixture, ITestOutput
         await Saved(await actor.NoRedirect.PostAsync("/config/notification-rules",Form(("notificationRuleId",id),("ruleName",$"Scenario {year}"),("analyteSpecimenId",specimen),("population","child"),
             ("minimumValue",minimum),("recipientKind","caregiver"),("dueInDays",days),("dayBasis","business"),("timeZoneId","Eastern Standard Time"),("calendarName","Synthetic weekdays only"),("holidays",""),
             ("effectiveFrom",$"{year}-01-01"),("effectiveTo",$"{year}-12-31"),("approvalReference","Synthetic test scenario; no historical legal approval"),("approved","true")))); return id;
+    }
+    private async Task<Guid> Template(MeritClient actor,string key)
+    {
+        string page=await actor.Http.GetStringAsync("/config/notification-rules?template="+key);
+        var draft=Merit.Application.Services.MarylandPolicyDrafts.Get(key);
+        Assert.Equal(draft["ruleName"],System.Net.WebUtility.HtmlDecode(System.Text.RegularExpressions.Regex.Match(page,"id=\"ruleName\" name=\"ruleName\" value=\"([^\"]*)\"").Groups[1].Value));
+        var id=Guid.NewGuid();
+        var values=draft.Select(d=>(d.Key,(object?)d.Value)).ToList();
+        values.AddRange([("notificationRuleId",id),("analyteSpecimenId",specimen),("calendarName","Synthetic weekdays only"),("holidays",""),("approved","true")]);
+        await Saved(await actor.NoRedirect.PostAsync("/config/notification-rules",Form(values.ToArray())));
+        Assert.Equal(1,(int)(await Sql("SELECT COUNT(*) FROM config.notificationRule WHERE notificationRuleId=@id",("@id",id)))!);
+        return id;
+    }
+    private async Task<Guid> ProgramRule(MeritClient actor,int year,string minimum,int days,Guid sampleA,Guid sampleB)
+    {
+        var id=Guid.NewGuid(); await actor.Http.GetStringAsync("/config/workflows");
+        await Saved(await actor.NoRedirect.PostAsync("/config/workflows/draft",Form(("WorkflowDefinitionId",id),("Name","Scenario program "+root),("Version",year==2020?1:2),
+            ("Description","Synthetic program milestone; not Maryland program-owner policy approval"),("TriggerEvent","receivedResult"),("Population","child"),("CompletionKind","internal"),
+            ("AnalyteSpecimenId",specimen),("MinimumValue",minimum),("RoutingPolicy","servingJurisdiction"),("DueInDays",days),("DayBasis","calendar"),
+            ("TimeZoneId","Eastern Standard Time"),("EffectiveFrom",$"{year}-01-01"),("EffectiveTo",$"{year}-12-31"))));
+        using var preview=await actor.NoRedirect.PostAsync($"/config/workflows/{id}/preview",Form(("samplePersonId",sampleA),("secondSamplePersonId",sampleB)));
+        Assert.Equal(HttpStatusCode.OK,preview.StatusCode);
+        string html=await preview.Content.ReadAsStringAsync(); Assert.Contains("Publish this previewed version",html,StringComparison.Ordinal);
+        string stamp=System.Text.RegularExpressions.Regex.Match(html,"name=\"versionStamp\" value=\"([^\"]+)\"").Groups[1].Value;
+        Assert.NotEmpty(stamp);
+        await Saved(await actor.NoRedirect.PostAsync($"/config/workflows/{id}/publish",Form(("versionStamp",stamp),("samplePersonId",sampleA),("secondSamplePersonId",sampleB),
+            ("approvalReference","Synthetic scenario approval only; not legal or clinician approval"),("approved","true"))));
+        return id;
     }
     private async Task<Guid> Person(MeritClient actor,string name,string dob)
     {
