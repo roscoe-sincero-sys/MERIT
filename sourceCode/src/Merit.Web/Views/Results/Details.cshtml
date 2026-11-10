@@ -32,6 +32,10 @@
     </section>
     <section class="merit-section">
         <h2>As reported (never edited)</h2>
+        @if (r.SourceChannel == "manual")
+        {
+            <p>These are the fields transcribed during manual entry, not a complete copy of the original report. Automatic report-completeness checks do not apply. Review the original and record follow-up in the <a href="/people/@r.PersonId/care">patient's activity history</a>. Reporting-deadline review still applies.</p>
+        }
         <table class="usa-table usa-table--borderless usa-table--compact">
             <tbody>
                 @foreach (var kv in Model.Snapshot.OrderBy(kv => Merit.Application.Reference.DisplayNames.FieldOrder(kv.Key)))
