@@ -14,10 +14,14 @@ public sealed partial class PatientCareTests
 {
     private async Task CloneReviewResult(SqlConnection c, Guid id, string sample = "venous", string snapshot = "{}", decimal value = 1001, Guid? personOverride = null)
         => await Sql(c, """
+            -- These fixtures represent imported source reports. Do not inherit the demo result's manual channel.
+            INSERT dbo.intakeBatch(intakeBatchId,rootTenantId,owningTenantId,senderOrganizationId,sourceChannel,fileName,receivedUtc,batchStatus,receivedCount,loadedCount,submittedByUserId)
+            SELECT @id,b.rootTenantId,b.owningTenantId,b.senderOrganizationId,'upload',N'Synthetic receipt-review import','2026-10-01T16:00:00','loaded',1,1,b.submittedByUserId
+            FROM dbo.labResult r JOIN dbo.intakeBatch b ON b.intakeBatchId=r.intakeBatchId WHERE r.labResultId=@original;
             INSERT dbo.labResult (labResultId,rootTenantId,owningTenantId,personId,analyteSpecimenId,collectedDate,receivedUtc,resultStatus,
               valueReported,unitReported,valueCanonical,unitCanonical,labOrganizationId,reportedSnapshotJson,intakeBatchId,population,ageAtCollectionMonths,sampleType)
             SELECT @id,rootTenantId,owningTenantId,COALESCE(@person,personId),analyteSpecimenId,'2026-09-01','2026-10-01T16:00:00','final',
-              @value,unitReported,@value,unitCanonical,labOrganizationId,@snapshot,intakeBatchId,'child',48,@sample
+              @value,unitReported,@value,unitCanonical,labOrganizationId,@snapshot,@id,'child',48,@sample
             FROM dbo.labResult WHERE labResultId=@original;
             """, ("@id", id), ("@original", fixture.Ids.MiaLabResultId), ("@sample", sample), ("@snapshot", snapshot), ("@value", value), ("@person", personOverride));
 
@@ -54,6 +58,7 @@ public sealed partial class PatientCareTests
             DELETE dbo.stagingHoldReason WHERE stagingRowId=@staging; DELETE dbo.stagingRow WHERE stagingRowId=@staging;
             DELETE config.notificationRule WHERE notificationRuleId IN (SELECT CONVERT(UNIQUEIDENTIFIER,[value]) FROM OPENJSON(@rules));
             DELETE dbo.labResult WHERE labResultId IN (SELECT CONVERT(UNIQUEIDENTIFIER,[value]) FROM OPENJSON(@results));
+            DELETE dbo.intakeBatch WHERE intakeBatchId IN (SELECT CONVERT(UNIQUEIDENTIFIER,[value]) FROM OPENJSON(@results));
             DELETE dbo.personRelationship WHERE personId=@patient; DELETE dbo.personAccess WHERE personId=@patient; DELETE dbo.person WHERE personId=@patient;
             """, ("@results", JsonSerializer.Serialize(results)), ("@rules", JsonSerializer.Serialize(rules)), ("@staging", staging), ("@case", caseId), ("@patient", patientId));
 

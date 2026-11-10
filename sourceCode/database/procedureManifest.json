@@ -3532,6 +3532,32 @@
   ]
  },
  {
+  "name": "dbo.uspIsManualReceiptSource",
+  "kind": "read",
+  "grants": [],
+  "permission": null,
+  "params": [
+   {
+    "name": "intakeBatchId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "rootTenantId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "manual",
+    "type": "BIT",
+    "hasDefault": false,
+    "isOutput": true
+   }
+  ]
+ },
+ {
   "name": "dbo.uspLinkInvestigationCase",
   "kind": "write",
   "grants": [

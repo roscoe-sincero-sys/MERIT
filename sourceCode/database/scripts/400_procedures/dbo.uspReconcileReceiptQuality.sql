@@ -100,7 +100,8 @@ BEGIN
         END;
         DECLARE @root UNIQUEIDENTIFIER, @owner UNIQUEIDENTIFIER, @person UNIQUEIDENTIFIER, @received DATETIME2 (3),
          @parsed NVARCHAR (MAX), @patch NVARCHAR (MAX), @specimen UNIQUEIDENTIFIER, @value DECIMAL (18,6), @age INT,
-         @collected DATE, @final DATE, @state VARCHAR (2), @verified BIT = 0, @excluded BIT = 0, @population VARCHAR (10), @operator VARCHAR (1), @sameDayChecked BIT=0, @lateConfirmed BIT=0, @verifiedPolicy UNIQUEIDENTIFIER;
+         @collected DATE, @final DATE, @state VARCHAR (2), @verified BIT = 0, @excluded BIT = 0, @population VARCHAR (10), @operator VARCHAR (1), @sameDayChecked BIT=0, @lateConfirmed BIT=0, @verifiedPolicy UNIQUEIDENTIFIER,
+         @manual BIT = 0, @batch UNIQUEIDENTIFIER;
         IF @stagingRowId IS NOT NULL
         BEGIN
          SELECT @labResultId = COALESCE (@labResultId, s.labResultId), @root = s.rootTenantId, @owner = s.owningTenantId,
@@ -121,7 +122,7 @@ BEGIN
            @final = COALESCE (r.reportingFinalDateVerified,
                              CASE WHEN EXISTS (SELECT 1 FROM OPENJSON(r.reportedSnapshotJson) WHERE [key]='finalResultDateCanonical') THEN TRY_CONVERT(DATE,JSON_VALUE(r.reportedSnapshotJson,'$.finalResultDateCanonical')) ELSE TRY_CONVERT (DATE, NULLIF(TRIM(JSON_VALUE (r.reportedSnapshotJson, '$.finalResultDate')),N'')) END),
            @verified = CASE WHEN r.reportingEligibilityVerified=1 AND r.reportingVerifiedByUserId IS NOT NULL THEN 1 ELSE 0 END,
-           @state = l.state
+           @state = l.state, @batch=r.intakeBatchId
          FROM dbo.labResult AS r LEFT JOIN dbo.location AS l ON l.locationId = r.reportedLocationId
          WHERE r.labResultId = @labResultId AND r.isDeleted = 0 AND r.resultRowStatus = 'valid' AND r.resultStatus IN ('final','corrected');
         END;
@@ -129,6 +130,10 @@ BEGIN
         BEGIN
             ;THROW 51404, N'The receipt source was not found or is outside your access.', 1;
         END;
+        -- Authorization above runs as the caller. The internal owner lookup exposes no batch content
+        -- and cannot be executed directly by application roles, including clinical-only profiles.
+        IF @labResultId IS NOT NULL AND @stagingRowId IS NULL
+         EXEC dbo.uspIsManualReceiptSource @intakeBatchId=@batch,@rootTenantId=@root,@manual=@manual OUTPUT;
         IF @specimen IS NULL SELECT @specimen = analyteSpecimenId FROM config.loincCode
          WHERE loincCode = config.udfReceiptField (@parsed,@patch,'loinc') AND isDeleted = 0;
         SET @final = COALESCE (@final, TRY_CONVERT (DATE, config.udfReceiptField (@parsed,@patch,'finalResultDate')));
@@ -171,7 +176,10 @@ BEGIN
         BEGIN
             SET @verified=0; SET @excluded=0; SET @sameDayChecked=0; SET @lateConfirmed=0;
         END;
-        IF @excluded=1 SET @required=NULL;
+        -- Manual entry captures selected result fields, not an inventory of the original report.
+        -- Use the intake channel, never a caller-controlled JSON source marker. Keep timeline
+        -- review and all historical findings; chart demographics are not source evidence.
+        IF @excluded=1 OR @manual=1 SET @required=NULL;
         DECLARE @missing NVARCHAR (1000);
         SELECT @missing = LEFT (STRING_AGG (CONVERT (NVARCHAR (MAX), f.fieldName), N', '),1000) FROM
          (SELECT DISTINCT TRIM ([value]) AS fieldName,0 AS knownInvalid FROM STRING_SPLIT (@required, ',')
