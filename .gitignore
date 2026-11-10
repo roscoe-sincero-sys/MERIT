@@ -42,3 +42,6 @@ Thumbs.db
 
 # Local assessment notes
 EGM_ADOPTION_ASSESSMENT.md
+
+# Local process id files
+*.pid
