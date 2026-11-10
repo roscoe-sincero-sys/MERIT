@@ -167,11 +167,12 @@ public sealed class Scenario243ContinuousTests(MeritFixture fixture, ITestOutput
             Assert.Contains("open|",await Receipt(tplManualLow,"labReportingReview"),StringComparison.Ordinal);
             Record("PASS: PR #239 drafts (child caregiver notice, residence-owner notice, elevated and below-reference lab reporting) were activated from the draft links. Qualifying 2025 CSV/manual results created review-gated caregiver and owner obligations due 2025-03-17; 3 ug/dL created none. All three results opened laboratory-reporting timeline review instead of assuming a final-result date or Maryland eligibility.");
             Assert.DoesNotContain("dob",await Receipt(tplCsv.Result!.Value,"missingInformation"),StringComparison.Ordinal);
-            string manualMissing=await Receipt(tplManualHigh,"missingInformation");
-            // #262 (manual-entry report completeness) is tracked separately; record the observed state so this replay stays valid before and after that fix.
-            bool flagsKnownDemographics=manualMissing.Contains("open|",StringComparison.Ordinal) && manualMissing.Contains("lastName",StringComparison.Ordinal) && manualMissing.Contains("dob",StringComparison.Ordinal);
-            Record(flagsKnownDemographics ? "GAP #262: manual entry under the lab-reporting drafts opens 'Missing Information Received' listing firstName/lastName/dob already on the patient record; the CSV comparison result does not."
-                : "#262 CHECK: manual entry under the lab-reporting drafts no longer opens a missing-information task for name/DOB held on the patient record.");
+            foreach(var result in new[] {tplManualHigh,tplManualLow})
+            {
+                Assert.Empty(await Receipt(result,"missingInformation"));
+                Assert.DoesNotContain("Missing/unusable mapped report fields",await Receipt(result,"receiptFinding"),StringComparison.Ordinal);
+            }
+            Record("PASS #262: manual entry under both lab-reporting drafts does not invent missing-report fields from the limited transcription. CSV source completeness and manual reporting-timeline reviews remain active.");
 
             await manager.Client.Http.GetStringAsync($"/people/{oldPatient}/care/testing");
             using(var rejected=await manager.Client.NoRedirect.PostAsync($"/people/{oldPatient}/care/testing",Form(("workTaskId",Guid.NewGuid()),("planKind","early"),("labResultId",manual2020),("evidence","Historical policy replay, not current treatment"),("clinicianConfirmed","true"))))
