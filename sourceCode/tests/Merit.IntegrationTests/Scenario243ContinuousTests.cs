@@ -174,6 +174,43 @@ public sealed class Scenario243ContinuousTests(MeritFixture fixture, ITestOutput
             }
             Record("PASS #262: manual entry under both lab-reporting drafts does not invent missing-report fields from the limited transcription. CSV source completeness and manual reporting-timeline reviews remain active.");
 
+            // Post-#264 audit: automatic Maryland clinical-review prompts, ongoing follow-up plans, and the pregnancy/affected-property drafts.
+            async Task<Guid> PersonOf(Guid result)=>(Guid)(await Sql("SELECT personId FROM dbo.labResult WHERE labResultId=@id",("@id",result)))!;
+            var reviewRoster=await manager.Client.Http.GetStringAsync("/testing?planKind=review");
+            foreach(var result in new[] {imported2025.Result!.Value,manual2025,tplCsv.Result!.Value,tplManualHigh})
+            {
+                var person=await PersonOf(result);
+                Assert.Equal(1,(int)(await Sql("SELECT COUNT(*) FROM dbo.workTask WHERE personId=@p AND queueCode='testingReview' AND taskStatus='open' AND isDeleted=0",("@p",person)))!);
+                Assert.Contains($"/people/{person}/care/testing",reviewRoster,StringComparison.Ordinal);
+            }
+            Assert.Contains("Clinical review required",reviewRoster,StringComparison.Ordinal);
+            Record("PASS: every 2025 child result (CSV and manual) opened one Maryland clinical testing review, listed in the roster as 'Clinical review required' without an invented target.");
+            var csvPatient=await PersonOf(imported2025.Result!.Value);
+            var ongoing=Guid.NewGuid(); await manager.Client.Http.GetStringAsync($"/people/{csvPatient}/care/testing");
+            await Saved(await manager.Client.NoRedirect.PostAsync($"/people/{csvPatient}/care/testing",Form(("workTaskId",ongoing),("planKind","later"),("labResultId",imported2025.Result),("targetDate","2025-03-09"),("evidence","Synthetic clinician-reviewed decline; ongoing retesting schedule"),("clinicianConfirmed","true"))));
+            var ongoingRoster=await manager.Client.Http.GetStringAsync("/testing?dueFilter=next7&planKind=later");
+            Assert.Contains(ongoing.ToString(),ongoingRoster,StringComparison.Ordinal);
+            Assert.Contains("Ongoing follow-up after reviewed decline",ongoingRoster,StringComparison.Ordinal); Assert.Contains("Due within 7 days",ongoingRoster,StringComparison.Ordinal);
+            var csvOverview=await manager.Client.Http.GetStringAsync($"/people/{csvPatient}");
+            Assert.Contains("Ongoing follow-up after reviewed decline",csvOverview,StringComparison.Ordinal); Assert.Contains("Due within 7 days",csvOverview,StringComparison.Ordinal);
+            Record("PASS: an ongoing (later-phase) retesting plan for the CSV-imported patient appears in the seven-day roster and patient overview with its type and 'Due within 7 days' flag.");
+
+            foreach(var key in new[] {"mdPregnantAdult","mdAffectedChild"}) templates[key]=await Template(admin.Client,key);
+            var mother=await Person(clerk.Client,"Pregnant"+suffix,"1995-05-05");
+            await manager.Client.Http.GetStringAsync($"/people/{mother}/pregnancies/add");
+            await Saved(await manager.Client.NoRedirect.PostAsync($"/people/{mother}/pregnancies",Form(("StartDate","2024-10-01"),("ExpectedEndDate","2025-07-01"),("Source","provider"))));
+            var pregnantResult=await Manual(clerk.Client,mother,2025,"4",suffix+"-pregnant");
+            var affectedChild=await Person(clerk.Client,"Affected"+suffix,"2023-01-06");
+            var affectedResult=await Manual(clerk.Client,affectedChild,2025,"4",suffix+"-affected");
+            async Task<string> Obligation(Guid result,Guid rule)=>(await Sql("SELECT STRING_AGG(CONCAT(n.recipientKind,'|',n.evaluationState,'|',CONVERT(CHAR(10),n.dueDate,23),'|',w.taskStatus),';') FROM dbo.notificationObligation n JOIN dbo.workTask w ON w.workTaskId=n.workTaskId WHERE n.labResultId=@id AND n.notificationRuleId=@rule",("@id",result),("@rule",rule)))?.ToString() ?? "";
+            Record("PREGNANCY population: "+await Sql("SELECT population FROM dbo.labResult WHERE labResultId=@id",("@id",pregnantResult)));
+            Record("PREGNANCY mdPregnantAdult: "+await Obligation(pregnantResult,templates["mdPregnantAdult"])+" / mdChild: "+await Obligation(pregnantResult,templates["mdChild"]));
+            Record("AFFECTED mdAffectedChild: "+await Obligation(affectedResult,templates["mdAffectedChild"])+" / mdOwnerChild: "+await Obligation(affectedResult,templates["mdOwnerChild"]));
+            Assert.Equal("patient|needsReview|2025-03-17|open",await Obligation(pregnantResult,templates["mdPregnantAdult"]));
+            Assert.Empty(await Obligation(pregnantResult,templates["mdChild"]));
+            Assert.Equal("owner|needsReview|2025-03-17|open",await Obligation(affectedResult,templates["mdAffectedChild"]));
+            Record("PASS: pregnancy episode recorded through the patient form made an adult 4 ug/dL result population 'pregnant' and created a review-gated patient notice due 2025-03-17 (no child notice). The affected-property draft created a review-gated owner notice for a qualifying child result.");
+
             await manager.Client.Http.GetStringAsync($"/people/{oldPatient}/care/testing");
             using(var rejected=await manager.Client.NoRedirect.PostAsync($"/people/{oldPatient}/care/testing",Form(("workTaskId",Guid.NewGuid()),("planKind","early"),("labResultId",manual2020),("evidence","Historical policy replay, not current treatment"),("clinicianConfirmed","true"))))
                 Assert.Equal(HttpStatusCode.UnprocessableEntity,rejected.StatusCode);
