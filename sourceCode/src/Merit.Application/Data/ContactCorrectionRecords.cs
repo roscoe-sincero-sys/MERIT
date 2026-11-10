@@ -11,6 +11,9 @@ public sealed class ContactCorrectionInput
     public string? City { get; set; }
     public string? State { get; set; }
     public string? Zip5 { get; set; }
+    public string UnitAction { get; set; } = "unspecified";
+    public string? Unit { get; set; }
+    public string? ProposedAddressKey { get; internal set; }
 }
 public sealed class ContactCorrectionRow
 {
@@ -24,6 +27,8 @@ public sealed class ContactCorrectionRow
     public string? City { get; init; }
     public string? State { get; init; }
     public string? Zip5 { get; init; }
+    public string UnitAction { get; init; } = "unspecified";
+    public string? Unit { get; init; }
     public string SourceNote { get; init; } = "";
     public string RequestStatus { get; init; } = "";
     public string ResponsibleAgency { get; init; } = "";

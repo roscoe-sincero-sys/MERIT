@@ -5098,6 +5098,24 @@
     "type": "VARCHAR(5)",
     "hasDefault": true,
     "isOutput": false
+   },
+   {
+    "name": "unitAction",
+    "type": "VARCHAR(12)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "unit",
+    "type": "NVARCHAR(30)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "proposedAddressKey",
+    "type": "NVARCHAR(300)",
+    "hasDefault": true,
+    "isOutput": false
    }
   ]
  },

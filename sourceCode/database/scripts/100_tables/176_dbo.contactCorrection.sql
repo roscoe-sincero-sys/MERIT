@@ -32,6 +32,9 @@ BEGIN
         city                       NVARCHAR (80)     NULL,
         state                      VARCHAR (2)       NULL,
         zip5                       VARCHAR (5)       NULL,
+        unitAction                 VARCHAR (12)      NOT NULL CONSTRAINT DF_dbo_contactCorrection_unitAction DEFAULT ('unspecified'),
+        unit                       NVARCHAR (30)     NULL,
+        proposedAddressKey         NVARCHAR (300)    NULL,
         sourceNote                 NVARCHAR (1000)   NOT NULL,
         beforeJson                 NVARCHAR (MAX)    NOT NULL,
         afterJson                  NVARCHAR (MAX)    NULL,
@@ -65,6 +68,12 @@ IF COL_LENGTH (N'dbo.contactCorrection', N'state') IS NULL
     ALTER TABLE dbo.contactCorrection ADD state                      VARCHAR (2)       NULL;
 IF COL_LENGTH (N'dbo.contactCorrection', N'zip5') IS NULL
     ALTER TABLE dbo.contactCorrection ADD zip5                       VARCHAR (5)       NULL;
+IF COL_LENGTH (N'dbo.contactCorrection', N'unitAction') IS NULL
+    ALTER TABLE dbo.contactCorrection ADD unitAction                 VARCHAR (12)      NOT NULL CONSTRAINT DF_dbo_contactCorrection_unitAction DEFAULT ('unspecified');
+IF COL_LENGTH (N'dbo.contactCorrection', N'unit') IS NULL
+    ALTER TABLE dbo.contactCorrection ADD unit                       NVARCHAR (30)     NULL;
+IF COL_LENGTH (N'dbo.contactCorrection', N'proposedAddressKey') IS NULL
+    ALTER TABLE dbo.contactCorrection ADD proposedAddressKey         NVARCHAR (300)    NULL;
 IF COL_LENGTH (N'dbo.contactCorrection', N'afterJson') IS NULL
     ALTER TABLE dbo.contactCorrection ADD afterJson                  NVARCHAR (MAX)    NULL;
 IF COL_LENGTH (N'dbo.contactCorrection', N'requestStatus') IS NULL
@@ -85,6 +94,11 @@ GO
 IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_dbo_contactCorrection_contactType')
 BEGIN
     ALTER TABLE dbo.contactCorrection ADD CONSTRAINT CK_dbo_contactCorrection_contactType CHECK (contactType IN ('phone','email','address'));
+END;
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_dbo_contactCorrection_unitAction')
+BEGIN
+    ALTER TABLE dbo.contactCorrection ADD CONSTRAINT CK_dbo_contactCorrection_unitAction CHECK (unitAction IN ('unspecified','set','remove'));
 END;
 GO
 IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_dbo_contactCorrection_beforeJson')
@@ -226,6 +240,9 @@ EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', 
 EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'contactCorrection', @ColumnName = N'city', @Description = N'Proposed address city.';
 EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'contactCorrection', @ColumnName = N'state', @Description = N'Proposed address state.';
 EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'contactCorrection', @ColumnName = N'zip5', @Description = N'Proposed address ZIP.';
+EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'contactCorrection', @ColumnName = N'unitAction', @Description = N'unspecified preserves legacy semantics; set or remove explicitly verifies the apartment/unit.';
+EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'contactCorrection', @ColumnName = N'unit', @Description = N'Proposed apartment/unit when unitAction is set; null for explicit removal or unspecified.';
+EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'contactCorrection', @ColumnName = N'proposedAddressKey', @Description = N'Server-computed normalized street/unit/city/state/ZIP key for explicit unit changes; null for legacy/unspecified requests.';
 EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'contactCorrection', @ColumnName = N'sourceNote', @Description = N'Requester source evidence.';
 EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'contactCorrection', @ColumnName = N'beforeJson', @Description = N'Contact and residence values visible when requested.';
 EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'contactCorrection', @ColumnName = N'afterJson', @Description = N'Values verified by the reviewer after applying changes.';
