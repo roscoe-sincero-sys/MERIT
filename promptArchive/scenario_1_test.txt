@@ -1,0 +1,27 @@
+
+Create and perform a TEST scenario that has the following:
+
+1. Platform admin user
+2. Region 3 admin user
+3. Maryland admin
+4. Maryland supervisor
+5. Various other Maryland accounts below supervisor that covers various workflows
+6. MERIT is not configured for Maryland.  Maryland specific notifications and other date-driven tasks or milestones have not been configured.  Thresholds have not be set. 
+
+Platform user creates region 3 user admin.  Region 3 user admin creates Maryland admin with appropriate rights.  Maryland admin creates MD supervisor with appropriate rights.  MD supervisor creates various other MD accounts covering different workflows.
+
+Maryland admin logs in and creates the date-driven notifications and tasks outlined in https://github.com/roscoe-sincero-sys/MERIT/pull/239 and other documents.  Assume the current year is 2020.  So requirements were based from that time period.
+
+MD accounts load lab results from HL7 files triggering various date-driven notifications and tasks.  Were the dates entered?  Were relevant tasks automatically created such as a task indicating to notify caregiver with a due date configured for MD.
+MD accounts manually enter lab results triggering various date-driven notifications and tasks.
+
+Then fast forward to the year to 2025.  Update the MD specific configurations.
+
+MD accounts load lab results from CSV files triggering various date-driven notifications and tasks.  Were the dates entered?  Were relevant tasks automatically created?
+MD accounts manually enter lab results triggering various date-driven notifications and tasks.
+
+Is there a screen where user can see a list of patients with upcoming tests (dates, follow-up or Ongoing Follow-Up Retesting Schedule, flagged for overdue, flagged for upcoming in 7 days). Using this list would include contact list (phone, email, mailing address) for each patient.  Usually, it is the caregiver's contact. Export function for this list.
+
+Does the individual patient screen show when their upcoming test is and type (follow-up or Ongoing Follow-Up Retesting Schedule)?  Is it flagged for overdue?  Flagged for upcoming in 7 days?
+
+

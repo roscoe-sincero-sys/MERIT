@@ -1,0 +1,212 @@
+[
+  {
+    "user": "region3demo",
+    "me": {
+      "userName": "region3demo",
+      "displayName": "Region 3 demo administrator",
+      "actingTenantName": "EPA Region 3 Demo",
+      "permissions": [
+        "audit.view",
+        "case.edit",
+        "case.open",
+        "case.view",
+        "config.edit",
+        "data.export",
+        "extract.run",
+        "extract.submit",
+        "intake.configure",
+        "intake.upload",
+        "investigation.edit",
+        "matching.configure",
+        "person.edit",
+        "person.merge",
+        "person.view",
+        "person.view_identifiers",
+        "registry.edit",
+        "result.edit",
+        "result.release_hold",
+        "result.view",
+        "task.edit",
+        "task.view",
+        "tenant.administer",
+        "tenant.create"
+      ],
+      "timeZone": "America/New_York"
+    },
+    "pages": {
+      "/": 200,
+      "/search": 200,
+      "/intake": 200,
+      "/cases": 200,
+      "/investigations": 200,
+      "/app/queues": 200,
+      "/app/held": 200,
+      "/app/match-review": 200,
+      "/app/results": 200,
+      "/app/clusters": 200,
+      "/app/map": 200,
+      "/app/reports": 200,
+      "/extracts": 200,
+      "/reporters": 200,
+      "/admin/users": 200,
+      "/admin/tenants": 200,
+      "/admin/audit": 200,
+      "/config/settings": 200,
+      "/config/thresholds": 200,
+      "/config/analytes": 200
+    },
+    "boundaryChecks": {
+      "Virginia": 200,
+      "BaltimoreCounty": 200,
+      "PrinceGeorgesCounty": 200
+    }
+  },
+  {
+    "user": "marylanddemo",
+    "me": {
+      "userName": "marylanddemo",
+      "displayName": "Maryland demo administrator",
+      "actingTenantName": "Maryland Lead and Metals Program (demo)",
+      "permissions": [
+        "audit.view",
+        "case.edit",
+        "case.open",
+        "case.view",
+        "config.edit",
+        "data.export",
+        "extract.run",
+        "extract.submit",
+        "intake.configure",
+        "intake.upload",
+        "investigation.edit",
+        "matching.configure",
+        "person.edit",
+        "person.merge",
+        "person.view",
+        "person.view_identifiers",
+        "registry.edit",
+        "result.edit",
+        "result.release_hold",
+        "result.view",
+        "task.edit",
+        "task.view",
+        "tenant.administer",
+        "tenant.create"
+      ],
+      "timeZone": "America/New_York"
+    },
+    "pages": {
+      "/": 200,
+      "/search": 200,
+      "/intake": 200,
+      "/cases": 200,
+      "/investigations": 200,
+      "/app/queues": 200,
+      "/app/held": 200,
+      "/app/match-review": 200,
+      "/app/results": 200,
+      "/app/clusters": 200,
+      "/app/map": 200,
+      "/app/reports": 200,
+      "/extracts": 200,
+      "/reporters": 200,
+      "/admin/users": 200,
+      "/admin/tenants": 200,
+      "/admin/audit": 200,
+      "/config/settings": 200,
+      "/config/thresholds": 200,
+      "/config/analytes": 200
+    },
+    "boundaryChecks": {
+      "Virginia": 404,
+      "BaltimoreCounty": 200,
+      "PrinceGeorgesCounty": 200
+    }
+  },
+  {
+    "user": "countydemo",
+    "me": {
+      "userName": "countydemo",
+      "displayName": "Baltimore County demo administrator",
+      "actingTenantName": "Baltimore County Department of Health",
+      "permissions": [
+        "audit.view",
+        "case.edit",
+        "case.open",
+        "case.view",
+        "config.edit",
+        "data.export",
+        "extract.run",
+        "extract.submit",
+        "intake.configure",
+        "intake.upload",
+        "investigation.edit",
+        "matching.configure",
+        "person.edit",
+        "person.merge",
+        "person.view",
+        "person.view_identifiers",
+        "registry.edit",
+        "result.edit",
+        "result.release_hold",
+        "result.view",
+        "task.edit",
+        "task.view",
+        "tenant.administer",
+        "tenant.create"
+      ],
+      "timeZone": "America/New_York"
+    },
+    "pages": {
+      "/": 200,
+      "/search": 200,
+      "/intake": 200,
+      "/cases": 200,
+      "/investigations": 200,
+      "/app/queues": 200,
+      "/app/held": 200,
+      "/app/match-review": 200,
+      "/app/results": 200,
+      "/app/clusters": 200,
+      "/app/map": 200,
+      "/app/reports": 200,
+      "/extracts": 200,
+      "/reporters": 200,
+      "/admin/users": 200,
+      "/admin/tenants": 200,
+      "/admin/audit": 200,
+      "/config/settings": 200,
+      "/config/thresholds": 200,
+      "/config/analytes": 200
+    },
+    "boundaryChecks": {
+      "Virginia": 404,
+      "BaltimoreCounty": 200,
+      "PrinceGeorgesCounty": 404
+    }
+  },
+  {
+    "user": "platformdemo",
+    "me": {
+      "userName": "platformdemo",
+      "displayName": "Platform demo administrator",
+      "actingTenantName": "MERIT platform",
+      "permissions": [
+        "audit.view",
+        "platform.administer",
+        "tenant.administer",
+        "tenant.create"
+      ],
+      "timeZone": "America/New_York"
+    },
+    "pages": {
+      "/admin/users": 200,
+      "/admin/tenants": 200
+    },
+    "boundaryChecks": {
+      "Virginia": 302,
+      "BaltimoreCounty": 302,
+      "PrinceGeorgesCounty": 302
+    }
+  }
+]

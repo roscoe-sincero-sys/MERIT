@@ -39,3 +39,9 @@ __pycache__/
 Thumbs.db
 .DS_Store
 *.swp
+
+# Local assessment notes
+EGM_ADOPTION_ASSESSMENT.md
+
+# Local process id files
+*.pid

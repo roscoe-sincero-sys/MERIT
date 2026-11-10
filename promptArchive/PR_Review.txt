@@ -1,0 +1,3 @@
+A new PR is available.  Review the PR.  Identify yourself as the PR reviewer.  Assign PR to repo owner, roscoe-sincero-sys.  You will not be able to Approve or Request changes as you are logging in using my account.  Instead, add a new comment to either Approve or Request Changes.  If Requesting changes, provide details.
+
+Developer has updated the PR with changes.  Review the PR.  Identify yourself as the PR reviewer.  Assign PR to repo owner, roscoe-sincero-sys.  You will not be able to Approve or Request changes as you are logging in using my account.  Instead, add a new comment to either Approve or Request Changes.  If Requesting changes, provide details.

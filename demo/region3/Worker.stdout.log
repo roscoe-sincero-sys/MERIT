@@ -1,0 +1,12 @@
+info: Merit.Worker.JobWorker[1929458206]
+      MERIT worker VICTUS:27644 started
+info: Microsoft.Hosting.Lifetime[14]
+      Now listening on: http://localhost:5280
+info: Microsoft.Hosting.Lifetime[0]
+      Application started. Press Ctrl+C to shut down.
+info: Microsoft.Hosting.Lifetime[0]
+      Hosting environment: Development
+info: Microsoft.Hosting.Lifetime[0]
+      Content root path: C:\Local\Github\MERIT\sourceCode\src\Merit.Worker
+info: Merit.Worker.ClusterScheduler[1867316110]
+      Cluster detection ran: {"clusters":0}
