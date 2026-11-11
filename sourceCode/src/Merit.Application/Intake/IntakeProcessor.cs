@@ -142,29 +142,51 @@ public sealed partial class IntakeProcessor(
         var formats = ((profile.FileType == "hl7" ? "yyyy-MM-dd," : "") + (profile.DateFormats ?? "yyyy-MM-dd,MM/dd/yyyy,M/d/yyyy"))
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
-        foreach (var row in rows)
+        try
         {
-            ct.ThrowIfCancellationRequested();
-            try
+            foreach (var row in rows)
             {
-                bool ok = await ProcessRowAsync(batch, profile, row, formats, registry, ct).ConfigureAwait(false);
-                if (ok)
+                ct.ThrowIfCancellationRequested();
+                try
                 {
-                    loaded++;
+                    bool ok = await ProcessRowAsync(batch, profile, row, formats, registry, ct).ConfigureAwait(false);
+                    if (ok)
+                    {
+                        loaded++;
+                    }
+                    else
+                    {
+                        held++;
+                    }
                 }
-                else
+                catch (Errors.MeritException ex)
                 {
                     held++;
+                    LogRowHeld(logger, row.StagingRowId, ex.GetType().Name);
+                    await intake.CompleteRowAsync(row.StagingRowId, "held", null,
+                        [new HoldReason(ex is Errors.PermissionDeniedException ? "permissionDenied" : "uncertainMatch", null,
+                            ex is Errors.PermissionDeniedException ? "The initiating profile lacks permission required for this import. Ask an administrator to review the sender and account setup. " + ex.Message : ex.Message, null)], false, ct).ConfigureAwait(false);
                 }
             }
-            catch (Errors.MeritException ex)
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Issue 269: a row that cannot even be held must not strand the batch in 'parsing' with nothing to review.
+            // Rows already loaded or held stay as they are; the uploader sees the batch as failed with a reason.
+            LogBatchFailed(logger, batchId, ex.GetType().Name);
+            try
             {
-                held++;
-                LogRowHeld(logger, row.StagingRowId, ex.GetType().Name);
-                await intake.CompleteRowAsync(row.StagingRowId, "held", null,
-                    [new HoldReason(ex is Errors.PermissionDeniedException ? "permissionDenied" : "uncertainMatch", null,
-                        ex is Errors.PermissionDeniedException ? "The initiating profile lacks permission required for this import. Ask an administrator to review the sender and account setup. " + ex.Message : ex.Message, null)], false, ct).ConfigureAwait(false);
+                await intake.SetBatchStatusAsync(batchId, "failed",
+                    $"Processing stopped after {loaded + held} of {rows.Count} rows: {(ex is Errors.MeritException ? ex.Message : "an unexpected error occurred")}. "
+                    + "Rows already loaded or held are kept. Ask an administrator to review the job log before uploading the remaining rows again.",
+                    CancellationToken.None).ConfigureAwait(false);
             }
+            catch (Errors.MeritException)
+            {
+                // The original failure is what the job records; a second failure here must not replace it.
+            }
+
+            throw;
         }
 
         await intake.SetBatchStatusAsync(batchId, "loaded", null, ct).ConfigureAwait(false);
@@ -600,4 +622,7 @@ public sealed partial class IntakeProcessor(
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Staging row {StagingRowId} held: {Reason}")]
     private static partial void LogRowHeld(ILogger logger, Guid stagingRowId, string reason);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Intake batch {IntakeBatchId} failed while processing rows: {Reason}")]
+    private static partial void LogBatchFailed(ILogger logger, Guid intakeBatchId, string reason);
 }

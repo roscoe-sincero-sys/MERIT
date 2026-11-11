@@ -108,6 +108,26 @@ BEGIN
 END;
 GO
 
+-- Issue 270: the tenant that owned the record when the event was written, so a county or security reviewer sees every
+-- event on its records (including by staff it does not administer) without row access to them. Additive: an
+-- append-only ledger accepts a new nullable column; earlier rows stay NULL and are scoped by user only.
+IF COL_LENGTH (N'logs.auditEvent', N'owningTenantId') IS NULL
+BEGIN
+    ALTER TABLE logs.auditEvent ADD owningTenantId UNIQUEIDENTIFIER NULL;
+END;
+GO
+
+IF NOT EXISTS (SELECT 1
+                 FROM sys.indexes
+                WHERE name      = N'IX_logs_auditEvent_owningTenantId_eventUtc'
+                  AND object_id = OBJECT_ID (N'logs.auditEvent'))
+BEGIN
+    CREATE INDEX IX_logs_auditEvent_owningTenantId_eventUtc
+        ON logs.auditEvent (owningTenantId, eventUtc)
+        WHERE owningTenantId IS NOT NULL;
+END;
+GO
+
 IF NOT EXISTS (SELECT 1
                  FROM sys.indexes
                 WHERE name      = N'IX_logs_auditEvent_entityType_entityId'
@@ -138,6 +158,7 @@ EXEC util.uspSetObjectDescription @SchemaName = N'logs', @ObjectType = N'TABLE',
 EXEC util.uspSetObjectDescription @SchemaName = N'logs', @ObjectType = N'TABLE', @ObjectName = N'auditEvent', @ColumnName = N'entityId', @Description = N'Id of the record acted on.';
 EXEC util.uspSetObjectDescription @SchemaName = N'logs', @ObjectType = N'TABLE', @ObjectName = N'auditEvent', @ColumnName = N'recordCount', @Description = N'Rows returned or exported, for list views and exports.';
 EXEC util.uspSetObjectDescription @SchemaName = N'logs', @ObjectType = N'TABLE', @ObjectName = N'auditEvent', @ColumnName = N'clientAddress', @Description = N'IP address of the client, for sign-in events.';
+EXEC util.uspSetObjectDescription @SchemaName = N'logs', @ObjectType = N'TABLE', @ObjectName = N'auditEvent', @ColumnName = N'owningTenantId', @Description = N'Tenant that owned the record acted on when the event was written (patient work owner for people and results), so tenant-scoped audit review includes events by anyone on that tenant''s records. NULL for events without a record, and for events before issue 270.';
 EXEC util.uspSetObjectDescription @SchemaName = N'logs', @ObjectType = N'TABLE', @ObjectName = N'auditEvent', @ColumnName = N'isDeleted', @Description = N'Soft-delete flag; always 0. An append-only ledger cannot be updated, so audit history is never deleted.';
 EXEC util.uspSetObjectDescription @SchemaName = N'logs', @ObjectType = N'TABLE', @ObjectName = N'auditEvent', @ColumnName = N'deletedBy', @Description = N'Insert-time default only; never changes, since the ledger rejects UPDATE.';
 EXEC util.uspSetObjectDescription @SchemaName = N'logs', @ObjectType = N'TABLE', @ObjectName = N'auditEvent', @ColumnName = N'deletedDateUtc', @Description = N'Insert-time default only; never changes, since the ledger rejects UPDATE.';

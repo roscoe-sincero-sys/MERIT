@@ -134,7 +134,11 @@ BEGIN
                AND s.effectiveFrom <= @today AND (s.effectiveTo IS NULL OR s.effectiveTo >= @today);
         END;
 
-        SET @owner = COALESCE (@owner, @root);
+        -- Issue 268: a routed jurisdiction (or the root) the caller cannot write would abort the insert under row-level
+        -- security and, with it, the whole intake row. The case opens in the caller's acting tenant instead; when that
+        -- differs from the residence jurisdiction, a follow-up task below says so, because there is no case transfer.
+        DECLARE @routed UNIQUEIDENTIFIER = COALESCE (@owner, @root);
+        SET @owner = dbo.udfWritableWorkOwner (@root, @routed);
 
         DECLARE @code VARCHAR (8) = (SELECT code FROM config.analyte WHERE analyteId = @analyteId);
         DECLARE @number VARCHAR (20) = CONCAT (@code, '-', YEAR (@openedDate), '-',
@@ -153,6 +157,16 @@ BEGIN
         INSERT dbo.caseResultLink(caseResultLinkId,rootTenantId,owningTenantId,personId,exposureCaseId,labResultId,openingActivityId)
         SELECT NEWID(),@root,@owner,@personId,@exposureCaseId,@qualifyingLabResultId,caseActivityId
          FROM dbo.caseActivity WHERE exposureCaseId=@exposureCaseId AND lifecycleKind='opened';
+
+        IF @owner <> @routed AND @routed <> @root
+        BEGIN
+            INSERT dbo.workTask (workTaskId, rootTenantId, owningTenantId, queueCode, title, detail, personId, exposureCaseId, labResultId)
+            VALUES (CAST (CAST (NEWID () AS BINARY (10)) + CAST (DATEDIFF_BIG (MILLISECOND, '19700101', SYSUTCDATETIME ()) AS BINARY (6)) AS UNIQUEIDENTIFIER),
+                    @root, @owner, 'caseFollowUp', N'Case opened outside the residence jurisdiction',
+                    CONCAT (N'The patient''s current residence is served by ', (SELECT tenantName FROM auth.tenant WHERE tenantId = @routed),
+                            N', which the person entering this result cannot work in, so the case opened here. Coordinate with that jurisdiction or a state administrator before follow-up.'),
+                    @personId, @exposureCaseId, @qualifyingLabResultId);
+        END;
 
         EXEC dbo.uspRefreshPersonAccess @personId = @personId;
 

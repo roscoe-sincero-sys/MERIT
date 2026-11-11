@@ -41,16 +41,22 @@ Attempts at unknown names belong to no jurisdiction, so they are investigated at
 
 ## Screens
 - **User page** (`/admin/users/{id}`), for an administrator of the person's home tenant: the latest 50 events.
-- **Sign-in activity** (Administration menu, `tenant.administer`) shows, for the last hour, day, week or 30 days:
+- **Sign-in activity** (Administration menu, `tenant.administer` or `security.review`) shows, for the last hour, day, week or 30 days:
   - one address trying five or more accounts or names (spraying);
   - one account tried from three or more addresses (stuffing);
   - a sign-in after three or more failures within the hour before it;
   - failures by address and by account;
   - lockouts and rate-limit refusals.
 
-  Tenant administrators see the accounts they administer. Holders of `security.investigate` see everything, including unknown names (hashed) and refusals that belong to no account.
+  Tenant administrators and security reviewers see the accounts homed **or holding a current grant** in the tenants they administer or review (#270): a two-county worker appears for both counties. Holders of `security.investigate` see everything, including unknown names (hashed) and refusals that belong to no account. **Export this report (CSV)** downloads every section with its section name (`/admin/sign-in-activity/activity.csv`, audited; #272).
 - **Unknown user names** (`security.investigate`): names grouped by hash with attempts, addresses and first and last time. It offers **Look up a name** (hashes what you type; nothing is decrypted), **Show names** (needs a current authenticator code), and a hashed CSV export (`/admin/sign-in-activity/unknown-names.csv`). Names are never exported.
-- **Audit log:** the action filter **Sign-in and account security (all)** narrows the ledger to those actions.
+- **Audit log:** the action filter **Sign-in and account security (all)** narrows the ledger to those actions. Scope (#270): a reviewer who covers a data root's top tenant (a state administrator; a platform or region administrator for the roots below it) sees that whole root. Anyone else sees events by the users homed or granted in the tenants they review, plus events by anyone on records those tenants owned when the event was written (`logs.auditEvent.owningTenantId`, stamped from #270 on; earlier events are scoped by user only).
+- **Users** (`tenant.administer` or `security.review`) lists accounts and their current access; **Export users and access (CSV)** is the access-review file (`/admin/users.csv`). An account's page offers its sign-in history as CSV (`/admin/users/{id}/sign-in-history.csv`). Both exports are audited (#272).
+
+## Security officer role (#271)
+Every data root has a **Security officer (security reports, read only)** role: `audit.view`, `usage.view` and `security.review`. Grant it at the tenants the officer reviews, for example one county. The officer sees the audit log, sign-in activity, users and access, and screen usage for those tenants, with exports. They cannot change accounts or grants and see no patient records unless another role gives them that. A state or county administrator can grant it, because the Administrator role now includes `security.review`.
+
+**Unknown user names stay platform-only, on purpose.** A name that matched no account belongs to no tenant, so it cannot be scoped to a county; `security.investigate` therefore remains on the Platform administrator role.
 
 ## Retention
 The worker runs `logs.uspPurgeSignInEvents` daily. Events older than `SignInLog:RetentionDays` (default 365, at least 30) **lose their personal data**: the address, forwarded chain, user agent, and both copies of an attempted name. The row is then marked deleted, leaving an anonymous count.

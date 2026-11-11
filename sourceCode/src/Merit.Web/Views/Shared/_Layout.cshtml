@@ -5,6 +5,7 @@
     string path = Context.Request.Path.Value ?? "/";
     bool signedIn = CurrentSession.IsAuthenticated;
     bool minimalHeader = ViewData["MinimalHeader"] is true;
+    var deployment = DeploymentIndicator.From(Configuration); @* #224: configured environment and data mode only *@
     string profileHref = "/account/profiles?returnUrl=" + Uri.EscapeDataString($"{Context.Request.PathBase}{Context.Request.Path}{Context.Request.QueryString}");
     long? sessionExpires = (await Context.AuthenticateAsync(AuthSchemes.Session)).Properties?.ExpiresUtc?.ToUnixTimeMilliseconds();
 }
@@ -27,6 +28,10 @@
 </head>
 <body data-session-minutes="@(signedIn ? Configuration.GetValue("Session:IdleTimeoutMinutes", 20) : 0)" data-session-user="@CurrentSession.UserName" data-session-expires="@sessionExpires">
     <a class="merit-skip" href="#main-content">Skip to main content</a>
+    @if (deployment.Banner is string environmentBanner)
+    {
+        <div class="merit-environment" role="note" aria-label="Environment" data-environment="@deployment.Environment!.ToLowerInvariant()">@environmentBanner</div>
+    }
     @* One header for every installation: the grouped navigation from #137, no longer behind a setting (issue #184). *@
     <header class="merit-header" role="banner">
         <div class="merit-header__inner">
@@ -106,7 +111,7 @@
         <div id="dialog-body" class="merit-dialog__content"></div>
     </dialog>
 
-    <footer class="merit-footer">MERIT &middot; Synthetic demonstration data only &middot; Every view, change and export of a person, result or case is audited.</footer>
+    <footer class="merit-footer">@deployment.Footer &middot; Every view, change and export of a person, result or case is audited.</footer>
 
     <dialog id="confirmation-dialog" class="merit-dialog" aria-labelledby="confirmation-heading" aria-describedby="confirmation-message">
         <h2 id="confirmation-heading">Confirm action</h2>

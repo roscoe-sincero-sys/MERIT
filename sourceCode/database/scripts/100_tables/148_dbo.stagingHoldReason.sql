@@ -59,9 +59,19 @@ GO
 -- -------------------------------------------------------------------------------------------
 -- 3. Check constraints. System-defined values and cross-column rules.
 -- -------------------------------------------------------------------------------------------
+-- Issue 269: 'permissionDenied' (a row the initiating profile may not complete) is held for review, not a batch failure.
+IF EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_dbo_stagingHoldReason_reasonCode'
+               AND definition NOT LIKE N'%''permissionDenied''%')
+BEGIN
+    BEGIN TRANSACTION;
+    ALTER TABLE dbo.stagingHoldReason DROP CONSTRAINT CK_dbo_stagingHoldReason_reasonCode;
+    ALTER TABLE dbo.stagingHoldReason WITH CHECK ADD CONSTRAINT CK_dbo_stagingHoldReason_reasonCode CHECK (reasonCode IN ('unknownSender', 'unknownTestCode', 'unknownUnit', 'inactiveAnalyte', 'missingResultValue', 'missingDob', 'unusableAddress', 'possibleDuplicate', 'uncertainMatch', 'outOfJurisdiction', 'impossibleDates', 'permissionDenied'));
+    COMMIT TRANSACTION;
+END;
+GO
 IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_dbo_stagingHoldReason_reasonCode')
 BEGIN
-    ALTER TABLE dbo.stagingHoldReason ADD CONSTRAINT CK_dbo_stagingHoldReason_reasonCode CHECK (reasonCode IN ('unknownSender', 'unknownTestCode', 'unknownUnit', 'inactiveAnalyte', 'missingResultValue', 'missingDob', 'unusableAddress', 'possibleDuplicate', 'uncertainMatch', 'outOfJurisdiction', 'impossibleDates'));
+    ALTER TABLE dbo.stagingHoldReason ADD CONSTRAINT CK_dbo_stagingHoldReason_reasonCode CHECK (reasonCode IN ('unknownSender', 'unknownTestCode', 'unknownUnit', 'inactiveAnalyte', 'missingResultValue', 'missingDob', 'unusableAddress', 'possibleDuplicate', 'uncertainMatch', 'outOfJurisdiction', 'impossibleDates', 'permissionDenied'));
 END;
 GO
 

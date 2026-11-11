@@ -33,9 +33,9 @@
         (Label: "Administration", Links: new[] {
             (Text: "Usage", Url: "/admin/usage", Visible: CurrentSession.Has(Permissions.UsageView)),
             (Text: CurrentSession.Has(Permissions.ConfigEdit) ? "Configuration" : "Reference levels", Url: "/config/thresholds", Visible: !CurrentSession.IsPlatformAdmin),
-            (Text: "Users", Url: "/admin/users", Visible: CurrentSession.Has(Permissions.TenantAdminister)),
+            (Text: "Users", Url: "/admin/users", Visible: CurrentSession.Has(Permissions.TenantAdminister) || CurrentSession.Has(Permissions.SecurityReview)),
             (Text: "Tenants", Url: "/admin/tenants", Visible: CurrentSession.Has(Permissions.TenantCreate)),
-            (Text: "Sign-in activity", Url: "/admin/sign-in-activity", Visible: CurrentSession.Has(Permissions.TenantAdminister)),
+            (Text: "Sign-in activity", Url: "/admin/sign-in-activity", Visible: CurrentSession.Has(Permissions.TenantAdminister) || CurrentSession.Has(Permissions.SecurityReview)),
             (Text: "Audit log", Url: "/admin/audit", Visible: CurrentSession.Has(Permissions.AuditView)) })
     };
 }

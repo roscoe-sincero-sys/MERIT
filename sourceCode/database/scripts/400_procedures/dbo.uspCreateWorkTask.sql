@@ -111,7 +111,7 @@ BEGIN
 
         DECLARE @root UNIQUEIDENTIFIER = auth.udfSessionRootTenantId ();
         DECLARE @owner UNIQUEIDENTIFIER = COALESCE ((SELECT owningTenantId FROM dbo.exposureCase WHERE exposureCaseId = @exposureCaseId),
-                                                    @owningTenantId, dbo.udfPatientWorkOwner(@personId), auth.udfSessionActingTenantId ());
+                                                    @owningTenantId, dbo.udfWritableWorkOwner (@root, dbo.udfPatientWorkOwner(@personId)), auth.udfSessionActingTenantId ()); -- issue 268: inferred patient owner must be writable
 
         IF NOT EXISTS (SELECT 1 FROM dbo.workTask
                         WHERE queueCode = @queueCode AND taskStatus = 'open' AND isDeleted = 0 AND title = @title

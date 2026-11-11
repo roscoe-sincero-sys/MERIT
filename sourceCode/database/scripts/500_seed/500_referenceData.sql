@@ -48,7 +48,8 @@ USING (VALUES
     ('tenant.administer',         N'Manage users, their master profiles and child tenants at the tenants they administer', 'admin'),
     ('tenant.create',             N'Add tenants under the tenants you administer', 'admin'),
     ('platform.administer',       N'Platform administration: create data roots and manage every account (no access to records)', 'admin'),
-    ('security.investigate',      N'Investigate sign-in attacks: see every sign-in event, including attempts at unknown user names, and reveal those names', 'admin')
+    ('security.investigate',      N'Investigate sign-in attacks: see every sign-in event, including attempts at unknown user names, and reveal those names', 'admin'),
+    ('security.review',           N'Review security reports read-only for the tenants granted: audit, sign-in activity and user access, with exports', 'admin')
 ) AS s (permissionCode, permissionName, accessLevel)
    ON t.permissionCode = s.permissionCode AND t.isDeleted = 0
 WHEN MATCHED AND (t.permissionName <> s.permissionName OR t.accessLevel <> s.accessLevel) THEN

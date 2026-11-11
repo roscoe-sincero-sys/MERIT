@@ -60,6 +60,15 @@ public static class CurrentSessionExtensions
         }
     }
 
+    /// <summary>Throws unless the session holds at least one of the permissions.</summary>
+    public static void RequireAny(this ICurrentSession session, params string[] permissions)
+    {
+        if (!session.IsAuthenticated || !permissions.Any(session.Permissions.Contains))
+        {
+            throw new Errors.PermissionDeniedException(string.Join(" or ", permissions));
+        }
+    }
+
     public static Guid RequireUserId(this ICurrentSession session)
         => session.UserId ?? throw new Errors.PermissionDeniedException(Security.Permissions.SignedIn);
 }

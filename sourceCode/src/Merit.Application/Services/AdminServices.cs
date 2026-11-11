@@ -144,7 +144,7 @@ public sealed class AdminService(IClock clock, IAccountData accounts, AccountSer
 
     public async Task<IReadOnlyList<UserListRow>> UsersAsync(CancellationToken ct = default)
     {
-        session.Require(Permissions.TenantAdminister);
+        session.RequireAny(Permissions.TenantAdminister, Permissions.SecurityReview); // #271: read-only for security reviewers
         return await accounts.ListUsersAsync(ct).ConfigureAwait(false);
     }
 
@@ -244,7 +244,7 @@ public sealed class AdminService(IClock clock, IAccountData accounts, AccountSer
     /// <summary>An account's sign-in history (#191), for an administrator of its home tenant.</summary>
     public async Task<IReadOnlyList<SignInEventRow>> SignInHistoryAsync(Guid appUserId, int top = 50, CancellationToken ct = default)
     {
-        session.Require(Permissions.TenantAdminister);
+        session.RequireAny(Permissions.TenantAdminister, Permissions.SecurityReview); // #271: read-only for security reviewers
         return await accounts.ListSignInEventsAsync(appUserId, top, ct).ConfigureAwait(false);
     }
 

@@ -165,6 +165,10 @@ services.AddAuthorization(o =>
         o.AddPolicy(permission, p => p.AddAuthenticationSchemes(AuthSchemes.Session).RequireAuthenticatedUser()
             .RequireClaim(MeritClaims.Permission, permission));
     }
+
+    // User access and sign-in reports: administrators, or read-only security reviewers (#271).
+    o.AddPolicy(Permissions.SecurityReports, p => p.AddAuthenticationSchemes(AuthSchemes.Session).RequireAuthenticatedUser()
+        .RequireClaim(MeritClaims.Permission, Permissions.TenantAdminister, Permissions.SecurityReview));
 });
 
 // ---------------------------------------------------------------------------------------------- MVC, API, antiforgery

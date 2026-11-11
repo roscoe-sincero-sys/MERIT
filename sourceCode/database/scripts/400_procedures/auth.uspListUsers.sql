@@ -25,7 +25,7 @@ logs.uspStartExecutionLogging and logs.uspRecordExecutionError (scripts/000_infr
 ========================================================================================================================
 Notes:
 
-Requires permission tenant.administer (auth.udfHasPermission); refuses with 51403 otherwise.
+Requires permission tenant.administer or security.review (auth.udfHasPermission); refuses with 51403 otherwise.
 
 Rule 8 error-only instrumentation (a procedure that only reads), generated from templates/procedure-readonly.sql by tools/generateProcedures.py. Row-level security applies to every table read
 or written here: SESSION_CONTEXT (N'scopeKey') decides what the caller can see.
@@ -74,9 +74,9 @@ BEGIN
 
     BEGIN TRY
 
-        IF auth.udfHasPermission (N'tenant.administer') = 0
+        IF auth.udfHasPermission (N'tenant.administer') = 0 AND auth.udfHasPermission (N'security.review') = 0
         BEGIN
-            ;THROW 51403, N'You do not have permission to do this (tenant.administer).', 1;
+            ;THROW 51403, N'You do not have permission to do this (tenant.administer or security.review).', 1;
         END;
 
         -- =========================================================================================
@@ -85,6 +85,9 @@ BEGIN
 
         DECLARE @admin TABLE (tenantId UNIQUEIDENTIFIER PRIMARY KEY);
         INSERT @admin SELECT tenantId FROM auth.tvfAdminTenants ();
+        -- Issue 271: a security reviewer lists the same accounts read-only; canManageAccount stays administration-only.
+        DECLARE @review TABLE (tenantId UNIQUEIDENTIFIER PRIMARY KEY);
+        INSERT @review SELECT tenantId FROM auth.tvfReviewTenants ('security.review');
 
         SELECT u.appUserId, u.userName, u.displayName, u.email, u.isActive, u.mfaEnabled, u.lastSignInUtc, u.lockoutEndUtc
              , h.tenantName AS homeTenantName, h.tenantType AS homeTenantType
@@ -101,8 +104,8 @@ BEGIN
           FROM auth.appUser AS u
           LEFT JOIN auth.tenant AS h ON h.tenantId = u.homeTenantId
          WHERE u.isDeleted = 0
-           AND (EXISTS (SELECT 1 FROM @admin AS a WHERE a.tenantId = u.homeTenantId)
-                OR EXISTS (SELECT 1 FROM auth.userAssignment AS ua JOIN @admin AS a ON a.tenantId = ua.tenantId
+           AND (EXISTS (SELECT 1 FROM @review AS a WHERE a.tenantId = u.homeTenantId)
+                OR EXISTS (SELECT 1 FROM auth.userAssignment AS ua JOIN @review AS a ON a.tenantId = ua.tenantId
                             WHERE ua.appUserId = u.appUserId AND ua.isDeleted = 0
                               AND (ua.endDate IS NULL OR ua.endDate >= auth.udfSessionToday ())))
          ORDER BY u.displayName;

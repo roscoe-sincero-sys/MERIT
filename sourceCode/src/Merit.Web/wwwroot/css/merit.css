@@ -70,6 +70,9 @@ body:not(.merit-keyboard-mode) [tabindex="-1"]:focus { outline: none; }
 main.merit-main { max-width: 80rem; margin: 0 auto; padding: 1rem 1rem 3rem; }
 .merit-main h1, #manual-result-form section { overflow-wrap: anywhere; }
 #manual-result-form > .usa-button { margin-right: 0; }
+/* #224: non-live environments name themselves above the header on every screen. */
+.merit-environment { background: #8a3c00; color: #fff; font-weight: 700; letter-spacing: .02em; padding: .35rem 1rem; text-align: center; }
+.merit-environment[data-environment="test"], .merit-environment[data-environment="development"] { background: #5c1a8a; }
 .merit-footer { border-top: 1px solid var(--merit-line); color: var(--merit-muted); font-size: .85rem; padding: 1rem; text-align: center; }
 
 /* ---------------------------------------------------------------------------------------------- page parts */

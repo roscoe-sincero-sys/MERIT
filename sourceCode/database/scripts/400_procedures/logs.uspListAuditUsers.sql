@@ -83,12 +83,32 @@ BEGIN
         -- ===== The procedure's own work starts here. Everything above and below is boilerplate. ==
         -- =========================================================================================
 
+        -- Issue 270: scope to what the caller reviews, not to the whole data root. A data root is visible in full only
+        -- where the caller reviews its root tenant (a state administrator; a platform or region administrator for the
+        -- roots below it). Elsewhere: events by users homed or granted (now or before) in the reviewed tenants, and
+        -- events on records those tenants owned when the event was written.
+        DECLARE @scope TABLE (tenantId UNIQUEIDENTIFIER PRIMARY KEY);
+        INSERT @scope SELECT tenantId FROM auth.tvfReviewTenants ('audit.view');
+        DECLARE @wholeRoots TABLE (rootTenantId UNIQUEIDENTIFIER PRIMARY KEY);
+        INSERT @wholeRoots SELECT t.tenantId FROM auth.tenant AS t JOIN @scope AS s ON s.tenantId = t.tenantId WHERE t.tenantId = t.rootTenantId;
+        DECLARE @partRoots TABLE (rootTenantId UNIQUEIDENTIFIER PRIMARY KEY);
+        INSERT @partRoots SELECT DISTINCT t.rootTenantId FROM auth.tenant AS t JOIN @scope AS s ON s.tenantId = t.tenantId
+         WHERE NOT EXISTS (SELECT 1 FROM @wholeRoots AS w WHERE w.rootTenantId = t.rootTenantId);
+        DECLARE @users TABLE (appUserId UNIQUEIDENTIFIER PRIMARY KEY);
+        INSERT @users SELECT u.appUserId FROM auth.appUser AS u
+         WHERE EXISTS (SELECT 1 FROM @partRoots)
+           AND (EXISTS (SELECT 1 FROM @scope AS s WHERE s.tenantId = u.homeTenantId)
+                OR EXISTS (SELECT 1 FROM auth.userAssignment AS ua JOIN @scope AS s ON s.tenantId = ua.tenantId WHERE ua.appUserId = u.appUserId AND ua.isDeleted = 0));
+
         SELECT u.appUserId, u.displayName
           FROM auth.appUser AS u
          WHERE EXISTS (SELECT 1
                          FROM logs.auditEvent AS e
                         WHERE e.appUserId = u.appUserId
-                          AND e.rootTenantId = auth.udfSessionRootTenantId ())
+                          AND (EXISTS (SELECT 1 FROM @wholeRoots AS w WHERE w.rootTenantId = e.rootTenantId)
+                OR (EXISTS (SELECT 1 FROM @partRoots AS p WHERE p.rootTenantId = e.rootTenantId)
+                    AND (EXISTS (SELECT 1 FROM @users AS x WHERE x.appUserId = e.appUserId)
+                         OR EXISTS (SELECT 1 FROM @scope AS s WHERE s.tenantId = e.owningTenantId)))))
          ORDER BY u.displayName, u.appUserId;
 
         -- =========================================================================================

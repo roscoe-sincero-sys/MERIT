@@ -181,9 +181,9 @@ public sealed partial class Hl7IntakeTests(MeritFixture fixture)
             return id;
         }
 
-        public async Task<IntakeBatchRow> RunAsync(Guid profile, string content, bool uploadAgain = false, DateTime? departmentReceivedAt = null)
+        public async Task<IntakeBatchRow> RunAsync(Guid profile, string content, bool uploadAgain = false, DateTime? departmentReceivedAt = null, string? asUser = null)
         {
-            webSession.Current = admin;
+            if (asUser is null) webSession.Current = admin; else await AsAsync(asUser);
             var batch = await Web.GetRequiredService<IntakeService>().UploadAsync(profile, "native-" + Guid.NewGuid() + (content.StartsWith("MSH") ? ".hl7" : ".csv"), content, uploadAgain,
                 historical: departmentReceivedAt is not null, departmentReceivedAt: departmentReceivedAt,
                 receiptEvidence: departmentReceivedAt is null ? null : "Synthetic verified Department receipt ledger, scenario #245", receiptConfirmed: departmentReceivedAt is not null);

@@ -19,9 +19,34 @@ namespace Merit.Web.Controllers;
 public sealed class SignInActivityController(SignInLogService log, ICurrentSession session, IClock clock) : Controller
 {
     [HttpGet("")]
-    [Authorize(Policy = Permissions.TenantAdminister)]
+    [Authorize(Policy = Permissions.SecurityReports)]
     public async Task<IActionResult> Index(int hours = 24, CancellationToken ct = default)
         => View(new SignInActivityModel(await log.ActivityAsync(hours, ct), Math.Clamp(hours, 1, 2160), session.Has(Permissions.SecurityInvestigate)));
+
+    /// <summary>Every section of the suspicious-activity report as one file (#272), one row per finding with its section.
+    /// Unknown user names stay hashed. The export is audited.</summary>
+    [HttpGet("activity.csv")]
+    [Authorize(Policy = Permissions.SecurityReports)]
+    public async Task<IActionResult> ActivityCsv(int hours = 24, CancellationToken ct = default)
+    {
+        var r = await log.ExportActivityAsync(hours, ct);
+        static string U(DateTime d) => d.ToString("u", CultureInfo.InvariantCulture);
+        var rows = new List<IReadOnlyList<object?>>();
+        rows.AddRange(r.ByAddress.Select(x => (IReadOnlyList<object?>)["Failures by address", x.ClientAddress, null, null, x.Failures,
+            $"{x.DistinctAccounts} accounts, {x.DistinctUnknownNames} unknown names", x.Lockouts, x.RateLimited, U(x.FirstUtc), U(x.LastUtc)]));
+        rows.AddRange(r.ByAccount.Select(x => (IReadOnlyList<object?>)["Failures by account", null, x.UserName, x.DisplayName, x.Failures,
+            $"{x.DistinctAddresses} addresses", x.Lockouts, null, null, U(x.LastUtc)]));
+        rows.AddRange(r.Spraying.Select(x => (IReadOnlyList<object?>)["One address, many accounts", x.ClientAddress, null, null, x.Failures,
+            $"{x.Targets} targets", null, null, U(x.FirstUtc), U(x.LastUtc)]));
+        rows.AddRange(r.Stuffing.Select(x => (IReadOnlyList<object?>)["One account, many addresses", null, x.UserName ?? ("hash " + x.AttemptedNameHash), x.DisplayName,
+            x.Failures, $"{x.Addresses} addresses", null, null, null, U(x.LastUtc)]));
+        rows.AddRange(r.SuccessAfterFailures.Select(x => (IReadOnlyList<object?>)["Signed in after failures", x.SuccessAddress, x.UserName, x.DisplayName,
+            x.Failures, $"{x.Addresses} addresses", null, null, null, U(x.SuccessUtc)]));
+        rows.AddRange(r.LockoutsAndLimits.Select(x => (IReadOnlyList<object?>)["Lockouts and rate limits", x.ClientAddress, x.UserName, null, null,
+            x.EventType + (x.Reason is null ? "" : ": " + x.Reason), null, null, null, U(x.EventUtc)]));
+        return File(TabularExport.Csv(["Section", "Address", "User name", "Name", "Failures", "Detail", "Lockouts", "Rate limited", "First (UTC)", "Last (UTC)"], rows),
+            TabularExport.CsvType, $"merit-sign-in-activity-{clock.Today:yyyy-MM-dd}.csv");
+    }
 
     [HttpGet("unknown-names")]
     [Authorize(Policy = Permissions.SecurityInvestigate)]
