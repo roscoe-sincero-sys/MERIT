@@ -664,7 +664,7 @@ public sealed record ResultDetailModel(LabResultDetailRow Result, IReadOnlyList<
 public sealed record CasePageModel(CaseDetail Detail, IReadOnlyList<SelectOption> Users, IReadOnlyList<SelectOption> ClosureReasons,
                                    IReadOnlyList<SelectOption> ActivityTypes, IReadOnlyList<SelectOption> Outcomes, bool CanEdit,
                                    bool CanInvestigate, string? Message = null, FormDraft? Draft = null, IReadOnlyList<SelectOption>? ContactOptions = null,
-                                   bool HasInvestigationTargets = false);
+                                   bool HasInvestigationTargets = false, IReadOnlyList<SelectOption>? TransferTargets = null);
 
 /// <summary>
 /// The case list's filters and sort, bound from the query string, so a filtered list is a link (issue #50). Assigned is

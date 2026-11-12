@@ -55,6 +55,12 @@ public sealed class CaseData(Db db) : ICaseData
     public Task ReopenCaseAsync(Guid exposureCaseId, string reason, byte[] rowVersion, CancellationToken ct = default)
         => db.ExecuteAsync("dbo.uspReopenCase", new { exposureCaseId, reason, rowVersion }, ct);
 
+    public Task<IReadOnlyList<CaseTransferTarget>> ListCaseTransferTargetsAsync(Guid exposureCaseId, CancellationToken ct = default)
+        => db.QueryAsync<CaseTransferTarget>("dbo.uspListCaseTransferTargets", new { exposureCaseId }, ct);
+
+    public Task TransferCaseAsync(Guid exposureCaseId, Guid toTenantId, string reason, byte[] rowVersion, CancellationToken ct = default)
+        => db.ExecuteAsync("dbo.uspTransferExposureCase", new { exposureCaseId, toTenantId, reason, rowVersion }, ct);
+
     public async Task<OpenCaseResult> OpenCaseAsync(Guid exposureCaseId, Guid personId, Guid analyteId, string population, string classification,
                                                     Guid qualifyingLabResultId, string workflowTemplate, DateOnly openedDate,
                                                     CancellationToken ct = default)

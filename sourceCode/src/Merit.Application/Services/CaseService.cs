@@ -105,6 +105,26 @@ public sealed class CaseService(IClock clock, ICaseData cases, IWorkData work, I
         return null;
     }
 
+    /// <summary>Where the caller may move this case (#274): case editing with write access at both ends.</summary>
+    public Task<IReadOnlyList<CaseTransferTarget>> TransferTargetsAsync(Guid id, CancellationToken ct = default)
+    {
+        session.Require(Permissions.CaseEdit);
+        return cases.ListCaseTransferTargetsAsync(id, ct);
+    }
+
+    /// <summary>Moves an open case, with its history, tasks, obligations and own investigations, to another
+    /// jurisdiction of the same data root (#274). The database checks access at both ends; the change is audited.</summary>
+    public async Task TransferAsync(Guid id, Guid? toTenantId, string? reason, bool confirmed, byte[] rowVersion, CancellationToken ct = default)
+    {
+        session.Require(Permissions.CaseEdit);
+        new Validator().Required("toTenantId", toTenantId, "Receiving jurisdiction")
+            .Required("transferReason", reason, "Reason").MaxLength("transferReason", reason, 500, "Reason")
+            .When(!confirmed, "transferConfirmed", "Confirm that the receiving jurisdiction takes over this case.")
+            .When(rowVersion.Length != 8, "RowVersion", "Reload the case before transferring it.").ThrowIfInvalid();
+        await cases.TransferCaseAsync(id, toTenantId!.Value, reason!.Trim(), rowVersion, ct).ConfigureAwait(false);
+        await audit.ChangedAsync("exposureCase", id, ct).ConfigureAwait(false);
+    }
+
     public async Task ReopenAsync(Guid id, string? reason, byte[] rowVersion, CancellationToken ct = default)
     {
         session.Require(Permissions.CaseEdit);

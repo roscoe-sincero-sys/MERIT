@@ -210,6 +210,24 @@
                 </form>
                 </details>
             </section>
+            @if (Model.TransferTargets is { Count: > 0 } targets)
+            {
+            <section class="merit-section" aria-labelledby="transfer-heading">
+                <h2 id="transfer-heading">Transfer case</h2>
+                <details class="merit-details" id="case-transfer-details" data-preserve-open open="@(draft.Form == "transfer")">
+                <summary>Transfer to another jurisdiction&hellip;</summary>
+                <p id="transfer-consequence">Now owned by <strong>@c.OwningTenantName</strong>. The receiving jurisdiction takes over the case with its history, tasks, notification obligations, sources, documents and the investigations only this case uses. A worker who cannot work there is unassigned. You may lose access to the case afterwards.</p>
+                <form class="usa-form" id="case-transfer-form" hx-post="/cases/@c.ExposureCaseId/transfer" hx-target="#case-body" hx-swap="outerHTML">
+                    <input type="hidden" name="rowVersion" value="@draft.Value("transfer", "rowVersion", rv)" />
+                    <div class="usa-form-group"><label class="usa-label" for="toTenantId">Receiving jurisdiction</label>
+                        <select class="usa-select" id="toTenantId" name="toTenantId" required>@foreach (var o in targets) { <option value="@o.Value" selected="@(draft.Selected("transfer", "toTenantId", o))">@o.Label</option> }</select></div>
+                    <div class="usa-form-group"><label class="usa-label" for="transferReason">Reason (required)</label><input class="usa-input" id="transferReason" name="transferReason" maxlength="500" value="@draft.Value("transfer", "transferReason")" required /></div>
+                    <div class="usa-checkbox"><input class="usa-checkbox__input" type="checkbox" name="transferConfirmed" id="transferConfirmed" value="true" required /><label class="usa-checkbox__label" for="transferConfirmed">The receiving jurisdiction has agreed to take over this case.</label></div>
+                    <button class="usa-button usa-button--outline" type="submit" aria-describedby="transfer-consequence">Transfer case</button>
+                </form>
+                </details>
+            </section>
+            }
             <section class="merit-section" aria-labelledby="close-heading">
                 <h2 id="close-heading">Close case</h2>
                 <details class="merit-details" id="case-close-details" data-preserve-open open="@(draft.Form == "close")">

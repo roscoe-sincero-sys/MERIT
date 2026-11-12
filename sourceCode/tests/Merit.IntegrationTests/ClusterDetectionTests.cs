@@ -22,6 +22,20 @@ public sealed class ClusterDetectionTests(MeritFixture fixture)
         await c.OpenAsync();
         try
         {
+            // The worker's way in: its own login, under a supervisor's session scope.
+            var user = (Guid)(await Sql(c, "SELECT appUserId FROM auth.appUser WHERE userName = N'supervisor'"))!;
+            await Sql(c, """
+                DECLARE @expires DATETIME2 (3) = DATEADD (MINUTE, 30, SYSUTCDATETIME ());
+                EXEC auth.uspCreateSessionScope @sessionScopeId = @scope, @appUserId = @user, @expiresUtc = @expires;
+                """, ("@scope", scope), ("@user", user));
+            var acting = (Guid)(await Sql(c, "SELECT actingTenantId FROM auth.sessionScope WHERE sessionScopeId = @scope", ("@scope", scope)))!;
+            var work = new WorkData(new Db(Options.Create(new MeritDatabaseOptions { ConnectionString = TestEnvironment.WorkerConnectionString }),
+                new ScopeSession(scope, user, acting)));
+
+            // Other tests leave open cases that share an address (the HL7 sample patients). Detect those first, so the
+            // count below is this test's group alone whatever order the suite runs in.
+            await work.DetectClustersAsync(365, 2);
+
             // Two open cases whose people share one new home: the group detection should turn into a cluster.
             await Sql(c, """
                 DECLARE @mia UNIQUEIDENTIFIER = @miaPerson;
@@ -52,16 +66,6 @@ public sealed class ClusterDetectionTests(MeritFixture fixture)
                     """, ("@person", people[i]), ("@result", results[i]), ("@case", cases[i]), ("@location", location), ("@tag", tag),
                     ("@miaPerson", fixture.Ids.MiaPersonId), ("@miaResult", fixture.Ids.MiaLabResultId), ("@miaCase", fixture.Ids.MiaCaseId));
             }
-
-            // The worker's way in: its own login, under a supervisor's session scope.
-            var user = (Guid)(await Sql(c, "SELECT appUserId FROM auth.appUser WHERE userName = N'supervisor'"))!;
-            await Sql(c, """
-                DECLARE @expires DATETIME2 (3) = DATEADD (MINUTE, 30, SYSUTCDATETIME ());
-                EXEC auth.uspCreateSessionScope @sessionScopeId = @scope, @appUserId = @user, @expiresUtc = @expires;
-                """, ("@scope", scope), ("@user", user));
-            var acting = (Guid)(await Sql(c, "SELECT actingTenantId FROM auth.sessionScope WHERE sessionScopeId = @scope", ("@scope", scope)))!;
-            var work = new WorkData(new Db(Options.Create(new MeritDatabaseOptions { ConnectionString = TestEnvironment.WorkerConnectionString }),
-                new ScopeSession(scope, user, acting)));
 
             Assert.Equal(1, await work.DetectClustersAsync(365, 2));
             Assert.Equal(1, await Sql(c, "SELECT COUNT (*) FROM dbo.cluster WHERE sharedKey = @location AND isDeleted = 0", ("@location", location)));

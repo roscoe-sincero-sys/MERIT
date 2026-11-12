@@ -119,6 +119,34 @@ public sealed class CasesController(IClock clock, CaseService cases, PersonServi
         return PartialView("_CaseBody", await PageAsync(id, "Task updated.", ct));
     }
 
+    /// <summary>Transfers the case to another jurisdiction (#274). Afterwards the caller may no longer see it, so the
+    /// response shows the case if they still can, otherwise sends them to the case list.</summary>
+    [HttpPost("{id:guid}/transfer")]
+    [Authorize(Policy = Permissions.CaseEdit)]
+    public async Task<IActionResult> Transfer(Guid id, Guid? toTenantId, string? transferReason, bool transferConfirmed, string rowVersion, CancellationToken ct)
+    {
+        try
+        {
+            await cases.TransferAsync(id, toTenantId, transferReason, transferConfirmed, Options.FromHex(rowVersion) ?? [], ct);
+        }
+        catch (ValidationException ex)
+        {
+            return this.Invalid("_CaseBody", (await PageAsync(id, null, ct)) with { Draft = this.SubmittedDraft("transfer") }, ex);
+        }
+
+        Response.Announce("Case transferred.");
+        try
+        {
+            return PartialView("_CaseBody", await PageAsync(id, "Case transferred. The receiving jurisdiction now owns it, its history and its open work.", ct));
+        }
+        catch (NotFoundException)
+        {
+            // The caller does not work in the receiving jurisdiction: the case is now out of their sight.
+            Response.Headers["HX-Redirect"] = Url.Action(nameof(Index)) ?? "/cases";
+            return Ok();
+        }
+    }
+
     [HttpPost("{id:guid}/reopen")]
     [Authorize(Policy = Permissions.CaseEdit)]
     public async Task<IActionResult> Reopen(Guid id, string? reason, string rowVersion, CancellationToken ct)
@@ -208,9 +236,15 @@ public sealed class CasesController(IClock clock, CaseService cases, PersonServi
             contacts.AddRange(person.Relationships.Select(r => new SelectOption(r.OtherPersonId.ToString(), $"{r.OtherFirstName} {r.OtherLastName} ({r.RoleLabel})")));
             hasTargets = person.Places.Any(p => p.EndDate is null || p.EndDate >= clock.Today.AddDays(-365)) || person.Employment.Count > 0;
         }
+        bool canEdit = session.Has(Permissions.CaseEdit) && detail.Case.CaseStatus != "closed";
+        var transfer = canEdit
+            ? (await cases.TransferTargetsAsync(id, ct)).Select(t => new SelectOption(t.TenantId.ToString(),
+                t.IsResidence ? $"{t.TenantName} (patient's residence)" : t.TenantName)).ToList()
+            : [];
         return new CasePageModel(detail, users, refData.Choices("closureReason", null, includeBlank: true),
             refData.Choices("activityType", "contactAttempt"), refData.Choices("activityOutcome", null, includeBlank: true),
-            session.Has(Permissions.CaseEdit) && detail.Case.CaseStatus != "closed", session.Has(Permissions.InvestigationEdit), message, ContactOptions: contacts, HasInvestigationTargets: hasTargets);
+            canEdit, session.Has(Permissions.InvestigationEdit), message, ContactOptions: contacts, HasInvestigationTargets: hasTargets,
+            TransferTargets: transfer);
     }
 }
 
