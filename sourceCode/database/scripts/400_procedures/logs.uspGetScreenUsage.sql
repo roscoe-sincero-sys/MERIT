@@ -86,14 +86,17 @@ BEGIN
         IF @days NOT BETWEEN 1 AND 90
         BEGIN
             ;THROW 51422, N'Choose a period from 1 to 90 days.', 1;
-        END;DECLARE @root UNIQUEIDENTIFIER = auth.udfSessionRootTenantId ();
-        DECLARE @scope UNIQUEIDENTIFIER = TRY_CAST (SESSION_CONTEXT (N'scopeKey') AS UNIQUEIDENTIFIER);
+        END;
         DECLARE @from DATETIME2 (3) = DATEADD (DAY, -@days, SYSUTCDATETIME ());
+        -- Issue 277: the tenants this session reviews usage for (administered, or holding usage.view, clipped by profile
+        -- and view-as), matched on the visit's working tenant at the time. A security officer has no record or administered
+        -- tenants, so the session's own tenant lists left its county empty; this also reaches descendant data roots.
+        DECLARE @review TABLE (tenantId UNIQUEIDENTIFIER PRIMARY KEY);
+        INSERT @review SELECT tenantId FROM auth.tvfReviewTenants ('usage.view');
         SELECT v.* INTO #visits
           FROM logs.screenVisit AS v
-         WHERE v.isDeleted = 0 AND v.rootTenantId = @root AND v.eventUtc >= @from
-           AND (EXISTS (SELECT 1 FROM auth.sessionScopeTenant AS st WHERE st.sessionScopeId = @scope AND st.tenantId = v.actingTenantId)
-             OR EXISTS (SELECT 1 FROM auth.sessionScopeAdminTenant AS st WHERE st.sessionScopeId = @scope AND st.tenantId = v.actingTenantId));
+         WHERE v.isDeleted = 0 AND v.eventUtc >= @from
+           AND EXISTS (SELECT 1 FROM @review AS r WHERE r.tenantId = v.actingTenantId);
         ALTER TABLE #visits ADD PRIMARY KEY CLUSTERED (screenVisitId);
         SELECT v.screenCode, CAST (NULL AS VARCHAR (1000)) AS roleCode, COUNT (*) AS visits,
                COUNT (DISTINCT v.sessionReference) AS sessions, COUNT (v.durationMs) AS timedVisits,

@@ -20,7 +20,8 @@ public sealed record PersonInput(
     string? PreferredLanguage,
     DateOnly? DeceasedDate,
     IReadOnlyList<string> RaceCodes,
-    byte[]? RowVersion);
+    byte[]? RowVersion,
+    string? ResidenceCountyFips = null);
 
 public sealed record PersonSaveOutcome(Guid PersonId, bool IsNew, IReadOnlyList<string> Changes);
 
@@ -48,7 +49,8 @@ public sealed record RelationshipInput(
     bool IsPrimaryContact,
     bool HasLegalCustody,
     DateOnly? StartDate,
-    string Source);
+    string Source,
+    string? NewResidenceCountyFips = null);
 
 public sealed record EmploymentInput(
     Guid? EmploymentId,
@@ -166,7 +168,7 @@ public sealed class PersonService(
         var saved = await data.SavePersonAsync(new PersonSave(id, lastName, firstName, Clean(input.MiddleName),
             MatchKeys.NameKey(lastName) ?? lastName.ToUpperInvariant(), MatchKeys.NameKey(firstName),
             MatchKeys.IsPlaceholderName(firstName), input.Dob, input.DobVerified, input.Sex, input.Ethnicity,
-            Clean(input.PreferredLanguage), input.DeceasedDate, input.RowVersion), ct).ConfigureAwait(false);
+            Clean(input.PreferredLanguage), input.DeceasedDate, input.RowVersion, CountyFips(input.ResidenceCountyFips)), ct).ConfigureAwait(false);
         await data.SaveRacesAsync(id, input.RaceCodes, ct).ConfigureAwait(false);
         await (saved.IsNew ? audit.CreatedAsync("person", id, ct) : audit.ChangedAsync("person", id, ct)).ConfigureAwait(false);
 
@@ -231,6 +233,10 @@ public sealed class PersonService(
     }
 
     /// <summary>"Add relationship" picks an existing person or creates a contact-only person.</summary>
+    /// <summary>A three-digit county FIPS code, or null: only a usable code may route a new person's ownership (#279).</summary>
+    private static string? CountyFips(string? value)
+        => value?.Trim() is { Length: 3 } fips && fips.All(char.IsAsciiDigit) ? fips : null;
+
     public async Task AddRelationshipAsync(RelationshipInput input, CancellationToken ct = default)
     {
         session.Require(Permissions.PersonEdit);
@@ -241,7 +247,7 @@ public sealed class PersonService(
         v.ThrowIfInvalid();
 
         Guid related = input.RelatedPersonId ?? (await SaveAsync(new PersonInput(null, input.NewLastName, input.NewFirstName, null,
-            input.NewDob, false, input.NewSex ?? "unknown", "unknown", null, null, [], null), ct).ConfigureAwait(false)).PersonId;
+            input.NewDob, false, input.NewSex ?? "unknown", "unknown", null, null, [], null, input.NewResidenceCountyFips), ct).ConfigureAwait(false)).PersonId;
         if (related == input.PersonId)
         {
             throw new BusinessRuleException("A person cannot be related to themselves.");

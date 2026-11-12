@@ -348,8 +348,9 @@ public sealed partial class IntakeProcessor(
         // ---- commit: person, alias, address, guardian
         if (newPerson)
         {
+            // #279/#280: the reported residence county decides which of the worker's jurisdictions owns the new patient.
             var saved = await personService.SaveAsync(new PersonInput(null, lastName, firstName, Get("middleName"), dob, false,
-                Get("sex") ?? "unknown", "unknown", null, null, [], null), ct).ConfigureAwait(false);
+                Get("sex") ?? "unknown", "unknown", null, null, [], null, Get("countyFips")), ct).ConfigureAwait(false);
             personId = saved.PersonId;
         }
 
@@ -370,7 +371,7 @@ public sealed partial class IntakeProcessor(
         Guid? reportedLocationId = await HandleAddressAsync(personId.Value, f, collected.Value, config, ct).ConfigureAwait(false);
         var guardians=Get("guardianContactsJson") is string guardianJson
             ? JsonSerializer.Deserialize<Dictionary<string,string?>[]>(guardianJson) ?? [] : [f];
-        foreach(var guardian in guardians) await HandleGuardianAsync(personId.Value,guardian,collected.Value,config,ct).ConfigureAwait(false);
+        foreach(var guardian in guardians) await HandleGuardianAsync(personId.Value,guardian,collected.Value,config,ct,Get("countyFips")).ConfigureAwait(false);
 
         Guid? providerId = null;
         // The same normalization as the registry, so a formatted NPI in the file still links (issue #12).
@@ -512,7 +513,8 @@ public sealed partial class IntakeProcessor(
     /// A guardian on the report becomes a contact-only person with an unverified relationship; a guardian value that
     /// looks like an organization (an employer typed into the guardian field) goes to review instead.
     /// </summary>
-    private async Task HandleGuardianAsync(Guid personId, Dictionary<string,string?> fields, DateOnly collected, JurisdictionSettings config, CancellationToken ct)
+    private async Task HandleGuardianAsync(Guid personId, Dictionary<string,string?> fields, DateOnly collected, JurisdictionSettings config, CancellationToken ct,
+                                           string? patientCountyFips = null)
     {
         string? guardian=fields.GetValueOrDefault("guardianName");
         if (string.IsNullOrWhiteSpace(guardian))
@@ -548,7 +550,7 @@ public sealed partial class IntakeProcessor(
         if(matches.Count==0)
         {
             await personService.AddRelationshipAsync(new RelationshipInput(personId, null, last, string.IsNullOrEmpty(first) ? null : first,
-                null, null, "caregiver", false, false, null, "labReport"), ct).ConfigureAwait(false);
+                null, null, "caregiver", false, false, null, "labReport", patientCountyFips), ct).ConfigureAwait(false);
             matches=(await persons.GetRelationshipsAsync(personId,ct)).Where(r=>!r.IsInverse && r.EndDate is null && MatchKeys.NameKey(r.OtherLastName)==MatchKeys.NameKey(last) && MatchKeys.NameKey(r.OtherFirstName)==MatchKeys.NameKey(first)).ToList();
         }
         if(matches.Count!=1) { await Review(); return; }

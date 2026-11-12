@@ -517,7 +517,8 @@ public sealed record PersonSave(
     string Ethnicity,
     string? PreferredLanguage,
     DateOnly? DeceasedDate,
-    byte[]? RowVersion);
+    byte[]? RowVersion,
+    string? ResidenceCountyFips = null);
 
 public sealed record RelationshipSave(
     Guid PersonRelationshipId,

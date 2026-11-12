@@ -55,7 +55,7 @@ public sealed class PersonData(Db db) : IPersonData
         => await db.QuerySingleAsync<SavePersonResult>("dbo.uspSavePerson", new
         {
             p.PersonId, p.LastName, p.FirstName, p.MiddleName, p.LastNameKey, p.FirstNameKey, p.IsPlaceholderName, p.Dob,
-            p.DobVerified, p.Sex, p.Ethnicity, p.PreferredLanguage, p.DeceasedDate, p.RowVersion,
+            p.DobVerified, p.Sex, p.Ethnicity, p.PreferredLanguage, p.DeceasedDate, p.RowVersion, p.ResidenceCountyFips,
         }, ct).ConfigureAwait(false) ?? throw new NotFoundException();
 
     public Task SaveRacesAsync(Guid personId, IReadOnlyList<string> raceCodes, CancellationToken ct = default)

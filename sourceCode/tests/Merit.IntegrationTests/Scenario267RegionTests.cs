@@ -346,7 +346,8 @@ public sealed class Scenario267RegionTests(MeritFixture fixture, ITestOutputHelp
             var readOnlyForm = await Try(dualClerk.NoRedirect.GetAsync("/people/new"));
             var readOnlyCreate = await Try(dualClerk.NoRedirect.PostAsync("/people/new", Form(("LastName", "ReadOnly" + suffix), ("FirstName", "Ada"), ("Dob", "2023-01-01"), ("Sex", "female"), ("Ethnicity", "unknown"))));
             Expect(await Count("SELECT COUNT(*) FROM dbo.person WHERE lastName=@n", ("@n", "ReadOnly" + suffix)) == 0, $"14: read-only profile created a patient ({(int)readOnlyCreate.Code})");
-            Record($"PASS 14f: two-county clerk's 'Baltimore County only' profile opens the Baltimore County patient and cannot open the Harford patient ({(int)crossCounty.Code}); 'Read only' cannot open the new-patient form ({(int)readOnlyForm.Code}) or create a patient ({(int)readOnlyCreate.Code}).");
+            int before14f = unexpected.Count(u => u.StartsWith("14:", StringComparison.Ordinal) && !u.Contains("#268", StringComparison.Ordinal));
+            Record($"{(before14f == 0 ? "PASS" : "FAIL")} 14f (#279): two-county clerk's 'Baltimore County only' profile opens the Baltimore County patient and cannot open the Harford patient ({(int)crossCounty.Code}); 'Read only' cannot open the new-patient form ({(int)readOnlyForm.Code}) or create a patient ({(int)readOnlyCreate.Code}).");
             await Switch(dualClerk, null);
 
             // ---------------------------------------------------------------- 15-17: county case management and investigation
