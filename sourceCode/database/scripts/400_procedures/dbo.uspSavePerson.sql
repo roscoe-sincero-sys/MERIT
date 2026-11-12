@@ -63,6 +63,7 @@ CREATE OR ALTER PROCEDURE dbo.uspSavePerson
       , @preferredLanguage VARCHAR (20) = NULL
       , @deceasedDate      DATE = NULL
       , @rowVersion        BINARY (8) = NULL
+      , @residenceCountyFips VARCHAR (3) = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -144,15 +145,35 @@ BEGIN
             SET @isNew = 1;
             SET @deceasedChanged = IIF (@deceasedDate IS NULL, 0, 1);
 
+            -- Issues 279/280: a new person reported with a residence county belongs to that county's jurisdiction when
+            -- this session can write there, not to whichever tenant a multi-county worker happens to be working in.
+            -- Otherwise (no county, no jurisdiction, or one the caller cannot write) the working tenant keeps it, as
+            -- before. Children of the person (aliases, contacts, identifiers, places) copy this owner when created.
+            DECLARE @owner UNIQUEIDENTIFIER = COALESCE (@acting, @root), @routed UNIQUEIDENTIFIER;
+            -- A statewide session (working at the root) keeps creating state records, with county access by residence.
+            IF @residenceCountyFips IS NOT NULL AND @acting IS NOT NULL AND @acting <> @root
+            BEGIN
+                SELECT TOP (1) @routed = t.tenantId
+                  FROM config.subJurisdiction AS sj
+                  JOIN auth.tenantJurisdiction AS tj ON tj.subJurisdictionId = sj.subJurisdictionId AND tj.isDeleted = 0
+                  JOIN auth.tenant AS t ON t.tenantId = tj.tenantId AND t.rootTenantId = @root AND t.tenantType = 'jurisdiction'
+                                       AND t.isActive = 1 AND t.isDeleted = 0
+                 WHERE sj.rootTenantId = @root AND sj.countyFips = @residenceCountyFips AND sj.isDeleted = 0
+                 ORDER BY t.tenantCode;
+                IF @routed IS NOT NULL AND EXISTS (SELECT 1 FROM auth.tvfTenantWritePredicate (@root, @routed, 0))
+                    SET @owner = @routed;
+            END;
+
             INSERT dbo.person (personId, rootTenantId, owningTenantId, lastName, firstName, middleName, lastNameKey, firstNameKey,
                                isPlaceholderName, dob, dobVerified, sex, ethnicity, preferredLanguage, deceasedDate)
-            VALUES (@personId, @root, COALESCE(@acting,@root), @lastName, @firstName, @middleName, @lastNameKey, @firstNameKey,
+            VALUES (@personId, @root, @owner, @lastName, @firstName, @middleName, @lastNameKey, @firstNameKey,
                     @isPlaceholderName, @dob, @dobVerified, @sex, @ethnicity, @preferredLanguage, @deceasedDate);
 
-            IF @acting IS NOT NULL AND @acting <> @root
+            -- The creation share follows the owner: the creating tenant, not a second county by default.
+            IF @owner <> @root
             BEGIN
                 INSERT dbo.personAccess (personAccessId, rootTenantId, personId, tenantId, accessReason)
-                VALUES (CAST (CAST (NEWID () AS BINARY (10)) + CAST (DATEDIFF_BIG (MILLISECOND, '19700101', SYSUTCDATETIME ()) AS BINARY (6)) AS UNIQUEIDENTIFIER), @root, @personId, @acting, 'share');
+                VALUES (CAST (CAST (NEWID () AS BINARY (10)) + CAST (DATEDIFF_BIG (MILLISECOND, '19700101', SYSUTCDATETIME ()) AS BINARY (6)) AS UNIQUEIDENTIFIER), @root, @personId, @owner, 'share');
             END;
         END;
 

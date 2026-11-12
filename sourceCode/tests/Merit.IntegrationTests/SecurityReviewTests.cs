@@ -95,7 +95,14 @@ public sealed class SecurityReviewTests(MeritFixture fixture)
         string users = await client.Http.GetStringAsync("/admin/users");
         Assert.Contains("<td>cmbaltco</td>", users, StringComparison.Ordinal);
         Assert.Contains("<td>cmboth</td>", users, StringComparison.Ordinal);
-        Assert.DoesNotContain("<td>cmbalt</td>", users, StringComparison.Ordinal);
+        // #278: city-only staff appear for the county only if they actually reached county records (for example a county
+        // resident's result entered in the city); other tests may have done that, so the expectation comes from the ledger.
+        bool reachedCounty = await Sql<int>("""
+            SELECT COUNT(*) FROM logs.auditEvent e JOIN auth.appUser u ON u.appUserId = e.appUserId
+             WHERE u.userName = 'cmbalt' AND e.eventUtc >= DATEADD (DAY, -365, SYSUTCDATETIME ())
+               AND e.owningTenantId IN (SELECT c.descendantTenantId FROM auth.tenantClosure c JOIN auth.tenant t ON t.tenantId = c.ancestorTenantId WHERE t.tenantCode = 'MD-BCO' AND c.isDeleted = 0)
+            """) > 0;
+        Assert.Equal(reachedCounty, users.Contains("<td>cmbalt</td>", StringComparison.Ordinal));
         Assert.DoesNotContain("/admin/users/new", users, StringComparison.Ordinal);
         string csv = await client.Http.GetStringAsync("/admin/users.csv");
         Assert.StartsWith("\"User name\",\"Name\",\"Email\"", csv.TrimStart((char)0xFEFF), StringComparison.Ordinal);

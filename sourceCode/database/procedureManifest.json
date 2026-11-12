@@ -6560,6 +6560,12 @@
     "type": "BINARY (8)",
     "hasDefault": true,
     "isOutput": false
+   },
+   {
+    "name": "residenceCountyFips",
+    "type": "VARCHAR (3)",
+    "hasDefault": true,
+    "isOutput": false
    }
   ]
  },

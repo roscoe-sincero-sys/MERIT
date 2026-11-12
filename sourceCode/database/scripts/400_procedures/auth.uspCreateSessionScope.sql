@@ -198,11 +198,14 @@ BEGIN
                    OR EXISTS (SELECT 1 FROM @adminScope WHERE tenantId = @actingTenantId) THEN @actingTenantId END;
         IF @acting IS NULL
         BEGIN
+            -- Issue 280: the same tenant every time. Equal depths (a worker in two counties) used to fall to a GUID
+            -- comparison, so new records went to a different county from one deployment or run to the next.
             SET @acting = (SELECT TOP (1) s.tenantId
                              FROM (SELECT tenantId FROM @tenants UNION SELECT tenantId FROM @adminScope) AS s
                              JOIN auth.tenantClosure AS c ON c.descendantTenantId = s.tenantId AND c.ancestorTenantId = @platform
                                                          AND c.isDeleted = 0
-                            ORDER BY c.depth, s.tenantId);
+                             JOIN auth.tenant AS t ON t.tenantId = s.tenantId
+                            ORDER BY c.depth, t.tenantName, t.tenantCode, s.tenantId);
         END;
         IF @acting IS NULL
         BEGIN

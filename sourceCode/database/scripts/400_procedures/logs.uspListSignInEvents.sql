@@ -85,16 +85,9 @@ BEGIN
         -- =========================================================================================
 
         DECLARE @all BIT = auth.udfHasPermission (N'security.investigate');
-        -- Issues 270/271: accounts homed or holding a current grant in the tenants the caller administers or reviews.
-        DECLARE @admin TABLE (tenantId UNIQUEIDENTIFIER PRIMARY KEY);
-        INSERT @admin SELECT tenantId FROM auth.tvfReviewTenants ('security.review');
+        -- Issues 270/271/278: the accounts that can reach, or did reach, the tenants the caller administers or reviews.
         DECLARE @accounts TABLE (appUserId UNIQUEIDENTIFIER PRIMARY KEY);
-        INSERT @accounts SELECT u.appUserId FROM auth.appUser AS u
-         WHERE u.isDeleted = 0
-           AND (EXISTS (SELECT 1 FROM @admin AS a WHERE a.tenantId = u.homeTenantId)
-                OR EXISTS (SELECT 1 FROM auth.userAssignment AS ua JOIN @admin AS a ON a.tenantId = ua.tenantId
-                            WHERE ua.appUserId = u.appUserId AND ua.isDeleted = 0
-                              AND (ua.endDate IS NULL OR ua.endDate >= auth.udfSessionToday ())));
+        INSERT @accounts SELECT appUserId FROM auth.tvfReviewAccounts ('security.review');
 
         SELECT TOP (CASE WHEN @top BETWEEN 1 AND 1000 THEN @top ELSE 100 END)
                e.eventUtc, e.eventType, e.step, e.method, e.reason, e.clientAddress, e.forwardedFor, e.userAgent,
