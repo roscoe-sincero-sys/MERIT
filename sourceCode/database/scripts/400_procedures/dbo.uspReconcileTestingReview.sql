@@ -98,7 +98,7 @@ BEGIN
         FROM dbo.labResult AS r JOIN config.analyteSpecimen AS s ON s.analyteSpecimenId=r.analyteSpecimenId JOIN config.analyte AS a ON a.analyteId=s.analyteId
         WHERE r.labResultId=@labResultId AND r.resultRowStatus='valid' AND r.resultStatus IN ('final','corrected') AND r.isDeleted=0
          AND a.code='PB' AND s.specimen='wholeBlood' AND s.canonicalUnit=N'ug/dL' AND r.ageAtCollectionMonths BETWEEN 6 AND 71;
-        SET @owner=dbo.udfPatientWorkOwner(@person);
+        SET @owner=dbo.udfWritableWorkOwner(@root,dbo.udfPatientWorkOwner(@person)); -- issue 268
         IF @person IS NOT NULL AND (@md=1 OR EXISTS(SELECT 1 FROM dbo.workTask WHERE personId=@person AND testingPlanJson IS NOT NULL AND isDeleted=0))
         BEGIN
             DECLARE @lock INT;

@@ -4,9 +4,10 @@
 }
 <div class="merit-page-header">
     <h1>Users</h1>
-    <span><a class="usa-button" href="/admin/users/new">Add a user</a> <a class="usa-button usa-button--outline" href="/admin/audit">Audit log</a></span>
+    <span>@if (Model.CanAdminister) { <a class="usa-button" href="/admin/users/new">Add a user</a> } @if (Model.CanAudit) { <a class="usa-button usa-button--outline" href="/admin/audit">Audit log</a> } <a class="usa-button usa-button--outline" href="/admin/users.csv" download>Export users and access (CSV)</a></span>
 </div>
-<p class="merit-meta">People who work for the tenants you administer, and people from elsewhere you have given access here.</p>
+<p class="merit-meta">@(Model.CanAdminister ? "People who work for the tenants you administer, and people from elsewhere you have given access here." : "People who work for, or have access to, the tenants you review. Read only: ask an administrator to change an account.")</p>
+@if (Model.CanAdminister) {
 <details class="merit-details" open="@(ViewData["findMessage"] is string)"><summary>Give access to an external user</summary>
 <form class="merit-inline-form" method="get" action="/admin/users">
     <label class="usa-label" for="find">Give access to someone from another tenant: their exact user name</label>
@@ -15,6 +16,7 @@
     <button class="usa-button usa-button--outline" type="submit">Find</button>
 </form>
 </details>
+}
 @* A filter field like the others in MERIT: its own group, then the count after a gap (issue #171). *@
 <div class="usa-form-group merit-filter">
     <label class="usa-label" for="user-filter">Filter listed users</label>
@@ -29,7 +31,7 @@
             @foreach (var u in Model.Users)
             {
                 <tr data-user-row>
-                    <td><a class="usa-link" href="/admin/users/@u.AppUserId">@u.DisplayName</a></td>
+                    <td>@if (Model.CanAdminister) { <a class="usa-link" href="/admin/users/@u.AppUserId">@u.DisplayName</a> } else { @u.DisplayName }</td>
                     <td>@u.UserName</td>
                     <td>@u.HomeTenantName@(u.CanManageAccount ? "" : " (another administrator)")</td>
                     <td>@u.Assignments</td>

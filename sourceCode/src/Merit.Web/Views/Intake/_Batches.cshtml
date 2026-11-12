@@ -20,7 +20,7 @@
                 <div class="usa-card__container" id="batch-@b.IntakeBatchId">
                     <div class="usa-card__header"><h3 class="usa-card__heading merit-card__file">@FileNames.Breakable(b.FileName)</h3></div>
                     <div class="usa-card__body">
-                        <p><span class="merit-badge @(b.BatchStatus == "paused" ? "merit-badge--urgent" : incomplete ? "merit-badge--suspect" : b.BatchStatus == "loaded" ? "merit-badge--ok" : "")">@label</span>
+                        <p><span class="merit-badge @(b.BatchStatus is "paused" or "failed" ? "merit-badge--urgent" : incomplete ? "merit-badge--suspect" : b.BatchStatus == "loaded" ? "merit-badge--ok" : "")">@label</span>
                             <span class="merit-meta">@b.SenderName &middot; @Options.Date(b.ReceivedUtc) &middot; @b.SubmittedBy</span></p>
                         @if (b.DepartmentReceivedUtc is DateTime originalReceipt) { <p><strong>Historical Department receipt:</strong> @TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(originalReceipt, DateTimeKind.Utc), TimeZoneInfo.FindSystemTimeZoneById(b.ReceiptTimeZone!)).ToString("yyyy-MM-dd HH:mm") (@b.ReceiptTimeZone). Upload time above is retained separately.</p><details><summary>Receipt source evidence</summary><p class="care-note">@b.ReceiptEvidence</p></details> }
                         @if (b.PauseReason is not null) { <p>@b.PauseReason</p> }

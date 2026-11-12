@@ -130,6 +130,9 @@ BEGIN
         BEGIN
             ;THROW 51404, N'The receipt source was not found or is outside your access.', 1;
         END;
+        -- Issue 268: results are owned by the data root, which a county-scoped session cannot write. Keep that owner for
+        -- sessions that can (state-level review is unchanged); otherwise the findings stay with the caller's tenant.
+        SET @owner = dbo.udfWritableWorkOwner (@root, @owner);
         -- Authorization above runs as the caller. The internal owner lookup exposes no batch content
         -- and cannot be executed directly by application roles, including clinical-only profiles.
         IF @labResultId IS NOT NULL AND @stagingRowId IS NULL

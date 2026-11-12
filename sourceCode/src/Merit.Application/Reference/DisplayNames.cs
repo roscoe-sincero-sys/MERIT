@@ -17,6 +17,7 @@ public sealed class DisplayNames
         ["missingDob"] = "Missing date of birth", ["unusableAddress"] = "Unusable address",
         ["possibleDuplicate"] = "Possible duplicate", ["uncertainMatch"] = "Uncertain person match",
         ["outOfJurisdiction"] = "Out of jurisdiction", ["impossibleDates"] = "Impossible dates",
+        ["permissionDenied"] = "Needs an account with permission",
         // Populations: report groups and chart series name them, not their codes (issue #166).
         ["child"] = "Child", ["adult"] = "Adult", ["pregnant"] = "Pregnant",
         // Cases, results and specimens.

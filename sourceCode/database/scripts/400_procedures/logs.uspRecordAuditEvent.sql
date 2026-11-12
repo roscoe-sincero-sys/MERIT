@@ -91,9 +91,27 @@ BEGIN
         -- ===== The procedure's own work starts here. Everything above and below is boilerplate. ==
         -- =========================================================================================
 
-        INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, recordCount, clientAddress)
+        -- Issue 270: stamp the owner the actor's own session can see now, so a tenant-scoped reviewer later sees events on
+        -- that tenant's records without needing row access to the records themselves.
+        DECLARE @owner UNIQUEIDENTIFIER;
+        IF @entityId IS NOT NULL
+        BEGIN
+            SET @owner = CASE @entityType
+                WHEN 'person'                 THEN dbo.udfPatientWorkOwner (@entityId)
+                WHEN 'patientCare'            THEN dbo.udfPatientWorkOwner (@entityId)
+                WHEN 'labResult'              THEN dbo.udfPatientWorkOwner ((SELECT personId FROM dbo.labResult WHERE labResultId = @entityId))
+                WHEN 'exposureCase'           THEN (SELECT owningTenantId FROM dbo.exposureCase WHERE exposureCaseId = @entityId)
+                WHEN 'investigation'          THEN (SELECT owningTenantId FROM dbo.investigation WHERE investigationId = @entityId)
+                WHEN 'workTask'               THEN (SELECT owningTenantId FROM dbo.workTask WHERE workTaskId = @entityId)
+                WHEN 'testingPlan'            THEN (SELECT owningTenantId FROM dbo.workTask WHERE workTaskId = @entityId)
+                WHEN 'notificationObligation' THEN (SELECT owningTenantId FROM dbo.notificationObligation WHERE notificationObligationId = @entityId)
+                WHEN 'stagingRow'             THEN (SELECT owningTenantId FROM dbo.stagingRow WHERE stagingRowId = @entityId)
+            END;
+        END;
+
+        INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, recordCount, clientAddress, owningTenantId)
         VALUES (auth.udfSessionUserId (), auth.udfSessionRootTenantId (), @eventAction, @entityType, @entityId, @recordCount,
-                @clientAddress);
+                @clientAddress, @owner);
 
         SET @Comments = N'Audit event recorded.';
 

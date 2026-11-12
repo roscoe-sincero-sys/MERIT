@@ -149,7 +149,7 @@ public sealed class EndpointInventoryTests
                 problems.Add(name + " has no [Authorize(Policy = ...)]");
             }
 
-            problems.AddRange(policies.Where(p => p is null || (p != Permissions.SignedIn && !Permissions.All.Contains(p)))
+            problems.AddRange(policies.Where(p => p is null || (p != Permissions.SignedIn && !Permissions.All.Contains(p) && !Permissions.CompositePolicies.Contains(p)))
                 .Select(p => $"{name} names unknown policy '{p}'"));
         }
 

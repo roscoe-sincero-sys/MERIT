@@ -137,18 +137,49 @@ public sealed class ConfigController(IClock clock, ConfigService config, IRefere
 public sealed class AdminController(IClock clock, AdminService admin, AuditService audit, ICurrentSession session) : Controller
 {
     [HttpGet("users")]
-    [Authorize(Policy = Permissions.TenantAdminister)]
+    [Authorize(Policy = Permissions.SecurityReports)]
     public async Task<IActionResult> Users(string? find, CancellationToken ct)
     {
+        bool administers = session.Has(Permissions.TenantAdminister);
         // Exact user name: give someone who works elsewhere (for example two counties) access where you administer.
-        if (!string.IsNullOrWhiteSpace(find) && await admin.FindUserAsync(find, ct) is { } found)
+        if (administers && !string.IsNullOrWhiteSpace(find) && await admin.FindUserAsync(find, ct) is { } found)
         {
             return RedirectToAction(nameof(EditUser), new { id = found.AppUserId });
         }
 
-        ViewData["findMessage"] = string.IsNullOrWhiteSpace(find) ? null : $"No active account is called \"{find}\".";
-        return View(new UsersModel(await admin.UsersAsync(ct)));
+        ViewData["findMessage"] = !administers || string.IsNullOrWhiteSpace(find) ? null : $"No active account is called \"{find}\".";
+        return View(new UsersModel(await admin.UsersAsync(ct), administers, session.Has(Permissions.AuditView)));
     }
+
+    /// <summary>Users and their current access, for access review (#272). Same scope as the page; the export is audited.</summary>
+    [HttpGet("users.csv")]
+    [Authorize(Policy = Permissions.SecurityReports)]
+    public async Task<IActionResult> UsersCsv(CancellationToken ct)
+    {
+        var users = await admin.UsersAsync(ct);
+        await audit.ExportedAsync("userAccess", null, users.Count, ct);
+        return File(TabularExport.Csv(["User name", "Name", "Email", "Works for", "Current access (role @ tenant)", "Active", "MFA enrolled",
+                "Last sign-in (UTC)", "Locked until (UTC)", "Account managed here"],
+            users.Select(u => (IReadOnlyList<object?>)[u.UserName, u.DisplayName, u.Email, u.HomeTenantName, u.Assignments,
+                u.IsActive ? "yes" : "no", u.MfaEnabled ? "yes" : "no", Utc(u.LastSignInUtc), Utc(u.LockoutEndUtc), u.CanManageAccount ? "yes" : "no"])),
+            TabularExport.CsvType, $"merit-users-access-{clock.Today:yyyy-MM-dd}.csv");
+    }
+
+    /// <summary>One account's sign-in history (#272), up to 1,000 events. The stored procedure checks the scope; audited.</summary>
+    [HttpGet("users/{id:guid}/sign-in-history.csv")]
+    [Authorize(Policy = Permissions.SecurityReports)]
+    public async Task<IActionResult> SignInHistoryCsv(Guid id, CancellationToken ct)
+    {
+        var events = await admin.SignInHistoryAsync(id, 1000, ct);
+        await audit.ExportedAsync("signInHistory", id, events.Count, ct);
+        return File(TabularExport.Csv(["When (UTC)", "Event", "Step", "Method", "Reason", "Address", "Forwarded for", "User agent",
+                "Failed sign-ins", "Locked until (UTC)", "By (administrator)", "Session reference"],
+            events.Select(e => (IReadOnlyList<object?>)[Utc(e.EventUtc), e.EventType, e.Step, e.Method, e.Reason, e.ClientAddress,
+                e.ForwardedFor, e.UserAgent, e.FailedSignInCount, Utc(e.LockoutEndUtc), e.ActorDisplayName, e.SessionReference])),
+            TabularExport.CsvType, $"merit-sign-in-history-{clock.Today:yyyy-MM-dd}.csv");
+    }
+
+    private static string? Utc(DateTime? value) => value?.ToString("u", System.Globalization.CultureInfo.InvariantCulture);
 
     [HttpGet("users/new")]
     [HttpGet("users/{id:guid}")]
@@ -239,8 +270,10 @@ public sealed class AdminController(IClock clock, AdminService admin, AuditServi
             await admin.AssignAsync(id, roleId, tenantId, includeDescendants, accessLevel ?? "full", clock.Today, null, ct);
             TempData["userMessage"] = "Grant added. The person's active sessions have been signed out.";
         }
-        catch (MeritException ex) when (ex is ValidationException or PermissionDeniedException)
+        catch (MeritException ex) when (ex is ValidationException or PermissionDeniedException or BusinessRuleException)
         {
+            // #271: a business rule (for example "platform roles are granted only at the platform") is shown beside the
+            // grant form like any other refusal, not as a bare error page.
             TempData["userError"] = ex.Message;
         }
 

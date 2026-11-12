@@ -40,6 +40,15 @@ public static class Permissions
     /// <summary>Sign-in investigation (#191): every sign-in event, unknown user names, and revealing them.</summary>
     public const string SecurityInvestigate = "security.investigate";
 
+    /// <summary>Read-only security review for the tenants granted (#271): audit, sign-in activity, user access, exports.</summary>
+    public const string SecurityReview = "security.review";
+
+    /// <summary>Policy (not a permission): user access and sign-in reports, for administrators or security reviewers.</summary>
+    public const string SecurityReports = "securityReports";
+
+    /// <summary>Policies that accept any one of several permissions; each is registered in Merit.Web.</summary>
+    public static IReadOnlyList<string> CompositePolicies { get; } = [SecurityReports];
+
     /// <summary>Policy for actions any signed-in user may take (their own account, sign-out).</summary>
     public const string SignedIn = "signedIn";
 
@@ -48,6 +57,6 @@ public static class Permissions
         PersonView, PersonEdit, PersonViewIdentifiers, PersonMerge, ResultView, ResultEdit, ResultReleaseHold, CaseView,
         CaseOpen, CaseEdit, InvestigationEdit, TaskView, TaskEdit, IntakeUpload, IntakeConfigure, DataExport,
         MatchingConfigure, ExtractRun, ExtractSubmit, ConfigEdit, RegistryEdit, TenantAdminister, TenantCreate, AuditView, PlatformAdminister,
-        SecurityInvestigate, UsageView, DocumentView, DocumentEdit, WorkflowWaive,
+        SecurityInvestigate, SecurityReview, UsageView, DocumentView, DocumentEdit, WorkflowWaive,
     ];
 }

@@ -25,7 +25,7 @@ logs.uspStartExecutionLogging and logs.uspRecordExecutionError (scripts/000_infr
 ========================================================================================================================
 Notes:
 
-Requires permission tenant.administer (auth.udfHasPermission); refuses with 51403 otherwise.
+Requires permission tenant.administer or security.review (auth.udfHasPermission); refuses with 51403 otherwise.
 
 Rule 8 error-only instrumentation (a procedure that only reads), generated from templates/procedure-readonly.sql by tools/generateProcedures.py. Row-level security applies to every table read
 or written here: SESSION_CONTEXT (N'scopeKey') decides what the caller can see.
@@ -77,9 +77,9 @@ BEGIN
 
     BEGIN TRY
 
-        IF auth.udfHasPermission (N'tenant.administer') = 0
+        IF auth.udfHasPermission (N'tenant.administer') = 0 AND auth.udfHasPermission (N'security.review') = 0
         BEGIN
-            ;THROW 51403, N'You do not have permission to do this (tenant.administer).', 1;
+            ;THROW 51403, N'You do not have permission to do this (tenant.administer or security.review).', 1;
         END;
 
         -- =========================================================================================
@@ -87,10 +87,16 @@ BEGIN
         -- =========================================================================================
 
         DECLARE @all BIT = auth.udfHasPermission (N'security.investigate');
+        -- Issues 270/271: accounts homed or holding a current grant in the tenants the caller administers or reviews.
         DECLARE @admin TABLE (tenantId UNIQUEIDENTIFIER PRIMARY KEY);
-        INSERT @admin SELECT tenantId FROM auth.tvfAdminTenants ();
+        INSERT @admin SELECT tenantId FROM auth.tvfReviewTenants ('security.review');
         DECLARE @accounts TABLE (appUserId UNIQUEIDENTIFIER PRIMARY KEY);
-        INSERT @accounts SELECT u.appUserId FROM auth.appUser AS u JOIN @admin AS a ON a.tenantId = u.homeTenantId WHERE u.isDeleted = 0;
+        INSERT @accounts SELECT u.appUserId FROM auth.appUser AS u
+         WHERE u.isDeleted = 0
+           AND (EXISTS (SELECT 1 FROM @admin AS a WHERE a.tenantId = u.homeTenantId)
+                OR EXISTS (SELECT 1 FROM auth.userAssignment AS ua JOIN @admin AS a ON a.tenantId = ua.tenantId
+                            WHERE ua.appUserId = u.appUserId AND ua.isDeleted = 0
+                              AND (ua.endDate IS NULL OR ua.endDate >= auth.udfSessionToday ())));
         DECLARE @since DATETIME2 (3) = DATEADD (HOUR, -CASE WHEN @hours BETWEEN 1 AND 2160 THEN @hours ELSE 24 END, SYSUTCDATETIME ());
 
         DECLARE @e TABLE (eventUtc DATETIME2 (3), eventType VARCHAR (40), reason VARCHAR (60), appUserId UNIQUEIDENTIFIER,

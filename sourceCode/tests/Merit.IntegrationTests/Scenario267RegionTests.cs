@@ -428,18 +428,19 @@ public sealed class Scenario267RegionTests(MeritFixture fixture, ITestOutputHelp
             Assert.Equal(0, await Count("SELECT COUNT(*) FROM auth.userAssignment WHERE appUserId=@u AND roleId=@r AND isDeleted=0", ("@u", officer), ("@r", platformRole)));
             Record($"OBSERVE 22a (#271): platform granting its own role (the only role with security.investigate) to the Harford account: POST HTTP {(int)refusedPost.Code}: {WebUtility.HtmlDecode(Excerpt(refusedPost.Body))}; user page message: " + (WebUtility.HtmlDecode(Regex.Match(refusal, "usa-alert--error[^>]*><div[^>]*><p[^>]*>([^<]*)").Groups[1].Value) is { Length: > 0 } m ? m : "(none)"));
             var securityRoles = (await Sql("SELECT STRING_AGG(r.roleCode,',') FROM auth.role r WHERE r.rootTenantId=@r AND r.isDeleted=0 AND EXISTS (SELECT 1 FROM auth.rolePermission rp JOIN auth.permission p ON p.permissionId=rp.permissionId WHERE rp.roleId=r.roleId AND rp.isDeleted=0 AND p.permissionCode='security.investigate')", ("@r", mdRoot)))?.ToString();
-            Record("OBSERVE 22b (#271): Maryland roles holding security.investigate: " + (securityRoles ?? "(none)"));
-            await Grant(platform, officer, md["025"], "userAdministrator");
-            Assert.Equal(1, await Count("SELECT COUNT(*) FROM auth.userAssignment ua JOIN auth.role r ON r.roleId=ua.roleId WHERE ua.appUserId=@u AND r.roleCode='userAdministrator' AND ua.tenantId=@t AND ua.isDeleted=0", ("@u", officer), ("@t", md["025"])));
-            Record("PASS 22c: platform granted the Harford account the strongest security role available to a Maryland account: User administrator (tenant.administer, audit.view) at Harford County only.");
+            Record("OBSERVE 22b (#271): Maryland roles holding security.investigate: " + (securityRoles ?? "(none)") + " (unknown sign-in names match no account, so they belong to no tenant and stay platform-only)");
+            Expect(refusal.Contains("Platform accounts hold only platform roles", StringComparison.Ordinal), "22: the refused platform-role grant is not explained on the user page (#271)");
+            await Grant(platform, officer, md["025"], "securityOfficer");
+            Assert.Equal(1, await Count("SELECT COUNT(*) FROM auth.userAssignment ua JOIN auth.role r ON r.roleId=ua.roleId WHERE ua.appUserId=@u AND r.roleCode='securityOfficer' AND ua.tenantId=@t AND ua.isDeleted=0", ("@u", officer), ("@t", md["025"])));
+            Record("PASS 22c (#271): platform granted the Harford account the Security officer role (audit.view, usage.view, security.review: read-only security reports) at Harford County only.");
 
             // ---------------------------------------------------------------- 23: Harford security officer reports
             var security = await SignIn("harfordsecurity" + suffix);
             await security.Http.GetStringAsync($"/people/{harfordPerson}"); // the officer is also a Harford case manager
             await SecurityReports("Harford County security officer", security, harford: true);
             Record(unexpected.Count == 0 ? "RESULT: no unexpected behaviour." : $"RESULT: {unexpected.Count} unexpected: " + string.Join(" || ", unexpected));
-            // Only the filed county-intake defect (#268) may remain; anything else is a new finding.
-            Assert.All(unexpected, u => Assert.Contains("#268", u, StringComparison.Ordinal));
+            // #268-#272 are fixed: any unexpected behaviour is a new finding.
+            Assert.Empty(unexpected);
         }
         finally
         {
@@ -540,6 +541,9 @@ public sealed class Scenario267RegionTests(MeritFixture fixture, ITestOutputHelp
         string usage = await Get("/admin/usage?days=1");
         string usageCsv = await Get("/admin/usage/summary.csv?days=1");
         string users = await Get("/admin/users");
+        string activityCsv = await Get("/admin/sign-in-activity/activity.csv?hours=24");
+        string usersCsv = await Get("/admin/users.csv");
+        Expect(auditCsv.Length > 0 && activityCsv.Length > 0 && usersCsv.Length > 0, $"{who}: a security report export is unavailable (#272): {string.Join("; ", lines)}");
         var csvUsers = auditCsv.Split("\r\n").Skip(1).Where(l => l.Length > 0).Select(l => l.Split(',')[1]).Distinct().ToList();
         string Of(string body, string prefix) => Regex.IsMatch(body, prefix + "[a-z0-9]*" + suffix, RegexOptions.IgnoreCase) ? "yes" : "no";
         Record($"REPORTS {who}: {string.Join("; ", lines)}");
@@ -548,10 +552,18 @@ public sealed class Scenario267RegionTests(MeritFixture fixture, ITestOutputHelp
         Record($"REPORTS {who} (#270/#272): sign-in activity mentions — Harford {Of(activity, "harford")}, Baltimore City {Of(activity, "city")}, Virginia {Of(activity, "va059")}; has an export link: {activity.Contains(".csv", StringComparison.Ordinal)}");
         Record($"REPORTS {who} (#272): user list mentions — Harford {Of(users, "harford")}, two-county {Of(users, "dual")}, Baltimore City {Of(users, "city")}, Virginia {Of(users, "va059")}; has an export link: {users.Contains(".csv", StringComparison.Ordinal)}");
         Record($"REPORTS {who}: unknown names report available {unknown.Length > 0}, export {unknownCsv.Length > 0}; usage report {usage.Length > 0}, export {usageCsv.Length > 0}");
+        Record($"REPORTS {who} (#272): exports — sign-in activity {activityCsv.Length > 0}, users and access {usersCsv.Length > 0}, audit {auditCsv.Length > 0}");
         if (harford)
         {
             // Expected by #267 step 23: only Harford users and other users who accessed Harford data.
-            Record($"CHECK 23 (#270): Harford officer sees Baltimore City-only staff in audit: {Of(auditCsv, "city")}; in user list: {Of(users, "city")}; sees two-county staff who touched Harford data: {Of(auditCsv, "dual")}");
+            Record($"CHECK 23 (#270): Harford officer sees Baltimore City-only staff in audit: {Of(auditCsv, "city")}; in user list: {Of(users, "city")}; sees two-county staff who touched Harford data: {Of(auditCsv, "dual")}; Harford staff: {Of(auditCsv, "harford")}");
+            Expect(Of(auditCsv, "city") == "no" && Of(users, "city") == "no", "23: the Harford officer's reports include Baltimore City-only staff (#270)");
+            Expect(Of(auditCsv, "harford") == "yes" && Of(auditCsv, "dual") == "yes", "23: the Harford officer's audit omits Harford staff or the two-county staff who work Harford data (#270)");
+            Expect(!users.Contains("/admin/users/new", StringComparison.Ordinal), "23: the read-only Security officer is offered account creation (#271)");
+        }
+        else
+        {
+            Expect(Of(auditCsv, "harford") == "yes" && Of(auditCsv, "va059") == "yes", $"{who}: the audit does not reach the state data roots below it (#270)");
         }
     }
 

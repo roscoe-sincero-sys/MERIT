@@ -196,9 +196,23 @@ public sealed class ResultService(
                 null, [], [], true);
         }
 
-        var outcome = await classification.ClassifyAsync(id, input.PersonId, specimen.AnalyteSpecimenId,
-            new ClassifiableResult(id, input.CollectedDate.Value, sampleType, Clean(input.TestMethod), Clean(input.Speciation),
-                normalized.Operator, normalized.ValueCanonical, input.ResultStatus != "preliminary"), ct).ConfigureAwait(false);
+        ClassificationOutcome outcome;
+        try
+        {
+            outcome = await classification.ClassifyAsync(id, input.PersonId, specimen.AnalyteSpecimenId,
+                new ClassifiableResult(id, input.CollectedDate.Value, sampleType, Clean(input.TestMethod), Clean(input.Speciation),
+                    normalized.Operator, normalized.ValueCanonical, input.ResultStatus != "preliminary"), ct).ConfigureAwait(false);
+        }
+        catch (MeritException ex) when (ex is PermissionDeniedException or BusinessRuleException or NotFoundException)
+        {
+            // Issue 268: the result is already committed. Reporting a refusal here would tell the user nothing was saved
+            // while a partly processed result stays on file. Say what happened; the follow-up steps are reconcilers and
+            // can be re-run (patient notification and work evaluation) once access or configuration is corrected.
+            return new ResultSaveSummary(id, analyte.DisplayName, valueDisplay, canonicalDisplay, "not evaluated", [],
+                "Result saved, but follow-up processing did not complete: " + ex.Message
+                + " Cases, notices and review tasks for this result may be missing. Ask a supervisor or administrator to review it before relying on it.",
+                null, ["Follow-up processing stopped after the result was saved."], [], false);
+        }
 
         var rules = await thresholds.GetRulesAsync(specimen.AnalyteSpecimenId, input.CollectedDate.Value, ct).ConfigureAwait(false);
         var eval = new ResultForEvaluation(normalized.Operator, normalized.ValueCanonical, outcome.Decision.EffectiveSampleType,

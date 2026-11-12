@@ -868,7 +868,8 @@ public sealed record SettingsModel(IReadOnlyList<SettingRow> Current, IReadOnlyL
 
 public sealed record AnalytesModel(IReadOnlyList<AnalyteRow> Analytes, IReadOnlyList<AnalyteSpecimenRow> Specimens, bool CanEdit);
 
-public sealed record UsersModel(IReadOnlyList<UserListRow> Users);
+/// <summary>The user list; read-only (no add, find or edit) for a security reviewer who does not administer (#271).</summary>
+public sealed record UsersModel(IReadOnlyList<UserListRow> Users, bool CanAdminister = true, bool CanAudit = true);
 
 public sealed class UserFormModel
 {

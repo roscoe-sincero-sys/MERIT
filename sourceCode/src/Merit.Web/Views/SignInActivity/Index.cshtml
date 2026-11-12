@@ -5,6 +5,7 @@
     string Window(int h) => h % 24 == 0 ? $"{h / 24} day{(h == 24 ? "" : "s")}" : $"{h} hours";
 }
 <h1>Sign-in activity</h1>
+<p><a class="usa-button usa-button--outline" href="/admin/sign-in-activity/activity.csv?hours=@Model.Hours" download>Export this report (CSV)</a></p>
 <p>Patterns worth a look in the last <strong>@Window(Model.Hours)</strong>.
     @(Model.CanInvestigate
         ? "You see every sign-in event, including attempts at user names that match no account."

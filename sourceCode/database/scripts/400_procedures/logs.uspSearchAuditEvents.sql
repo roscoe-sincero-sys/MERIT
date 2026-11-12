@@ -13,7 +13,7 @@ CreateDate:   2026-10-24
 ========================================================================================================================
 Description:
 
-Searches the audit ledger within the caller's root tenant by user, record, action, record type and time, newest first, one page at a time with the total. Record type 'report' covers every report.
+Searches the audit ledger within what the caller reviews (whole data roots it reviews at the root; elsewhere events by its users or on its tenants' records, issue 270) by user, record, action, record type and time, newest first, one page at a time with the total. Record type 'report' covers every report.
 
 ========================================================================================================================
 Requirements and Key Dependencies:
@@ -95,11 +95,31 @@ BEGIN
         -- ===== The procedure's own work starts here. Everything above and below is boilerplate. ==
         -- =========================================================================================
 
+        -- Issue 270: scope to what the caller reviews, not to the whole data root. A data root is visible in full only
+        -- where the caller reviews its root tenant (a state administrator; a platform or region administrator for the
+        -- roots below it). Elsewhere: events by users homed or granted (now or before) in the reviewed tenants, and
+        -- events on records those tenants owned when the event was written.
+        DECLARE @scope TABLE (tenantId UNIQUEIDENTIFIER PRIMARY KEY);
+        INSERT @scope SELECT tenantId FROM auth.tvfReviewTenants ('audit.view');
+        DECLARE @wholeRoots TABLE (rootTenantId UNIQUEIDENTIFIER PRIMARY KEY);
+        INSERT @wholeRoots SELECT t.tenantId FROM auth.tenant AS t JOIN @scope AS s ON s.tenantId = t.tenantId WHERE t.tenantId = t.rootTenantId;
+        DECLARE @partRoots TABLE (rootTenantId UNIQUEIDENTIFIER PRIMARY KEY);
+        INSERT @partRoots SELECT DISTINCT t.rootTenantId FROM auth.tenant AS t JOIN @scope AS s ON s.tenantId = t.tenantId
+         WHERE NOT EXISTS (SELECT 1 FROM @wholeRoots AS w WHERE w.rootTenantId = t.rootTenantId);
+        DECLARE @users TABLE (appUserId UNIQUEIDENTIFIER PRIMARY KEY);
+        INSERT @users SELECT u.appUserId FROM auth.appUser AS u
+         WHERE EXISTS (SELECT 1 FROM @partRoots)
+           AND (EXISTS (SELECT 1 FROM @scope AS s WHERE s.tenantId = u.homeTenantId)
+                OR EXISTS (SELECT 1 FROM auth.userAssignment AS ua JOIN @scope AS s ON s.tenantId = ua.tenantId WHERE ua.appUserId = u.appUserId AND ua.isDeleted = 0));
+
         SELECT e.auditEventId, e.eventUtc, e.appUserId, u.displayName, e.eventAction, e.entityType, e.entityId,
                e.recordCount, e.clientAddress, COUNT (*) OVER () AS totalCount
           FROM logs.auditEvent AS e
           LEFT JOIN auth.appUser AS u ON u.appUserId = e.appUserId
-         WHERE e.rootTenantId = auth.udfSessionRootTenantId ()
+         WHERE (EXISTS (SELECT 1 FROM @wholeRoots AS w WHERE w.rootTenantId = e.rootTenantId)
+                OR (EXISTS (SELECT 1 FROM @partRoots AS p WHERE p.rootTenantId = e.rootTenantId)
+                    AND (EXISTS (SELECT 1 FROM @users AS x WHERE x.appUserId = e.appUserId)
+                         OR EXISTS (SELECT 1 FROM @scope AS s WHERE s.tenantId = e.owningTenantId))))
            AND (@appUserId IS NULL OR e.appUserId = @appUserId)
            AND (@entityId IS NULL OR e.entityId = @entityId)
            AND (@eventAction IS NULL OR e.eventAction = @eventAction
@@ -150,7 +170,7 @@ EXEC util.uspSetObjectDescription
       @SchemaName  = N'logs'
     , @ObjectType  = N'PROCEDURE'
     , @ObjectName  = N'uspSearchAuditEvents'
-    , @Description = N'Searches the audit ledger within the caller''s root tenant by user, record, action, record type and time, newest first, one page at a time with the total. Record type ''report'' covers every report.';
+    , @Description = N'Searches the audit ledger within what the caller reviews (whole data roots it reviews at the root; elsewhere events by its users or on its tenants'' records, issue 270) by user, record, action, record type and time, newest first, one page at a time with the total. Record type ''report'' covers every report.';
 GO
 
 IF DATABASE_PRINCIPAL_ID (N'meritWebRole') IS NOT NULL
