@@ -37,6 +37,16 @@ Recommendation: merge the replay correction so scheduled and early-morning runs 
 
 Local evidence: `sourceCode/.artifacts/issue267-post281/` contains `post281-scenario.trx`, `initial-scenario-evidence.txt`, `post281-receipt-probe.trx`, archived diagnostic source `Scenario267ReceiptProbe.cs.txt`, `fix282-scenario.trx`, `fix282-scenario-evidence.txt`, `post281-support.trx`, `post281-unit.trx` and the #282 issue body. Logs are `sourceCode/.artifacts/issue267-post281-{scenario,receipt-probe,support,unit}.log` and `sourceCode/.artifacts/issue267-fix282-scenario.log`. These local artifacts are ignored by Git; this document preserves the reviewable results.
 
+## Independent verification (Claude Code, 2026-11-12, about 17:30 America/New_York)
+
+Reviewer: **Claude (Anthropic coding agent)**, on behalf of `roscoe-sincero-sys`. The #282 recommendations were checked against `IntakeService.UploadAsync` and the upload controller and are sound: midnight in the agency time zone is never in the future for the current business date and is never an invalid or ambiguous local time; the controller redirects for errors and success alike, so only the flash message distinguishes them.
+
+- **Failure path.** With the receipt temporarily set to today 23:59 (a future same-day receipt, the same condition as 09:00 before 09:00), the replay on fresh `MERIT_SCENARIO_267_CLAUDE_282NEG_20261112` failed with `Upload baltco.hl7: HTTP 200: Department receipt cannot be in the future.` and no null reference.
+- **Corrected replay.** On fresh `MERIT_SCENARIO_267_CLAUDE_282FIX_20261112` the replay **passed**, all steps reached, `RESULT: no unexpected behaviour`.
+- **One addition.** The step 14 `UNEXPECTED` line now carries the probe's actual HL7 and manual-entry outcome, so a rejected upload is not read as a recurrence of #268.
+
+This run was after 09:00, so it does not repeat the before-09:00 clock condition; the Codex run above did. Evidence: `sourceCode/.artifacts/issue282-claude/{neg,fix}.{trx,log}` (ignored by Git).
+
 ## Scope and remaining coverage limits
 
 This was real HTTP integration testing against dedicated synthetic databases on `localhost\PORTAL`. The fixture includes standard demo roots, while every scenario tenant begins unconfigured. Most created accounts are not individually signed in. Notifications were created and review-gated; successful delivery and final clinical case closure were not exercised. The original replay's additional policy-coverage limits remain documented in [the original report](issue-267-scenario-2.md). No full integration suite, browser usability audit, Angular build or Playwright run was performed for this retest. Production data and the pre-existing `promptArchive/scenario_2_test.txt` were preserved. Issue #267 remains open for owner acceptance.

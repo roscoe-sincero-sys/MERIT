@@ -273,7 +273,7 @@ public sealed class Scenario267RegionTests(MeritFixture fixture, ITestOutputHelp
             countyManual = $"HTTP {(int)manualProbe.Code}, saved results {await Count("SELECT COUNT(*) FROM dbo.labResult WHERE accessionNumber=@a", ("@a", suffix + "-probe"))}, receipt tasks {await Count("SELECT COUNT(*) FROM dbo.workTask w JOIN dbo.labResult r ON r.labResultId=w.labResultId WHERE r.accessionNumber=@a AND w.queueCode IN ('labReportingReview','receiptFinding','missingInformation')", ("@a", suffix + "-probe"))}";
             bool countyIntakeWorks = countyHl7 == "loaded" && manualProbe.Code is HttpStatusCode.Redirect or HttpStatusCode.OK;
             Record($"{(countyIntakeWorks ? "PASS" : "DEFECT")} 14 county-scoped intake (#268): two-county clerk HL7 import → {countyHl7}; manual entry → {countyManual}.");
-            Expect(countyIntakeWorks, "14: county-scoped intake clerk cannot import or enter results (#268)");
+            Expect(countyIntakeWorks, $"14: county-scoped intake clerk cannot import or enter results (#268): HL7 import → {countyHl7}; manual entry → {countyManual}");
             // Statewide clerk for the remaining data entry, so the county workflows below still run.
             staff["mdintakeClerk"] = await CreateUser(mdAdmin, mdRoot, "mdintakeclerk" + suffix, "intakeClerk");
             var intakeClerk = countyIntakeWorks ? dualClerk : await SignIn("mdintakeclerk" + suffix);
