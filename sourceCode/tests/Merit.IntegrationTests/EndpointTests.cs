@@ -366,7 +366,7 @@ public sealed partial class EndpointTests(MeritFixture fixture, ITestOutputHelpe
         var csv = await supervisor.NoRedirect.GetAsync($"/admin/audit.csv?entityId={mia}&action=view&recordType=person");
         Assert.Equal("text/csv", csv.Content.Headers.ContentType?.MediaType);
         var lines = (await csv.Content.ReadAsStringAsync()).Split("\r\n", StringSplitOptions.RemoveEmptyEntries);
-        Assert.Equal("When,User,Action,Record type,Record id,Rows,Address", lines[0]);
+        Assert.Equal("When,User,Action,Record type,Record id,Rows,Address,Administration details (IDs)", lines[0]);
         Assert.All(lines.Skip(1), l => Assert.Contains($",Viewed,Person,{mia},", l, StringComparison.Ordinal));
         string exports = await supervisor.Http.GetStringAsync("/admin/audit?action=export&recordType=auditEvent");
         Assert.Contains("<td>Exported</td>", exports, StringComparison.Ordinal);

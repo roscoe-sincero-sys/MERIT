@@ -73,7 +73,8 @@ public sealed partial class PatientCareTests
         var person = await TestingPatient(c, "2018-01-01");
         try
         {
-            var result = await TestingResult(c, person, "2020-08-01", 4); var task = Guid.NewGuid();
+            // The source predates the 3.5 reference level; it must exceed the configured historical level of 5.
+            var result = await TestingResult(c, person, "2020-08-01", 6); var task = Guid.NewGuid();
             var user = await fixture.SignedInAsync("supervisor");
             await user.Http.GetStringAsync($"/people/{person}/care/testing");
             using var denied = await user.NoRedirect.PostAsync($"/people/{person}/care/testing", Form(

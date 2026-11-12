@@ -126,6 +126,10 @@ BEGIN
             UPDATE auth.tenant SET timeZone = @timeZone WHERE tenantId = @root AND timeZone IS NULL;
         END;
 
+        IF NOT EXISTS(SELECT 1 FROM config.jurisdictionSetting WHERE rootTenantId=@root AND settingKey='testingPolicyVersion' AND isDeleted=0)
+         INSERT config.jurisdictionSetting(jurisdictionSettingId,rootTenantId,settingKey,settingValue,effectiveFrom,settingDescription)
+         VALUES(NEWID(),@root,'testingPolicyVersion',N'none',@effectiveFrom,N'Adopted clinical testing policy: none (off), or MDH-2025-03 for Maryland. Activate only after program review; reference-level history must also be configured.');
+
         -- Closure: self, plus every ancestor of the parent one level further away.
         INSERT auth.tenantClosure (tenantClosureId, ancestorTenantId, descendantTenantId, depth)
         SELECT CAST (CAST (NEWID () AS BINARY (10)) + CAST (DATEDIFF_BIG (MILLISECOND, '19700101', SYSUTCDATETIME ()) AS BINARY (6)) AS UNIQUEIDENTIFIER), x.ancestorTenantId, @root, x.depth

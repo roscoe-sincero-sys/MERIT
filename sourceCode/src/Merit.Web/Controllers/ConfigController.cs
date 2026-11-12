@@ -332,14 +332,14 @@ public sealed class AdminController(IClock clock, AdminService admin, AuditServi
     {
         var events = await audit.SearchAsync(session, AuditQuery(filter, 1, AuditExportRows), ct);
         await audit.ExportedAsync("auditEvent", null, events.Count, ct);
-        var csv = new System.Text.StringBuilder("When,User,Action,Record type,Record id,Rows,Address\r\n");
+        var csv = new System.Text.StringBuilder("When,User,Action,Record type,Record id,Rows,Address,Administration details (IDs)\r\n");
         foreach (var e in events)
         {
             csv.AppendJoin(',', new[]
             {
                 clock.ToLocal(e.EventUtc).ToString("yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture),
                 e.DisplayName, AuditText.Action(e.EventAction), AuditText.RecordType(e.EntityType), e.EntityId?.ToString(),
-                e.RecordCount?.ToString(System.Globalization.CultureInfo.InvariantCulture), e.ClientAddress,
+                e.RecordCount?.ToString(System.Globalization.CultureInfo.InvariantCulture), e.ClientAddress, e.AdministrationJson,
             }.Select(CsvField)).Append("\r\n");
         }
 

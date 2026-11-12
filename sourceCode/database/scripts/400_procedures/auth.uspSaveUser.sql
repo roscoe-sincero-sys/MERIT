@@ -111,6 +111,10 @@ BEGIN
             ;THROW 51403, N'You can place people only in tenants you administer.', 1;
         END;
 
+        DECLARE @auditAction VARCHAR(40) = CASE WHEN NOT EXISTS (SELECT 1 FROM auth.appUser WHERE appUserId=@appUserId) THEN 'create'
+         WHEN @isActive=0 AND EXISTS (SELECT 1 FROM auth.appUser WHERE appUserId=@appUserId AND isActive=1) THEN 'deactivate'
+         WHEN @isActive=1 AND EXISTS (SELECT 1 FROM auth.appUser WHERE appUserId=@appUserId AND isActive=0) THEN 'reactivate' ELSE 'update' END;
+
         IF EXISTS (SELECT 1 FROM auth.appUser WHERE appUserId = @appUserId)
         BEGIN
             IF NOT EXISTS (SELECT 1 FROM auth.appUser AS u JOIN @admin AS a ON a.tenantId = u.homeTenantId
@@ -150,8 +154,8 @@ BEGIN
                 UPDATE auth.passwordReset SET supersededUtc = SYSUTCDATETIME ()
                  WHERE appUserId = @appUserId AND consumedUtc IS NULL AND supersededUtc IS NULL AND isDeleted = 0;
 
-                INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId)
-                SELECT @me, rootTenantId, 'passwordSetByAdmin', 'appUser', @appUserId FROM auth.appUser WHERE appUserId = @appUserId;
+                INSERT logs.auditEvent (appUserId, rootTenantId, owningTenantId, eventAction, entityType, entityId)
+                SELECT @me, rootTenantId, homeTenantId, 'passwordSetByAdmin', 'appUser', @appUserId FROM auth.appUser WHERE appUserId = @appUserId;
             END;
 
             IF @emailCodesOff = 1 OR @isActive = 0
@@ -162,8 +166,8 @@ BEGIN
 
             IF @emailCodesOff = 1
             BEGIN
-                INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId)
-                SELECT @appUserId, rootTenantId, 'mfaEmailDisabled', 'appUser', @appUserId FROM auth.appUser WHERE appUserId = @appUserId;
+                INSERT logs.auditEvent (appUserId, rootTenantId, owningTenantId, eventAction, entityType, entityId)
+                SELECT @me, rootTenantId, homeTenantId, 'mfaEmailDisabled', 'appUser', @appUserId FROM auth.appUser WHERE appUserId = @appUserId;
             END;
 
             IF @isActive = 0
@@ -196,7 +200,17 @@ BEGIN
             INSERT auth.userProfile (userProfileId, appUserId, profileName, profileDescription, isMaster, isActive)
             VALUES (CAST (HASHBYTES ('MD5', CONCAT (N'masterProfile:', @appUserId)) AS UNIQUEIDENTIFIER), @appUserId,
                     N'Master profile', N'Everything you have been given. Managed by your administrator.', 1, 1);
+
+            INSERT logs.auditEvent(appUserId,rootTenantId,owningTenantId,eventAction,entityType,entityId,administrationJson)
+            VALUES(@me,@root,@homeTenantId,'create','userProfile',
+                CAST(HASHBYTES('MD5',CONCAT(N'masterProfile:',@appUserId)) AS UNIQUEIDENTIFIER),
+                (SELECT @appUserId AS appUserId,CAST(1 AS BIT) AS isMaster FOR JSON PATH,WITHOUT_ARRAY_WRAPPER));
         END;
+
+        INSERT logs.auditEvent(appUserId,rootTenantId,owningTenantId,eventAction,entityType,entityId,administrationJson)
+        SELECT @me,rootTenantId,homeTenantId,@auditAction,'appUser',appUserId,
+         (SELECT appUserId,homeTenantId,isActive FOR JSON PATH,WITHOUT_ARRAY_WRAPPER)
+        FROM auth.appUser WHERE appUserId=@appUserId;
 
         SET @Comments = N'User saved.';
 

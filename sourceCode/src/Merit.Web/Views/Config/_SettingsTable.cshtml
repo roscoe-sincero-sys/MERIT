@@ -12,7 +12,11 @@
                         {
                             <form class="merit-form-row" hx-post="/config/settings/@s.SettingKey" hx-target="#settings-table" hx-swap="innerHTML">
                                 <label class="usa-sr-only" for="v-@s.SettingKey">Value of @s.SettingKey</label>
+                                @if (s.SettingKey == "testingPolicyVersion") {
+                                <select class="usa-select" id="v-@s.SettingKey" name="settingValue"><option value="none" selected="@(s.SettingValue == "none")">No testing policy (off)</option><option value="MDH-2025-03" selected="@(s.SettingValue == "MDH-2025-03")">MDH March 2025 (Maryland only)</option></select>
+                                } else {
                                 <input class="usa-input @(s.SettingValue == "NOTSET" ? "usa-input--error" : "")" id="v-@s.SettingKey" name="settingValue" value="@s.SettingValue" />
+                                }
                                 <label class="usa-sr-only" for="d-@s.SettingKey">Effective from</label>
                                 <input class="usa-input" id="d-@s.SettingKey" name="effectiveFrom" type="date" value="@Options.Iso(Clock.Today)" />
                                 <button class="usa-button usa-button--outline usa-button--small" type="submit">Change</button>

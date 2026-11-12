@@ -342,8 +342,9 @@ SELECT u.appUserId, u.userName, u.displayName, h.tenantName AS homeTenantName
 , @homeTenantId UNIQUEIDENTIFIER = NULL
 , @passwordChangeRequired BIT = NULL""",
         "key": "CONCAT (N'appUserId=', @appUserId, N', homeTenantId=', @homeTenantId)",
-        "body": f"""
-{ADMIN_TENANTS}
+        "body": """
+DECLARE @admin TABLE (tenantId UNIQUEIDENTIFIER PRIMARY KEY);
+INSERT @admin SELECT tenantId FROM auth.tvfAdminTenants ();
 DECLARE @me UNIQUEIDENTIFIER = auth.udfSessionUserId ();
 DECLARE @root UNIQUEIDENTIFIER = (SELECT rootTenantId FROM auth.tenant WHERE tenantId = @homeTenantId AND isDeleted = 0);
 
@@ -351,6 +352,10 @@ IF @homeTenantId IS NOT NULL AND NOT EXISTS (SELECT 1 FROM @admin WHERE tenantId
 BEGIN
     ;THROW 51403, N'You can place people only in tenants you administer.', 1;
 END;
+
+DECLARE @auditAction VARCHAR(40) = CASE WHEN NOT EXISTS (SELECT 1 FROM auth.appUser WHERE appUserId=@appUserId) THEN 'create'
+ WHEN @isActive=0 AND EXISTS (SELECT 1 FROM auth.appUser WHERE appUserId=@appUserId AND isActive=1) THEN 'deactivate'
+ WHEN @isActive=1 AND EXISTS (SELECT 1 FROM auth.appUser WHERE appUserId=@appUserId AND isActive=0) THEN 'reactivate' ELSE 'update' END;
 
 IF EXISTS (SELECT 1 FROM auth.appUser WHERE appUserId = @appUserId)
 BEGIN
@@ -391,8 +396,8 @@ BEGIN
         UPDATE auth.passwordReset SET supersededUtc = SYSUTCDATETIME ()
          WHERE appUserId = @appUserId AND consumedUtc IS NULL AND supersededUtc IS NULL AND isDeleted = 0;
 
-        INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId)
-        SELECT @me, rootTenantId, 'passwordSetByAdmin', 'appUser', @appUserId FROM auth.appUser WHERE appUserId = @appUserId;
+        INSERT logs.auditEvent (appUserId, rootTenantId, owningTenantId, eventAction, entityType, entityId)
+        SELECT @me, rootTenantId, homeTenantId, 'passwordSetByAdmin', 'appUser', @appUserId FROM auth.appUser WHERE appUserId = @appUserId;
     END;
 
     IF @emailCodesOff = 1 OR @isActive = 0
@@ -403,8 +408,8 @@ BEGIN
 
     IF @emailCodesOff = 1
     BEGIN
-        INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId)
-        SELECT @appUserId, rootTenantId, 'mfaEmailDisabled', 'appUser', @appUserId FROM auth.appUser WHERE appUserId = @appUserId;
+        INSERT logs.auditEvent (appUserId, rootTenantId, owningTenantId, eventAction, entityType, entityId)
+        SELECT @me, rootTenantId, homeTenantId, 'mfaEmailDisabled', 'appUser', @appUserId FROM auth.appUser WHERE appUserId = @appUserId;
     END;
 
     IF @isActive = 0
@@ -437,7 +442,17 @@ BEGIN
     INSERT auth.userProfile (userProfileId, appUserId, profileName, profileDescription, isMaster, isActive)
     VALUES (CAST (HASHBYTES ('MD5', CONCAT (N'masterProfile:', @appUserId)) AS UNIQUEIDENTIFIER), @appUserId,
             N'Master profile', N'Everything you have been given. Managed by your administrator.', 1, 1);
+
+    INSERT logs.auditEvent(appUserId,rootTenantId,owningTenantId,eventAction,entityType,entityId,administrationJson)
+    VALUES(@me,@root,@homeTenantId,'create','userProfile',
+        CAST(HASHBYTES('MD5',CONCAT(N'masterProfile:',@appUserId)) AS UNIQUEIDENTIFIER),
+        (SELECT @appUserId AS appUserId,CAST(1 AS BIT) AS isMaster FOR JSON PATH,WITHOUT_ARRAY_WRAPPER));
 END;
+
+INSERT logs.auditEvent(appUserId,rootTenantId,owningTenantId,eventAction,entityType,entityId,administrationJson)
+SELECT @me,rootTenantId,homeTenantId,@auditAction,'appUser',appUserId,
+ (SELECT appUserId,homeTenantId,isActive FOR JSON PATH,WITHOUT_ARRAY_WRAPPER)
+FROM auth.appUser WHERE appUserId=@appUserId;
 
 SET @Comments = N'User saved.';
 """,
@@ -462,16 +477,20 @@ SET @Comments = N'User saved.';
 BEGIN
     ;THROW 50000, N'@accessLevel must be read, write or full.', 1;
 END;""",
-        "body": f"""
-{ADMIN_TENANTS}
-DECLARE @platform UNIQUEIDENTIFIER = {PLATFORM};
+        "body": """
+DECLARE @admin TABLE (tenantId UNIQUEIDENTIFIER PRIMARY KEY);
+INSERT @admin SELECT tenantId FROM auth.tvfAdminTenants ();
+DECLARE @platform UNIQUEIDENTIFIER = CAST (HASHBYTES ('MD5', N'tenant:PLATFORM') AS UNIQUEIDENTIFIER);
 DECLARE @me UNIQUEIDENTIFIER = auth.udfSessionUserId ();
-DECLARE @rank INT = {RANK.format('@accessLevel')};
+DECLARE @rank INT = CASE @accessLevel WHEN 'full' THEN 3 WHEN 'write' THEN 2 ELSE 1 END;
 
 IF USER_NAME () <> N'dbo' AND @appUserId = @me
 BEGIN
     ;THROW 51403, N'Nobody can change their own master profile. Ask another administrator.', 1;
 END;
+
+DECLARE @auditAction VARCHAR(40) = CASE WHEN NOT EXISTS (SELECT 1 FROM auth.userAssignment WHERE userAssignmentId=@userAssignmentId) THEN 'grant'
+ WHEN @endDate <= auth.udfSessionToday() THEN 'revoke' ELSE 'update' END;
 
 IF EXISTS (SELECT 1 FROM auth.userAssignment WHERE userAssignmentId = @userAssignmentId)
 BEGIN
@@ -538,6 +557,11 @@ END;
 -- A grant change invalidates the user's resolved access: end their open sessions.
 UPDATE auth.sessionScope SET revokedUtc = SYSUTCDATETIME () WHERE appUserId = @appUserId AND revokedUtc IS NULL;
 
+INSERT logs.auditEvent(appUserId,rootTenantId,owningTenantId,eventAction,entityType,entityId,administrationJson)
+SELECT @me,t.rootTenantId,ua.tenantId,@auditAction,'userAssignment',ua.userAssignmentId,
+ (SELECT ua.appUserId,ua.roleId,ua.tenantId,ua.accessLevel,ua.includeDescendants,ua.startDate,ua.endDate FOR JSON PATH,WITHOUT_ARRAY_WRAPPER)
+FROM auth.userAssignment ua JOIN auth.tenant t ON t.tenantId=ua.tenantId WHERE ua.userAssignmentId=@userAssignmentId;
+
 SET @Comments = N'Grant saved; user sessions revoked.';
 """,
     },
@@ -547,8 +571,9 @@ SET @Comments = N'Grant saved; user sessions revoked.';
         "desc": "Clears sign-in lockout for an account in an administered home tenant; retains credentials and MFA.",
         "params": "@appUserId UNIQUEIDENTIFIER",
         "key": "CONCAT (N'appUserId=', @appUserId)",
-        "body": f"""
-{ADMIN_TENANTS}
+        "body": """
+DECLARE @admin TABLE (tenantId UNIQUEIDENTIFIER PRIMARY KEY);
+INSERT @admin SELECT tenantId FROM auth.tvfAdminTenants ();
 
 IF NOT EXISTS (SELECT 1 FROM auth.appUser AS u JOIN @admin AS a ON a.tenantId = u.homeTenantId
                 WHERE u.appUserId = @appUserId AND u.isDeleted = 0)
@@ -558,6 +583,9 @@ END;
 
 UPDATE auth.appUser SET failedSignInCount = 0, lockoutEndUtc = NULL
  WHERE appUserId = @appUserId AND isDeleted = 0;
+INSERT logs.auditEvent(appUserId,rootTenantId,owningTenantId,eventAction,entityType,entityId)
+SELECT auth.udfSessionUserId(),rootTenantId,homeTenantId,'unlock','appUser',appUserId FROM auth.appUser WHERE appUserId=@appUserId;
+
 SET @Comments = N'Account unlocked.';
 """,
     },
@@ -568,8 +596,9 @@ SET @Comments = N'Account unlocked.';
                 "verified the person, so they enroll again at next sign-in. Only for accounts whose home tenant the administrator administers, and not their own.",
         "params": "@appUserId UNIQUEIDENTIFIER",
         "key": "CONCAT (N'appUserId=', @appUserId)",
-        "body": f"""
-{ADMIN_TENANTS}
+        "body": """
+DECLARE @admin TABLE (tenantId UNIQUEIDENTIFIER PRIMARY KEY);
+INSERT @admin SELECT tenantId FROM auth.tvfAdminTenants ();
 
 IF USER_NAME () <> N'dbo' AND @appUserId = auth.udfSessionUserId ()
 BEGIN
@@ -593,6 +622,9 @@ UPDATE auth.mfaEmailChallenge SET supersededUtc = SYSUTCDATETIME ()
 UPDATE auth.passwordReset SET supersededUtc = SYSUTCDATETIME ()
  WHERE appUserId = @appUserId AND consumedUtc IS NULL AND supersededUtc IS NULL AND isDeleted = 0;
 UPDATE auth.sessionScope SET revokedUtc = SYSUTCDATETIME () WHERE appUserId = @appUserId AND revokedUtc IS NULL;
+
+INSERT logs.auditEvent(appUserId,rootTenantId,owningTenantId,eventAction,entityType,entityId)
+SELECT auth.udfSessionUserId(),rootTenantId,homeTenantId,'mfaResetByAdmin','appUser',appUserId FROM auth.appUser WHERE appUserId=@appUserId;
 
 SET @Comments = N'MFA reset.';
 """,
@@ -708,7 +740,7 @@ IF ISJSON (@grantsJson) = 0
 BEGIN
     ;THROW 50000, N'@grantsJson must be a JSON array of grants.', 1;
 END;""",
-        "body": f"""
+        "body": """
 DECLARE @me UNIQUEIDENTIFIER = auth.udfSessionUserId ();
 DECLARE @msg NVARCHAR (2048);
 
@@ -725,6 +757,11 @@ IF EXISTS (SELECT 1 FROM auth.userProfile WHERE userProfileId = @userProfileId)
 BEGIN
     ;THROW 51403, N'You can change only your own extra profiles. The master profile is managed by your administrator.', 1;
 END;
+
+DECLARE @auditAction VARCHAR(40) = CASE WHEN NOT EXISTS (SELECT 1 FROM auth.userProfile WHERE userProfileId=@userProfileId) THEN 'create'
+ WHEN @isActive=0 THEN 'deactivate' ELSE 'update' END;
+DECLARE @auditTenants TABLE(tenantId UNIQUEIDENTIFIER PRIMARY KEY);
+INSERT @auditTenants SELECT DISTINCT tenantId FROM auth.userProfileGrant WHERE userProfileId=@userProfileId AND isDeleted=0;
 
 DECLARE @g TABLE (tenantId UNIQUEIDENTIFIER, roleId UNIQUEIDENTIFIER, includeDescendants BIT, accessLevel VARCHAR (10));
 INSERT @g (tenantId, roleId, includeDescendants, accessLevel)
@@ -755,7 +792,7 @@ SET @msg = (SELECT TOP (1) CONCAT (N'This profile would give you more than your 
              WHERE (g.accessLevel <> 'read' OR pm.accessLevel = 'read')
                AND NOT EXISTS (SELECT 1 FROM auth.tvfUserGrantPermissions (@me) AS m
                                 WHERE m.tenantId = tc.descendantTenantId AND m.permissionCode = pm.permissionCode
-                                  AND m.grantRank >= {RANK.format('g.accessLevel')})
+                                  AND m.grantRank >= CASE g.accessLevel WHEN 'full' THEN 3 WHEN 'write' THEN 2 ELSE 1 END)
              ORDER BY t.tenantName, pm.permissionCode);
 IF @msg IS NOT NULL
 BEGIN
@@ -777,12 +814,18 @@ END;
 UPDATE auth.userProfileGrant SET isDeleted = 1 WHERE userProfileId = @userProfileId AND isDeleted = 0;
 
 INSERT auth.userProfileGrant (userProfileGrantId, userProfileId, roleId, tenantId, includeDescendants, accessLevel)
-SELECT {NEWID}, @userProfileId, roleId, tenantId, includeDescendants, accessLevel FROM @g;
+SELECT CAST (CAST (NEWID () AS BINARY (10)) + CAST (DATEDIFF_BIG (MILLISECOND, '19700101', SYSUTCDATETIME ()) AS BINARY (6)) AS UNIQUEIDENTIFIER), @userProfileId, roleId, tenantId, includeDescendants, accessLevel FROM @g;
 
 -- Sessions using the profile end, so a narrowed or deactivated profile takes effect at once.
 UPDATE auth.sessionScope SET revokedUtc = SYSUTCDATETIME ()
  WHERE userProfileId = @userProfileId AND revokedUtc IS NULL
    AND sessionScopeId <> COALESCE (TRY_CAST (SESSION_CONTEXT (N'scopeKey') AS UNIQUEIDENTIFIER), NEWID ());
+
+INSERT @auditTenants SELECT DISTINCT tenantId FROM @g g WHERE NOT EXISTS(SELECT 1 FROM @auditTenants a WHERE a.tenantId=g.tenantId);
+INSERT logs.auditEvent(appUserId,rootTenantId,owningTenantId,eventAction,entityType,entityId,administrationJson)
+SELECT @me,t.rootTenantId,t.tenantId,@auditAction,'userProfile',@userProfileId,
+ (SELECT @me AS appUserId,@isActive AS isActive,JSON_QUERY((SELECT roleId,accessLevel,includeDescendants FROM @g g WHERE g.tenantId=t.tenantId FOR JSON PATH)) AS grants FOR JSON PATH,WITHOUT_ARRAY_WRAPPER)
+FROM @auditTenants a JOIN auth.tenant t ON t.tenantId=a.tenantId;
 
 SET @Comments = N'Profile saved.';
 """,

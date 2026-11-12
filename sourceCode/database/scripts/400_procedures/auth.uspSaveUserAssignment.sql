@@ -117,6 +117,9 @@ BEGIN
             ;THROW 51403, N'Nobody can change their own master profile. Ask another administrator.', 1;
         END;
 
+        DECLARE @auditAction VARCHAR(40) = CASE WHEN NOT EXISTS (SELECT 1 FROM auth.userAssignment WHERE userAssignmentId=@userAssignmentId) THEN 'grant'
+         WHEN @endDate <= auth.udfSessionToday() THEN 'revoke' ELSE 'update' END;
+
         IF EXISTS (SELECT 1 FROM auth.userAssignment WHERE userAssignmentId = @userAssignmentId)
         BEGIN
             IF NOT EXISTS (SELECT 1 FROM auth.userAssignment AS ua JOIN @admin AS a ON a.tenantId = ua.tenantId
@@ -181,6 +184,11 @@ BEGIN
 
         -- A grant change invalidates the user's resolved access: end their open sessions.
         UPDATE auth.sessionScope SET revokedUtc = SYSUTCDATETIME () WHERE appUserId = @appUserId AND revokedUtc IS NULL;
+
+        INSERT logs.auditEvent(appUserId,rootTenantId,owningTenantId,eventAction,entityType,entityId,administrationJson)
+        SELECT @me,t.rootTenantId,ua.tenantId,@auditAction,'userAssignment',ua.userAssignmentId,
+         (SELECT ua.appUserId,ua.roleId,ua.tenantId,ua.accessLevel,ua.includeDescendants,ua.startDate,ua.endDate FOR JSON PATH,WITHOUT_ARRAY_WRAPPER)
+        FROM auth.userAssignment ua JOIN auth.tenant t ON t.tenantId=ua.tenantId WHERE ua.userAssignmentId=@userAssignmentId;
 
         SET @Comments = N'Grant saved; user sessions revoked.';
 

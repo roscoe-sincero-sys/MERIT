@@ -141,8 +141,13 @@ BEGIN
         -- ===== The procedure's own work starts here. Everything above and below is boilerplate. ==
         -- =========================================================================================
 
+        DECLARE @auditAction VARCHAR(40)=CASE WHEN EXISTS(SELECT 1 FROM auth.tenant WHERE tenantCode=@tenantCode AND isDeleted=0) THEN 'update' ELSE 'create' END;
+
         EXEC config.uspInstallChildTenant @tenantCode = @tenantCode, @tenantName = @tenantName, @tenantType = @tenantType,
              @parentTenantCode = @parentTenantCode, @countyFipsList = @countyFipsList, @countiesJson = @countiesJson;
+
+        INSERT logs.auditEvent(appUserId,rootTenantId,owningTenantId,eventAction,entityType,entityId)
+        SELECT auth.udfSessionUserId(),rootTenantId,tenantId,@auditAction,'tenant',tenantId FROM auth.tenant WHERE tenantCode=@tenantCode AND isDeleted=0;
 
         SET @Comments = N'Child tenant created.';
 

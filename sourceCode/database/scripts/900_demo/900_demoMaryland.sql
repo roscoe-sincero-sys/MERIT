@@ -235,6 +235,20 @@ BEGIN
 END;
 GO
 
+-- The synthetic Maryland demo explicitly adopts its clinical policy. New program roots remain off.
+UPDATE config.jurisdictionSetting SET settingValue=N'MDH-2025-03'
+ WHERE rootTenantId=(SELECT tenantId FROM auth.tenant WHERE tenantCode='MD-LEAD') AND settingKey='testingPolicyVersion' AND isDeleted=0;
+-- Historical sources use the reference level at their source draw, including the pre-2024 level of 5.
+INSERT config.threshold(thresholdId,rootTenantId,analyteSpecimenId,population,thresholdType,lowerValue,unit,comparator,effectiveFrom,effectiveTo,isActive)
+SELECT NEWID(),t.rootTenantId,t.analyteSpecimenId,'child','case',5,N'ug/dL','>=','20200701','20231231',1
+ FROM config.threshold t WHERE t.rootTenantId=(SELECT tenantId FROM auth.tenant WHERE tenantCode='MD-LEAD')
+ AND t.population='child' AND t.thresholdType='case' AND t.isActive=1 AND t.sampleType IS NULL AND t.effectiveFrom='20260101';
+INSERT config.threshold(thresholdId,rootTenantId,analyteSpecimenId,population,thresholdType,lowerValue,unit,comparator,effectiveFrom,effectiveTo,isActive)
+SELECT NEWID(),t.rootTenantId,t.analyteSpecimenId,'child','case',3.5,N'ug/dL','>=','20240101','20251231',1
+ FROM config.threshold t WHERE t.rootTenantId=(SELECT tenantId FROM auth.tenant WHERE tenantCode='MD-LEAD')
+ AND t.population='child' AND t.thresholdType='case' AND t.isActive=1 AND t.sampleType IS NULL AND t.effectiveFrom='20260101';
+GO
+
 -- A short-lived session scope for the supervisor, so every procedure below runs exactly as it does for the application.
 DECLARE @scope UNIQUEIDENTIFIER = NEWID ();
 DECLARE @user UNIQUEIDENTIFIER = CAST (HASHBYTES ('MD5', N'user:supervisor') AS UNIQUEIDENTIFIER);

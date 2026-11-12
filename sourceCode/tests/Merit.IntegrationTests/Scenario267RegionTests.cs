@@ -213,7 +213,7 @@ public sealed class Scenario267RegionTests(MeritFixture fixture, ITestOutputHelp
             Record($"COUNT: {await Count("SELECT COUNT(*) FROM auth.appUser WHERE userName LIKE @s", ("@s", "%" + suffix))} accounts created by this replay.");
 
             // ---------------------------------------------------------------- 12: Maryland configuration (#202 decisions)
-            foreach (var (key, value) in new[] { ("statePostalCode","MD"),("stateFips","24"),("adultAgeCutoffYears","18"),("investigationLookbackDays","365"),("contactAttemptsBeforeLetter","3") })
+            foreach (var (key, value) in new[] { ("statePostalCode","MD"),("stateFips","24"),("testingPolicyVersion","MDH-2025-03"),("adultAgeCutoffYears","18"),("investigationLookbackDays","365"),("contactAttemptsBeforeLetter","3") })
                 await Saved(await mdAdmin.NoRedirect.PostAsync("/config/settings/" + key, Form(("settingValue", value), ("effectiveFrom", "2020-01-01"))));
             await mdAdmin.Http.GetStringAsync("/reporters");
             clia = "21D0267" + string.Concat(suffix[..3].Select(ch => char.IsAsciiDigit(ch) ? ch : (char)('0' + (ch - 'A') % 10)));
@@ -388,6 +388,18 @@ public sealed class Scenario267RegionTests(MeritFixture fixture, ITestOutputHelp
             }
             Record($"PASS 18: Virginia state, county administrator, case manager and supervisor accounts made {probes} attempts on Maryland patients, cases, results, testing plans and investigations, by direct link and through search, lists and exports. None returned Maryland data.");
 
+            var vaCaseManager = await SignIn("va059casemanager" + suffix);
+            var vaPolicyPatient = await Person(vaCaseManager, "VirginiaPolicy" + suffix, today.AddMonths(-14), states["VA"]);
+            string vaPolicyUrl = $"/people/{vaPolicyPatient}/care/testing";
+            string vaPolicyPage = await vaCaseManager.Http.GetStringAsync(vaPolicyUrl);
+            Assert.Contains("No testing policy is active", vaPolicyPage, StringComparison.Ordinal);
+            Assert.DoesNotContain("mde.maryland.gov", vaPolicyPage, StringComparison.Ordinal);
+            var vaPlan = await Try(vaCaseManager.NoRedirect.PostAsync(vaPolicyUrl, Form(("workTaskId", Guid.NewGuid()),
+                ("planKind", "screen12"), ("evidence", "Synthetic Virginia policy scope check"), ("clinicianConfirmed", "true"))));
+            Assert.Equal(HttpStatusCode.UnprocessableEntity, vaPlan.Code);
+            Assert.Equal(0, await Count("SELECT COUNT(*) FROM dbo.workTask WHERE personId=@p AND testingPlanJson IS NOT NULL", ("@p", vaPolicyPatient)));
+            Record("PASS 18b (#285): unconfigured Virginia shows a neutral testing-policy message and refuses a direct testing-plan POST without saving a plan.");
+
             // ---------------------------------------------------------------- 19: Region 3 profiles and CRUD
             await Profile(regional, "Region read only", [(region, "administrator", "read")]);
             await Profile(regional, "Region accounts only", [(region, "administrator", "full")]);
@@ -560,6 +572,12 @@ public sealed class Scenario267RegionTests(MeritFixture fixture, ITestOutputHelp
             Record($"CHECK 23 (#270): Harford officer sees Baltimore City-only staff in audit: {Of(auditCsv, "city")}; in user list: {Of(users, "city")}; sees two-county staff who touched Harford data: {Of(auditCsv, "dual")}; Harford staff: {Of(auditCsv, "harford")}");
             Expect(Of(auditCsv, "city") == "no" && Of(users, "city") == "no", "23: the Harford officer's reports include Baltimore City-only staff (#270)");
             Expect(Of(auditCsv, "harford") == "yes" && Of(auditCsv, "dual") == "yes", "23: the Harford officer's audit omits Harford staff or the two-county staff who work Harford data (#270)");
+            Assert.Contains("Granted access", auditCsv, StringComparison.Ordinal);
+            Assert.Contains("platform", auditCsv, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("mdadmin" + suffix, auditCsv, StringComparison.OrdinalIgnoreCase);
+            var officerGrant = (Guid)(await Sql("SELECT ua.userAssignmentId FROM auth.userAssignment ua JOIN auth.appUser u ON u.appUserId=ua.appUserId JOIN auth.role r ON r.roleId=ua.roleId WHERE u.userName=@u AND r.roleCode='securityOfficer'", ("@u", "harfordsecurity" + suffix)))!;
+            Assert.Contains(officerGrant.ToString(), auditCsv, StringComparison.OrdinalIgnoreCase);
+            Record("PASS 23b (#284): Harford audit includes the platform's Security officer grant and the Maryland administrator's county administration, with Baltimore City-only activity excluded.");
             Expect(!users.Contains("/admin/users/new", StringComparison.Ordinal), "23: the read-only Security officer is offered account creation (#271)");
         }
         else
@@ -659,11 +677,11 @@ public sealed class Scenario267RegionTests(MeritFixture fixture, ITestOutputHelp
         await Saved(await actor.NoRedirect.PostAsync("/config/intake-formats", Form(values.ToArray())));
         return (Guid)(await Sql("SELECT intakeProfileId FROM dbo.intakeProfile WHERE rootTenantId=@r AND profileName=@n AND isActive=1", ("@r", mdRoot), ("@n", "Scenario 267 " + type)))!;
     }
-    private async Task<Guid> Person(MeritClient actor, string name, DateOnly dob)
+    private async Task<Guid> Person(MeritClient actor, string name, DateOnly dob, Guid? root = null)
     {
         await actor.Http.GetStringAsync("/people/new");
         await Saved(await actor.NoRedirect.PostAsync("/people/new", Form(("LastName", name), ("FirstName", "Ada"), ("Dob", dob.ToString("yyyy-MM-dd")), ("Sex", "female"), ("Ethnicity", "unknown"))));
-        return (Guid)(await Sql("SELECT personId FROM dbo.person WHERE rootTenantId=@r AND lastName=@n AND isDeleted=0", ("@r", mdRoot), ("@n", name)))!;
+        return Assert.IsType<Guid>(await Sql("SELECT personId FROM dbo.person WHERE rootTenantId=@r AND lastName=@n AND isDeleted=0", ("@r", root ?? mdRoot), ("@n", name)));
     }
     private async Task Place(MeritClient actor, Guid person, string line1, string city, string zip, string county)
     {

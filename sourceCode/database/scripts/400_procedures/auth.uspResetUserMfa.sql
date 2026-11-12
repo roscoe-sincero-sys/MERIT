@@ -120,6 +120,9 @@ BEGIN
          WHERE appUserId = @appUserId AND consumedUtc IS NULL AND supersededUtc IS NULL AND isDeleted = 0;
         UPDATE auth.sessionScope SET revokedUtc = SYSUTCDATETIME () WHERE appUserId = @appUserId AND revokedUtc IS NULL;
 
+        INSERT logs.auditEvent(appUserId,rootTenantId,owningTenantId,eventAction,entityType,entityId)
+        SELECT auth.udfSessionUserId(),rootTenantId,homeTenantId,'mfaResetByAdmin','appUser',appUserId FROM auth.appUser WHERE appUserId=@appUserId;
+
         SET @Comments = N'MFA reset.';
 
         -- =========================================================================================

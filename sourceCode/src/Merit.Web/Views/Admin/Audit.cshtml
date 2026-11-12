@@ -83,6 +83,7 @@
                         <td>@AuditText.Action(e.EventAction)</td>
                         <td>
                             @AuditText.RecordType(e.EntityType)
+                            @if (e.AdministrationJson is string details) { <details><summary>Administration details (IDs)</summary><p class="merit-mono merit-meta">@details</p></details> }
                             @if (e.EntityId is Guid id)
                             {
                                 <br />

@@ -113,12 +113,12 @@ BEGIN
                 OR EXISTS (SELECT 1 FROM auth.userAssignment AS ua JOIN @scope AS s ON s.tenantId = ua.tenantId WHERE ua.appUserId = u.appUserId AND ua.isDeleted = 0));
 
         SELECT e.auditEventId, e.eventUtc, e.appUserId, u.displayName, e.eventAction, e.entityType, e.entityId,
-               e.recordCount, e.clientAddress, COUNT (*) OVER () AS totalCount
+               e.recordCount, e.clientAddress, e.administrationJson, COUNT (*) OVER () AS totalCount
           FROM logs.auditEvent AS e
           LEFT JOIN auth.appUser AS u ON u.appUserId = e.appUserId
          WHERE (EXISTS (SELECT 1 FROM @wholeRoots AS w WHERE w.rootTenantId = e.rootTenantId)
                 OR (EXISTS (SELECT 1 FROM @partRoots AS p WHERE p.rootTenantId = e.rootTenantId)
-                    AND (EXISTS (SELECT 1 FROM @users AS x WHERE x.appUserId = e.appUserId)
+                    AND ((e.owningTenantId IS NULL AND EXISTS (SELECT 1 FROM @users AS x WHERE x.appUserId = e.appUserId))
                          OR EXISTS (SELECT 1 FROM @scope AS s WHERE s.tenantId = e.owningTenantId))))
            AND (@appUserId IS NULL OR e.appUserId = @appUserId)
            AND (@entityId IS NULL OR e.entityId = @entityId)
