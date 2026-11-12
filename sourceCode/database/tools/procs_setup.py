@@ -30,12 +30,12 @@ PROCS = [
                  "config.uspCreateRootTenant, which checks who may create the tenant. Settings the specification says "
                  "'must be set at install' are created with a placeholder value of NOTSET where the application needs "
                  "a number to run; an administrator replaces them on the settings screen. Returns the root tenant id.",
-        "body": f"""
-DECLARE @root UNIQUEIDENTIFIER = {k("CONCAT (N'tenant:', @tenantCode)")};
+        "body": """
+DECLARE @root UNIQUEIDENTIFIER = CAST (HASHBYTES ('MD5', CONCAT (N'tenant:', @tenantCode)) AS UNIQUEIDENTIFIER);
 SET @effectiveFrom=COALESCE(@effectiveFrom,auth.udfSessionToday());
 DECLARE @parent UNIQUEIDENTIFIER = COALESCE ((SELECT tenantId FROM auth.tenant WHERE tenantCode = @parentTenantCode
                                                                                 AND isDeleted = 0),
-                                             {k("N'tenant:PLATFORM'")});
+                                             CAST (HASHBYTES ('MD5', N'tenant:PLATFORM') AS UNIQUEIDENTIFIER));
 
 IF @tenantType NOT IN ('region', 'state', 'tribe', 'jurisdiction')
 BEGIN
@@ -58,9 +58,13 @@ BEGIN
     UPDATE auth.tenant SET timeZone = @timeZone WHERE tenantId = @root AND timeZone IS NULL;
 END;
 
+IF NOT EXISTS(SELECT 1 FROM config.jurisdictionSetting WHERE rootTenantId=@root AND settingKey='testingPolicyVersion' AND isDeleted=0)
+ INSERT config.jurisdictionSetting(jurisdictionSettingId,rootTenantId,settingKey,settingValue,effectiveFrom,settingDescription)
+ VALUES(NEWID(),@root,'testingPolicyVersion',N'none',@effectiveFrom,N'Adopted clinical testing policy: none (off), or MDH-2025-03 for Maryland. Activate only after program review; reference-level history must also be configured.');
+
 -- Closure: self, plus every ancestor of the parent one level further away.
 INSERT auth.tenantClosure (tenantClosureId, ancestorTenantId, descendantTenantId, depth)
-SELECT {NEWID}, x.ancestorTenantId, @root, x.depth
+SELECT CAST (CAST (NEWID () AS BINARY (10)) + CAST (DATEDIFF_BIG (MILLISECOND, '19700101', SYSUTCDATETIME ()) AS BINARY (6)) AS UNIQUEIDENTIFIER), x.ancestorTenantId, @root, x.depth
   FROM (SELECT @root AS ancestorTenantId, 0 AS depth
         UNION ALL
         SELECT ancestorTenantId, depth + 1 FROM auth.tenantClosure WHERE descendantTenantId = @parent AND isDeleted = 0) AS x
@@ -77,11 +81,13 @@ INSERT @roles VALUES
   ('occupationalInvestigator', N'Occupational investigator', 0, 0, 'person.view,person.edit,result.view,result.edit,case.view,case.open,case.edit,investigation.edit,task.view,task.edit,data.export,document.view,document.edit'),
   ('supervisor', N'Supervisor', 0, 0, 'person.view,person.edit,person.view_identifiers,person.merge,result.view,result.edit,result.release_hold,case.view,case.open,case.edit,investigation.edit,task.view,task.edit,workflow.waive,intake.upload,registry.edit,data.export,extract.run,extract.submit,audit.view,usage.view,document.view,document.edit'),
   ('epidemiologist', N'Epidemiologist (de-identified)', 0, 1, 'person.view,result.view,case.view,task.view,data.export,extract.run'),
-  ('administrator', N'Administrator (users and configuration)', 1, 0, 'tenant.administer,tenant.create,config.edit,registry.edit,intake.configure,matching.configure,audit.view,usage.view,person.view,result.view,case.view,task.view'),
-  ('userAdministrator', N'User administrator (accounts and access only)', 1, 0, 'tenant.administer,audit.view');
+  ('administrator', N'Administrator (users and configuration)', 1, 0, 'tenant.administer,tenant.create,config.edit,registry.edit,intake.configure,matching.configure,audit.view,usage.view,security.review,person.view,result.view,case.view,task.view'),
+  ('userAdministrator', N'User administrator (accounts and access only)', 1, 0, 'tenant.administer,audit.view'),
+  -- Issue 271: read-only security review for the tenants granted. No account changes and no patient records.
+  ('securityOfficer', N'Security officer (security reports, read only)', 1, 0, 'audit.view,usage.view,security.review');
 
 INSERT auth.role (roleId, rootTenantId, roleCode, roleName, isAdministrator, isDeidentified)
-SELECT {k("CONCAT (N'profile:', @tenantCode, N':', r.roleCode)")}, @root, r.roleCode, r.roleName,
+SELECT CAST (HASHBYTES ('MD5', CONCAT (N'profile:', @tenantCode, N':', r.roleCode)) AS UNIQUEIDENTIFIER), @root, r.roleCode, r.roleName,
        r.isAdministrator, r.isDeidentified
   FROM @roles AS r
  WHERE NOT EXISTS (SELECT 1 FROM auth.role AS x WHERE x.rootTenantId = @root AND x.roleCode = r.roleCode
@@ -92,7 +98,7 @@ UPDATE x SET roleName = r.roleName
  WHERE x.rootTenantId = @root AND x.isDeleted = 0 AND x.roleName <> r.roleName;
 
 INSERT auth.rolePermission (rolePermissionId, roleId, permissionId)
-SELECT {NEWID}, ro.roleId, pm.permissionId
+SELECT CAST (CAST (NEWID () AS BINARY (10)) + CAST (DATEDIFF_BIG (MILLISECOND, '19700101', SYSUTCDATETIME ()) AS BINARY (6)) AS UNIQUEIDENTIFIER), ro.roleId, pm.permissionId
   FROM @roles AS r
  CROSS APPLY STRING_SPLIT (r.permissions, ',') AS s
   JOIN auth.role AS ro ON ro.rootTenantId = @root AND ro.roleCode = r.roleCode AND ro.isDeleted = 0
@@ -131,7 +137,7 @@ INSERT @settings VALUES
 
 INSERT config.jurisdictionSetting (jurisdictionSettingId, rootTenantId, settingKey, settingValue, effectiveFrom,
                                    settingDescription)
-SELECT {NEWID}, @root, s.settingKey, s.settingValue, @effectiveFrom, s.settingDescription
+SELECT CAST (CAST (NEWID () AS BINARY (10)) + CAST (DATEDIFF_BIG (MILLISECOND, '19700101', SYSUTCDATETIME ()) AS BINARY (6)) AS UNIQUEIDENTIFIER), @root, s.settingKey, s.settingValue, @effectiveFrom, s.settingDescription
   FROM @settings AS s
  WHERE NOT EXISTS (SELECT 1 FROM config.jurisdictionSetting AS x WHERE x.rootTenantId = @root
                                                                 AND x.settingKey = s.settingKey AND x.isDeleted = 0);
@@ -157,13 +163,13 @@ INSERT @th VALUES
 
 INSERT config.threshold (thresholdId, rootTenantId, analyteSpecimenId, population, sampleType, thresholdType, actionCodeId,
                          dueIntervalDays, lowerValue, upperValue, unit, comparator, effectiveFrom, authority, isActive)
-SELECT {k("CONCAT (N'threshold:', @tenantCode, N':', t.rowKey)")}, @root, @pbBlood, t.population, t.sampleType,
+SELECT CAST (HASHBYTES ('MD5', CONCAT (N'threshold:', @tenantCode, N':', t.rowKey)) AS UNIQUEIDENTIFIER), @root, @pbBlood, t.population, t.sampleType,
        t.thresholdType, t.actionCodeId, t.dueIntervalDays, t.lowerValue, t.upperValue, N'ug/dL', '>=', @effectiveFrom,
        t.authority, t.isActive
   FROM @th AS t
  WHERE @pbBlood IS NOT NULL AND @seedThresholds=1
    AND NOT EXISTS (SELECT 1 FROM config.threshold AS x
-                    WHERE x.thresholdId = {k("CONCAT (N'threshold:', @tenantCode, N':', t.rowKey)")});
+                    WHERE x.thresholdId = CAST (HASHBYTES ('MD5', CONCAT (N'threshold:', @tenantCode, N':', t.rowKey)) AS UNIQUEIDENTIFIER));
 
 -- ------------------------------------------------------------------------------------------ environmental standards
 DECLARE @std TABLE (rowKey VARCHAR (40), sampleType VARCHAR (30), surface NVARCHAR (60), standardValue DECIMAL (18, 6),
@@ -176,15 +182,15 @@ INSERT @std VALUES
 
 INSERT config.environmentalStandard (environmentalStandardId, rootTenantId, sampleType, surface, standardValue, unit,
                                      authority, effectiveFrom)
-SELECT {k("CONCAT (N'standard:', @tenantCode, N':', s.rowKey)")}, @root, s.sampleType, s.surface, s.standardValue, s.unit,
+SELECT CAST (HASHBYTES ('MD5', CONCAT (N'standard:', @tenantCode, N':', s.rowKey)) AS UNIQUEIDENTIFIER), @root, s.sampleType, s.surface, s.standardValue, s.unit,
        s.authority, '2025-01-13'
   FROM @std AS s
  WHERE NOT EXISTS (SELECT 1 FROM config.environmentalStandard AS x
-                    WHERE x.environmentalStandardId = {k("CONCAT (N'standard:', @tenantCode, N':', s.rowKey)")});
+                    WHERE x.environmentalStandardId = CAST (HASHBYTES ('MD5', CONCAT (N'standard:', @tenantCode, N':', s.rowKey)) AS UNIQUEIDENTIFIER));
 
 -- ------------------------------------------------------------------------------------------ counties
 INSERT config.subJurisdiction (subJurisdictionId, rootTenantId, countyFips, subJurisdictionName, jurisdictionType)
-SELECT {k("CONCAT (N'county:', @tenantCode, N':', j.fips)")}, @root, j.fips, j.countyName, COALESCE (j.countyType, 'county')
+SELECT CAST (HASHBYTES ('MD5', CONCAT (N'county:', @tenantCode, N':', j.fips)) AS UNIQUEIDENTIFIER), @root, j.fips, j.countyName, COALESCE (j.countyType, 'county')
   FROM OPENJSON (COALESCE (@countiesJson, N'[]'))
   WITH (fips CHAR (3) '$.fips', countyName NVARCHAR (80) '$.name', countyType VARCHAR (20) '$.type') AS j
  WHERE j.fips LIKE '[0-9][0-9][0-9]' AND LEN (LTRIM (j.countyName)) > 0
@@ -358,9 +364,14 @@ BEGIN
     ;THROW 51422, N'Choose the time zone from the list.', 1;
 END;""",
         "body": """
+DECLARE @auditAction VARCHAR(40)=CASE WHEN EXISTS(SELECT 1 FROM auth.tenant WHERE tenantCode=@tenantCode AND isDeleted=0) THEN 'update' ELSE 'create' END;
+
 EXEC config.uspInstallRootTenant @tenantCode = @tenantCode, @tenantName = @tenantName, @statePostalCode = @statePostalCode,
      @stateFips = @stateFips, @effectiveFrom = @effectiveFrom, @tenantType = @tenantType,
      @parentTenantCode = @parentTenantCode, @countiesJson = @countiesJson, @timeZone = @timeZone, @seedThresholds=@seedThresholds;
+
+INSERT logs.auditEvent(appUserId,rootTenantId,owningTenantId,eventAction,entityType,entityId)
+SELECT auth.udfSessionUserId(),rootTenantId,tenantId,@auditAction,'tenant',tenantId FROM auth.tenant WHERE tenantCode=@tenantCode AND isDeleted=0;
 
 SET @Comments = N'Root tenant created.';
 """,
@@ -408,8 +419,13 @@ BEGIN
     ;THROW 51422, N'That tenant code is already used elsewhere in the tree.', 1;
 END;""",
         "body": """
+DECLARE @auditAction VARCHAR(40)=CASE WHEN EXISTS(SELECT 1 FROM auth.tenant WHERE tenantCode=@tenantCode AND isDeleted=0) THEN 'update' ELSE 'create' END;
+
 EXEC config.uspInstallChildTenant @tenantCode = @tenantCode, @tenantName = @tenantName, @tenantType = @tenantType,
      @parentTenantCode = @parentTenantCode, @countyFipsList = @countyFipsList, @countiesJson = @countiesJson;
+
+INSERT logs.auditEvent(appUserId,rootTenantId,owningTenantId,eventAction,entityType,entityId)
+SELECT auth.udfSessionUserId(),rootTenantId,tenantId,@auditAction,'tenant',tenantId FROM auth.tenant WHERE tenantCode=@tenantCode AND isDeleted=0;
 
 SET @Comments = N'Child tenant created.';
 """,

@@ -339,7 +339,7 @@ public sealed partial class EmailCodeTests(MeritFixture fixture)
             ("Email", "changed-" + account.Email), ("IsActive", "true"), ("HomeTenantId", home)));
         Assert.Equal(HttpStatusCode.Redirect, saved.StatusCode);
         Assert.Equal(1, await account.ScalarAsync<int>("SELECT COUNT (*) FROM auth.appUser WHERE appUserId = @id AND mfaEmailVerifiedUtc IS NULL"));
-        Assert.Equal(1, await account.ScalarAsync<int>("SELECT COUNT (*) FROM logs.auditEvent WHERE appUserId = @id AND eventAction = 'mfaEmailDisabled'"));
+        Assert.Equal(1, await account.ScalarAsync<int>("SELECT COUNT (*) FROM logs.auditEvent WHERE entityId = @id AND appUserId = (SELECT appUserId FROM auth.appUser WHERE userName=N'admin') AND eventAction = 'mfaEmailDisabled'"));
 
         await account.ScalarAsync<int>("UPDATE auth.appUser SET mfaEmailVerifiedUtc = SYSUTCDATETIME (), mfaPreferredMethod = 'email' WHERE appUserId = @id; SELECT 0");
         string page = await admin.Http.GetStringAsync($"/admin/users/{account.Id}");

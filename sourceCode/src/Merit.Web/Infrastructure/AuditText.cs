@@ -11,7 +11,9 @@ public static class AuditText
 {
     public static readonly IReadOnlyList<(string Code, string Label)> Actions =
     [
-        ("view", "Viewed"), ("create", "Created"), ("update", "Changed"), ("export", "Exported"), ("search", "Searched"),
+        ("grant", "Granted access"), ("revoke", "Ended grant"), ("deactivate", "Deactivated"),
+        ("reactivate", "Reactivated"), ("unlock", "Unlocked account"), ("mfaResetByAdmin", "Administrator reset MFA"),
+        ("delete", "Deleted"), ("view", "Viewed"), ("create", "Created"), ("update", "Changed"), ("export", "Exported"), ("search", "Searched"),
         ("signIn", "Signed in"), ("signInFailed", "Sign-in failed"), ("signOut", "Signed out"),
         ("mfaEnrolled", "Set up multi-factor authentication"),
         ("mfaEmailEnabled", "Turned on email codes"), ("mfaEmailDisabled", "Turned off email codes"),
@@ -30,6 +32,7 @@ public static class AuditText
         ("report", "Report"), ("extractRun", "Extract"), ("appUser", "User account"), ("viewAsUser", "User account (view as)"),
         ("personOutsideScope", "Person outside your access"), ("auditEvent", "Audit log"),
         ("unknownUserNames", "Unknown user names (sign-in)"), ("signInActivity", "Sign-in activity report"),
+        ("userAssignment", "Role grant"), ("tenant", "Tenant"), ("userProfile", "Working profile"),
         ("userAccess", "Users and access"), ("signInHistory", "Account sign-in history"),
     ];
 

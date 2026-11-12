@@ -79,6 +79,8 @@ public sealed class PersonRow
 
     public Guid RootTenantId { get; init; }
 
+    public string? TestingPolicyVersion { get; init; }
+
     public string LastName { get; init; } = string.Empty;
 
     public string? FirstName { get; init; }

@@ -6,17 +6,22 @@
     string root = $"/people/{patient.PersonId}/care/testing";
     string V(string key, string fallback = "") => ViewData.ModelState.TryGetValue(key, out var e) ? e.AttemptedValue ?? fallback : fallback;
     var bloodResults = Model.Person.Results.Where(r => r.AnalyteCode == "PB" && r.Specimen == "wholeBlood" && r.UnitCanonical == "ug/dL").ToArray();
-    bool edit = Session.Has(Permissions.PersonEdit) && Session.Has(Permissions.TaskEdit);
+    bool policyActive = patient.TestingPolicyVersion == "MDH-2025-03";
+    bool edit = policyActive && Session.Has(Permissions.PersonEdit) && Session.Has(Permissions.TaskEdit);
 }
 <p><a href="/people/@patient.PersonId/care">Back to patient follow-up</a></p>
 <h1>Blood lead testing plan</h1>
 <p><strong>@patient.LastName, @patient.FirstName</strong> · Birth date: @patient.Dob</p>
+@if (!policyActive) {
+<p>No testing policy is active for this patient's state. Ask the state administrator to configure an approved policy.</p>
+@if(!ViewData.ModelState.IsValid) { <div class="usa-alert usa-alert--error" role="alert"><div asp-validation-summary="All"></div></div> }
+} else {
 <p>Maryland childhood guidance. These are provider testing plans, separate from Department notification and laboratory reporting deadlines. Verify Maryland applicability, outside records and the clinician's assessment before saving. School/child-care testing certificates are not tracked here.</p>
 <p><a href="https://mde.maryland.gov/programs/land/LeadPoisoningPrevention/Documents/Reports/MDH%202025%20Maryland%20Guidelines%20for%20Lead%20Exposure.pdf">MDH March 2025 clinical guidance (Tables 1, 2, 4 and 6)</a> · <a href="https://regs.maryland.gov/us/md/exec/comar/10.11.04.04">COMAR screening requirements</a></p>
 <details><summary>How targets and source draws work</summary>
 <p>Screen at 12 and 24 months. Missing proof requires source review; arrange catch-up promptly, before age 6. A test before 24 months cannot satisfy the 24-month plan. Catch-up remains dated when actually performed; it does not establish timely birthday screening.</p>
 <p>Confirmation starts at the first unresolved elevated capillary draw in the reviewed episode. Below-level capillary tests and later elevated capillary tests do not restart it. A venous result is required to complete confirmation even if two capillary tests meet the separate legal EBL definition.</p>
-<p>Confirmation windows: 3.5 to under 10 µg/dL: 12 weeks; 10 to under 20: 4 weeks; 20 to under 45: 2 weeks; 45 or higher: within 48 hours. For 45 or higher, coordinate urgently now and verify the actual draw timestamp; a date-only result cannot establish the exact cutoff.</p>
+<p>Confirmation windows: configured elevated reference level to under 10 µg/dL: 12 weeks; 10 to under 20: 4 weeks; 20 to under 45: 2 weeks; 45 or higher: within 48 hours. For 45 or higher, coordinate urgently now and verify the actual draw timestamp; a date-only result cannot establish the exact cutoff.</p>
 <p>Follow-up starts at the reviewed venous draw, not receipt. Early follow-up covers the first 2–4 tests; later follow-up requires clinician-reviewed decline. Default targets use the end of the guidance range; choose an earlier date when indicated. At 45 or higher, coordinate urgently under the treatment plan. Below-reference monitoring uses three calendar months toward reviewed closure.</p>
 <p>Below-level closure requires completed environmental remediation and the latest two consecutive low tests at least three calendar months apart. A new elevated or uncertain result invalidates readiness. Readiness review does not close the case.</p>
 </details>
@@ -62,4 +67,6 @@
 <label class="usa-label" for="currentGuidanceReason">Why current guidance applies to this older source</label><textarea class="usa-textarea" id="currentGuidanceReason" name="currentGuidanceReason" maxlength="1000">@V("currentGuidanceReason")</textarea>
 </details>
 <button class="usa-button">Save reviewed testing plan</button></form></section>
+}
+
 }

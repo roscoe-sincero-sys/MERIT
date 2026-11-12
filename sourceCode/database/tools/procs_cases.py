@@ -454,7 +454,7 @@ SET @Comments = N'Activity logged.';
 , @closureReviewConfirmed BIT = 0""",
         "key": "CONCAT (N'exposureCaseId=', @exposureCaseId, N', closureReason=', @closureReason)",
         "validate": CASE_VISIBLE,
-        "body": f"""
+        "body": """
 DECLARE @personId UNIQUEIDENTIFIER, @root UNIQUEIDENTIFIER, @owner UNIQUEIDENTIFIER, @opened DATE;
 SELECT @personId = personId, @root = rootTenantId, @owner = owningTenantId, @opened = openedDate
   FROM dbo.exposureCase WHERE exposureCaseId = @exposureCaseId;
@@ -511,9 +511,11 @@ IF @closureReason='belowLevelOnRetest' AND EXISTS
  (SELECT 1 FROM dbo.exposureCase AS c JOIN config.analyte AS a ON a.analyteId=c.analyteId
   JOIN dbo.labResult AS q ON q.labResultId=c.qualifyingLabResultId
   WHERE c.exposureCaseId=@exposureCaseId AND a.code='PB' AND q.ageAtCollectionMonths BETWEEN 0 AND 71
-  AND (UPPER(config.udfReceiptField(q.reportedSnapshotJson,NULL,'state'))='MD'
-    OR EXISTS(SELECT 1 FROM dbo.workTask WHERE personId=@personId AND isDeleted=0 AND testingPlanJson IS NOT NULL)))
+  AND config.udfActiveTestingPolicy(c.rootTenantId,auth.udfSessionToday())='MDH-2025-03')
 BEGIN
+DECLARE @testingRoot UNIQUEIDENTIFIER=(SELECT rootTenantId FROM dbo.person WHERE personId=@personId),
+ @testingDob DATE=(SELECT dob FROM dbo.person WHERE personId=@personId);
+
     DECLARE @low TABLE(id UNIQUEIDENTIFIER,draw DATE,value DECIMAL(18,6),op VARCHAR(4));
     INSERT @low SELECT TOP(2) r.labResultId,r.collectedDate,r.valueCanonical,r.operator FROM dbo.labResult AS r
      JOIN config.analyteSpecimen AS s ON s.analyteSpecimenId=r.analyteSpecimenId JOIN config.analyte AS a ON a.analyteId=s.analyteId
@@ -521,7 +523,7 @@ BEGIN
       AND a.code='PB' AND s.specimen='wholeBlood' AND s.canonicalUnit=N'ug/dL'
       AND r.collectedDate>=(SELECT q.collectedDate FROM dbo.exposureCase AS c JOIN dbo.labResult AS q ON q.labResultId=c.qualifyingLabResultId WHERE c.exposureCaseId=@exposureCaseId)
      ORDER BY r.collectedDate DESC,r.labResultId;
-    IF (SELECT COUNT(*) FROM @low)<>2 OR EXISTS(SELECT 1 FROM @low WHERE value IS NULL OR op IS NULL OR NOT ((op='=' AND value<3.5) OR (op='<' AND value<=3.5)))
+    IF (SELECT COUNT(*) FROM @low)<>2 OR EXISTS(SELECT 1 FROM @low WHERE config.udfTestingReferenceLevel(@testingRoot,draw,@testingDob) IS NULL OR value IS NULL OR op IS NULL OR NOT ((op='=' AND value<config.udfTestingReferenceLevel(@testingRoot,draw,@testingDob)) OR (op='<' AND value<=config.udfTestingReferenceLevel(@testingRoot,draw,@testingDob))))
       OR (SELECT MAX(draw) FROM @low)<DATEADD(MONTH,3,(SELECT MIN(draw) FROM @low)) OR (SELECT MAX(draw) FROM @low)>@closedDate
       OR NOT EXISTS(SELECT 1 FROM dbo.workTask AS w WHERE w.personId=@personId AND w.exposureCaseId=@exposureCaseId
        AND w.queueCode='testingDischarge' AND w.taskStatus='done' AND w.isDeleted=0 AND JSON_VALUE(w.testingPlanJson,'$.remediationConfirmed')='true'
@@ -541,11 +543,14 @@ END;
 UPDATE dbo.exposureCase
    SET caseStatus = 'closed', closureReason = @closureReason, closedDate = @closedDate
  WHERE exposureCaseId = @exposureCaseId AND isDeleted = 0 AND caseStatus <> 'closed' AND rowVersion = @rowVersion;
-{CONCURRENCY}
+IF @@ROWCOUNT = 0
+BEGIN
+    ;THROW 51409, N'This record was changed by someone else, or is no longer available. Reload it and try again.', 1;
+END;
 
 INSERT dbo.caseActivity (caseActivityId, rootTenantId, owningTenantId, exposureCaseId, activityType, activityDate,
                          workerUserId, note, lifecycleKind)
-VALUES ({NEWID}, @root, @owner, @exposureCaseId, 'statusChange', @closedDate, auth.udfSessionUserId (),
+VALUES (CAST (CAST (NEWID () AS BINARY (10)) + CAST (DATEDIFF_BIG (MILLISECOND, '19700101', SYSUTCDATETIME ()) AS BINARY (6)) AS UNIQUEIDENTIFIER), @root, @owner, @exposureCaseId, 'statusChange', @closedDate, auth.udfSessionUserId (),
         CONCAT (N'Case closed: ', @closureReason, IIF (@note IS NULL, N'', N'. ' + @note)), 'closed');
 
 UPDATE dbo.workTask

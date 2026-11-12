@@ -128,6 +128,12 @@ BEGIN
         SELECT @root = rootTenantId, @owner = owningTenantId FROM dbo.person WHERE personId = @personId;
         IF @exposureCaseId IS NOT NULL SELECT @owner = owningTenantId FROM dbo.exposureCase WHERE exposureCaseId = @exposureCaseId;
 
+        DECLARE @policyVersion VARCHAR(40)=config.udfActiveTestingPolicy(@root,auth.udfSessionToday());
+        IF @policyVersion IS NULL
+        BEGIN
+         ;THROW 51422,N'No testing policy is active for this patient''s state. Ask the state administrator to configure an approved policy.',1;
+        END;
+
         IF @exposureCaseId IS NULL
         BEGIN
          SET @owner=dbo.udfPatientWorkOwner(@personId);
@@ -189,9 +195,15 @@ BEGIN
             BEGIN
                 ;THROW 51422, N'Choose a valid final blood lead result collected at age 6 to under 72 months. Other ages require an individual clinical plan.', 1;
             END;
+        DECLARE @referenceLevel DECIMAL(18,6)=config.udfTestingReferenceLevel(@root,@draw,@dob);
+        IF @referenceLevel IS NULL
+        BEGIN
+         ;THROW 51422,N'Configure an unambiguous blood lead reference level for this source draw date before recording a testing plan.',1;
+        END;
+
             IF @planKind='confirmation'
             BEGIN
-                IF @sample<>'capillary' OR @value<3.5 OR @op<>'='
+                IF @sample<>'capillary' OR @value<@referenceLevel OR @op<>'='
                 BEGIN
                     ;THROW 51422, N'Confirmation starts at an elevated capillary draw; uncertain results need source clarification.', 1;
                 END;
@@ -199,7 +211,7 @@ BEGIN
                 BEGIN
                     ;THROW 51422, N'A venous result is already recorded on or after this draw. Review it before planning confirmation.', 1;
                 END;
-                IF EXISTS(SELECT 1 FROM @r AS r WHERE r.sampleType='capillary' AND r.valueCanonical>=3.5 AND r.operator IN ('=','>') AND r.collectedDate<@draw
+                IF EXISTS(SELECT 1 FROM @r AS r WHERE r.sampleType='capillary' AND r.valueCanonical>=config.udfTestingReferenceLevel(@root,r.collectedDate,@dob) AND r.operator IN ('=','>') AND r.collectedDate<@draw
                   AND r.collectedDate>COALESCE((SELECT MAX(collectedDate) FROM @r WHERE sampleType='venous' AND collectedDate<@draw),'00010101'))
                 BEGIN
                     ;THROW 51422, N'An earlier unresolved elevated capillary draw exists. Use that initial draw; later capillary tests do not restart confirmation.', 1;
@@ -207,7 +219,7 @@ BEGIN
                 SET @latest=CASE WHEN @value>=45 THEN @draw WHEN @value>=20 THEN DATEADD(DAY,14,@draw) WHEN @value>=10 THEN DATEADD(DAY,28,@draw) ELSE DATEADD(DAY,84,@draw) END;
                 SET @urgent=CASE WHEN @value>=45 THEN 1 ELSE 0 END;
                 SET @advice=CASE WHEN @urgent=1 THEN N'Urgent clinician coordination now: confirmation within 48 hours of the actual initial draw timestamp. Date-only data cannot establish the exact 48-hour cutoff; record the timestamp and clinician plan in evidence.'
-                  ELSE N'MDH March 2025 Table 2: confirmation within 12 weeks for 3.5 to under 10, 4 weeks for 10 to under 20, 2 weeks for 20 to under 45. Greater elevations require faster clinician assessment.' END;
+                  ELSE N'MDH March 2025 Table 2: confirmation within 12 weeks from the configured reference level to under 10, 4 weeks for 10 to under 20, 2 weeks for 20 to under 45. Greater elevations require faster clinician assessment.' END;
             END
             ELSE IF @planKind IN ('early','later')
             BEGIN
@@ -220,12 +232,12 @@ BEGIN
                     ;THROW 51422, N'Follow-up intervals require an exact venous result; use clinical/source review for censored or capillary results.', 1;
                 END;
                 SET @urgent=CASE WHEN @value>=45 THEN 1 ELSE 0 END;
-                SET @latest=CASE WHEN @value>=45 THEN @draw WHEN @value<3.5 THEN DATEADD(MONTH,3,@draw)
+                SET @latest=CASE WHEN @value>=45 THEN @draw WHEN @value<@referenceLevel THEN DATEADD(MONTH,3,@draw)
                   WHEN @value>=20 THEN DATEADD(MONTH,CASE WHEN @planKind='early' THEN 1 ELSE 3 END,@draw)
                   WHEN @value>=10 THEN DATEADD(MONTH,CASE WHEN @planKind='early' THEN 3 ELSE 6 END,@draw)
                   ELSE DATEADD(MONTH,CASE WHEN @planKind='early' THEN 3 ELSE 9 END,@draw) END;
                 SET @advice=CASE WHEN @urgent=1 THEN N'As soon as possible: urgent clinician coordination and individualized treatment plan; do not wait for a routine retest.'
-                  WHEN @value<3.5 THEN N'Below-reference monitoring: repeat every 3 months toward reviewed closure; remediation and two consecutive low results are required.'
+                  WHEN @value<@referenceLevel THEN N'Below-reference monitoring: repeat every 3 months toward reviewed closure; remediation and two consecutive low results are required.'
                   ELSE N'MDH March 2025 Table 4. Early: 3 months / 1-3 months / 2 weeks-1 month. Later, only after clinician-reviewed decline: 6-9 / 3-6 / 1-3 months. Select an earlier target within the approved clinical plan; never infer decline from test count alone.' END;
             END
             ELSE
@@ -238,11 +250,11 @@ BEGIN
                 INSERT @recent SELECT TOP(2) labResultId,collectedDate,valueCanonical,operator FROM @r
                   WHERE collectedDate<=@today AND collectedDate>=(SELECT r.collectedDate FROM dbo.exposureCase AS c JOIN dbo.labResult AS r ON r.labResultId=c.qualifyingLabResultId WHERE c.exposureCaseId=@exposureCaseId)
                   ORDER BY collectedDate DESC,labResultId;
-                IF (SELECT COUNT(*) FROM @recent)<>2 OR EXISTS(SELECT 1 FROM @recent WHERE value IS NULL OR op IS NULL OR NOT ((op='=' AND value<3.5) OR (op='<' AND value<=3.5)))
+                IF (SELECT COUNT(*) FROM @recent)<>2 OR EXISTS(SELECT 1 FROM @recent WHERE config.udfTestingReferenceLevel(@root,draw,@dob) IS NULL OR value IS NULL OR op IS NULL OR NOT ((op='=' AND value<config.udfTestingReferenceLevel(@root,draw,@dob)) OR (op='<' AND value<=config.udfTestingReferenceLevel(@root,draw,@dob))))
                   OR (SELECT MAX(draw) FROM @recent)<DATEADD(MONTH,3,(SELECT MIN(draw) FROM @recent))
                   OR @draw<>(SELECT MAX(draw) FROM @recent)
                 BEGIN
-                    ;THROW 51422, N'Closure needs the latest two consecutive valid blood lead tests below 3.5, at least three calendar months apart, and completed environmental remediation. Select the latest result.', 1;
+                    ;THROW 51422, N'Closure needs the latest two consecutive valid blood lead tests below the configured reference level at their draw dates, at least three calendar months apart, and completed environmental remediation. Select the latest result.', 1;
                 END;
                 SELECT @second=id FROM @recent WHERE id<>@labResultId;
                 SET @latest=@today;
@@ -269,7 +281,7 @@ BEGIN
         BEGIN
             ;THROW 51422, N'An open plan of this type exists. Complete it with a real test or dismiss it with a documented clinical reason before replacing it.', 1;
         END;
-        DECLARE @json NVARCHAR(MAX)=(SELECT 'MDH-2025-03' AS policyVersion,@planKind AS kind,@labResultId AS anchorResultId,@draw AS anchorDate,
+        DECLARE @json NVARCHAR(MAX)=(SELECT @policyVersion AS policyVersion,@referenceLevel AS referenceLevel,@planKind AS kind,@labResultId AS anchorResultId,@draw AS anchorDate,
          @second AS previousLowResultId,@remediationConfirmed AS remediationConfirmed,@evidence AS clinicalEvidence,
          @policyReference AS policyReferenceDate,'currentCare' AS policyPurpose,
          @currentGuidanceConfirmed AS currentGuidanceConfirmed,@currentGuidanceReason AS currentGuidanceReason,

@@ -105,6 +105,9 @@ BEGIN
 
         UPDATE auth.appUser SET failedSignInCount = 0, lockoutEndUtc = NULL
          WHERE appUserId = @appUserId AND isDeleted = 0;
+        INSERT logs.auditEvent(appUserId,rootTenantId,owningTenantId,eventAction,entityType,entityId)
+        SELECT auth.udfSessionUserId(),rootTenantId,homeTenantId,'unlock','appUser',appUserId FROM auth.appUser WHERE appUserId=@appUserId;
+
         SET @Comments = N'Account unlocked.';
 
         -- =========================================================================================

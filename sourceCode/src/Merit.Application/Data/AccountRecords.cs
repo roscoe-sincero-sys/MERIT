@@ -346,6 +346,8 @@ public sealed class AuditEventRow
 {
     public long AuditEventId { get; init; }
 
+    public string? AdministrationJson { get; init; }
+
     public DateTime EventUtc { get; init; }
 
     public Guid? AppUserId { get; init; }

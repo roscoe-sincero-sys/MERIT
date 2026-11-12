@@ -13,8 +13,8 @@ Notes: Issue 278. Can reach: homed in a reviewed tenant, or a current grant at a
        already includes descendants). Did reach: the actor of an audit event in the last 365 days on a record a reviewed tenant owned, so a
        statewide worker who opened a county case appears in that county's review. A statewide grant alone does not list
        every statewide worker in every county: observed access is the test, which keeps county lists bounded and keeps the
-       county administrator's Users page to its own people plus actual outside actors. Platform accounts see no records
-       and so never appear through the audit clause for record events. Staff of sibling jurisdictions only are not
+       county administrator's Users page to its own people plus actual outside actors. Platform accounts see no clinical records,
+       but their audited county administration appears here (#284). Staff of sibling jurisdictions only are not
        included. Seeing an account here grants nothing: account changes stay with its home tenant's administrators.
 Example Usage: SELECT appUserId FROM auth.tvfReviewAccounts ('security.review');
 Modification History: 2026-11-11, issue 278, initial version.

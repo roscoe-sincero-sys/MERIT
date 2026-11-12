@@ -107,7 +107,7 @@ BEGIN
                         WHERE e.appUserId = u.appUserId
                           AND (EXISTS (SELECT 1 FROM @wholeRoots AS w WHERE w.rootTenantId = e.rootTenantId)
                 OR (EXISTS (SELECT 1 FROM @partRoots AS p WHERE p.rootTenantId = e.rootTenantId)
-                    AND (EXISTS (SELECT 1 FROM @users AS x WHERE x.appUserId = e.appUserId)
+                    AND ((e.owningTenantId IS NULL AND EXISTS (SELECT 1 FROM @users AS x WHERE x.appUserId = e.appUserId))
                          OR EXISTS (SELECT 1 FROM @scope AS s WHERE s.tenantId = e.owningTenantId)))))
          ORDER BY u.displayName, u.appUserId;
 

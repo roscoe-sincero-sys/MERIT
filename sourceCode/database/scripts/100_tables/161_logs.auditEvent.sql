@@ -50,7 +50,7 @@ BEGIN
                                    'signInFailed', 'signOut', 'mfaEnrolled', 'permissionDenied', 'mfaEmailEnabled',
                                    'mfaEmailDisabled', 'mfaMethodChanged', 'mfaCodeSent', 'mfaCodeNotSent',
                                    'mfaCodeRefused', 'mfaCodeLocked', 'passwordChanged', 'passwordResetRequested',
-                                   'passwordResetCompleted', 'passwordSetByAdmin'))
+                                   'passwordResetCompleted', 'passwordSetByAdmin', 'grant', 'revoke', 'deactivate', 'reactivate', 'unlock', 'mfaResetByAdmin'))
     )
     WITH (LEDGER = ON (APPEND_ONLY = ON));
 END;
@@ -79,7 +79,7 @@ IF NOT EXISTS (SELECT 1
                  FROM sys.check_constraints
                 WHERE name = N'CK_logs_auditEvent_eventAction'
                   AND parent_object_id = OBJECT_ID (N'logs.auditEvent')
-                  AND definition LIKE N'%passwordResetCompleted%')
+                  AND definition LIKE N'%mfaResetByAdmin%')
 BEGIN
     IF OBJECT_ID (N'logs.CK_logs_auditEvent_eventAction', N'C') IS NOT NULL
     BEGIN
@@ -94,7 +94,7 @@ BEGIN
                                    'signInFailed', 'signOut', 'mfaEnrolled', 'permissionDenied', 'mfaEmailEnabled',
                                    'mfaEmailDisabled', 'mfaMethodChanged', 'mfaCodeSent', 'mfaCodeNotSent',
                                    'mfaCodeRefused', 'mfaCodeLocked', 'passwordChanged', 'passwordResetRequested',
-                                   'passwordResetCompleted', 'passwordSetByAdmin'));
+                                   'passwordResetCompleted', 'passwordSetByAdmin', 'grant', 'revoke', 'deactivate', 'reactivate', 'unlock', 'mfaResetByAdmin'));
     END
     ELSE
     BEGIN
@@ -103,7 +103,7 @@ BEGIN
                                    'signInFailed', 'signOut', 'mfaEnrolled', 'permissionDenied', 'mfaEmailEnabled',
                                    'mfaEmailDisabled', 'mfaMethodChanged', 'mfaCodeSent', 'mfaCodeNotSent',
                                    'mfaCodeRefused', 'mfaCodeLocked', 'passwordChanged', 'passwordResetRequested',
-                                   'passwordResetCompleted', 'passwordSetByAdmin'));
+                                   'passwordResetCompleted', 'passwordSetByAdmin', 'grant', 'revoke', 'deactivate', 'reactivate', 'unlock', 'mfaResetByAdmin'));
     END;
 END;
 GO
@@ -166,4 +166,12 @@ EXEC util.uspSetObjectDescription @SchemaName = N'logs', @ObjectType = N'TABLE',
 EXEC util.uspSetObjectDescription @SchemaName = N'logs', @ObjectType = N'TABLE', @ObjectName = N'auditEvent', @ColumnName = N'createdDateUtc', @Description = N'UTC timestamp of row insert.';
 EXEC util.uspSetObjectDescription @SchemaName = N'logs', @ObjectType = N'TABLE', @ObjectName = N'auditEvent', @ColumnName = N'modifiedBy', @Description = N'Equal to createdBy; the ledger rejects UPDATE.';
 EXEC util.uspSetObjectDescription @SchemaName = N'logs', @ObjectType = N'TABLE', @ObjectName = N'auditEvent', @ColumnName = N'modifiedDateUtc', @Description = N'Equal to createdDateUtc; the ledger rejects UPDATE.';
+GO
+
+-- Issue 284: immutable administration snapshots contain identifiers, codes and flags only.
+IF COL_LENGTH(N'logs.auditEvent',N'administrationJson') IS NULL
+    ALTER TABLE logs.auditEvent ADD administrationJson NVARCHAR(MAX) NULL;
+GO
+EXEC util.uspSetObjectDescription @SchemaName=N'logs',@ObjectType=N'TABLE',@ObjectName=N'auditEvent',@ColumnName=N'administrationJson',
+ @Description=N'Immutable administration snapshot: account, role and tenant identifiers, access codes, flags and effective dates only. No form text, names, credentials or secrets.';
 GO

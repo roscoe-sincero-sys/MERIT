@@ -97,6 +97,27 @@ BEGIN
         -- =========================================================================================
 
         DECLARE @root UNIQUEIDENTIFIER = auth.udfSessionRootTenantId ();
+        IF @settingKey='testingPolicyVersion' AND USER_NAME()<>N'dbo'
+           AND NOT EXISTS(
+             SELECT 1 FROM auth.sessionScope ss CROSS APPLY auth.tvfUserGrantPermissions(ss.appUserId) m
+             WHERE ss.sessionScopeId=TRY_CAST(SESSION_CONTEXT(N'scopeKey') AS UNIQUEIDENTIFIER)
+               AND ss.isDeleted=0 AND ss.revokedUtc IS NULL AND ss.expiresUtc>SYSUTCDATETIME()
+               AND m.tenantId=@root AND m.permissionCode='config.edit' AND m.grantRank>=2
+               AND ((ss.viewAsUserId IS NOT NULL
+                     AND EXISTS(SELECT 1 FROM auth.tvfUserGrantPermissions(ss.viewAsUserId) v WHERE v.tenantId=@root AND v.permissionCode='config.edit' AND v.grantRank>=2)
+                     AND EXISTS(SELECT 1 FROM auth.tvfUserGrantPermissions(ss.appUserId) a WHERE a.tenantId=@root AND a.permissionCode='tenant.administer'))
+                 OR (ss.viewAsUserId IS NULL AND ss.userProfileId IS NOT NULL
+                     AND EXISTS(SELECT 1 FROM auth.tvfProfileGrantPermissions(ss.userProfileId) p WHERE p.tenantId=@root AND p.permissionCode='config.edit' AND p.grantRank>=2))
+                 OR (ss.viewAsUserId IS NULL AND ss.userProfileId IS NULL)))
+        BEGIN
+            ;THROW 51403,N'Only a configuration administrator at the data root can adopt or disable its testing policy.',1;
+        END;
+        IF @settingKey='testingPolicyVersion' AND (@settingValue NOT IN (N'none',N'MDH-2025-03')
+         OR (@settingValue=N'MDH-2025-03' AND NOT EXISTS(SELECT 1 FROM auth.tenant WHERE tenantId=@root AND statePostalCode='MD')))
+        BEGIN
+         ;THROW 51422,N'Choose no testing policy, or the supported MDH March 2025 policy for a Maryland data root.',1;
+        END;
+
         DECLARE @desc NVARCHAR (500);
 
         SELECT TOP (1) @desc = settingDescription

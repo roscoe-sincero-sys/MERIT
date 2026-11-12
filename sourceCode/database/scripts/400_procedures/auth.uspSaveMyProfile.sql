@@ -117,6 +117,11 @@ BEGIN
             ;THROW 51403, N'You can change only your own extra profiles. The master profile is managed by your administrator.', 1;
         END;
 
+        DECLARE @auditAction VARCHAR(40) = CASE WHEN NOT EXISTS (SELECT 1 FROM auth.userProfile WHERE userProfileId=@userProfileId) THEN 'create'
+         WHEN @isActive=0 THEN 'deactivate' ELSE 'update' END;
+        DECLARE @auditTenants TABLE(tenantId UNIQUEIDENTIFIER PRIMARY KEY);
+        INSERT @auditTenants SELECT DISTINCT tenantId FROM auth.userProfileGrant WHERE userProfileId=@userProfileId AND isDeleted=0;
+
         DECLARE @g TABLE (tenantId UNIQUEIDENTIFIER, roleId UNIQUEIDENTIFIER, includeDescendants BIT, accessLevel VARCHAR (10));
         INSERT @g (tenantId, roleId, includeDescendants, accessLevel)
         SELECT tenantId, roleId, COALESCE (includeDescendants, 1), COALESCE (accessLevel, 'read')
@@ -174,6 +179,12 @@ BEGIN
         UPDATE auth.sessionScope SET revokedUtc = SYSUTCDATETIME ()
          WHERE userProfileId = @userProfileId AND revokedUtc IS NULL
            AND sessionScopeId <> COALESCE (TRY_CAST (SESSION_CONTEXT (N'scopeKey') AS UNIQUEIDENTIFIER), NEWID ());
+
+        INSERT @auditTenants SELECT DISTINCT tenantId FROM @g g WHERE NOT EXISTS(SELECT 1 FROM @auditTenants a WHERE a.tenantId=g.tenantId);
+        INSERT logs.auditEvent(appUserId,rootTenantId,owningTenantId,eventAction,entityType,entityId,administrationJson)
+        SELECT @me,t.rootTenantId,t.tenantId,@auditAction,'userProfile',@userProfileId,
+         (SELECT @me AS appUserId,@isActive AS isActive,JSON_QUERY((SELECT roleId,accessLevel,includeDescendants FROM @g g WHERE g.tenantId=t.tenantId FOR JSON PATH)) AS grants FOR JSON PATH,WITHOUT_ARRAY_WRAPPER)
+        FROM @auditTenants a JOIN auth.tenant t ON t.tenantId=a.tenantId;
 
         SET @Comments = N'Profile saved.';
 
