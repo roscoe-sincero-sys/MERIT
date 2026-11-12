@@ -164,7 +164,7 @@ BEGIN
             VALUES (CAST (CAST (NEWID () AS BINARY (10)) + CAST (DATEDIFF_BIG (MILLISECOND, '19700101', SYSUTCDATETIME ()) AS BINARY (6)) AS UNIQUEIDENTIFIER),
                     @root, @owner, 'caseFollowUp', N'Case opened outside the residence jurisdiction',
                     CONCAT (N'The patient''s current residence is served by ', (SELECT tenantName FROM auth.tenant WHERE tenantId = @routed),
-                            N', which the person entering this result cannot work in, so the case opened here. Coordinate with that jurisdiction or a state administrator before follow-up.'),
+                            N', which the person entering this result cannot work in, so the case opened here. Agree the handover with that jurisdiction, then use Transfer case on the case page (a state user or someone working in both can transfer it). Transferring completes this task.'),
                     @personId, @exposureCaseId, @qualifyingLabResultId);
         END;
 

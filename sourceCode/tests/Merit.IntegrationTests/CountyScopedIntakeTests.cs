@@ -69,6 +69,9 @@ public sealed partial class Hl7IntakeTests
         }
         finally
         {
+            // Retire this test's cases: every imported patient shares the HL7 sample address, and open cases at one
+            // address are a cluster that ClusterDetectionTests would otherwise count.
+            await Execute(c, "UPDATE dbo.exposureCase SET isDeleted=1 WHERE personId IN (SELECT r.personId FROM dbo.labResult r JOIN dbo.intakeBatch b ON b.intakeBatchId=r.intakeBatchId WHERE b.submittedByUserId=(SELECT appUserId FROM auth.appUser WHERE userName='cmbalt') AND r.labResultId<>@id)", Guid.Empty);
             await Execute(c, "UPDATE auth.userAssignment SET isDeleted=1 WHERE userAssignmentId=@id", grant);
             await Execute(c, "UPDATE config.notificationRule SET isActive=0 WHERE notificationRuleId=@id", rule);
         }

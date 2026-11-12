@@ -327,6 +327,18 @@ public sealed record ResultListQuery(Guid? AnalyteId, DateOnly? CollectedFrom, D
 
 // ------------------------------------------------------------------------------------------------ cases
 
+/// <summary>A tenant the caller may transfer a case to (#274); the patient's residence jurisdiction is flagged.</summary>
+public sealed class CaseTransferTarget
+{
+    public Guid TenantId { get; init; }
+
+    public string TenantName { get; init; } = string.Empty;
+
+    public string TenantType { get; init; } = string.Empty;
+
+    public bool IsResidence { get; init; }
+}
+
 public sealed class OpenCaseResult
 {
     public string CaseNumber { get; init; } = string.Empty;

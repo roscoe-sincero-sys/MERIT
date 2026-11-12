@@ -237,6 +237,10 @@ public interface ICaseData
 {
     Task ReopenCaseAsync(Guid exposureCaseId, string reason, byte[] rowVersion, CancellationToken ct = default);
 
+    Task<IReadOnlyList<CaseTransferTarget>> ListCaseTransferTargetsAsync(Guid exposureCaseId, CancellationToken ct = default);
+
+    Task TransferCaseAsync(Guid exposureCaseId, Guid toTenantId, string reason, byte[] rowVersion, CancellationToken ct = default);
+
     Task<OpenCaseResult> OpenCaseAsync(Guid exposureCaseId, Guid personId, Guid analyteId, string population, string classification, Guid qualifyingLabResultId, string workflowTemplate, DateOnly openedDate, CancellationToken ct = default);
 
     Task<AttachResultOutcome> AttachResultAsync(Guid exposureCaseId, Guid labResultId, string computedClassification, bool isHighest, CancellationToken ct = default);
