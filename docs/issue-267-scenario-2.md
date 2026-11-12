@@ -1,5 +1,7 @@
 # Issue #267: test scenario 2 (EPA Region 3, Maryland and Virginia counties, security reports)
 
+Latest result: [post-PR #281 retest, 2026-11-12](issue-267-post281-retest.md). The replay passes after correcting its early-morning receipt defect (#282). The report below records the original baseline and findings.
+
 Baseline: merged main `fac72d7` (after PR #266), 2026-11-11. This work added a test and this document. No application code, schema, permission or production data changed. All data is synthetic and lives in dedicated `MERIT_SCENARIO_267_*` / `MERIT_AUDIT267_*` databases on `localhost\PORTAL`.
 
 ## Outcome
