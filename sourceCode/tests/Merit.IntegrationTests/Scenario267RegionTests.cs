@@ -273,7 +273,7 @@ public sealed class Scenario267RegionTests(MeritFixture fixture, ITestOutputHelp
             countyManual = $"HTTP {(int)manualProbe.Code}, saved results {await Count("SELECT COUNT(*) FROM dbo.labResult WHERE accessionNumber=@a", ("@a", suffix + "-probe"))}, receipt tasks {await Count("SELECT COUNT(*) FROM dbo.workTask w JOIN dbo.labResult r ON r.labResultId=w.labResultId WHERE r.accessionNumber=@a AND w.queueCode IN ('labReportingReview','receiptFinding','missingInformation')", ("@a", suffix + "-probe"))}";
             bool countyIntakeWorks = countyHl7 == "loaded" && manualProbe.Code is HttpStatusCode.Redirect or HttpStatusCode.OK;
             Record($"{(countyIntakeWorks ? "PASS" : "DEFECT")} 14 county-scoped intake (#268): two-county clerk HL7 import → {countyHl7}; manual entry → {countyManual}.");
-            Expect(countyIntakeWorks, "14: county-scoped intake clerk cannot import or enter results (#268)");
+            Expect(countyIntakeWorks, $"14: county-scoped intake clerk cannot import or enter results (#268): HL7 import → {countyHl7}; manual entry → {countyManual}");
             // Statewide clerk for the remaining data entry, so the county workflows below still run.
             staff["mdintakeClerk"] = await CreateUser(mdAdmin, mdRoot, "mdintakeclerk" + suffix, "intakeClerk");
             var intakeClerk = countyIntakeWorks ? dualClerk : await SignIn("mdintakeclerk" + suffix);
@@ -699,9 +699,14 @@ public sealed class Scenario267RegionTests(MeritFixture fixture, ITestOutputHelp
     private async Task<Guid> Upload(MeritClient actor, Guid user, Guid profile, string content, string filename, DateOnly receipt, int expectedLoaded = 1)
     {
         await actor.Http.GetStringAsync("/intake"); using var form = new MultipartFormDataContent();
-        foreach (var (key, value) in new[] { ("intakeProfileId", profile.ToString()), ("historical", "true"), ("departmentReceivedAt", receipt.ToString("yyyy-MM-dd") + "T09:00"), ("receiptEvidence", "Synthetic receipt ledger scenario 267"), ("receiptConfirmed", "true") }) form.Add(new StringContent(value), key);
-        form.Add(new ByteArrayContent(Encoding.UTF8.GetBytes(content)), "file", filename); await Saved(await actor.NoRedirect.PostAsync("/intake/upload", form));
-        var batch = (Guid)(await Sql("SELECT TOP(1) intakeBatchId FROM dbo.intakeBatch WHERE rootTenantId=@r AND fileName=@n ORDER BY receivedUtc DESC", ("@r", mdRoot), ("@n", filename)))!;
+        // Keep the synthetic receipt on the requested business date, even when the replay runs before 09:00.
+        foreach (var (key, value) in new[] { ("intakeProfileId", profile.ToString()), ("historical", "true"), ("departmentReceivedAt", receipt.ToString("yyyy-MM-dd") + "T00:00"), ("receiptEvidence", "Synthetic receipt ledger scenario 267"), ("receiptConfirmed", "true") }) form.Add(new StringContent(value), key);
+        form.Add(new ByteArrayContent(Encoding.UTF8.GetBytes(content)), "file", filename);
+        using var uploaded = await actor.Http.PostAsync("/intake/upload", form);
+        string uploadPage = await uploaded.Content.ReadAsStringAsync();
+        Assert.True(uploaded.StatusCode == HttpStatusCode.OK && uploadPage.Contains("File received. It is being processed", StringComparison.Ordinal),
+            $"Upload {filename}: HTTP {(int)uploaded.StatusCode}: {Excerpt(uploadPage)}");
+        var batch = Assert.IsType<Guid>(await Sql("SELECT TOP(1) intakeBatchId FROM dbo.intakeBatch WHERE rootTenantId=@r AND fileName=@n ORDER BY receivedUtc DESC", ("@r", mdRoot), ("@n", filename)));
         string json = (string)(await Sql("SELECT TOP(1) * FROM dbo.jobQueue WHERE JSON_VALUE(payloadJson,'$.intakeBatchId')=CONVERT(VARCHAR(36),@id) FOR JSON PATH,WITHOUT_ARRAY_WRAPPER", ("@id", batch)))!;
         var job = JsonSerializer.Deserialize<ClaimedJobRow>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })!;
         var session = new ReplaySession(); var services = new ServiceCollection(); services.AddLogging(); services.AddSingleton<ICurrentSession>(session);
