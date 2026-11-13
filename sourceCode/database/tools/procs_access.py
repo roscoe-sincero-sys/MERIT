@@ -270,14 +270,14 @@ SELECT u.appUserId, u.userName, u.displayName, u.email, u.isActive, u.mfaEnabled
           JOIN auth.role   AS r ON r.roleId = ua.roleId
           JOIN auth.tenant AS t ON t.tenantId = ua.tenantId
          WHERE ua.appUserId = u.appUserId AND ua.isDeleted = 0
-           AND (ua.endDate IS NULL OR ua.endDate >= auth.udfSessionToday ())) AS assignments
+           AND (ua.endDate IS NULL OR ua.endDate >= auth.udfSessionToday ()) AND ua.revokedUtc IS NULL) AS assignments
   FROM auth.appUser AS u
   LEFT JOIN auth.tenant AS h ON h.tenantId = u.homeTenantId
  WHERE u.isDeleted = 0
    AND (EXISTS (SELECT 1 FROM @admin AS a WHERE a.tenantId = u.homeTenantId)
         OR EXISTS (SELECT 1 FROM auth.userAssignment AS ua JOIN @admin AS a ON a.tenantId = ua.tenantId
                     WHERE ua.appUserId = u.appUserId AND ua.isDeleted = 0
-                      AND (ua.endDate IS NULL OR ua.endDate >= auth.udfSessionToday ())))
+                      AND (ua.endDate IS NULL OR ua.endDate >= auth.udfSessionToday ()) AND ua.revokedUtc IS NULL))
  ORDER BY u.displayName;
 """,
     },
@@ -304,7 +304,7 @@ SELECT u.appUserId, u.userName, u.displayName, u.email, u.isActive, u.mfaEnabled
                     WHERE ua.appUserId = u.appUserId AND ua.isDeleted = 0));
 
 SELECT ua.userAssignmentId, ua.roleId, r.roleName, ua.tenantId, t.tenantName, ua.includeDescendants, ua.accessLevel,
-       ua.startDate, ua.endDate,
+       ua.startDate, ua.endDate, ua.revokedUtc,
        CAST (CASE WHEN EXISTS (SELECT 1 FROM @admin AS a WHERE a.tenantId = ua.tenantId) THEN 1 ELSE 0 END AS BIT) AS canManage
   FROM auth.userAssignment AS ua
   JOIN auth.role   AS r ON r.roleId = ua.roleId
@@ -464,7 +464,7 @@ SET @Comments = N'User saved.';
         "desc": "Adds, changes or ends a grant in a user's master profile. Only at tenants the administrator "
                 "administers; never in their own master profile; a role from the tenant's part of the tree (platform "
                 "roles only at the platform, for platform accounts); and, except for a platform administrator, never a "
-                "permission or access level the administrator does not hold at that tenant. The user's sessions end.",
+                "permission or access level the administrator does not hold at that tenant. The user's sessions end. @revokeNow = 1 ends an existing grant at once (issue 295): it stamps revokedUtc, which every grant resolver checks, because the inclusive end date alone leaves the grant usable until midnight.",
         "params": """@userAssignmentId   UNIQUEIDENTIFIER
 , @appUserId          UNIQUEIDENTIFIER
 , @roleId             UNIQUEIDENTIFIER
@@ -472,7 +472,8 @@ SET @Comments = N'User saved.';
 , @includeDescendants BIT = 1
 , @accessLevel        VARCHAR (10) = 'full'
 , @startDate          DATE
-, @endDate            DATE = NULL""",
+, @endDate            DATE = NULL
+, @revokeNow          BIT = 0""",
         "key": "CONCAT (N'userAssignmentId=', @userAssignmentId, N', appUserId=', @appUserId, N', tenantId=', @tenantId)",
         "validate": """IF @accessLevel IS NULL OR @accessLevel NOT IN ('read', 'write', 'full')
 BEGIN
@@ -491,7 +492,7 @@ BEGIN
 END;
 
 DECLARE @auditAction VARCHAR(40) = CASE WHEN NOT EXISTS (SELECT 1 FROM auth.userAssignment WHERE userAssignmentId=@userAssignmentId) THEN 'grant'
- WHEN @endDate <= auth.udfSessionToday() THEN 'revoke' ELSE 'update' END;
+ WHEN @revokeNow = 1 OR @endDate <= auth.udfSessionToday() THEN 'revoke' ELSE 'update' END;
 
 IF EXISTS (SELECT 1 FROM auth.userAssignment WHERE userAssignmentId = @userAssignmentId)
 BEGIN
@@ -501,8 +502,19 @@ BEGIN
         ;THROW 51403, N'That grant is at a tenant you do not administer.', 1;
     END;
 
+    -- Issue 295: an ended grant stays ended. Its end date is inclusive, so only revokedUtc removes it at once.
+    IF EXISTS (SELECT 1 FROM auth.userAssignment WHERE userAssignmentId = @userAssignmentId AND revokedUtc IS NOT NULL)
+    BEGIN
+        ;THROW 51422, N'This grant has already been ended. Add a new grant to give the access back.', 1;
+    END;
+
+    DECLARE @today DATE = auth.udfSessionToday ();
     UPDATE auth.userAssignment
-       SET endDate = @endDate
+       SET endDate = CASE WHEN @revokeNow = 0 THEN @endDate
+                          WHEN startDate > @today THEN startDate   -- a grant that never started: CK_auth_userAssignment_DateOrder
+                          WHEN endDate < @today THEN endDate       -- already expired: keep its real last day
+                          ELSE @today END,
+           revokedUtc = CASE WHEN @revokeNow = 1 THEN SYSUTCDATETIME () ELSE revokedUtc END
      WHERE userAssignmentId = @userAssignmentId AND isDeleted = 0;
 END
 ELSE
@@ -510,6 +522,10 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM @admin WHERE tenantId = @tenantId)
     BEGIN
         ;THROW 51403, N'You can grant roles only at tenants you administer.', 1;
+    END;
+    IF @revokeNow = 1
+    BEGIN
+        ;THROW 51404, N'The grant to end was not found.', 1;
     END;
 
     DECLARE @roleRoot UNIQUEIDENTIFIER = (SELECT rootTenantId FROM auth.role WHERE roleId = @roleId AND isDeleted = 0);
@@ -560,7 +576,7 @@ UPDATE auth.sessionScope SET revokedUtc = SYSUTCDATETIME () WHERE appUserId = @a
 
 INSERT logs.auditEvent(appUserId,rootTenantId,owningTenantId,eventAction,entityType,entityId,administrationJson)
 SELECT @me,t.rootTenantId,ua.tenantId,@auditAction,'userAssignment',ua.userAssignmentId,
- (SELECT ua.appUserId,ua.roleId,ua.tenantId,ua.accessLevel,ua.includeDescendants,ua.startDate,ua.endDate FOR JSON PATH,WITHOUT_ARRAY_WRAPPER)
+ (SELECT ua.appUserId,ua.roleId,ua.tenantId,ua.accessLevel,ua.includeDescendants,ua.startDate,ua.endDate,ua.revokedUtc FOR JSON PATH,WITHOUT_ARRAY_WRAPPER)
 FROM auth.userAssignment ua JOIN auth.tenant t ON t.tenantId=ua.tenantId WHERE ua.userAssignmentId=@userAssignmentId;
 
 SET @Comments = N'Grant saved; user sessions revoked.';
@@ -708,7 +724,7 @@ SELECT p.userProfileId, ua.roleId, r.roleName, ua.tenantId, t.tenantName, ua.inc
   FROM auth.userProfile    AS p
   JOIN auth.userAssignment AS ua ON ua.appUserId = p.appUserId AND ua.isDeleted = 0
                                 AND ua.startDate <= auth.udfSessionToday ()
-                                AND (ua.endDate IS NULL OR ua.endDate >= auth.udfSessionToday ())
+                                AND (ua.endDate IS NULL OR ua.endDate >= auth.udfSessionToday ()) AND ua.revokedUtc IS NULL
   JOIN auth.role   AS r ON r.roleId = ua.roleId
   JOIN auth.tenant AS t ON t.tenantId = ua.tenantId
  WHERE p.appUserId = @me AND p.isMaster = 1 AND p.isDeleted = 0

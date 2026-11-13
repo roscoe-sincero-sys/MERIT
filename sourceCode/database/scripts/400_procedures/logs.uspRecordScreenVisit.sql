@@ -150,7 +150,7 @@ BEGIN
               FROM (SELECT DISTINCT ro.roleCode FROM auth.userAssignment AS a
                       JOIN auth.role AS ro ON ro.roleId = a.roleId AND ro.isDeleted = 0
                      WHERE a.appUserId = COALESCE (@viewAs, @me) AND a.isDeleted = 0
-                       AND a.startDate <= auth.udfSessionToday () AND (a.endDate IS NULL OR a.endDate >= auth.udfSessionToday ())
+                       AND a.startDate <= auth.udfSessionToday () AND (a.endDate IS NULL OR a.endDate >= auth.udfSessionToday ()) AND a.revokedUtc IS NULL
                        AND (a.tenantId = @acting OR (a.includeDescendants = 1 AND EXISTS
                             (SELECT 1 FROM auth.tenantClosure AS tc WHERE tc.ancestorTenantId = a.tenantId AND tc.descendantTenantId = @acting AND tc.isDeleted = 0)))
                        AND (@profile IS NULL OR EXISTS (SELECT 1 FROM auth.userProfileGrant AS pg WHERE pg.userProfileId = @profile

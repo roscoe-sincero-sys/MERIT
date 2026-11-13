@@ -99,7 +99,7 @@ BEGIN
                             WHERE ua.appUserId = u.appUserId AND ua.isDeleted = 0));
 
         SELECT ua.userAssignmentId, ua.roleId, r.roleName, ua.tenantId, t.tenantName, ua.includeDescendants, ua.accessLevel,
-               ua.startDate, ua.endDate,
+               ua.startDate, ua.endDate, ua.revokedUtc,
                CAST (CASE WHEN EXISTS (SELECT 1 FROM @admin AS a WHERE a.tenantId = ua.tenantId) THEN 1 ELSE 0 END AS BIT) AS canManage
           FROM auth.userAssignment AS ua
           JOIN auth.role   AS r ON r.roleId = ua.roleId

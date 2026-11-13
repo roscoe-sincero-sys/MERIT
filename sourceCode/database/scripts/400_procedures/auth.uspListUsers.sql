@@ -103,7 +103,7 @@ BEGIN
                   JOIN auth.role   AS r ON r.roleId = ua.roleId
                   JOIN auth.tenant AS t ON t.tenantId = ua.tenantId
                  WHERE ua.appUserId = u.appUserId AND ua.isDeleted = 0
-                   AND (ua.endDate IS NULL OR ua.endDate >= auth.udfSessionToday ())
+                   AND (ua.endDate IS NULL OR ua.endDate >= auth.udfSessionToday ()) AND ua.revokedUtc IS NULL
                    -- #278: an outside actor's grants elsewhere are not the reviewer's business; show those reaching here.
                    AND (EXISTS (SELECT 1 FROM @admin AS a WHERE a.tenantId = u.homeTenantId)
                         OR EXISTS (SELECT 1 FROM auth.tenantClosure AS tc JOIN @review AS rv ON rv.tenantId = tc.descendantTenantId

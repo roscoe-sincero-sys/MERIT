@@ -85,7 +85,7 @@ public interface IAccountData
     Task SaveUserAsync(Guid appUserId, string userName, string displayName, string? email, bool isActive, string? passwordHash, Guid? homeTenantId,
                        bool? passwordChangeRequired = null, CancellationToken ct = default);
 
-    Task SaveUserAssignmentAsync(Guid userAssignmentId, Guid appUserId, Guid roleId, Guid tenantId, bool includeDescendants, string accessLevel, DateOnly startDate, DateOnly? endDate, CancellationToken ct = default);
+    Task SaveUserAssignmentAsync(Guid userAssignmentId, Guid appUserId, Guid roleId, Guid tenantId, bool includeDescendants, string accessLevel, DateOnly startDate, DateOnly? endDate, CancellationToken ct = default, bool revokeNow = false);
 
     Task<PersonSummaryRow?> FindUserForGrantAsync(string userName, CancellationToken ct = default);
 

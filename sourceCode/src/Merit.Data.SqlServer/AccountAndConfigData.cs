@@ -187,9 +187,9 @@ public sealed class AccountData(Db db) : IAccountData
         => db.ExecuteAsync("auth.uspSaveUser", new { appUserId, userName, displayName, email, isActive, passwordHash, homeTenantId, passwordChangeRequired }, ct);
 
     public Task SaveUserAssignmentAsync(Guid userAssignmentId, Guid appUserId, Guid roleId, Guid tenantId, bool includeDescendants,
-                                        string accessLevel, DateOnly startDate, DateOnly? endDate, CancellationToken ct = default)
+                                        string accessLevel, DateOnly startDate, DateOnly? endDate, CancellationToken ct = default, bool revokeNow = false)
         => db.ExecuteAsync("auth.uspSaveUserAssignment",
-            new { userAssignmentId, appUserId, roleId, tenantId, includeDescendants, accessLevel, startDate, endDate }, ct);
+            new { userAssignmentId, appUserId, roleId, tenantId, includeDescendants, accessLevel, startDate, endDate, revokeNow }, ct);
 
     public Task<PersonSummaryRow?> FindUserForGrantAsync(string userName, CancellationToken ct = default)
         => db.QuerySingleAsync<PersonSummaryRow>("auth.uspFindUserForGrant", new { userName }, ct);

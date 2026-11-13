@@ -221,6 +221,8 @@ TABLES = [
               null=False, default="'full'", check="accessLevel IN ('read', 'write', 'full')"),
             c("startDate", "DATE", "First day the assignment applies.", null=False),
             c("endDate", "DATE", "Last day the assignment applies; NULL = open-ended."),
+            c("revokedUtc", "DATETIME2 (3)", "UTC time an administrator ended the grant. From then it gives no access, "
+              "including for the rest of its end date; NULL = not revoked (issue 295)."),
         ],
         "fks": [("appUserId", "auth.appUser", "appUserId"), ("roleId", "auth.role", "roleId"),
                 ("tenantId", "auth.tenant", "tenantId")],

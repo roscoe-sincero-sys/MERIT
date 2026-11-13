@@ -41,7 +41,7 @@ RETURN
       JOIN auth.rolePermission AS rp ON rp.roleId = r.roleId AND rp.isDeleted = 0
       JOIN auth.permission AS pm ON pm.permissionId = rp.permissionId AND pm.isDeleted = 0
      WHERE u.isActive = 1 AND u.isDeleted = 0
-       AND ua.startDate <= auth.udfSessionToday () AND (ua.endDate IS NULL OR ua.endDate >= auth.udfSessionToday ())
+       AND ua.startDate <= auth.udfSessionToday () AND (ua.endDate IS NULL OR ua.endDate >= auth.udfSessionToday ()) AND ua.revokedUtc IS NULL
        AND (ua.accessLevel <> 'read' OR pm.accessLevel = 'read')
        AND @requiredPermission IN ('case.edit', 'task.edit', 'investigation.edit')
      GROUP BY u.appUserId, tc.descendantTenantId

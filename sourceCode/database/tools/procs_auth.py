@@ -112,7 +112,7 @@ SELECT {NEWID}, @sessionScopeId, x.tenantId
          WHERE ua.appUserId = @appUserId
            AND ua.isDeleted = 0
            AND ua.startDate <= @today
-           AND (ua.endDate IS NULL OR ua.endDate >= @today)) AS x;
+           AND (ua.endDate IS NULL OR ua.endDate >= @today) AND ua.revokedUtc IS NULL) AS x;
 
 INSERT auth.sessionScopePermission (sessionScopePermissionId, sessionScopeId, permissionCode)
 SELECT {NEWID}, @sessionScopeId, x.permissionCode
@@ -123,14 +123,14 @@ SELECT {NEWID}, @sessionScopeId, x.permissionCode
          WHERE ua.appUserId = @appUserId
            AND ua.isDeleted = 0
            AND ua.startDate <= @today
-           AND (ua.endDate IS NULL OR ua.endDate >= @today)) AS x;
+           AND (ua.endDate IS NULL OR ua.endDate >= @today) AND ua.revokedUtc IS NULL) AS x;
 
 DECLARE @acting UNIQUEIDENTIFIER =
     (SELECT TOP (1) ua.tenantId
        FROM auth.userAssignment AS ua
        JOIN auth.tenantClosure  AS tc ON tc.descendantTenantId = ua.tenantId AND tc.ancestorTenantId = @root
       WHERE ua.appUserId = @appUserId AND ua.isDeleted = 0
-        AND ua.startDate <= @today AND (ua.endDate IS NULL OR ua.endDate >= @today)
+        AND ua.startDate <= @today AND (ua.endDate IS NULL OR ua.endDate >= @today) AND ua.revokedUtc IS NULL
       ORDER BY tc.depth, ua.startDate);
 
 SELECT @sessionScopeId                AS sessionScopeId
@@ -273,7 +273,7 @@ SELECT u.appUserId, u.userName, u.displayName, u.email, u.isActive, u.mfaEnabled
      , STRING_AGG (CONCAT (p.profileName, N' @ ', t.tenantName), N'; ') WITHIN GROUP (ORDER BY p.profileName) AS assignments
   FROM auth.appUser AS u
   LEFT JOIN auth.userAssignment AS ua ON ua.appUserId = u.appUserId AND ua.isDeleted = 0
-                                     AND (ua.endDate IS NULL OR ua.endDate >= auth.udfSessionToday ())
+                                     AND (ua.endDate IS NULL OR ua.endDate >= auth.udfSessionToday ()) AND ua.revokedUtc IS NULL
   LEFT JOIN auth.profile AS p ON p.profileId = ua.profileId
   LEFT JOIN auth.tenant  AS t ON t.tenantId = ua.tenantId
  WHERE u.rootTenantId = @root AND u.isDeleted = 0
@@ -295,7 +295,7 @@ SELECT appUserId, userName, displayName, email, isActive, mfaEnabled, lastSignIn
  WHERE appUserId = @appUserId AND rootTenantId = @root AND isDeleted = 0;
 
 SELECT ua.userAssignmentId, ua.profileId, p.profileName, ua.tenantId, t.tenantName, ua.includeDescendants,
-       ua.startDate, ua.endDate
+       ua.startDate, ua.endDate, ua.revokedUtc
   FROM auth.userAssignment AS ua
   JOIN auth.profile AS p ON p.profileId = ua.profileId
   JOIN auth.tenant  AS t ON t.tenantId = ua.tenantId

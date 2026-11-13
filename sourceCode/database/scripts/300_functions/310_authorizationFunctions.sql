@@ -68,7 +68,7 @@ RETURN
      WHERE ua.appUserId = @appUserId
        AND ua.isDeleted = 0
        AND ua.startDate <= auth.udfSessionToday ()
-       AND (ua.endDate IS NULL OR ua.endDate >= auth.udfSessionToday ())
+       AND (ua.endDate IS NULL OR ua.endDate >= auth.udfSessionToday ()) AND ua.revokedUtc IS NULL
        AND (ua.accessLevel <> 'read' OR pm.accessLevel = 'read')
      GROUP BY tc.descendantTenantId, pm.permissionCode, pm.accessLevel;
 GO
