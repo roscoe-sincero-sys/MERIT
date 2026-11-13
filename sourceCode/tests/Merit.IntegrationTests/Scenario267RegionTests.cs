@@ -213,7 +213,7 @@ public sealed class Scenario267RegionTests(MeritFixture fixture, ITestOutputHelp
             Record($"COUNT: {await Count("SELECT COUNT(*) FROM auth.appUser WHERE userName LIKE @s", ("@s", "%" + suffix))} accounts created by this replay.");
 
             // ---------------------------------------------------------------- 12: Maryland configuration (#202 decisions)
-            foreach (var (key, value) in new[] { ("statePostalCode","MD"),("stateFips","24"),("testingPolicyVersion","MDH-2025-03"),("adultAgeCutoffYears","18"),("investigationLookbackDays","365"),("contactAttemptsBeforeLetter","3") })
+            foreach (var (key, value) in new[] { ("statePostalCode","MD"),("stateFips","24"),("testingPolicyVersion","MDH-2025-03"),("sessionTimeoutMinutes","30"),("adultAgeCutoffYears","18"),("investigationLookbackDays","365"),("contactAttemptsBeforeLetter","3") })
                 await Saved(await mdAdmin.NoRedirect.PostAsync("/config/settings/" + key, Form(("settingValue", value), ("effectiveFrom", "2020-01-01"))));
             await mdAdmin.Http.GetStringAsync("/reporters");
             clia = "21D0267" + string.Concat(suffix[..3].Select(ch => char.IsAsciiDigit(ch) ? ch : (char)('0' + (ch - 'A') % 10)));
@@ -557,6 +557,12 @@ public sealed class Scenario267RegionTests(MeritFixture fixture, ITestOutputHelp
         string activityCsv = await Get("/admin/sign-in-activity/activity.csv?hours=24");
         string usersCsv = await Get("/admin/users.csv");
         Expect(auditCsv.Length > 0 && activityCsv.Length > 0 && usersCsv.Length > 0, $"{who}: a security report export is unavailable (#272): {string.Join("; ", lines)}");
+        string configurationCsv = await Get("/admin/audit.csv?recordType=jurisdictionSetting");
+        Assert.Contains("testingPolicyVersion", configurationCsv, StringComparison.Ordinal);
+        Assert.Contains("MDH-2025-03", configurationCsv, StringComparison.Ordinal);
+        Assert.Contains("sessionTimeoutMinutes", configurationCsv, StringComparison.Ordinal);
+        Assert.Contains("mdadmin" + suffix, configurationCsv, StringComparison.OrdinalIgnoreCase);
+        Record($"PASS configuration audit (#287): {who} sees Maryland policy adoption and the security-setting change in the filtered export.");
         var csvUsers = auditCsv.Split("\r\n").Skip(1).Where(l => l.Length > 0).Select(l => l.Split(',')[1]).Distinct().ToList();
         string Of(string body, string prefix) => Regex.IsMatch(body, prefix + "[a-z0-9]*" + suffix, RegexOptions.IgnoreCase) ? "yes" : "no";
         Record($"REPORTS {who}: {string.Join("; ", lines)}");

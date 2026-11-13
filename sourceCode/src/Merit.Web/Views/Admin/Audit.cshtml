@@ -8,7 +8,7 @@
 }
 <partial name="_Breadcrumbs" model='(IReadOnlyList<BreadcrumbItem>)[new("Home", "/"), new("Audit history")]' />
 <h1 data-audit-page-size="@Model.PageSize">Audit log</h1>
-<p class="merit-meta">The tamper-evident ledger of views, changes and exports. It holds IDs, actions, users and times only.</p>
+<p class="merit-meta">The tamper-evident ledger of views, changes and exports. It holds IDs, actions, users, times and approved configuration codes and numbers. Free-text configuration values are excluded.</p>
 
 @* Filters (issue #45): who, what, which record, when. A GET form, so a filtered view is a link. *@
 <form class="usa-form merit-form-row merit-audit-filters" method="get" action="/admin/audit">
@@ -83,7 +83,7 @@
                         <td>@AuditText.Action(e.EventAction)</td>
                         <td>
                             @AuditText.RecordType(e.EntityType)
-                            @if (e.AdministrationJson is string details) { <details><summary>Administration details (IDs)</summary><p class="merit-mono merit-meta">@details</p></details> }
+                            @if (e.AdministrationJson is string details) { <details><summary>Administration and configuration details</summary><p class="merit-mono merit-meta">@details</p></details> }
                             @if (e.EntityId is Guid id)
                             {
                                 <br />

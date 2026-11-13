@@ -82,6 +82,10 @@ SELECT th.thresholdId, th.analyteSpecimenId, a.code AS analyteCode, a.displayNam
         "body": """
 DECLARE @root UNIQUEIDENTIFIER = auth.udfSessionRootTenantId ();
 
+DECLARE @oldState NVARCHAR(MAX),@newState NVARCHAR(MAX),@wasActive BIT;
+SELECT @wasActive=isActive,@oldState=(SELECT thresholdId,analyteSpecimenId,population,ageMinMonths,ageMaxMonths,thresholdType,actionCodeId,dueIntervalDays,lowerValue,upperValue,comparator,effectiveFrom,effectiveTo,isActive FOR JSON PATH,INCLUDE_NULL_VALUES,WITHOUT_ARRAY_WRAPPER)
+ FROM config.threshold WITH(UPDLOCK,HOLDLOCK) WHERE thresholdId=@thresholdId AND isDeleted=0;
+
 IF @isActive = 1 AND EXISTS (
     SELECT 1 FROM config.threshold AS t WITH (UPDLOCK, HOLDLOCK)
      WHERE t.isDeleted = 0 AND t.isActive = 1 AND t.thresholdId <> @thresholdId
@@ -106,7 +110,10 @@ BEGIN
            upperValue = @upperValue, unit = @unit, comparator = @comparator, effectiveFrom = @effectiveFrom,
            effectiveTo = @effectiveTo, authority = @authority, isActive = @isActive
      WHERE thresholdId = @thresholdId AND isDeleted = 0 AND rowVersion = @rowVersion;
-    {CONCURRENCY}
+    IF @@ROWCOUNT = 0
+    BEGIN
+        ;THROW 51409, N'This record was changed by someone else, or is no longer available. Reload it and try again.', 1;
+    END;
 END
 ELSE
 BEGIN
@@ -118,8 +125,17 @@ BEGIN
             @effectiveTo, @authority, @isActive);
 END;
 
+SELECT @newState=(SELECT thresholdId,analyteSpecimenId,population,ageMinMonths,ageMaxMonths,thresholdType,actionCodeId,dueIntervalDays,lowerValue,upperValue,comparator,effectiveFrom,effectiveTo,isActive FOR JSON PATH,INCLUDE_NULL_VALUES,WITHOUT_ARRAY_WRAPPER)
+ FROM config.threshold WHERE thresholdId=@thresholdId;
+INSERT logs.auditEvent(appUserId,rootTenantId,owningTenantId,eventAction,entityType,entityId,administrationJson)
+SELECT auth.udfSessionUserId(),rootTenantId,rootTenantId,
+ CASE WHEN @oldState IS NULL THEN 'create' WHEN @wasActive=1 AND isActive=0 THEN 'deactivate'
+      WHEN @wasActive=0 AND isActive=1 THEN 'reactivate' ELSE 'update' END,'threshold',thresholdId,
+ (SELECT JSON_QUERY(@oldState) AS oldValue,JSON_QUERY(@newState) AS newValue FOR JSON PATH,INCLUDE_NULL_VALUES,WITHOUT_ARRAY_WRAPPER)
+FROM config.threshold WHERE thresholdId=@thresholdId;
+
 SET @Comments = N'Threshold saved.';
-""".replace("{CONCURRENCY}", CONCURRENCY.replace("\n", "\n    ")),
+""",
     },
     {
         "schema": "config", "name": "uspGetSettings", "kind": "read", "grants": BOTH, "ticket": "T050",
@@ -171,26 +187,46 @@ BEGIN
  ;THROW 51422,N'Choose no testing policy, or the supported MDH March 2025 policy for a Maryland data root.',1;
 END;
 
+DECLARE @settingId UNIQUEIDENTIFIER=CAST(CAST(NEWID() AS BINARY(10))+CAST(DATEDIFF_BIG(MILLISECOND,'19700101',SYSUTCDATETIME()) AS BINARY(6)) AS UNIQUEIDENTIFIER),
+ @oldId UNIQUEIDENTIFIER,@oldValue NVARCHAR(2000);
+SELECT TOP(1) @oldId=jurisdictionSettingId,@oldValue=settingValue
+ FROM config.jurisdictionSetting WITH(UPDLOCK,HOLDLOCK)
+ WHERE rootTenantId=@root AND settingKey=@settingKey AND isDeleted=0 AND effectiveFrom<=@effectiveFrom
+   AND (effectiveTo IS NULL OR effectiveTo>=@effectiveFrom)
+ ORDER BY effectiveFrom DESC,jurisdictionSettingId;
+
 DECLARE @desc NVARCHAR (500);
 
 SELECT TOP (1) @desc = settingDescription
   FROM config.jurisdictionSetting WITH (UPDLOCK, HOLDLOCK)
- WHERE settingKey = @settingKey AND isDeleted = 0
+ WHERE rootTenantId = @root AND settingKey = @settingKey AND isDeleted = 0
  ORDER BY effectiveFrom DESC;
 
 -- A same-day change replaces the value; a later change ends the current row.
 UPDATE config.jurisdictionSetting
    SET isDeleted = 1
- WHERE settingKey = @settingKey AND isDeleted = 0 AND effectiveFrom >= @effectiveFrom;
+ WHERE rootTenantId = @root AND settingKey = @settingKey AND isDeleted = 0 AND effectiveFrom >= @effectiveFrom;
 
 UPDATE config.jurisdictionSetting
    SET effectiveTo = DATEADD (DAY, -1, @effectiveFrom)
- WHERE settingKey = @settingKey AND isDeleted = 0 AND effectiveFrom < @effectiveFrom
+ WHERE rootTenantId = @root AND settingKey = @settingKey AND isDeleted = 0 AND effectiveFrom < @effectiveFrom
    AND (effectiveTo IS NULL OR effectiveTo >= @effectiveFrom);
 
 INSERT config.jurisdictionSetting (jurisdictionSettingId, rootTenantId, settingKey, settingValue, effectiveFrom,
                                    settingDescription)
-VALUES (CAST (CAST (NEWID () AS BINARY (10)) + CAST (DATEDIFF_BIG (MILLISECOND, '19700101', SYSUTCDATETIME ()) AS BINARY (6)) AS UNIQUEIDENTIFIER), @root, @settingKey, @settingValue, @effectiveFrom, @desc);
+VALUES (@settingId, @root, @settingKey, @settingValue, @effectiveFrom, @desc);
+
+DECLARE @safeKey VARCHAR(80)=config.udfAuditSettingKey(@settingKey),
+ @safeOld NVARCHAR(2000)=config.udfAuditSettingValue(@settingKey,@oldValue),
+ @safeNew NVARCHAR(2000)=config.udfAuditSettingValue(@settingKey,@settingValue);
+INSERT logs.auditEvent(appUserId,rootTenantId,owningTenantId,eventAction,entityType,entityId,administrationJson)
+VALUES(auth.udfSessionUserId(),@root,@root,CASE WHEN @oldId IS NULL THEN 'create' ELSE 'update' END,'jurisdictionSetting',@settingId,
+ (SELECT @safeKey AS settingKey,@oldId AS oldSettingId,@effectiveFrom AS effectiveFrom,
+ @safeOld AS oldValue,@safeNew AS newValue,
+ CAST(CASE WHEN @safeKey IS NULL THEN 1 ELSE 0 END AS BIT) AS keyRedacted,
+ CAST(CASE WHEN @oldValue IS NOT NULL AND @safeOld IS NULL THEN 1 ELSE 0 END AS BIT) AS oldValueRedacted,
+ CAST(CASE WHEN @settingValue IS NOT NULL AND @safeNew IS NULL THEN 1 ELSE 0 END AS BIT) AS newValueRedacted
+ FOR JSON PATH,INCLUDE_NULL_VALUES,WITHOUT_ARRAY_WRAPPER));
 
 SET @Comments = N'Setting changed.';
 """,

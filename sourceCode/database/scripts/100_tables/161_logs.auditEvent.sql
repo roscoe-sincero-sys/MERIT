@@ -8,8 +8,8 @@ GO
     sign-in events. An APPEND-ONLY LEDGER table: rows can be inserted and never updated or deleted, and
     SQL Server keeps a cryptographic digest chain over them.
 
-    Ledger history cannot be deleted, so this table holds only IDs, actions, users, counts and times. Names,
-    dates of birth, addresses, result values and search text stay out of it; search text goes to the purgeable
+    Ledger history cannot be deleted, so this table holds IDs, actions, users, counts, times and safe configuration
+    codes/numbers. Names, dates of birth, addresses, patient result values and search text stay out of it; search text goes to the purgeable
     logs.searchLog instead.
 
     Hand-written rather than generated, because it departs from the table template in two documented ways:
@@ -19,7 +19,7 @@ GO
         same shape as every other table; deleted* and modified* simply never change from their insert values.
       - isDeleted is always 0 for the same reason. A purge of audit history is not possible by design.
 
-    The only writer is logs.uspRecordAuditEvent.
+    Writers are logs.uspRecordAuditEvent and the authorized mutation procedures that audit inside their transactions.
 */
 
 IF OBJECT_ID (N'logs.auditEvent', N'U') IS NULL
@@ -173,5 +173,5 @@ IF COL_LENGTH(N'logs.auditEvent',N'administrationJson') IS NULL
     ALTER TABLE logs.auditEvent ADD administrationJson NVARCHAR(MAX) NULL;
 GO
 EXEC util.uspSetObjectDescription @SchemaName=N'logs',@ObjectType=N'TABLE',@ObjectName=N'auditEvent',@ColumnName=N'administrationJson',
- @Description=N'Immutable administration snapshot: account, role and tenant identifiers, access codes, flags and effective dates only. No form text, names, credentials or secrets.';
+ @Description=N'Immutable administration/configuration snapshot: identifiers, allowlisted codes, canonical numeric settings, thresholds, flags and effective dates. No free text, names, credentials or secrets.';
 GO
