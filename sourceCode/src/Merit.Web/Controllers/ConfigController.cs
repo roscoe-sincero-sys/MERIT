@@ -14,20 +14,38 @@ namespace Merit.Web.Controllers;
 
 /// <summary>Threshold, settings and analyte configuration screens (htmx): small tables and forms.</summary>
 [Route("config")]
-public sealed class ConfigController(IClock clock, ConfigService config, IReferenceDataProvider reference, ICurrentSession session) : Controller
+public sealed class ConfigController(IClock clock, ConfigService config, IReferenceDataProvider reference, ICurrentSession session, CareService care) : Controller
 {
     [HttpGet("thresholds")]
     [Authorize(Policy = Permissions.SignedIn)]
     public async Task<IActionResult> Thresholds(CancellationToken ct)
-        => this.PageOrPartial("Thresholds", "_ThresholdTable",
-            new ThresholdListModel(await config.ThresholdsAsync(ct), session.Has(Permissions.ConfigEdit)));
+    {
+        var rows = await config.ThresholdsAsync(ct);
+        bool canEdit = session.Has(Permissions.ConfigEdit);
+        // Issue #292: say when an active notification rule's population has no case level.
+        ViewData["CoverageGaps"] = canEdit ? PolicyCoverage.Gaps(await care.RulesAsync(ct), rows) : [];
+        return this.PageOrPartial("Thresholds", "_ThresholdTable", new ThresholdListModel(rows, canEdit));
+    }
 
     [HttpGet("thresholds/new")]
     [HttpGet("thresholds/{id:guid}")]
     [Authorize(Policy = Permissions.ConfigEdit)]
-    public async Task<IActionResult> EditThreshold(Guid? id, CancellationToken ct)
+    public async Task<IActionResult> EditThreshold(Guid? id, string? template, CancellationToken ct)
     {
         var form = new ThresholdFormModel { EffectiveFrom = clock.Today };
+        // Issue #292: Maryland reference-level drafts prefill the form; nothing is saved until the administrator reviews and saves it.
+        if (id is null && MarylandPolicyDrafts.GetThreshold(template) is { } draft)
+        {
+            var refSet = await reference.GetAsync(ct);
+            var lead = refSet.Set.AnalyteSpecimens.FirstOrDefault(s => s.Specimen == "wholeBlood" && refSet.Analyte(s.AnalyteId)?.Code == "PB");
+            form = new ThresholdFormModel
+            {
+                AnalyteSpecimenId = lead?.AnalyteSpecimenId, Population = draft.Population, AgeMaxMonths = draft.AgeMaxMonths, ThresholdType = "case",
+                LowerValue = draft.LowerValue, Comparator = ">=", EffectiveFrom = draft.EffectiveFrom, EffectiveTo = draft.EffectiveTo,
+                Authority = draft.Authority, IsActive = true,
+            };
+        }
+
         if (id is Guid tid)
         {
             var t = (await config.ThresholdsAsync(ct)).FirstOrDefault(x => x.ThresholdId == tid) ?? throw new NotFoundException();

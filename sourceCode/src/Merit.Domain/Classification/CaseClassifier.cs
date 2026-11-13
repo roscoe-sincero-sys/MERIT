@@ -161,6 +161,19 @@ public static class CaseClassifier
                 explain.Add(caseOutcomes.Count == 0
                     ? "No case level is configured for this analyte, specimen and population."
                     : $"Below the case level ({string.Join(", ", caseOutcomes.Select(o => o.Rule.LowerValue))}).");
+
+                // Issue #292: a population with no case level never opens a case. When the value would be a case in
+                // another population, staff decide: an intended exclusion and a forgotten level look the same here.
+                if (caseOutcomes.Count == 0 && input.OpenCase is null && r.Operator != ResultOperator.LessThan
+                    && ThresholdEvaluator.LowestCaseLevel(input.Thresholds) is decimal lowestCase && r.ValueCanonical >= lowestCase)
+                {
+                    tasks.Add(new ProposedTask("populationReview", "Elevated result with no case level for this population",
+                        $"{Amount(r.ValueCanonical, input.Unit)} is at or above the lowest case level configured for another population "
+                        + $"({Amount(lowestCase, input.Unit)}), but no case level covers this patient's population and age, so no case was opened. "
+                        + "Decide whether follow-up is needed; if this population should be case-managed, ask the configuration administrator to add its case level.",
+                        14, false));
+                    explain.Add("At or above another population's case level: sent to review.");
+                }
             }
 
             return new ClassificationDecision(input.OpenCase is null ? CaseAction.None : CaseAction.AttachToCase,

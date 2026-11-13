@@ -147,7 +147,9 @@ BEGIN
         SELECT workTaskId, rootTenantId, owningTenantId, 'notificationDue',
                CONCAT (CASE WHEN evaluationState = 'needsReview' THEN N'Review potential notification: ' ELSE N'Notify ' END, recipientKind, N' — ', ruleName),
                CONCAT (N'Due ', CONVERT (VARCHAR (10), dueDate, 23), N' (', timeZoneId, N'). Required recipient: ', recipientKind, N'. Open the patient notification workspace to record completed delivery. Attempts do not complete this task.'),
-               personId, exposureCaseId, labResultId, dueDate, 1 FROM #new;
+               personId, exposureCaseId, labResultId, dueDate,
+               -- Issue 293: a deadline more than a year past is a historical backfill review, not a current urgent duty.
+               CASE WHEN dueDate < DATEADD (YEAR, -1, CAST (SYSUTCDATETIME () AS DATE)) THEN 0 ELSE 1 END FROM #new;
         INSERT dbo.notificationObligation (notificationObligationId, rootTenantId, owningTenantId, personId, exposureCaseId,
             labResultId, notificationRuleId, workTaskId, policySnapshotJson, ruleName, recipientKind, triggerEvent, anchorDate, dueDate, timeZoneId, evaluationState)
         SELECT notificationObligationId, rootTenantId, owningTenantId, personId, exposureCaseId, labResultId, notificationRuleId,

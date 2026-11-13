@@ -13,7 +13,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace Merit.Web.Controllers;
 
 [Authorize(Policy = Permissions.PersonView)]
-public sealed class CareController(CareService care, PersonService people, IReferenceDataProvider reference) : Controller
+public sealed class CareController(CareService care, PersonService people, IReferenceDataProvider reference, ConfigService config) : Controller
 {
     [HttpGet("people/{personId:guid}/care")]
     public async Task<IActionResult> Index(Guid personId, Guid? caseId, Guid? completing, int activityPage = 1, int documentPage = 1, int notificationPage = 1, CancellationToken ct = default)
@@ -244,7 +244,10 @@ public sealed class CareController(CareService care, PersonService people, IRefe
             if (lead is not null) defaults["analyteSpecimenId"] = lead.AnalyteSpecimenId.ToString();
         }
         ViewData["PolicyDefaults"] = defaults;
-        return View("Policies", new NotificationPolicyModel(await care.RulesAsync(ct), r.Set.AnalyteSpecimens.Where(s => s.IsActive)
+        var rules = await care.RulesAsync(ct);
+        // Issue #292: say when an active notification rule's population has no case level.
+        ViewData["CoverageGaps"] = PolicyCoverage.Gaps(rules, await config.ThresholdsAsync(ct));
+        return View("Policies", new NotificationPolicyModel(rules, r.Set.AnalyteSpecimens.Where(s => s.IsActive)
             .Select(s => new SelectOption(s.AnalyteSpecimenId.ToString(), $"{r.Analyte(s.AnalyteId)?.DisplayName} / {s.Specimen} / {s.CanonicalUnit}")).ToList()));
     }
 
