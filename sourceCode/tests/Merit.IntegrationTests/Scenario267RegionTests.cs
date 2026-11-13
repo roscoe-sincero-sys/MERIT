@@ -234,14 +234,20 @@ public sealed class Scenario267RegionTests(MeritFixture fixture, ITestOutputHelp
             specimen = (Guid)(await Sql("SELECT s.analyteSpecimenId FROM config.analyteSpecimen s JOIN config.analyte a ON a.analyteId=s.analyteId WHERE a.code='PB' AND s.specimen='wholeBlood'"))!;
             analyte = (Guid)(await Sql("SELECT analyteId FROM config.analyteSpecimen WHERE analyteSpecimenId=@id", ("@id", specimen)))!;
             // Reference level (§ 6-801 / COMAR 26.16.08.03): 5 ug/dL 2020-07-01..2023-12-31, 3.5 from 2024-01-01; child = under 6.
-            await Threshold(mdAdmin, "5", "2020-07-01", "2023-12-31");
-            await Threshold(mdAdmin, "3.5", "2024-01-01", null);
+            // #292: the reference-level history is configured for both populations the step 12 rules cover (children under 6 and
+            // pregnant women), from the shipped reference-level drafts.
+            foreach (var key in Merit.Application.Services.MarylandPolicyDrafts.ThresholdNames.Keys) await ThresholdDraft(mdAdmin, key);
+            Assert.Equal(4, await Count("SELECT COUNT(*) FROM config.threshold WHERE rootTenantId=@r AND thresholdType='case' AND isActive=1 AND isDeleted=0", ("@r", mdRoot)));
             var rules = new Dictionary<string, Guid>(StringComparer.Ordinal);
             foreach (var key in Merit.Application.Services.MarylandPolicyDrafts.Names.Keys) rules[key] = await Template(mdAdmin, key);
             var hl7 = await Format(mdAdmin, "hl7", []);
             var csv = await Format(mdAdmin, "csv", ["lastName","firstName","dob","sex","loinc","value","unit","collectedDate","reportedDate","finalResultDate","accessionNumber","sampleType","resultStatus","addressLine1","city","state","zip5","countyFips","guardianName","guardianPhone"]);
-            Assert.Equal(11, await Count("SELECT COUNT(*) FROM config.notificationRule WHERE rootTenantId=@r AND isActive=1", ("@r", mdRoot)));
-            Record("PASS 12: Maryland administrator configured settings, a reporting laboratory, the reference-level history (5 ug/dL July 2020–2023, 3.5 from 2024) and activated all 11 shipped Maryland drafts (child, pregnant minor/adult, residence owner, affected property, lab elevated/below-reference reporting and the two historical child-notice windows) with explicit synthetic calendars and approvals, plus HL7 and CSV import formats.");
+            Assert.Equal(13, await Count("SELECT COUNT(*) FROM config.notificationRule WHERE rootTenantId=@r AND isActive=1", ("@r", mdRoot)));
+            // #292: with a case level for every population that has a notification rule, the configuration pages show no coverage warning.
+            Expect(!(await mdAdmin.Http.GetStringAsync("/config/notification-rules")).Contains("id=\"coverage-gaps\"", StringComparison.Ordinal)
+                && !(await mdAdmin.Http.GetStringAsync("/config/thresholds")).Contains("id=\"coverage-gaps\"", StringComparison.Ordinal),
+                "Step 12 (#292): the configuration pages warn about a notification rule without a case level although every population is configured.");
+            Record("PASS 12: Maryland administrator configured settings, a reporting laboratory, the reference-level history (5 ug/dL July 2020–2023, 3.5 from 2024) and activated all 13 shipped Maryland drafts (child, pregnant minor/adult, residence owner, affected property, lab elevated/below-reference reporting and the two historical child-notice windows) with explicit synthetic calendars and approvals, plus HL7 and CSV import formats.");
 
             // ---------------------------------------------------------------- 13: profiles for Maryland accounts
             int profiles = 0;
@@ -375,6 +381,35 @@ public sealed class Scenario267RegionTests(MeritFixture fixture, ITestOutputHelp
             foreach (var (label, caseId, person, address, county) in new[] {
                 ("baltco", baltcoCase, baltcoPerson, "9900 Synthetic Way", "005"), ("harford", harfordCase, harfordPerson, "25 Harford Way", "025"), ("city", cityCase, cityPerson, "510 Charm City Ave", "510") })
                 await CountyWorkflow(label, caseId, person, county, md);
+
+            // ---------------------------------------------------------------- 17b (#292): a pregnant patient gets a case and an investigation request
+            foreach (var (label, dob) in new[] { ("PregAdult", today.AddYears(-28)), ("PregMinor", today.AddYears(-16).AddMonths(-3)) })
+            {
+                var pregnant = await Person(cityClerk, label + suffix, dob);
+                await Place(signedIn["citycasemanager" + suffix], pregnant, "520 Charm City Ave", "Baltimore", "21201", "510");
+                await signedIn["citycasemanager" + suffix].Http.GetStringAsync($"/people/{pregnant}");
+                await Saved(await signedIn["citycasemanager" + suffix].NoRedirect.PostAsync($"/people/{pregnant}/pregnancies", Form(("StartDate", today.AddMonths(-4).ToString("yyyy-MM-dd")), ("ExpectedEndDate", today.AddMonths(5).ToString("yyyy-MM-dd")), ("Source", "provider"))));
+                await Manual(countyIntakeWorks ? cityClerk : intakeClerk, pregnant, "5.0", "venous", today.AddDays(-4), suffix + "-" + label);
+                int cases = await Count("SELECT COUNT(*) FROM dbo.exposureCase WHERE personId=@p AND population='pregnant' AND caseStatus<>'closed' AND isDeleted=0", ("@p", pregnant));
+                int requests = await Count("SELECT COUNT(*) FROM dbo.workTask WHERE personId=@p AND queueCode='investigationRequest' AND isDeleted=0", ("@p", pregnant));
+                string recipients = (await Sql("SELECT ISNULL(STRING_AGG(recipientKind,',') WITHIN GROUP (ORDER BY recipientKind),'') FROM dbo.notificationObligation WHERE personId=@p AND isDeleted=0", ("@p", pregnant)))!.ToString()!;
+                Expect(cases == 1 && requests >= 1 && recipients == (label == "PregAdult" ? "owner,owner,patient" : "caregiver,owner,owner"),
+                    $"Step 17b (#292): {label} with venous 5.0 has {cases} case(s), {requests} investigation request(s) and notice reviews for [{recipients}].");
+            }
+            Record("PASS 17b (#292): a pregnant adult and a pregnant minor with an elevated venous result each get a pregnancy case, an investigation request and the three notice reviews (patient or caregiver, residence owner, affected-property owners).");
+
+            // ---------------------------------------------------------------- 17c (#293): historical periods notify the caregiver and the residence owner
+            foreach (var (label, value, drawn, expected) in new[] { ("Hist2022", "6.0", new DateOnly(2022, 9, 13), 2), ("Hist2022Low", "4.0", new DateOnly(2022, 9, 13), 0), ("Hist2023", "4.0", new DateOnly(2022, 11, 15), 2) })
+            {
+                var historical = await Person(cityClerk, label + suffix, new DateOnly(2020, 1, 15));
+                await Place(signedIn["citycasemanager" + suffix], historical, "530 Charm City Ave", "Baltimore", "21201", "510");
+                await Manual(countyIntakeWorks ? cityClerk : intakeClerk, historical, value, "venous", drawn, suffix + "-" + label);
+                string recipients = (await Sql("SELECT ISNULL(STRING_AGG(recipientKind,',') WITHIN GROUP (ORDER BY recipientKind),'') FROM dbo.notificationObligation WHERE personId=@p AND isDeleted=0", ("@p", historical)))!.ToString()!;
+                int urgent = await Count("SELECT COUNT(*) FROM dbo.workTask WHERE personId=@p AND queueCode='notificationDue' AND isUrgent=1 AND isDeleted=0", ("@p", historical));
+                Expect(recipients == (expected == 2 ? "caregiver,owner" : "") && urgent == 0,
+                    $"Step 17c (#293): {label} ({value} received {drawn.AddDays(2):yyyy-MM-dd}) has notice reviews for [{recipients}], {urgent} of them urgent.");
+            }
+            Record("PASS 17c (#293): a child result received in July–October 2022 at 5 or above, or in October 2022–December 2023 at 3.5 or above, gets caregiver and residence-owner notice reviews (not urgent: historical); 4.0 in the first period gets none.");
 
             // ---------------------------------------------------------------- 18: Virginia accounts cannot reach Maryland records
             var vaCounty = await SignIn("va059admin" + suffix);
@@ -675,11 +710,14 @@ public sealed class Scenario267RegionTests(MeritFixture fixture, ITestOutputHelp
         await client.Http.GetStringAsync("/account/profiles");
         await Saved(await client.NoRedirect.PostAsync("/account/profiles/switch", Form(("userProfileId", profile?.ToString() ?? ""))));
     }
-    private async Task Threshold(MeritClient actor, string minimum, string from, string? to)
+    private async Task ThresholdDraft(MeritClient actor, string key)
     {
-        await actor.Http.GetStringAsync("/config/thresholds/new");
-        await Saved(await actor.NoRedirect.PostAsync("/config/thresholds", Form(("ThresholdId", Guid.NewGuid()), ("AnalyteSpecimenId", specimen), ("Population", "child"), ("AgeMaxMonths", 71),
-            ("ThresholdType", "case"), ("LowerValue", minimum), ("Comparator", ">="), ("IsActive", "true"), ("EffectiveFrom", from), ("EffectiveTo", to ?? ""), ("Authority", "Synthetic scenario 267: Md. Environment § 6-801 reference level, not program approval"))));
+        var draft = Merit.Application.Services.MarylandPolicyDrafts.GetThreshold(key)!;
+        string page = WebUtility.HtmlDecode(await actor.Http.GetStringAsync("/config/thresholds/new?template=" + key));
+        Assert.Contains(Merit.Application.Services.MarylandPolicyDrafts.ThresholdAuthority, page, StringComparison.Ordinal);
+        await Saved(await actor.NoRedirect.PostAsync("/config/thresholds", Form(("ThresholdId", Guid.NewGuid()), ("AnalyteSpecimenId", specimen), ("Population", draft.Population), ("AgeMaxMonths", draft.AgeMaxMonths),
+            ("ThresholdType", "case"), ("LowerValue", draft.LowerValue.ToString(System.Globalization.CultureInfo.InvariantCulture)), ("Comparator", ">="), ("IsActive", "true"), ("EffectiveFrom", draft.EffectiveFrom.ToString("yyyy-MM-dd")),
+            ("EffectiveTo", draft.EffectiveTo?.ToString("yyyy-MM-dd") ?? ""), ("Authority", "Synthetic scenario 267: " + draft.Authority))));
     }
     private async Task<Guid> Template(MeritClient actor, string key)
     {

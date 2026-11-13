@@ -8,6 +8,17 @@
     @if (Model.CanEdit) { <a class="usa-button" href="/config/thresholds/new">Add a level</a> }
 </div>
 <p class="merit-meta">Every rule value is effective-dated data. A changed level is a new row from a date; open cases keep their classification and new results are evaluated under the rows in force on their collection date. Federal reference rows ship inactive until the jurisdiction turns them on.</p>
+@if (ViewData["CoverageGaps"] is IReadOnlyList<string> { Count: > 0 } gaps)
+{
+    <div class="usa-alert usa-alert--warning" role="status" id="coverage-gaps"><div class="usa-alert__body"><h2 class="usa-alert__heading">Notification rules without a case level</h2><ul class="usa-list">@foreach (var gap in gaps) { <li>@gap</li> }</ul><p class="usa-alert__text">Add a case level for the population, or retire the rule if no case management is intended.</p></div></div>
+}
+@if (Model.CanEdit)
+{
+    <details><summary>Maryland reference-level drafts</summary>
+        <p class="merit-meta">Drafts are not active. Each opens the form filled in from Md. Environment 6-801 / COMAR 26.16.08.03; verify the level, dates and program approval before saving. Children and pregnant women need their own case levels.</p>
+        <ul class="usa-list">@foreach (var draft in Merit.Application.Services.MarylandPolicyDrafts.ThresholdNames) { <li><a href="/config/thresholds/new?template=@draft.Key">@draft.Value</a></li> }</ul>
+    </details>
+}
 <div id="threshold-table">
     <partial name="_ThresholdTable" model="Model" />
 </div>
