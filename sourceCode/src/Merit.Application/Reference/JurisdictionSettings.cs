@@ -24,8 +24,6 @@ public sealed class JurisdictionSettings
 
     public string StateFips => Text("stateFips") ?? string.Empty;
 
-    public string AgencyName => Text("agencyName") ?? "MERIT";
-
     public int AdultAgeCutoffYears => Int("adultAgeCutoffYears") ?? 16;
 
     public int PregnancyMaxWeeks => Int("pregnancyMaxWeeks") ?? 42;
@@ -45,7 +43,11 @@ public sealed class JurisdictionSettings
 
     public int PasswordMinLength => PasswordPolicy.EffectiveMinimum(Int("passwordMinLength") ?? PasswordPolicy.MinimumLength);
 
-    public int SessionTimeoutMinutes => Int("sessionTimeoutMinutes") ?? 20;
+    /// <summary>Whether the quarterly CDC CBLS extract may be produced (default true).</summary>
+    public bool CblsEnabled => Bool("cblsEnabled") ?? true;
+
+    /// <summary>Whether the annual NIOSH ABLES extract may be produced (default true).</summary>
+    public bool AblesEnabled => Bool("ablesEnabled") ?? true;
 
     public ClassificationSettings Classification => new(
         (Text("confirmingMethods") ?? "graphiteFurnaceAa,icpMs").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)

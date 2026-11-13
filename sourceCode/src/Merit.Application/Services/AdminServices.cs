@@ -84,30 +84,38 @@ public sealed class ConfigService(IConfigData config, IReferenceDataProvider ref
     /// <summary>The jurisdiction setting that allows email one-time codes as an additional second factor.</summary>
     public const string EmailCodesSetting = "emailCodesEnabled";
 
-    public async Task SaveSettingAsync(string key, string? value, DateOnly effectiveFrom, bool acknowledgedEmailCodeRisk = false, CancellationToken ct = default)
+    /// <summary>
+    /// Changes a setting from a date. Issue #289: the key must be a catalogued setting that is in use and the value must
+    /// satisfy its definition (config.uspSaveSetting checks again). Issue #290: versions dated after the effective date are
+    /// replaced only when <paramref name="replaceLaterVersions"/> confirms it; the audit event names them.
+    /// </summary>
+    public async Task SaveSettingAsync(string key, string? value, DateOnly effectiveFrom, bool acknowledgedEmailCodeRisk = false,
+                                       bool replaceLaterVersions = false, CancellationToken ct = default)
     {
         session.Require(Permissions.ConfigEdit);
         var v = new Validator();
-        v.Required("SettingValue", value, "Value").MaxLength("SettingValue", value, 2000, "Value");
-        if (key == EmailCodesSetting && value is not null)
+        var definition = SettingCatalogue.Find(key);
+        string? trimmed = value?.Trim();
+        if (definition?.Kind == SettingKind.Boolean)
         {
-            // The specification: the settings screen states NIST's position before email codes can be turned on.
-            string normalized = value.Trim().ToLowerInvariant();
-            v.When(normalized is not ("true" or "false"), "SettingValue", "Enter true or false.");
-            v.When(normalized == "true" && !acknowledgedEmailCodeRisk, "SettingValue",
-                "Email codes are not accepted by NIST SP 800-63B-4 for out-of-band authentication. Tick the confirmation to turn them on.");
-            value = normalized;
+            trimmed = trimmed?.ToLowerInvariant();
         }
 
-        if (key == "passwordMinLength")
+        if (definition is { InUse: true })
         {
-            bool valid = int.TryParse(value, out int minimum)
-                         && minimum >= PasswordPolicy.MinimumLength && minimum <= PasswordPolicy.MaximumLength;
-            v.When(!valid, "SettingValue", $"Enter a whole number from {PasswordPolicy.MinimumLength} to {PasswordPolicy.MaximumLength}.");
+            v.Required("SettingValue", trimmed, "Value").MaxLength("SettingValue", trimmed, 2000, "Value");
         }
 
+        if (v.IsValid && SettingCatalogue.Problem(key, trimmed) is string problem)
+        {
+            v.When(true, "SettingValue", problem);
+        }
+
+        // The specification: the settings screen states NIST's position before email codes can be turned on.
+        v.When(key == EmailCodesSetting && trimmed == "true" && !acknowledgedEmailCodeRisk, "SettingValue",
+            "Email codes are not accepted by NIST SP 800-63B-4 for out-of-band authentication. Tick the confirmation to turn them on.");
         v.ThrowIfInvalid();
-        await config.SaveSettingAsync(key, value!.Trim(), effectiveFrom, ct).ConfigureAwait(false);
+        await config.SaveSettingAsync(key, trimmed!, effectiveFrom, replaceLaterVersions, ct).ConfigureAwait(false);
         settings.Invalidate();
     }
 

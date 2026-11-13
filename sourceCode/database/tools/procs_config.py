@@ -159,10 +159,12 @@ SELECT s.jurisdictionSettingId, s.settingKey, s.settingValue, s.effectiveFrom, s
         "schema": "config", "name": "uspSaveSetting", "kind": "write", "grants": WEB, "ticket": "T050",
         "permission": "config.edit",
         "desc": "Changes a jurisdiction setting from a date: the row in force is ended the day before and a new row starts, "
-                "so every change is effective-dated and kept.",
+                "so every change is effective-dated and kept. The key and value must satisfy config.tvfSettingCatalogue; "
+                "versions dated after the effective date are replaced only when the caller confirms it, and the audit event names them.",
         "params": """@settingKey    VARCHAR (80)
 , @settingValue  NVARCHAR (2000)
-, @effectiveFrom DATE""",
+, @effectiveFrom DATE
+, @replaceLaterVersions BIT = 0""",
         "key": "CONCAT (N'settingKey=', @settingKey, N', effectiveFrom=', @effectiveFrom)",
         "body": """
 DECLARE @root UNIQUEIDENTIFIER = auth.udfSessionRootTenantId ();
@@ -181,6 +183,16 @@ IF @settingKey='testingPolicyVersion' AND USER_NAME()<>N'dbo'
 BEGIN
     ;THROW 51403,N'Only a configuration administrator at the data root can adopt or disable its testing policy.',1;
 END;
+-- Issue 289: only catalogued settings that are in use, with a value inside their definition.
+DECLARE @problem NVARCHAR (400) = config.udfSettingProblem (@settingKey, @settingValue, @root);
+IF @problem IS NOT NULL AND NOT (@settingKey = 'testingPolicyVersion' AND @problem LIKE N'Choose one of%')
+BEGIN
+    ;THROW 51422, @problem, 1;
+END;
+IF @effectiveFrom IS NULL OR @effectiveFrom < '1900-01-01' OR @effectiveFrom > DATEADD (YEAR, 10, CAST (SYSUTCDATETIME () AS DATE))
+BEGIN
+    ;THROW 51422, N'Choose an effective date from 1900 to ten years from now.', 1;
+END;
 IF @settingKey='testingPolicyVersion' AND (@settingValue NOT IN (N'none',N'MDH-2025-03')
  OR (@settingValue=N'MDH-2025-03' AND NOT EXISTS(SELECT 1 FROM auth.tenant WHERE tenantId=@root AND statePostalCode='MD')))
 BEGIN
@@ -194,6 +206,29 @@ SELECT TOP(1) @oldId=jurisdictionSettingId,@oldValue=settingValue
  WHERE rootTenantId=@root AND settingKey=@settingKey AND isDeleted=0 AND effectiveFrom<=@effectiveFrom
    AND (effectiveTo IS NULL OR effectiveTo>=@effectiveFrom)
  ORDER BY effectiveFrom DESC,jurisdictionSettingId;
+
+-- Issue 290: versions dated after the effective date are replaced by this save. That needs the caller's explicit
+-- confirmation, and the audit event below names every version removed.
+DECLARE @laterCount INT, @laterFirst DATE, @laterLast DATE, @removedJson NVARCHAR (MAX);
+SELECT @laterCount = COUNT (*), @laterFirst = MIN (effectiveFrom), @laterLast = MAX (effectiveFrom)
+  FROM config.jurisdictionSetting WITH (UPDLOCK, HOLDLOCK)
+ WHERE rootTenantId = @root AND settingKey = @settingKey AND isDeleted = 0 AND effectiveFrom > @effectiveFrom;
+IF @laterCount > 0 AND COALESCE (@replaceLaterVersions, 0) = 0
+BEGIN
+    DECLARE @laterMessage NVARCHAR (400) = CONCAT (N'This setting has ', @laterCount, CASE WHEN @laterCount = 1 THEN N' version' ELSE N' versions' END,
+        N' dated after ', CONVERT (NVARCHAR (10), @effectiveFrom, 23), N' (effective ', CONVERT (NVARCHAR (10), @laterFirst, 23),
+        CASE WHEN @laterCount > 1 THEN CONCAT (N' to ', CONVERT (NVARCHAR (10), @laterLast, 23)) ELSE N'' END,
+        N'). Saving from this date would remove ', CASE WHEN @laterCount = 1 THEN N'it' ELSE N'them' END,
+        N'. Tick "Replace later-dated versions" to confirm, or choose a later effective date.');
+    ;THROW 51422, @laterMessage, 1;
+END;
+SET @removedJson = (SELECT s.jurisdictionSettingId AS settingId, s.effectiveFrom, s.effectiveTo
+                         , config.udfAuditSettingValue (@settingKey, s.settingValue) AS [value]
+                         , CAST (CASE WHEN config.udfAuditSettingValue (@settingKey, s.settingValue) IS NULL THEN 1 ELSE 0 END AS BIT) AS valueRedacted
+                      FROM config.jurisdictionSetting AS s
+                     WHERE s.rootTenantId = @root AND s.settingKey = @settingKey AND s.isDeleted = 0 AND s.effectiveFrom > @effectiveFrom
+                     ORDER BY s.effectiveFrom
+                       FOR JSON PATH, INCLUDE_NULL_VALUES);
 
 DECLARE @desc NVARCHAR (500);
 
@@ -220,12 +255,13 @@ DECLARE @safeKey VARCHAR(80)=config.udfAuditSettingKey(@settingKey),
  @safeOld NVARCHAR(2000)=config.udfAuditSettingValue(@settingKey,@oldValue),
  @safeNew NVARCHAR(2000)=config.udfAuditSettingValue(@settingKey,@settingValue);
 INSERT logs.auditEvent(appUserId,rootTenantId,owningTenantId,eventAction,entityType,entityId,administrationJson)
-VALUES(auth.udfSessionUserId(),@root,@root,CASE WHEN @oldId IS NULL THEN 'create' ELSE 'update' END,'jurisdictionSetting',@settingId,
+VALUES(auth.udfSessionUserId(),@root,@root,CASE WHEN @oldId IS NULL AND @laterCount = 0 THEN 'create' ELSE 'update' END,'jurisdictionSetting',@settingId,
  (SELECT @safeKey AS settingKey,@oldId AS oldSettingId,@effectiveFrom AS effectiveFrom,
  @safeOld AS oldValue,@safeNew AS newValue,
  CAST(CASE WHEN @safeKey IS NULL THEN 1 ELSE 0 END AS BIT) AS keyRedacted,
  CAST(CASE WHEN @oldValue IS NOT NULL AND @safeOld IS NULL THEN 1 ELSE 0 END AS BIT) AS oldValueRedacted,
- CAST(CASE WHEN @settingValue IS NOT NULL AND @safeNew IS NULL THEN 1 ELSE 0 END AS BIT) AS newValueRedacted
+ CAST(CASE WHEN @settingValue IS NOT NULL AND @safeNew IS NULL THEN 1 ELSE 0 END AS BIT) AS newValueRedacted,
+ @laterCount AS removedVersionCount,JSON_QUERY(COALESCE(@removedJson,N'[]')) AS removedVersions
  FOR JSON PATH,INCLUDE_NULL_VALUES,WITHOUT_ARRAY_WRAPPER));
 
 SET @Comments = N'Setting changed.';

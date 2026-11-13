@@ -12,7 +12,7 @@ using Merit.Domain.Population;
 namespace Merit.Application.Extracts;
 
 /// <summary>Federal extracts from the web side: request a run (a background job), show status, download the file.</summary>
-public sealed class ExtractService(IExtractData extracts, AuditService audit, ICurrentSession session)
+public sealed class ExtractService(IExtractData extracts, AuditService audit, ICurrentSession session, ISettingsProvider settings)
 {
     public async Task<Guid> RequestAsync(string extractType, int year, int? quarter, CancellationToken ct = default)
     {
@@ -22,6 +22,13 @@ public sealed class ExtractService(IExtractData extracts, AuditService audit, IC
         v.When(year < 2000 || year > DateTime.UtcNow.Year, "Year", "Choose a year up to the current one.");
         v.When(extractType == "CBLS" && quarter is not (>= 1 and <= 4), "Quarter", "CBLS files are quarterly: choose a quarter.");
         v.ThrowIfInvalid();
+
+        // Issue #289: the cblsEnabled / ablesEnabled settings decide whether this data root produces the extract.
+        var config = await settings.GetAsync(ct).ConfigureAwait(false);
+        if (extractType == "CBLS" ? !config.CblsEnabled : !config.AblesEnabled)
+        {
+            throw new BusinessRuleException($"The {extractType} extract is turned off in this jurisdiction's settings ({(extractType == "CBLS" ? "cblsEnabled" : "ablesEnabled")}).");
+        }
 
         DateOnly start, end;
         if (extractType == "CBLS")

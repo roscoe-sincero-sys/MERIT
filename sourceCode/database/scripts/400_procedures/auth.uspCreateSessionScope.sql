@@ -258,6 +258,7 @@ BEGIN
              , v.displayName                  AS viewAsDisplayName
              , @isPlatformAdmin               AS isPlatformAdmin
              , u.passwordChangeRequired
+             , auth.udfSessionIdleMinutes (@root) AS sessionIdleMinutes -- issue 289: NULL = the deployment default
           FROM auth.appUser AS u
           LEFT JOIN auth.tenant  AS r ON r.tenantId = @root
           LEFT JOIN auth.tenant  AS t ON t.tenantId = @acting

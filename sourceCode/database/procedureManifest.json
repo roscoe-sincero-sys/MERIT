@@ -1677,6 +1677,12 @@
     "type": "DATE",
     "hasDefault": false,
     "isOutput": false
+   },
+   {
+    "name": "replaceLaterVersions",
+    "type": "BIT",
+    "hasDefault": true,
+    "isOutput": false
    }
   ]
  },

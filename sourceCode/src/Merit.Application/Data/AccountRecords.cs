@@ -96,6 +96,9 @@ public sealed class SessionScopeSummaryRow
 
     public DateTime ExpiresUtc { get; init; }
 
+    /// <summary>The data root's sessionTimeoutMinutes setting when it is valid (5 to 60); null means the deployment default (#289).</summary>
+    public int? SessionIdleMinutes { get; init; }
+
     /// <summary>The user-made profile in use; null for the master profile.</summary>
     public Guid? UserProfileId { get; init; }
 

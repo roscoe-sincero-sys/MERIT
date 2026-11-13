@@ -1,25 +1,38 @@
 @model SettingsModel
+@using Merit.Application.Reference
 <div class="merit-table-wrap" id="settings-table-body" tabindex="0" role="region" aria-label="Jurisdiction settings; scroll for more columns">
     <table class="usa-table usa-table--borderless usa-table--compact">
         <thead><tr><th scope="col">Setting</th><th scope="col">Value</th><th scope="col">Since</th><th scope="col">What it decides</th></tr></thead>
         <tbody>
             @foreach (var s in Model.Current)
             {
+                // #289: the catalogue decides the input and whether the setting can be changed at all.
+                var definition = SettingCatalogue.Find(s.SettingKey);
+                bool inUse = definition is { InUse: true };
+                // #290: versions dated after today are scheduled; a save from an earlier date would replace them.
+                var scheduled = Model.History.Where(h => h.SettingKey == s.SettingKey && h.EffectiveFrom > Clock.Today).OrderBy(h => h.EffectiveFrom).ToList();
                 <tr id="setting-@s.SettingKey">
                     <th scope="row">@Options.Humanize(s.SettingKey)</th>
                     <td>
-                        @if (Model.CanEdit)
+                        @if (Model.CanEdit && inUse)
                         {
                             <form class="merit-form-row" hx-post="/config/settings/@s.SettingKey" hx-target="#settings-table" hx-swap="innerHTML">
                                 <label class="usa-sr-only" for="v-@s.SettingKey">Value of @s.SettingKey</label>
                                 @if (s.SettingKey == "testingPolicyVersion") {
                                 <select class="usa-select" id="v-@s.SettingKey" name="settingValue"><option value="none" selected="@(s.SettingValue == "none")">No testing policy (off)</option><option value="MDH-2025-03" selected="@(s.SettingValue == "MDH-2025-03")">MDH March 2025 (Maryland only)</option></select>
+                                } else if (definition!.Kind is SettingKind.Boolean or SettingKind.Code) {
+                                var choices = definition.Kind == SettingKind.Boolean ? new[] { "true", "false" } : definition.Codes!;
+                                <select class="usa-select" id="v-@s.SettingKey" name="settingValue" aria-describedby="h-@s.SettingKey">
+                                    @if (!choices.Contains(s.SettingValue, StringComparer.Ordinal)) { <option value="" selected>Choose (stored: @s.SettingValue)</option> }
+                                    @foreach (var choice in choices) { <option value="@choice" selected="@(s.SettingValue == choice)">@choice</option> }
+                                </select>
                                 } else {
-                                <input class="usa-input @(s.SettingValue == "NOTSET" ? "usa-input--error" : "")" id="v-@s.SettingKey" name="settingValue" value="@s.SettingValue" />
+                                <input class="usa-input @(s.SettingValue == "NOTSET" ? "usa-input--error" : "")" id="v-@s.SettingKey" name="settingValue" value="@s.SettingValue" aria-describedby="h-@s.SettingKey" />
                                 }
                                 <label class="usa-sr-only" for="d-@s.SettingKey">Effective from</label>
                                 <input class="usa-input" id="d-@s.SettingKey" name="effectiveFrom" type="date" value="@Options.Iso(Clock.Today)" />
                                 <button class="usa-button usa-button--outline usa-button--small" type="submit">Change</button>
+                                <div class="merit-meta" id="h-@s.SettingKey">@definition!.Hint</div>
                                 @if (s.SettingKey == Merit.Application.Services.ConfigService.EmailCodesSetting)
                                 {
                                     @* Before email codes can be turned on, NIST's position is stated and confirmed (specification, Authentication). *@
@@ -28,15 +41,41 @@
                                         <label class="usa-checkbox__label" for="ack-@s.SettingKey">I understand that NIST SP 800-63B-4 does not accept email for out-of-band authentication. Email codes stay an extra option: everyone keeps the authenticator app, and administrators never get email codes.</label>
                                     </div>
                                 }
+                                @* #290: a save never removes later-dated versions unless this is ticked; the audit names what was removed. *@
+                                <details class="merit-setting-later" open="@(scheduled.Count > 0)">
+                                    <summary>Backdating or scheduled versions</summary>
+                                    @if (scheduled.Count > 0)
+                                    {
+                                        <p class="merit-meta">Scheduled: @string.Join("; ", scheduled.Select(h => $"{h.SettingValue} from {Options.Date(h.EffectiveFrom)}"))</p>
+                                    }
+                                    <div class="usa-checkbox merit-setting-ack">
+                                        <input class="usa-checkbox__input" id="later-@s.SettingKey" type="checkbox" name="replaceLaterVersions" value="true" />
+                                        <label class="usa-checkbox__label" for="later-@s.SettingKey">Replace later-dated versions. A change from a date removes every version of this setting dated after it; without this tick such a change is refused.</label>
+                                    </div>
+                                </details>
                             </form>
                         }
                         else
                         {
                             @s.SettingValue
+                            @if (!inUse)
+                            {
+                                <span class="usa-tag">Not in use</span>
+                            }
                         }
                     </td>
                     <td>@Options.Date(s.EffectiveFrom)<div class="merit-meta">@s.ModifiedBy</div></td>
-                    <td class="merit-meta">@s.SettingDescription</td>
+                    <td class="merit-meta">
+                        @s.SettingDescription
+                        @if (s.SettingKey == "sessionTimeoutMinutes")
+                        {
+                            <div>Applies to sessions started after the change. An invalid stored value falls back to the deployment default.</div>
+                        }
+                        @if (!inUse)
+                        {
+                            <div>@(definition is null ? "Not a MERIT setting: it has no effect and cannot be changed." : "No feature reads this setting yet, so it cannot be changed.")</div>
+                        }
+                    </td>
                 </tr>
             }
         </tbody>

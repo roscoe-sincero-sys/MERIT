@@ -215,6 +215,18 @@ public sealed class Scenario267RegionTests(MeritFixture fixture, ITestOutputHelp
             // ---------------------------------------------------------------- 12: Maryland configuration (#202 decisions)
             foreach (var (key, value) in new[] { ("statePostalCode","MD"),("stateFips","24"),("testingPolicyVersion","MDH-2025-03"),("sessionTimeoutMinutes","30"),("adultAgeCutoffYears","18"),("investigationLookbackDays","365"),("contactAttemptsBeforeLetter","3") })
                 await Saved(await mdAdmin.NoRedirect.PostAsync("/config/settings/" + key, Form(("settingValue", value), ("effectiveFrom", "2020-01-01"))));
+            // #289: an out-of-range security setting, an unknown key and a setting nothing reads are refused.
+            foreach (var (key, value) in new[] { ("sessionTimeoutMinutes", "999999"), ("adultAgeCutoffYears", "banana"), ("madeUpKey", "x"), ("smsCodesEnabled", "true") })
+            {
+                await mdAdmin.Http.GetStringAsync("/config/settings");
+                using var refusedSetting = await mdAdmin.NoRedirect.PostAsync("/config/settings/" + key, Form(("settingValue", value), ("effectiveFrom", "2020-01-01")));
+                Expect(refusedSetting.StatusCode == HttpStatusCode.UnprocessableEntity, $"Step 12 (#289): setting {key}={value} was not refused (HTTP {(int)refusedSetting.StatusCode}).");
+            }
+            // #290: a change from today on a setting configured from 2020 keeps the 2020 version; a backdated change needs confirmation.
+            using (var backdated = await mdAdmin.NoRedirect.PostAsync("/config/settings/investigationLookbackDays", Form(("settingValue", "180"), ("effectiveFrom", "2019-01-01"))))
+                Expect(backdated.StatusCode == HttpStatusCode.UnprocessableEntity && (int)(await Sql("SELECT COUNT(*) FROM config.jurisdictionSetting WHERE rootTenantId=@r AND settingKey='investigationLookbackDays' AND isDeleted=0 AND settingValue=N'365' AND effectiveFrom='2020-01-01'", ("@r", mdRoot)))! == 1,
+                    $"Step 12 (#290): an unconfirmed backdated setting change was not refused or removed the 2020 version (HTTP {(int)backdated.StatusCode}).");
+            Record("PASS 12b (#289, #290): invalid values, an unknown key and an unused setting are refused; an unconfirmed backdated change is refused and removes nothing.");
             await mdAdmin.Http.GetStringAsync("/reporters");
             clia = "21D0267" + string.Concat(suffix[..3].Select(ch => char.IsAsciiDigit(ch) ? ch : (char)('0' + (ch - 'A') % 10)));
             await Saved(await mdAdmin.NoRedirect.PostAsync("/reporters", Form(("Kind", "laboratory"), ("Name", "Scenario 267 laboratory"), ("Clia", clia))));
@@ -352,6 +364,9 @@ public sealed class Scenario267RegionTests(MeritFixture fixture, ITestOutputHelp
 
             // ---------------------------------------------------------------- 15-17: county case management and investigation
             var cityClerk = await SignIn("cityintakeclerk" + suffix);
+            // #289: Maryland's step 12 session timeout (30 minutes) is the idle timeout of a Maryland session started after it.
+            string cityMinutes = System.Text.RegularExpressions.Regex.Match(await cityClerk.Http.GetStringAsync("/account/security"), "data-session-minutes=\"([0-9]+)\"").Groups[1].Value;
+            Expect(cityMinutes == "30", $"Step 12 (#289): a Maryland session started after the setting change has a {cityMinutes}-minute timeout, not 30.");
             var cityPerson = await Person(cityClerk, "City" + suffix, today.AddMonths(-28));
             await Place(signedIn["citycasemanager" + suffix], cityPerson, "510 Charm City Ave", "Baltimore", "21201", "510");
             var cityResult = await Manual(countyIntakeWorks ? cityClerk : intakeClerk, cityPerson, "12.0", "venous", today.AddDays(-4), suffix + "-city");
@@ -363,6 +378,9 @@ public sealed class Scenario267RegionTests(MeritFixture fixture, ITestOutputHelp
 
             // ---------------------------------------------------------------- 18: Virginia accounts cannot reach Maryland records
             var vaCounty = await SignIn("va059admin" + suffix);
+            string vaMinutes = System.Text.RegularExpressions.Regex.Match(await vaCounty.Http.GetStringAsync("/account/security"), "data-session-minutes=\"([0-9]+)\"").Groups[1].Value;
+            Expect(vaMinutes == "20", $"Step 12 (#289): a Virginia session has a {vaMinutes}-minute timeout; Maryland's setting must not apply (expected the default 20).");
+            Record($"PASS 12c (#289): session timeout follows the data root's setting: Maryland session {cityMinutes} minutes, Virginia session {vaMinutes} minutes.");
             var vaCm = await SignIn("va059casemanager" + suffix);
             var vaSup = await SignIn("va510supervisor" + suffix);
             var targets = new List<string> { $"/people/{harfordPerson}", $"/people/{baltcoPerson}", $"/people/{cityPerson}", $"/people/{child}", $"/cases/{harfordCase}", $"/cases/{baltcoCase}", $"/cases/{cityCase}",
