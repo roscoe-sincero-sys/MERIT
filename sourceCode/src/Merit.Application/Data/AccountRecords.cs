@@ -246,6 +246,9 @@ public sealed class UserAssignmentRow
 
     public DateOnly? EndDate { get; init; }
 
+    /// <summary>When an administrator ended the grant; from then it gives no access, whatever its end date (issue #295).</summary>
+    public DateTime? RevokedUtc { get; init; }
+
     /// <summary>1 when the grant is at a tenant the caller administers.</summary>
     public bool CanManage { get; init; }
 }

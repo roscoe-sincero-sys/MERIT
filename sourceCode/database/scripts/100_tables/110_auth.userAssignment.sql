@@ -28,6 +28,7 @@ BEGIN
         accessLevel                VARCHAR (10)      NOT NULL CONSTRAINT DF_auth_userAssignment_accessLevel DEFAULT ('full'),
         startDate                  DATE              NOT NULL,
         endDate                    DATE              NULL,
+        revokedUtc                 DATETIME2 (3)     NULL,
 
         -- Standard audit columns. Soft delete only. Convention: DF_<schema>_<tableName>_<fieldName>.
         isDeleted       BIT             NOT NULL CONSTRAINT DF_auth_userAssignment_isDeleted       DEFAULT (0),
@@ -53,6 +54,8 @@ IF COL_LENGTH (N'auth.userAssignment', N'accessLevel') IS NULL
     ALTER TABLE auth.userAssignment ADD accessLevel                VARCHAR (10)      NOT NULL CONSTRAINT DF_auth_userAssignment_accessLevel DEFAULT ('full');
 IF COL_LENGTH (N'auth.userAssignment', N'endDate') IS NULL
     ALTER TABLE auth.userAssignment ADD endDate                    DATE              NULL;
+IF COL_LENGTH (N'auth.userAssignment', N'revokedUtc') IS NULL
+    ALTER TABLE auth.userAssignment ADD revokedUtc                 DATETIME2 (3)     NULL;
 GO
 
 -- -------------------------------------------------------------------------------------------
@@ -175,6 +178,7 @@ EXEC util.uspSetObjectDescription @SchemaName = N'auth', @ObjectType = N'TABLE',
 EXEC util.uspSetObjectDescription @SchemaName = N'auth', @ObjectType = N'TABLE', @ObjectName = N'userAssignment', @ColumnName = N'accessLevel', @Description = N'read: look only; write: create and change; full: also soft delete.';
 EXEC util.uspSetObjectDescription @SchemaName = N'auth', @ObjectType = N'TABLE', @ObjectName = N'userAssignment', @ColumnName = N'startDate', @Description = N'First day the assignment applies.';
 EXEC util.uspSetObjectDescription @SchemaName = N'auth', @ObjectType = N'TABLE', @ObjectName = N'userAssignment', @ColumnName = N'endDate', @Description = N'Last day the assignment applies; NULL = open-ended.';
+EXEC util.uspSetObjectDescription @SchemaName = N'auth', @ObjectType = N'TABLE', @ObjectName = N'userAssignment', @ColumnName = N'revokedUtc', @Description = N'UTC time an administrator ended the grant. From then it gives no access, including for the rest of its end date; NULL = not revoked (issue 295).';
 EXEC util.uspSetObjectDescription @SchemaName = N'auth', @ObjectType = N'TABLE', @ObjectName = N'userAssignment', @ColumnName = N'isDeleted', @Description = N'Soft-delete flag. 1 = deleted, 0 = active. This database performs no hard deletes; all reads must filter isDeleted = 0.';
 EXEC util.uspSetObjectDescription @SchemaName = N'auth', @ObjectType = N'TABLE', @ObjectName = N'userAssignment', @ColumnName = N'deletedBy', @Description = N'Login or application user that soft-deleted the row. Stamped by trg_au_updt_userAssignment when isDeleted transitions 0 -> 1. Meaningful only when isDeleted = 1.';
 EXEC util.uspSetObjectDescription @SchemaName = N'auth', @ObjectType = N'TABLE', @ObjectName = N'userAssignment', @ColumnName = N'deletedDateUtc', @Description = N'UTC timestamp of the soft delete, stamped by trg_au_updt_userAssignment with the same instant as modifiedDateUtc. Meaningful only when isDeleted = 1.';

@@ -92,12 +92,13 @@
                 @foreach (var a in Model.Assignments)
                 {
                     <li>@a.RoleName at @a.TenantName @(a.IncludeDescendants ? "and everything under it" : "only") &middot; @Access(a.AccessLevel)
-                        <span class="merit-meta">@Options.Date(a.StartDate) &ndash; @(a.EndDate is null ? "current" : Options.Date(a.EndDate))</span>
-                        @if (a.EndDate is null && a.CanManage)
+                        <span class="merit-meta">@Options.Date(a.StartDate) &ndash; @(a.EndDate is null ? "current" : Options.Date(a.EndDate))@(a.RevokedUtc is null ? "" : " (ended by an administrator)")</span>
+                        @* Issue 295: a grant with a scheduled end date can also be ended now; an ended grant cannot be ended again. *@
+                        @if (a.RevokedUtc is null && a.CanManage && (a.EndDate is null || a.EndDate >= DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1))))
                         {
                             <form class="display-inline" method="post" action="/admin/users/@id/assignments/@a.UserAssignmentId/end" data-confirm="End @a.RoleName at @a.TenantName for @Model.DisplayName? All their active sessions will be signed out.">@Html.AntiForgeryToken()<button class="usa-button usa-button--unstyled" type="submit">End<span class="usa-sr-only"> @a.RoleName at @a.TenantName</span></button></form>
                         }
-                        else if (!a.CanManage) { <span class="merit-meta">(managed by another administrator)</span> }
+                        else if (!a.CanManage && a.RevokedUtc is null) { <span class="merit-meta">(managed by another administrator)</span> }
                     </li>
                 }
             </ul>

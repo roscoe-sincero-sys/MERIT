@@ -15,7 +15,7 @@ BEGIN
      WHERE u.isDeleted=0 AND EXISTS(SELECT 1 FROM @reviewed r WHERE r.tenantId=u.homeTenantId)
     UNION
     SELECT ua.appUserId FROM auth.userAssignment ua
-     WHERE ua.isDeleted=0 AND (ua.endDate IS NULL OR ua.endDate>=auth.udfSessionToday())
+     WHERE ua.isDeleted=0 AND (ua.endDate IS NULL OR ua.endDate>=auth.udfSessionToday()) AND ua.revokedUtc IS NULL
        AND EXISTS(SELECT 1 FROM @reviewed r WHERE r.tenantId=ua.tenantId)
     UNION
     SELECT e.appUserId FROM logs.auditEvent e

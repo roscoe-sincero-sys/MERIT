@@ -210,11 +210,15 @@ public sealed class AdminService(IClock clock, IAccountData accounts, AccountSer
             endDate, ct).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Ends a grant now (issue #295). The end date is the last day a grant applies, so a date alone would let a fresh
+    /// sign-in use the grant for the rest of today; the database also stamps the grant revoked, which every resolver checks.
+    /// </summary>
     public async Task EndAssignmentAsync(Guid appUserId, UserAssignmentRow assignment, CancellationToken ct = default)
     {
         session.Require(Permissions.TenantAdminister);
         await accounts.SaveUserAssignmentAsync(assignment.UserAssignmentId, appUserId, assignment.RoleId, assignment.TenantId,
-            assignment.IncludeDescendants, assignment.AccessLevel, assignment.StartDate, clock.Today, ct)
+            assignment.IncludeDescendants, assignment.AccessLevel, assignment.StartDate, clock.Today, ct, revokeNow: true)
             .ConfigureAwait(false);
     }
 
