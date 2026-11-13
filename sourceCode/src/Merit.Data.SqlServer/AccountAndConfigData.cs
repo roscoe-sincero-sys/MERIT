@@ -275,8 +275,8 @@ public sealed class ConfigData(Db db) : IConfigData
     public Task<IReadOnlyList<SettingRow>> GetSettingsAsync(DateOnly? asOfDate, bool includeHistory, CancellationToken ct = default)
         => db.QueryAsync<SettingRow>("config.uspGetSettings", new { asOfDate, includeHistory }, ct);
 
-    public Task SaveSettingAsync(string settingKey, string settingValue, DateOnly effectiveFrom, CancellationToken ct = default)
-        => db.ExecuteAsync("config.uspSaveSetting", new { settingKey, settingValue, effectiveFrom }, ct);
+    public Task SaveSettingAsync(string settingKey, string settingValue, DateOnly effectiveFrom, bool replaceLaterVersions = false, CancellationToken ct = default)
+        => db.ExecuteAsync("config.uspSaveSetting", new { settingKey, settingValue, effectiveFrom, replaceLaterVersions }, ct);
 
     public Task SaveAnalyteAsync(Guid analyteId, bool isActive, int sortOrder, CancellationToken ct = default)
         => db.ExecuteAsync("config.uspSaveAnalyte", new { analyteId, isActive, sortOrder }, ct);

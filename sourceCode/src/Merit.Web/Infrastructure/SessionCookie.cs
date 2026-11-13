@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Merit.Application.Data;
+using Merit.Application.Reference;
 using Microsoft.AspNetCore.Authentication;
 
 namespace Merit.Web.Infrastructure;
@@ -47,10 +48,21 @@ public static class SessionCookie
         claims.AddRange(scope.Permissions.Select(p => new Claim(MeritClaims.Permission, p)));
 
         var principal = new ClaimsPrincipal(new ClaimsIdentity(claims, AuthSchemes.Session, MeritClaims.UserName, null));
+        var issued = http.RequestServices.GetRequiredService<TimeProvider>().GetUtcNow();
+        // Issue #289: the data root's sessionTimeoutMinutes setting is the idle timeout of sessions started after the
+        // change. Sliding renewal keeps the ticket's own lifetime, so setting it here is enough; with no valid setting
+        // the deployment default (Session:IdleTimeoutMinutes) applies.
+        int idleMinutes = IdleMinutes(s.SessionIdleMinutes, http.RequestServices.GetRequiredService<IConfiguration>());
         await http.SignInAsync(AuthSchemes.Session,
             principal,
-            new AuthenticationProperties { IsPersistent = false, IssuedUtc = http.RequestServices.GetRequiredService<TimeProvider>().GetUtcNow() });
+            new AuthenticationProperties { IsPersistent = false, IssuedUtc = issued, ExpiresUtc = issued.AddMinutes(idleMinutes) });
         // A view rendered on this response must mint antiforgery tokens for the newly signed-in identity.
         http.User = principal;
     }
+
+    /// <summary>The idle timeout for a new session: the root's setting when it is within 5 to 60 minutes, else the deployment default.</summary>
+    public static int IdleMinutes(int? rootSetting, IConfiguration configuration)
+        => rootSetting is >= SettingCatalogue.SessionTimeoutMinimum and <= SettingCatalogue.SessionTimeoutMaximum
+            ? rootSetting.Value
+            : configuration.GetValue("Session:IdleTimeoutMinutes", 20);
 }

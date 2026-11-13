@@ -7,7 +7,12 @@
     bool minimalHeader = ViewData["MinimalHeader"] is true;
     var deployment = DeploymentIndicator.From(Configuration); @* #224: configured environment and data mode only *@
     string profileHref = "/account/profiles?returnUrl=" + Uri.EscapeDataString($"{Context.Request.PathBase}{Context.Request.Path}{Context.Request.QueryString}");
-    long? sessionExpires = (await Context.AuthenticateAsync(AuthSchemes.Session)).Properties?.ExpiresUtc?.ToUnixTimeMilliseconds();
+    var sessionTicket = (await Context.AuthenticateAsync(AuthSchemes.Session)).Properties;
+    long? sessionExpires = sessionTicket?.ExpiresUtc?.ToUnixTimeMilliseconds();
+    // #289: the idle timeout is this session's own (the data root's setting), not only the deployment default.
+    int sessionMinutes = sessionTicket is { IssuedUtc: { } ticketIssued, ExpiresUtc: { } ticketExpires }
+        ? Math.Max(1, (int)Math.Round((ticketExpires - ticketIssued).TotalMinutes))
+        : Configuration.GetValue("Session:IdleTimeoutMinutes", 20);
 }
 <!DOCTYPE html>
 <html lang="en">
@@ -26,7 +31,7 @@
     <link rel="stylesheet" href="~/css/merit.css" asp-append-version="true" />
     @await RenderSectionAsync("Head", required: false)
 </head>
-<body data-session-minutes="@(signedIn ? Configuration.GetValue("Session:IdleTimeoutMinutes", 20) : 0)" data-session-user="@CurrentSession.UserName" data-session-expires="@sessionExpires">
+<body data-session-minutes="@(signedIn ? sessionMinutes : 0)" data-session-user="@CurrentSession.UserName" data-session-expires="@sessionExpires">
     <a class="merit-skip" href="#main-content">Skip to main content</a>
     @if (deployment.Banner is string environmentBanner)
     {

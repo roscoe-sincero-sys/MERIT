@@ -121,7 +121,7 @@ public interface IConfigData
 
     Task<IReadOnlyList<SettingRow>> GetSettingsAsync(DateOnly? asOfDate, bool includeHistory, CancellationToken ct = default);
 
-    Task SaveSettingAsync(string settingKey, string settingValue, DateOnly effectiveFrom, CancellationToken ct = default);
+    Task SaveSettingAsync(string settingKey, string settingValue, DateOnly effectiveFrom, bool replaceLaterVersions = false, CancellationToken ct = default);
 
     Task SaveAnalyteAsync(Guid analyteId, bool isActive, int sortOrder, CancellationToken ct = default);
 

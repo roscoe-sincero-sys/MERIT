@@ -20,8 +20,10 @@ RETURNS NVARCHAR(2000)
 AS
 BEGIN
     DECLARE @safe NVARCHAR(2000);
-    IF @key COLLATE Latin1_General_100_BIN2 IN ('adultAgeCutoffYears','pregnancyMaxWeeks','investigationLookbackDays',
-       'siteInvestigationMinHours','contactAttemptsBeforeLetter','clusterWindowDays','clusterMinCount','passwordMinLength','sessionTimeoutMinutes')
+    IF @key COLLATE Latin1_General_100_BIN2='siteInvestigationMinHours'
+      SET @safe=CASE WHEN @value=N'NOTSET' THEN N'NOTSET' ELSE CONVERT(NVARCHAR(40),TRY_CONVERT(DECIMAL(9,2),@value)) END;
+    ELSE IF @key COLLATE Latin1_General_100_BIN2 IN ('adultAgeCutoffYears','pregnancyMaxWeeks','investigationLookbackDays',
+       'contactAttemptsBeforeLetter','clusterWindowDays','clusterMinCount','passwordMinLength','sessionTimeoutMinutes')
       SET @safe=CASE WHEN @value=N'NOTSET' THEN N'NOTSET' ELSE CONVERT(NVARCHAR(40),TRY_CONVERT(INT,@value)) END;
     ELSE IF @key COLLATE Latin1_General_100_BIN2 IN ('localNotification','unreportedMethodConfirms','cblsEnabled','ablesEnabled','emailCodesEnabled','smsCodesEnabled')
       SET @safe=CASE WHEN LOWER(TRIM(@value)) IN (N'true',N'false') THEN LOWER(TRIM(@value)) END;

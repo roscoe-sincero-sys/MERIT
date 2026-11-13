@@ -47,13 +47,17 @@ public sealed partial class AdministrationAndTestingPolicyTests
             Assert.Equal(2, await Sql<int>("SELECT COUNT(*) FROM logs.auditEvent WHERE entityId IN(@a,@b) AND appUserId=@u AND rootTenantId=@r AND owningTenantId=@r", ("@a", first), ("@b", second), ("@u", account.Id), ("@r", root)));
 
             const string sensitive = "Private configuration sentinel";
-            await SetConfiguration(admin, "agencyName", sensitive);
-            // Existing permissive/extension-setting behavior remains; unvalidated values and keys never become ledger text.
-            await SetConfiguration(admin, "sessionTimeoutMinutes", sensitive);
-            await SetConfiguration(admin, "PrivateExtensionKey", sensitive);
-            Assert.Equal(5, await ConfigurationEventCount(account.Id));
+            // Issue #289: free text in a typed setting, a setting nothing reads and an unknown key are refused, so none
+            // of them reaches the ledger. The redaction helpers remain for values stored before that rule.
+            foreach (string key in new[] { "agencyName", "sessionTimeoutMinutes", "PrivateExtensionKey" })
+            {
+                await admin.Http.GetStringAsync("/config/settings");
+                using var refusedValue = await admin.NoRedirect.PostAsync("/config/settings/" + key, Form(("settingValue", sensitive), ("effectiveFrom", "2026-01-01")));
+                Assert.Equal(HttpStatusCode.UnprocessableEntity, refusedValue.StatusCode);
+            }
+            Assert.Equal(2, await ConfigurationEventCount(account.Id));
             Assert.Equal(0, await Sql<int>("SELECT COUNT(*) FROM logs.auditEvent WHERE appUserId=@u AND (administrationJson LIKE '%Private%' OR administrationJson LIKE '%sentinel%')", ("@u", account.Id)));
-            Assert.Equal(3, await Sql<int>("SELECT COUNT(*) FROM logs.auditEvent WHERE appUserId=@u AND entityType='jurisdictionSetting' AND JSON_VALUE(administrationJson,'$.newValueRedacted')='true'", ("@u", account.Id)));
+            Assert.Equal(1, await Sql<int>("SELECT CASE WHEN config.udfAuditSettingValue('agencyName',@v) IS NULL AND config.udfAuditSettingValue('sessionTimeoutMinutes',@v) IS NULL AND config.udfAuditSettingKey('PrivateExtensionKey') IS NULL THEN 1 ELSE 0 END", ("@v", sensitive)));
             await SetConfiguration(admin, "sessionTimeoutMinutes", "30");
 
             var county = await ConfigurationCounty(root, "001");
