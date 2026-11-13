@@ -5,7 +5,7 @@ namespace Merit.Web.Infrastructure;
 
 /// <summary>
 /// The audit log in words (issue #45): actions and record types as a person says them, and a link to the record when the
-/// viewer can open it. The ledger itself holds codes and ids only.
+/// viewer can open it. The ledger holds identifiers, codes and approved configuration numbers; free-text values are excluded.
 /// </summary>
 public static class AuditText
 {
@@ -32,6 +32,7 @@ public static class AuditText
         ("report", "Report"), ("extractRun", "Extract"), ("appUser", "User account"), ("viewAsUser", "User account (view as)"),
         ("personOutsideScope", "Person outside your access"), ("auditEvent", "Audit log"),
         ("unknownUserNames", "Unknown user names (sign-in)"), ("signInActivity", "Sign-in activity report"),
+        ("jurisdictionSetting", "Setting"), ("threshold", "Threshold"),
         ("userAssignment", "Role grant"), ("tenant", "Tenant"), ("userProfile", "Working profile"),
         ("userAccess", "Users and access"), ("signInHistory", "Account sign-in history"),
     ];

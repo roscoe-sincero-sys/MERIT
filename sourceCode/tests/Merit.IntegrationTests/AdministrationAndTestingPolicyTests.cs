@@ -4,7 +4,7 @@ using Microsoft.Data.SqlClient;
 namespace Merit.IntegrationTests;
 
 [Collection(MeritCollection.Name)]
-public sealed class AdministrationAndTestingPolicyTests(MeritFixture fixture)
+public sealed partial class AdministrationAndTestingPolicyTests(MeritFixture fixture)
 {
     private static async Task<T> Sql<T>(string text, params (string Name, object Value)[] args)
     {
@@ -36,15 +36,15 @@ public sealed class AdministrationAndTestingPolicyTests(MeritFixture fixture)
         var client = fixture.Anonymous(); await account.SignInAsync(client, MeritFixture.Password);
         return (account, client);
     }
-    private async Task<Guid> NewRoot(string state)
+    private async Task<Guid> NewRoot(string state, string? counties = null, Guid? parentTenant = null)
     {
         var platform = await fixture.SignedInAsync("platform");
         string code = "POL-" + Guid.NewGuid().ToString("N")[..12].ToUpperInvariant();
-        var parent = await Sql<Guid>("SELECT tenantId FROM auth.tenant WHERE tenantCode='PLATFORM'");
+        var parent = parentTenant ?? await Sql<Guid>("SELECT tenantId FROM auth.tenant WHERE tenantCode='PLATFORM'");
         await platform.Http.GetStringAsync("/admin/tenants");
         await Saved(await platform.NoRedirect.PostAsync("/admin/tenants", Form(("ParentTenantId", parent), ("TenantCode", code),
             ("TenantName", code), ("TenantType", "state"), ("StatePostalCode", state), ("StateFips", state == "MD" ? "24" : "51"),
-            ("TimeZone", "Eastern Standard Time"), ("EffectiveFrom", "2020-01-01"), ("SeedThresholds", "false"))));
+            ("TimeZone", "Eastern Standard Time"), ("EffectiveFrom", "2020-01-01"), ("SeedThresholds", "false"), ("NewCounties", counties))));
         return await Sql<Guid>("SELECT tenantId FROM auth.tenant WHERE tenantCode=@code", ("@code", code));
     }
 

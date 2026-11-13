@@ -164,6 +164,14 @@ BEGIN
             @minimumValue, @maximumValue, @recipientKind, CASE WHEN @rulePurpose = 'labReporting' THEN 'report' ELSE 'receipt' END, @dueInDays, @dayBasis, @timeZoneId, @calendarName,
             @holidayDatesJson, @effectiveFrom, @effectiveTo, @approvalReference, auth.udfSessionUserId ());
 
+        DECLARE @ruleState NVARCHAR(MAX);
+        SELECT @ruleState=(SELECT notificationRuleId,analyteSpecimenId,population,rulePurpose,eligibilityMode,minimumAgeMonths,maximumAgeMonths,minimumValue,maximumValue,recipientKind,dueInDays,dayBasis,effectiveFrom,effectiveTo,approvedByUserId,isActive FOR JSON PATH,INCLUDE_NULL_VALUES,WITHOUT_ARRAY_WRAPPER)
+         FROM config.notificationRule WHERE notificationRuleId=@notificationRuleId;
+        INSERT logs.auditEvent(appUserId,rootTenantId,owningTenantId,eventAction,entityType,entityId,administrationJson)
+        VALUES(auth.udfSessionUserId(),@root,@owner,'create','notificationRule',@notificationRuleId,
+         (SELECT CAST(NULL AS NVARCHAR(1)) AS oldValue,JSON_QUERY(@ruleState) AS newValue,
+         CAST(1 AS BIT) AS approvedAndActivated FOR JSON PATH,INCLUDE_NULL_VALUES,WITHOUT_ARRAY_WRAPPER));
+
         -- =========================================================================================
         -- ===== End of the procedure's own work. ===================================================
         -- =========================================================================================

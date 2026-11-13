@@ -1,6 +1,36 @@
 SET XACT_ABORT ON;
 SET QUOTED_IDENTIFIER ON;
 GO
+/* Issue 287: resolve expensive profile/grant expansion once, not once per audit row/UNION branch. */
+CREATE OR ALTER FUNCTION auth.tvfReviewAccountSet(@permissionCode VARCHAR(60))
+RETURNS @accounts TABLE(appUserId UNIQUEIDENTIFIER NOT NULL PRIMARY KEY)
+AS
+BEGIN
+    DECLARE @reviewed TABLE(tenantId UNIQUEIDENTIFIER NOT NULL PRIMARY KEY,rootTenantId UNIQUEIDENTIFIER NOT NULL);
+    INSERT @reviewed
+    SELECT r.tenantId,t.rootTenantId FROM auth.tvfReviewTenants(@permissionCode) r JOIN auth.tenant t ON t.tenantId=r.tenantId;
+
+    INSERT @accounts
+    SELECT u.appUserId FROM auth.appUser u
+     WHERE u.isDeleted=0 AND EXISTS(SELECT 1 FROM @reviewed r WHERE r.tenantId=u.homeTenantId)
+    UNION
+    SELECT ua.appUserId FROM auth.userAssignment ua
+     WHERE ua.isDeleted=0 AND (ua.endDate IS NULL OR ua.endDate>=auth.udfSessionToday())
+       AND EXISTS(SELECT 1 FROM @reviewed r WHERE r.tenantId=ua.tenantId)
+    UNION
+    SELECT e.appUserId FROM logs.auditEvent e
+     WHERE e.appUserId IS NOT NULL AND e.owningTenantId IS NOT NULL
+       AND e.eventUtc>=DATEADD(DAY,-365,SYSUTCDATETIME())
+       AND EXISTS(SELECT 1 FROM @reviewed r WHERE r.tenantId=e.owningTenantId)
+    UNION
+    SELECT e.appUserId FROM logs.auditEvent e
+     WHERE e.appUserId IS NOT NULL AND e.owningTenantId=e.rootTenantId
+       AND e.entityType IN('jurisdictionSetting','threshold','notificationRule')
+       AND e.eventUtc>=DATEADD(DAY,-365,SYSUTCDATETIME())
+       AND EXISTS(SELECT 1 FROM @reviewed r WHERE r.rootTenantId=e.rootTenantId);
+    RETURN;
+END;
+GO
 /*
 ObjectName: auth.tvfReviewAccounts
 Author: MERIT build
@@ -14,7 +44,8 @@ Notes: Issue 278. Can reach: homed in a reviewed tenant, or a current grant at a
        statewide worker who opened a county case appears in that county's review. A statewide grant alone does not list
        every statewide worker in every county: observed access is the test, which keeps county lists bounded and keeps the
        county administrator's Users page to its own people plus actual outside actors. Platform accounts see no clinical records,
-       but their audited county administration appears here (#284). Staff of sibling jurisdictions only are not
+       but their audited county administration appears here (#284). Actors who changed root configuration that applies
+       to the reviewed county also appear (#287); this does not include other root records. Staff of sibling jurisdictions only are not
        included. Seeing an account here grants nothing: account changes stay with its home tenant's administrators.
 Example Usage: SELECT appUserId FROM auth.tvfReviewAccounts ('security.review');
 Modification History: 2026-11-11, issue 278, initial version.
@@ -23,24 +54,10 @@ CREATE OR ALTER FUNCTION auth.tvfReviewAccounts (@permissionCode VARCHAR (60))
 RETURNS TABLE
 AS
 RETURN
-    WITH reviewed AS (SELECT tenantId FROM auth.tvfReviewTenants (@permissionCode))
-    SELECT u.appUserId
-      FROM auth.appUser AS u
-     WHERE u.isDeleted = 0 AND EXISTS (SELECT 1 FROM reviewed AS r WHERE r.tenantId = u.homeTenantId)
-    UNION
-    SELECT ua.appUserId
-      FROM auth.userAssignment AS ua
-     WHERE ua.isDeleted = 0
-       AND (ua.endDate IS NULL OR ua.endDate >= auth.udfSessionToday ())
-       AND EXISTS (SELECT 1 FROM reviewed AS r WHERE r.tenantId = ua.tenantId)
-    UNION
-    SELECT e.appUserId
-      FROM logs.auditEvent AS e
-     WHERE e.appUserId IS NOT NULL
-       AND e.owningTenantId IS NOT NULL
-       AND e.eventUtc >= DATEADD (DAY, -365, SYSUTCDATETIME ())
-       AND EXISTS (SELECT 1 FROM reviewed AS r WHERE r.tenantId = e.owningTenantId);
+    SELECT appUserId FROM auth.tvfReviewAccountSet(@permissionCode);
 GO
+EXEC util.uspSetObjectDescription @SchemaName=N'auth',@ObjectType=N'FUNCTION',@ObjectName=N'tvfReviewAccountSet',
+ @Description=N'Materializes the live reviewed tenant scope once and returns local staff, audited outside actors and applicable root configuration actors, without granting record or account-management access.';
 EXEC util.uspSetObjectDescription @SchemaName=N'auth',@ObjectType=N'FUNCTION',@ObjectName=N'tvfReviewAccounts',
  @Description=N'Accounts a security reviewer sees for the reviewed tenants: homed or granted there, plus actors (for example statewide staff) with audited access to those tenants'' records in the last year (#278).';
 GO

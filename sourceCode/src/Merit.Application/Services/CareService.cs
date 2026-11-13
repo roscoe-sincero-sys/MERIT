@@ -219,7 +219,6 @@ public sealed class CareService(ICareData data, IWorkData work, AuditService aud
             .Required("approvalReference", row.ApprovalReference, "Approval reference").MaxLength("approvalReference", row.ApprovalReference, 300, "Approval reference").MaxLength("requiredFieldsCsv", row.RequiredFieldsCsv, 1000, "Required mapped fields");
         v.ThrowIfInvalid();
         await data.SaveRuleAsync(row, ct).ConfigureAwait(false);
-        await audit.CreatedAsync("notificationRule", row.NotificationRuleId, ct).ConfigureAwait(false);
         // Backfill is explicit and retryable from the rule list; subsequent received results evaluate automatically.
     }
     public async Task QueueEvaluationAsync(Guid ruleId, CancellationToken ct)
@@ -232,6 +231,5 @@ public sealed class CareService(ICareData data, IWorkData work, AuditService aud
     {
         session.Require(Permissions.ConfigEdit);
         await data.RetireRuleAsync(ruleId, ct).ConfigureAwait(false);
-        await audit.ChangedAsync("notificationRule", ruleId, ct).ConfigureAwait(false);
     }
 }

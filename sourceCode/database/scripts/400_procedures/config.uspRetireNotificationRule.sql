@@ -94,6 +94,10 @@ BEGIN
         -- ===== The procedure's own work starts here. Everything above and below is boilerplate. ==
         -- =========================================================================================
 
+        DECLARE @oldState NVARCHAR(MAX),@newState NVARCHAR(MAX);
+        SELECT @oldState=(SELECT notificationRuleId,analyteSpecimenId,population,rulePurpose,eligibilityMode,minimumAgeMonths,maximumAgeMonths,minimumValue,maximumValue,recipientKind,dueInDays,dayBasis,effectiveFrom,effectiveTo,approvedByUserId,isActive FOR JSON PATH,INCLUDE_NULL_VALUES,WITHOUT_ARRAY_WRAPPER)
+         FROM config.notificationRule WITH(UPDLOCK,HOLDLOCK) WHERE notificationRuleId=@notificationRuleId AND isDeleted=0;
+
         UPDATE config.notificationRule SET isActive = 0 WHERE notificationRuleId = @notificationRuleId AND isDeleted = 0
          AND EXISTS (SELECT 1 FROM auth.sessionScopeTenant AS st WHERE st.sessionScopeId = TRY_CAST (SESSION_CONTEXT (N'scopeKey') AS UNIQUEIDENTIFIER)
                      AND st.tenantId = owningTenantId AND st.accessLevel IN ('write','full'));
@@ -101,6 +105,13 @@ BEGIN
         BEGIN
             ;THROW 51404, N'The rule is unavailable in your writable agency scope.', 1;
         END;
+
+        SELECT @newState=(SELECT notificationRuleId,analyteSpecimenId,population,rulePurpose,eligibilityMode,minimumAgeMonths,maximumAgeMonths,minimumValue,maximumValue,recipientKind,dueInDays,dayBasis,effectiveFrom,effectiveTo,approvedByUserId,isActive FOR JSON PATH,INCLUDE_NULL_VALUES,WITHOUT_ARRAY_WRAPPER)
+         FROM config.notificationRule WHERE notificationRuleId=@notificationRuleId;
+        INSERT logs.auditEvent(appUserId,rootTenantId,owningTenantId,eventAction,entityType,entityId,administrationJson)
+        SELECT auth.udfSessionUserId(),rootTenantId,owningTenantId,'deactivate','notificationRule',notificationRuleId,
+         (SELECT JSON_QUERY(@oldState) AS oldValue,JSON_QUERY(@newState) AS newValue FOR JSON PATH,INCLUDE_NULL_VALUES,WITHOUT_ARRAY_WRAPPER)
+         FROM config.notificationRule WHERE notificationRuleId=@notificationRuleId;
 
         -- =========================================================================================
         -- ===== End of the procedure's own work. ===================================================

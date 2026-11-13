@@ -623,7 +623,9 @@ SELECT e.auditEventId, e.eventUtc, e.appUserId, u.displayName, e.eventAction, e.
  WHERE (EXISTS (SELECT 1 FROM @wholeRoots AS w WHERE w.rootTenantId = e.rootTenantId)
         OR (EXISTS (SELECT 1 FROM @partRoots AS p WHERE p.rootTenantId = e.rootTenantId)
             AND ((e.owningTenantId IS NULL AND EXISTS (SELECT 1 FROM @users AS x WHERE x.appUserId = e.appUserId))
-                 OR EXISTS (SELECT 1 FROM @scope AS s WHERE s.tenantId = e.owningTenantId))))
+                 OR EXISTS (SELECT 1 FROM @scope AS s WHERE s.tenantId = e.owningTenantId)
+                 -- Root configuration applies to every reviewed county in this root, never to another root.
+                 OR (e.owningTenantId=e.rootTenantId AND e.entityType IN ('jurisdictionSetting','threshold','notificationRule')))))
    AND (@appUserId IS NULL OR e.appUserId = @appUserId)
    AND (@entityId IS NULL OR e.entityId = @entityId)
    AND (@eventAction IS NULL OR e.eventAction = @eventAction
@@ -668,7 +670,9 @@ SELECT u.appUserId, u.displayName
                   AND (EXISTS (SELECT 1 FROM @wholeRoots AS w WHERE w.rootTenantId = e.rootTenantId)
         OR (EXISTS (SELECT 1 FROM @partRoots AS p WHERE p.rootTenantId = e.rootTenantId)
             AND ((e.owningTenantId IS NULL AND EXISTS (SELECT 1 FROM @users AS x WHERE x.appUserId = e.appUserId))
-                 OR EXISTS (SELECT 1 FROM @scope AS s WHERE s.tenantId = e.owningTenantId)))))
+                 OR EXISTS (SELECT 1 FROM @scope AS s WHERE s.tenantId = e.owningTenantId)
+                 -- Root configuration applies to every reviewed county in this root, never to another root.
+                 OR (e.owningTenantId=e.rootTenantId AND e.entityType IN ('jurisdictionSetting','threshold','notificationRule'))))))
  ORDER BY u.displayName, u.appUserId;
 """,
     },

@@ -108,7 +108,9 @@ BEGIN
                           AND (EXISTS (SELECT 1 FROM @wholeRoots AS w WHERE w.rootTenantId = e.rootTenantId)
                 OR (EXISTS (SELECT 1 FROM @partRoots AS p WHERE p.rootTenantId = e.rootTenantId)
                     AND ((e.owningTenantId IS NULL AND EXISTS (SELECT 1 FROM @users AS x WHERE x.appUserId = e.appUserId))
-                         OR EXISTS (SELECT 1 FROM @scope AS s WHERE s.tenantId = e.owningTenantId)))))
+                         OR EXISTS (SELECT 1 FROM @scope AS s WHERE s.tenantId = e.owningTenantId)
+                         -- Root configuration applies to every reviewed county in this root, never to another root.
+                         OR (e.owningTenantId=e.rootTenantId AND e.entityType IN ('jurisdictionSetting','threshold','notificationRule'))))))
          ORDER BY u.displayName, u.appUserId;
 
         -- =========================================================================================

@@ -120,16 +120,37 @@ INSERT config.notificationRule (notificationRuleId, rootTenantId, owningTenantId
     dayBasis, timeZoneId, calendarName, holidayDatesJson, effectiveFrom, effectiveTo, approvalReference, approvedByUserId)
 VALUES (@notificationRuleId, @root, @owner, @ruleName, @analyteSpecimenId, @population, @rulePurpose, @eligibilityMode, @requiredFieldsCsv, @minimumAgeMonths, @maximumAgeMonths,
     @minimumValue, @maximumValue, @recipientKind, CASE WHEN @rulePurpose = 'labReporting' THEN 'report' ELSE 'receipt' END, @dueInDays, @dayBasis, @timeZoneId, @calendarName,
-    @holidayDatesJson, @effectiveFrom, @effectiveTo, @approvalReference, auth.udfSessionUserId ());""", permission='config.edit',
+    @holidayDatesJson, @effectiveFrom, @effectiveTo, @approvalReference, auth.udfSessionUserId ());
+
+DECLARE @ruleState NVARCHAR(MAX);
+SELECT @ruleState=(SELECT notificationRuleId,analyteSpecimenId,population,rulePurpose,eligibilityMode,minimumAgeMonths,maximumAgeMonths,minimumValue,maximumValue,recipientKind,dueInDays,dayBasis,effectiveFrom,effectiveTo,approvedByUserId,isActive FOR JSON PATH,INCLUDE_NULL_VALUES,WITHOUT_ARRAY_WRAPPER)
+ FROM config.notificationRule WHERE notificationRuleId=@notificationRuleId;
+INSERT logs.auditEvent(appUserId,rootTenantId,owningTenantId,eventAction,entityType,entityId,administrationJson)
+VALUES(auth.udfSessionUserId(),@root,@owner,'create','notificationRule',@notificationRuleId,
+ (SELECT CAST(NULL AS NVARCHAR(1)) AS oldValue,JSON_QUERY(@ruleState) AS newValue,
+ CAST(1 AS BIT) AS approvedAndActivated FOR JSON PATH,INCLUDE_NULL_VALUES,WITHOUT_ARRAY_WRAPPER));
+""", permission='config.edit',
     desc='Creates an approved receipt-based policy version; existing snapshots cannot be edited or silently recalculated.'),
 proc('config.uspRetireNotificationRule', 'write', '@notificationRuleId UNIQUEIDENTIFIER', """
+DECLARE @oldState NVARCHAR(MAX),@newState NVARCHAR(MAX);
+SELECT @oldState=(SELECT notificationRuleId,analyteSpecimenId,population,rulePurpose,eligibilityMode,minimumAgeMonths,maximumAgeMonths,minimumValue,maximumValue,recipientKind,dueInDays,dayBasis,effectiveFrom,effectiveTo,approvedByUserId,isActive FOR JSON PATH,INCLUDE_NULL_VALUES,WITHOUT_ARRAY_WRAPPER)
+ FROM config.notificationRule WITH(UPDLOCK,HOLDLOCK) WHERE notificationRuleId=@notificationRuleId AND isDeleted=0;
+
 UPDATE config.notificationRule SET isActive = 0 WHERE notificationRuleId = @notificationRuleId AND isDeleted = 0
  AND EXISTS (SELECT 1 FROM auth.sessionScopeTenant AS st WHERE st.sessionScopeId = TRY_CAST (SESSION_CONTEXT (N'scopeKey') AS UNIQUEIDENTIFIER)
              AND st.tenantId = owningTenantId AND st.accessLevel IN ('write','full'));
 IF @@ROWCOUNT <> 1
 BEGIN
     ;THROW 51404, N'The rule is unavailable in your writable agency scope.', 1;
-END;""", permission='config.edit', desc='Stops generating new obligations; existing deadlines and evidence remain intact.'),
+END;
+
+SELECT @newState=(SELECT notificationRuleId,analyteSpecimenId,population,rulePurpose,eligibilityMode,minimumAgeMonths,maximumAgeMonths,minimumValue,maximumValue,recipientKind,dueInDays,dayBasis,effectiveFrom,effectiveTo,approvedByUserId,isActive FOR JSON PATH,INCLUDE_NULL_VALUES,WITHOUT_ARRAY_WRAPPER)
+ FROM config.notificationRule WHERE notificationRuleId=@notificationRuleId;
+INSERT logs.auditEvent(appUserId,rootTenantId,owningTenantId,eventAction,entityType,entityId,administrationJson)
+SELECT auth.udfSessionUserId(),rootTenantId,owningTenantId,'deactivate','notificationRule',notificationRuleId,
+ (SELECT JSON_QUERY(@oldState) AS oldValue,JSON_QUERY(@newState) AS newValue FOR JSON PATH,INCLUDE_NULL_VALUES,WITHOUT_ARRAY_WRAPPER)
+ FROM config.notificationRule WHERE notificationRuleId=@notificationRuleId;
+""", permission='config.edit', desc='Stops generating new obligations; existing deadlines and evidence remain intact.'),
 proc('uspReconcileNotifications', 'write', '@labResultId UNIQUEIDENTIFIER = NULL\n, @notificationRuleId UNIQUEIDENTIFIER = NULL\n, @personId UNIQUEIDENTIFIER = NULL',
     """IF auth.udfHasPermission (N'result.edit') = 0 AND auth.udfHasPermission (N'person.edit') = 0 AND auth.udfHasPermission (N'config.edit') = 0
 BEGIN

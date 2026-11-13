@@ -114,6 +114,10 @@ BEGIN
 
         DECLARE @root UNIQUEIDENTIFIER = auth.udfSessionRootTenantId ();
 
+        DECLARE @oldState NVARCHAR(MAX),@newState NVARCHAR(MAX),@wasActive BIT;
+        SELECT @wasActive=isActive,@oldState=(SELECT thresholdId,analyteSpecimenId,population,ageMinMonths,ageMaxMonths,thresholdType,actionCodeId,dueIntervalDays,lowerValue,upperValue,comparator,effectiveFrom,effectiveTo,isActive FOR JSON PATH,INCLUDE_NULL_VALUES,WITHOUT_ARRAY_WRAPPER)
+         FROM config.threshold WITH(UPDLOCK,HOLDLOCK) WHERE thresholdId=@thresholdId AND isDeleted=0;
+
         IF @isActive = 1 AND EXISTS (
             SELECT 1 FROM config.threshold AS t WITH (UPDLOCK, HOLDLOCK)
              WHERE t.isDeleted = 0 AND t.isActive = 1 AND t.thresholdId <> @thresholdId
@@ -152,6 +156,15 @@ BEGIN
                     @thresholdType, @actionCodeId, @dueIntervalDays, @lowerValue, @upperValue, @unit, @comparator, @effectiveFrom,
                     @effectiveTo, @authority, @isActive);
         END;
+
+        SELECT @newState=(SELECT thresholdId,analyteSpecimenId,population,ageMinMonths,ageMaxMonths,thresholdType,actionCodeId,dueIntervalDays,lowerValue,upperValue,comparator,effectiveFrom,effectiveTo,isActive FOR JSON PATH,INCLUDE_NULL_VALUES,WITHOUT_ARRAY_WRAPPER)
+         FROM config.threshold WHERE thresholdId=@thresholdId;
+        INSERT logs.auditEvent(appUserId,rootTenantId,owningTenantId,eventAction,entityType,entityId,administrationJson)
+        SELECT auth.udfSessionUserId(),rootTenantId,rootTenantId,
+         CASE WHEN @oldState IS NULL THEN 'create' WHEN @wasActive=1 AND isActive=0 THEN 'deactivate'
+              WHEN @wasActive=0 AND isActive=1 THEN 'reactivate' ELSE 'update' END,'threshold',thresholdId,
+         (SELECT JSON_QUERY(@oldState) AS oldValue,JSON_QUERY(@newState) AS newValue FOR JSON PATH,INCLUDE_NULL_VALUES,WITHOUT_ARRAY_WRAPPER)
+        FROM config.threshold WHERE thresholdId=@thresholdId;
 
         SET @Comments = N'Threshold saved.';
 
