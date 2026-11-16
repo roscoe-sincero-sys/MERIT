@@ -138,5 +138,15 @@
     "current": true,
     "seconds": 124,
     "files": "intakeClerk/peopleAndResults/enter-paper-result"
+  },
+  {
+    "id": "security-reports",
+    "title": "Security reports: the complete walkthrough",
+    "role": "administrator",
+    "feature": "security",
+    "built": "2026-11-16",
+    "current": true,
+    "seconds": 586,
+    "files": "administrator/security/security-reports"
   }
 ]

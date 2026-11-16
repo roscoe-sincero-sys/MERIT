@@ -1,0 +1,972 @@
+{
+  "id": "security-reports",
+  "title": "Security reports: the complete walkthrough",
+  "summary": "Use every security report as a county security officer, an administrator and a platform investigator.",
+  "role": "administrator",
+  "feature": "security",
+  "user": "securitydemo",
+  "source": "training/workflows/administrator/security/security-reports.workflow.ts",
+  "fingerprint": "ae205a8db73e63f6",
+  "appVersion": "2e34e44 2026-11-13",
+  "built": "2026-11-16",
+  "engine": "piper",
+  "voice": "en_US-kristin-medium",
+  "narrated": true,
+  "duration": 586037,
+  "introMs": 12002,
+  "outroMs": 16365,
+  "scenes": [
+    "Choose the right scope and review access",
+    "Investigate all sign-in patterns",
+    "Trace views, changes and exports in the audit log",
+    "Understand screen usage and reconstruct a session",
+    "Administrator: investigate one account",
+    "Platform investigator: unknown user names",
+    "Follow up and preserve the review trail"
+  ],
+  "steps": [
+    {
+      "scene": 0,
+      "say": "We begin as Sam, a Baltimore City security officer. All people and events in this video are synthetic training examples.",
+      "start": 12888,
+      "end": 22352,
+      "actions": [],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 0,
+      "say": "Security officers review users, sign-ins, audit events and usage within their granted places. This role does not provide patient records or account editing.",
+      "start": 22352,
+      "end": 34522,
+      "actions": [],
+      "onScreen": [
+        "People who work for, or have access to, the tenants you review. Read only: ask an administrator to change an account."
+      ],
+      "highlights": [
+        {
+          "at": 22376,
+          "rect": {
+            "x": 144,
+            "y": 302.828125,
+            "width": 1248,
+            "height": 16.5625
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 0,
+      "say": "Check the active profile and working place before reviewing. A narrower profile narrows your reports; regional and platform administrators can cover several data roots.",
+      "start": 34522,
+      "end": 45927,
+      "actions": [],
+      "onScreen": [
+        "Profile · Master profile · Switch ▾ · : switch profile or jurisdiction"
+      ],
+      "highlights": [
+        {
+          "at": 35097,
+          "rect": {
+            "x": 1182.359375,
+            "y": 56.4375,
+            "width": 104.5,
+            "height": 53.46875
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 0,
+      "say": "Filter listed users by name, user name or tenant. Review their home agency, master profile, MFA enrollment, last sign-in and account status.",
+      "start": 45927,
+      "end": 57409,
+      "actions": [
+        "Types “securitystaff” in Filter listed users"
+      ],
+      "onScreen": [
+        "Name User name Works for Master profile MFA Last sign-in Status · Security Training Staff 1 securitystaff1 Baltimore City Health Department (another administrator) Not yet enrolled Never Active · Security Training Staff 2 securitystaff2 Baltimore City Health Department (another administrator) Not yet enrolled Never Active · Security Training Staff 3 securitystaff3 Baltimore City Health Department "
+      ],
+      "highlights": [
+        {
+          "at": 48345,
+          "rect": {
+            "x": 144,
+            "y": 492.015625,
+            "width": 1248,
+            "height": 251.140625
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 0,
+      "say": "Staff can appear because they work here or hold access here. A home agency alone does not describe all their permissions.",
+      "start": 57409,
+      "end": 65760,
+      "actions": [],
+      "onScreen": [
+        "Name User name Works for Master profile MFA Last sign-in Status"
+      ],
+      "highlights": [
+        {
+          "at": 57429,
+          "rect": {
+            "x": 144,
+            "y": 492.015625,
+            "width": 1248,
+            "height": 38.53125
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 0,
+      "say": "Export users and access for an access review. The export uses your permitted scope; the filter box only filters the on-screen list.",
+      "start": 65760,
+      "end": 75929,
+      "actions": [
+        "Selects “Export users and access (CSV)”"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 0,
+      "say": "Ask an administrator to correct unexpected access or an account problem. The security officer reviews evidence without changing accounts.",
+      "start": 75929,
+      "end": 85563,
+      "actions": [
+        "Types “” in Filter listed users"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 1,
+      "say": "Open Sign-in activity from Administration to investigate suspicious patterns. These are leads to check, not proof that an account was compromised.",
+      "start": 85563,
+      "end": 96346,
+      "actions": [
+        "Selects “Administration (current section)”",
+        "Selects “Sign-in activity”"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 1,
+      "say": "Choose a window: one hour, one day, seven days or thirty days. Show refreshes the report for that window.",
+      "start": 96346,
+      "end": 104566,
+      "actions": [
+        "Chooses “7 days” for Window",
+        "Selects “Show”"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 1,
+      "say": "One address trying five or more accounts or unknown names suggests password spraying. Compare the target count, failures and first and last times.",
+      "start": 104567,
+      "end": 115098,
+      "actions": [],
+      "onScreen": [
+        "One address trying many accounts · Five or more different accounts or unknown names from one address: a sign of password spraying. · Addresses trying many accounts · Address Accounts or names Failures First Last · 192.0.2.10 5 5 Nov 16, 2026 6:16 AM Nov 16, 2026 6:16 AM"
+      ],
+      "highlights": [
+        {
+          "at": 104615,
+          "rect": {
+            "x": 144,
+            "y": 555.265625,
+            "width": 1248,
+            "height": 182.90625
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 1,
+      "say": "One account tried from at least three addresses suggests credential stuffing. Follow the account link when you need its individual history.",
+      "start": 115098,
+      "end": 124106,
+      "actions": [],
+      "onScreen": [
+        "One account tried from many addresses · Failures from three or more addresses: a sign of credential stuffing. · Accounts tried from many addresses · Account Addresses Failures Last · Security Training Staff 1 securitystaff1 3 3 Nov 16, 2026 6:16 AM"
+      ],
+      "highlights": [
+        {
+          "at": 115817,
+          "rect": {
+            "x": 144,
+            "y": 297.078125,
+            "width": 1248,
+            "height": 182.90625
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 1,
+      "say": "Signed in after repeated failures finds a full sign-in preceded by at least three failures in the previous hour. Compare the success address with the failed attempts.",
+      "start": 124106,
+      "end": 134824,
+      "actions": [],
+      "onScreen": [
+        "Signed in after repeated failures · A full sign-in after three or more failures on the same account within the hour before it. · None."
+      ],
+      "highlights": [
+        {
+          "at": 124159,
+          "rect": {
+            "x": 144,
+            "y": 499.890625,
+            "width": 1248,
+            "height": 98.453125
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 1,
+      "say": "Failures by address helps identify a noisy source. Compare affected accounts, unknown names, lockouts and rate-limit refusals.",
+      "start": 134824,
+      "end": 144947,
+      "actions": [],
+      "onScreen": [
+        "Failures by address · Failures by address · Address Failures Accounts Unknown names Lockouts Refused (rate limit) Last · 192.0.2.10 5 5 0 1 0 Nov 16, 2026 6:16 AM · 192.0.2.12 1 1 0 0 0 Nov 16, 2026 6:16 AM · 192.0.2.11 1 1 0 0 0 Nov 16, 2026 6:16 AM"
+      ],
+      "highlights": [
+        {
+          "at": 135409,
+          "rect": {
+            "x": 144,
+            "y": 278.25,
+            "width": 1248,
+            "height": 220.796875
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 1,
+      "say": "Failures by account helps distinguish one person having trouble from failures spread across many accounts and addresses.",
+      "start": 144948,
+      "end": 153120,
+      "actions": [],
+      "onScreen": [
+        "Failures by account · Failures by account · Account Failures Addresses Lockouts Last · Security Training Staff 1 securitystaff1 3 3 1 Nov 16, 2026 6:16 AM · Security Training Staff 5 securitystaff5 1 1 0 Nov 16, 2026 6:16 AM · Security Training Staff 2 securitystaff2 1 1 0 Nov 16, 2026 6:16 AM · Security Training Staff 3 securitystaff3 1 1 0 Nov 16, 2026 6:16 AM · Security Training Staff 4 securit"
+      ],
+      "highlights": [
+        {
+          "at": 145519,
+          "rect": {
+            "x": 144,
+            "y": 305.953125,
+            "width": 1248,
+            "height": 289.640625
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 1,
+      "say": "Lockouts and refusals shows when access was blocked and why. Account-free rate-limit events and unknown names require platform investigation.",
+      "start": 153120,
+      "end": 163433,
+      "actions": [],
+      "onScreen": [
+        "Lockouts and refusals · Lockouts and rate-limit refusals · When Event Account Address Detail · Nov 16, 2026 6:16 AM Account locked securitystaff1 192.0.2.10"
+      ],
+      "highlights": [
+        {
+          "at": 153172,
+          "rect": {
+            "x": 144,
+            "y": 615.5,
+            "width": 1248,
+            "height": 151.953125
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 1,
+      "say": "None means no matching pattern in this period and scope. It does not prove there were no attempts elsewhere or outside the selected window.",
+      "start": 163434,
+      "end": 172623,
+      "actions": [
+        "Chooses “1 hours” for Window",
+        "Selects “Show”"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 1,
+      "say": "Export this report downloads every report section for the selected window. Section names identify the pattern represented by each CSV row.",
+      "start": 172624,
+      "end": 182780,
+      "actions": [
+        "Selects “Export this report (CSV)”"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 2,
+      "say": "Open Audit log for the tamper-evident history of views, changes and exports. It records actions and identifiers, rather than copies of free-text record contents.",
+      "start": 182780,
+      "end": 195230,
+      "actions": [
+        "Selects “Administration (current section)”",
+        "Selects “Audit log”"
+      ],
+      "onScreen": [
+        "Events 1–100 of 100, newest first."
+      ],
+      "highlights": [
+        {
+          "at": 185126,
+          "rect": {
+            "x": 144,
+            "y": 527.0625,
+            "width": 218.90625,
+            "height": 18.390625
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 2,
+      "say": "Choose Sign-in and account security (all), then Search, to see security actions together instead of choosing one action at a time.",
+      "start": 195230,
+      "end": 205019,
+      "actions": [
+        "Chooses “Sign-in and account security (all)” for Action",
+        "Selects “Search”"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 2,
+      "say": "Clear filters to return to the whole ledger. Combine User, Action, Record type and dates to answer who did what and when.",
+      "start": 205019,
+      "end": 214397,
+      "actions": [
+        "Selects “Clear filters”"
+      ],
+      "onScreen": [
+        "User · Anyone · Casey Morgan (Baltimore City) · Sam Security (training) · Action · Any action · Sign-in and account security (all) · Granted access · Ended grant · Deactivated · Reactivated · Unlocked account · Administrator reset MFA · Deleted · Viewed · Created · Changed · Exported · Searched · Signed in · Sign-in failed · Signed out · Set up multi-factor authentication · Turned on email codes ·"
+      ],
+      "highlights": [
+        {
+          "at": 206529,
+          "rect": {
+            "x": 144,
+            "y": 353.78125,
+            "width": 1248,
+            "height": 157.28125
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 2,
+      "say": "For example, find Sam's access-review exports. Choose Sam under User, Exported under Action, and Users and access under Record type.",
+      "start": 214397,
+      "end": 226078,
+      "actions": [
+        "Chooses “Sam Security (training)” for User",
+        "Chooses “Exported” for Action",
+        "Chooses “Users and access” for Record type"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 2,
+      "say": "Set From and To for the review period, then Search. The count confirms whether your combined filters found events.",
+      "start": 226078,
+      "end": 234127,
+      "actions": [
+        "Types “2026-11-09” in From",
+        "Types “2026-11-17” in To",
+        "Selects “Search”",
+        "Selects “Clear filters”"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 2,
+      "say": "For one record, use Record id or its all events link. A record link opens the record only when your permissions allow it.",
+      "start": 234127,
+      "end": 243082,
+      "actions": [
+        "Selects “Every event for this record (all events)”"
+      ],
+      "onScreen": [
+        "c6a3abc2-b553-4e01-adb2-c04056812e18"
+      ],
+      "highlights": [
+        {
+          "at": 236036,
+          "rect": {
+            "x": 1046.84375,
+            "y": 395.8125,
+            "width": 164.578125,
+            "height": 40
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 2,
+      "say": "Events are newest first. Choose twenty-five or one hundred per page; use the page links to review older events when more exist.",
+      "start": 243082,
+      "end": 252275,
+      "actions": [
+        "Chooses “100” for Events per page",
+        "Selects “Search”"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 2,
+      "say": "Download CSV preserves the current filters, with at most the newest ten thousand events. Narrow the dates if you need a smaller review set.",
+      "start": 252275,
+      "end": 262550,
+      "actions": [
+        "Selects “Download CSV”"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 2,
+      "say": "County review includes scoped staff and events on records owned there when logged. Older events without an owner stamp rely on staff scope.",
+      "start": 262550,
+      "end": 272340,
+      "actions": [
+        "Selects “Clear filters”"
+      ],
+      "onScreen": [
+        "Events 1–100 of 101, newest first."
+      ],
+      "highlights": [
+        {
+          "at": 264541,
+          "rect": {
+            "x": 144,
+            "y": 527.0625,
+            "width": 218.90625,
+            "height": 18.390625
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 3,
+      "say": "Open Usage to review screen visits and navigation. Choose one, seven, thirty or ninety days, then Show usage.",
+      "start": 272340,
+      "end": 282640,
+      "actions": [
+        "Selects “Administration (current section)”",
+        "Selects “Usage”",
+        "Chooses “Last 7 days” for Period",
+        "Selects “Show usage”"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 3,
+      "say": "Visits by screen compares visits, sessions and timed visits. Visible time is optional, capped focused time; missing time means unknown.",
+      "start": 282640,
+      "end": 294183,
+      "actions": [],
+      "onScreen": [
+        "Visits by screen · Screen Visits Sessions Timed visits Average visible time · Audit log 22 3 22 4.6 seconds · Sign-in activity 9 3 9 11.5 seconds · Usage 7 3 6 1.0 seconds · My profiles 4 4 4 3.8 seconds · Usage session 4 2 2 1.1 seconds · Users 3 3 3 26.2 seconds · Person 2 1 2 12.0 seconds · Enter a result 2 1 2 12.0 seconds · Find or add a person 1 1 1 12.0 seconds · Result saved outcome 1 1 1 "
+      ],
+      "highlights": [
+        {
+          "at": 283369,
+          "rect": {
+            "x": 144,
+            "y": 91.375,
+            "width": 1248,
+            "height": 595.234375
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 3,
+      "say": "Expand Visits by active-profile role for role totals. One visit can have several roles, so adding role counts together would double-count visits.",
+      "start": 294183,
+      "end": 305569,
+      "actions": [
+        "Selects “Visits by active-profile role”"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 3,
+      "say": "Paths into Enter a result shows up to three preceding screens. Back-and-forth paths can be useful review, not necessarily mistakes.",
+      "start": 305569,
+      "end": 316273,
+      "actions": [],
+      "onScreen": [
+        "Five most common paths into Enter a result · Up to three preceding screens in the same recorded tab chain. A missing, expired or out-of-scope predecessor starts a new path; query and filter changes are not separate screens. · Find or add a person → Person → Enter a result — 1 visits in 1 sessions · Enter a result → Result saved outcome → Person → Enter a result — 1 visits in 1 sessions · Back-and-"
+      ],
+      "highlights": [
+        {
+          "at": 306783,
+          "rect": {
+            "x": 144,
+            "y": 173.25,
+            "width": 1248,
+            "height": 430.203125
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 3,
+      "say": "The observed search-to-saved flow is a strict four-screen sequence. Our seeded example illustrates navigation, not actual patient work or staff performance.",
+      "start": 316273,
+      "end": 328095,
+      "actions": [],
+      "onScreen": [
+        "Five most common paths into Enter a result · Up to three preceding screens in the same recorded tab chain. A missing, expired or out-of-scope predecessor starts a new path; query and filter changes are not separate screens. · Find or add a person → Person → Enter a result — 1 visits in 1 sessions · Enter a result → Result saved outcome → Person → Enter a result — 1 visits in 1 sessions · Back-and-"
+      ],
+      "highlights": [
+        {
+          "at": 316285,
+          "rect": {
+            "x": 144,
+            "y": 173.25,
+            "width": 1248,
+            "height": 430.203125
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 3,
+      "say": "Download summary CSV saves the report aggregates. Recent sessions is a limited list; the totals above cover the whole selected period.",
+      "start": 328095,
+      "end": 339197,
+      "actions": [
+        "Selects “Download summary CSV”"
+      ],
+      "onScreen": [
+        "Recent sessions · Showing the latest 5 of 5 sessions in this period. Aggregate counts above cover the full period. · User First recorded visit Last recorded visit Visits Sequence · Sam Security (training) Nov 16, 2026 6:17 AM Nov 16, 2026 6:21 AM 14 View session · fc6db9e9-94df-4431-9d5b-aebffcac7413 · Sam Security (training) Nov 16, 2026 6:15 AM Nov 16, 2026 6:15 AM 18 View session · 0ab9715c-a91"
+      ],
+      "highlights": [
+        {
+          "at": 331925,
+          "rect": {
+            "x": 144,
+            "y": 96.453125,
+            "width": 1248,
+            "height": 670.4375
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 3,
+      "say": "Choose View session to inspect the ordered screens, active profile and any retained sign-in or session-end events.",
+      "start": 339197,
+      "end": 347830,
+      "actions": [
+        "Selects “View session fc6db9e9-94df-4431-9d5b-aebffcac7413”"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 3,
+      "say": "Session timestamps are UTC with milliseconds. Tabs can interleave; expand Visit links and follow the predecessor when comparing a workflow.",
+      "start": 347830,
+      "end": 358723,
+      "actions": [
+        "Selects “Visit links”"
+      ],
+      "onScreen": [
+        "When UTC Screen Navigation hint Context Visible time · 2026-11-16 11:17:26.137 My profiles · /account/profiles · Visit links · Visit: 5346d0ec-24ad-4cdd-9920-6bae6b4d4e19 · Predecessor: · Tab: af64dccc-9ef6-47a0-b6a0-e41d7f9a32f5 · Direct Security officer · Master profile · 0.1 seconds · 2026-11-16 11:17:27.884 Users · /admin/users · Visit links · Direct Security officer · Master profile · 75.8 se"
+      ],
+      "highlights": [
+        {
+          "at": 349966,
+          "rect": {
+            "x": 144,
+            "y": -339.40625,
+            "width": 1248,
+            "height": 1457.09375
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 3,
+      "say": "Download this page CSV exports the current page, up to one hundred visits. Use session paging for additional visits.",
+      "start": 358723,
+      "end": 368120,
+      "actions": [
+        "Selects “Download this page CSV”"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 3,
+      "say": "You can also paste a session reference into Open a session reference. The reference is a reporting identifier, not a sign-in credential.",
+      "start": 368120,
+      "end": 377839,
+      "actions": [
+        "Selects “Back to usage”",
+        "Types “fc6db9e9-94df-4431-9d5b-aebffcac7413” in Open a session reference",
+        "Selects “Open session”"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 3,
+      "say": "No retained events or no visits can reflect scope, period, missing telemetry or retention. Browser closure alone does not prove that someone signed out.",
+      "start": 377839,
+      "end": 389261,
+      "actions": [],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 4,
+      "say": "We now switch to the Maryland administrator. Administrators can open account pages and act on problems that a security officer reports.",
+      "start": 389261,
+      "end": 399283,
+      "actions": [],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 4,
+      "say": "Filter for Security Training Staff 1 and open the account. Review the master profile to check places, roles, access levels and grant dates.",
+      "start": 399283,
+      "end": 410670,
+      "actions": [
+        "Types “securitystaff1” in Filter listed users",
+        "Selects “Security Training Staff 1”"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 4,
+      "say": "Sign-in history shows the latest fifty events: time, event, reason, address, browser and shortened session and attempt references.",
+      "start": 410670,
+      "end": 420895,
+      "actions": [],
+      "onScreen": [
+        "Sign-in history · The latest 5 events. Times are local; addresses come from the client after any trusted proxy. · Sign-in history, newest first · When Event Detail Address Browser Session · attempt · Nov 16, 2026 6:16 AM Account locked 192.0.2.10 · Nov 16, 2026 6:16 AM Wrong password Bad password 192.0.2.11 · Nov 16, 2026 6:16 AM Second factor failed authenticator app 192.0.2.12 · Nov 16, 2026 6:1"
+      ],
+      "highlights": [
+        {
+          "at": 411881,
+          "rect": {
+            "x": 776,
+            "y": 194.25,
+            "width": 616,
+            "height": 522.484375
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 4,
+      "say": "Correlate password and second-factor failures, successful sessions, expirations, sign-outs and administrator actions before deciding what needs follow-up.",
+      "start": 420895,
+      "end": 432837,
+      "actions": [],
+      "onScreen": [
+        "Sign-in history, newest first · When Event Detail Address Browser Session · attempt · Nov 16, 2026 6:16 AM Account locked 192.0.2.10 · Nov 16, 2026 6:16 AM Wrong password Bad password 192.0.2.11 · Nov 16, 2026 6:16 AM Second factor failed authenticator app 192.0.2.12 · Nov 16, 2026 6:16 AM Signed in 192.0.2.12 · Nov 16, 2026 6:16 AM Wrong password Bad password 192.0.2.10 MERIT synthetic training b"
+      ],
+      "highlights": [
+        {
+          "at": 420917,
+          "rect": {
+            "x": 776,
+            "y": 292.703125,
+            "width": 650.390625,
+            "height": 404.03125
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 4,
+      "say": "Export this account's sign-in history downloads up to one thousand events. Keep the account history with the activity and audit exports for your review.",
+      "start": 432837,
+      "end": 442997,
+      "actions": [
+        "Selects “Export this account's sign-in history (CSV)”"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 5,
+      "say": "We now switch to the platform administrator. Unknown user names belong to no county, so they require the security investigation permission.",
+      "start": 442997,
+      "end": 453105,
+      "actions": [],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 5,
+      "say": "Open Unknown user names. Hashes group repeated attempts at the same name without revealing what someone typed.",
+      "start": 453105,
+      "end": 461161,
+      "actions": [
+        "Selects “Unknown user names”"
+      ],
+      "onScreen": [
+        "Names (hashed) · Export the hashed list (CSV) · Unknown user names, most attempts first · Hash Attempts Addresses First Last Addresses seen · ce3eb0c85a67 3 1 Nov 16, 2026 6:14 AM Nov 16, 2026 6:17 AM ::1"
+      ],
+      "highlights": [
+        {
+          "at": 455613,
+          "rect": {
+            "x": 144,
+            "y": 580.921875,
+            "width": 1248,
+            "height": 186.34375
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 5,
+      "say": "Compare attempts, addresses, first and last times, and addresses seen. A hash is useful for correlation even when a name remains hidden.",
+      "start": 461161,
+      "end": 472234,
+      "actions": [],
+      "onScreen": [
+        "Names (hashed) · Export the hashed list (CSV) · Unknown user names, most attempts first · Hash Attempts Addresses First Last Addresses seen · ce3eb0c85a67 3 1 Nov 16, 2026 6:14 AM Nov 16, 2026 6:17 AM ::1"
+      ],
+      "highlights": [
+        {
+          "at": 461179,
+          "rect": {
+            "x": 144,
+            "y": 580.921875,
+            "width": 1248,
+            "height": 186.34375
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 5,
+      "say": "Look up a known suspected name without decrypting anything. Type the name and choose Look up to see its attempts over the last ninety days.",
+      "start": 472234,
+      "end": 481215,
+      "actions": [
+        "Types “trainingunknown” in User name someone may have tried",
+        "Selects “Look up”"
+      ],
+      "onScreen": [
+        "Attempts at \"trainingunknown\" · 3 attempts in the last 90 days. · Attempts at the name looked up · When Where Address Browser · Nov 16, 2026 6:17 AM Unknown user name ::1 Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/157.0.0.0 Safari/537.36 Edg/157.0.0.0 · Nov 16, 2026 6:15 AM Unknown user name ::1 Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb"
+      ],
+      "highlights": [
+        {
+          "at": 476819,
+          "rect": {
+            "x": 144,
+            "y": 259.921875,
+            "width": 1248,
+            "height": 301.265625
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 5,
+      "say": "A lookup with no matches reports no attempts in that period. Lookups are recorded in the audit log.",
+      "start": 481216,
+      "end": 488603,
+      "actions": [
+        "Types “trainingnomatch” in User name someone may have tried",
+        "Selects “Look up”"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 5,
+      "say": "Export the hashed list saves hashes and counts. The typed names are never included in this export.",
+      "start": 488603,
+      "end": 495706,
+      "actions": [
+        "Selects “Export the hashed list (CSV)”"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 5,
+      "say": "Use Show names only when the investigation needs it. A name may contain a password entered in the wrong box; do not copy or share the revealed text.",
+      "start": 495706,
+      "end": 506602,
+      "actions": [],
+      "onScreen": [
+        "Names may occasionally include a password someone typed into the user-name box by mistake. Showing names is recorded in the audit log. Use them for this investigation only; don't copy them out of this page or share them."
+      ],
+      "highlights": [
+        {
+          "at": 496251,
+          "rect": {
+            "x": 144,
+            "y": 355.609375,
+            "width": 1248,
+            "height": 66.84375
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 5,
+      "say": "Enter a current authenticator code, then Show names. The code stays masked in this video, and the reveal is recorded in the audit log.",
+      "start": 506602,
+      "end": 516699,
+      "actions": [
+        "Selects “Show names”"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 5,
+      "say": "Names are revealed for this page only. If an encryption key is no longer available, a name can instead appear as no longer readable.",
+      "start": 516699,
+      "end": 526350,
+      "actions": [],
+      "onScreen": [
+        "Names (shown for this page only) · Export the hashed list (CSV) · Unknown user names, most attempts first · Name Attempts Addresses First Last Addresses seen · trainingunknown · ce3eb0c85a67 · 3 1 Nov 16, 2026 6:14 AM Nov 16, 2026 6:17 AM ::1"
+      ],
+      "highlights": [
+        {
+          "at": 517466,
+          "rect": {
+            "x": 144,
+            "y": 558.921875,
+            "width": 1248,
+            "height": 207.953125
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 5,
+      "say": "Return to Unknown user names to restore the hashed view. This ends the temporary on-page reveal.",
+      "start": 526350,
+      "end": 533682,
+      "actions": [],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 6,
+      "say": "Finally, open Audit log and filter Action to Export. Report exports, unknown-name lookups and reveals leave an audit trail of the investigation itself.",
+      "start": 533682,
+      "end": 546041,
+      "actions": [
+        "Selects “Search”"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 6,
+      "say": "Use the report that matches the question: access for permissions, sign-ins for authentication, audit for recorded actions, and usage for observed navigation.",
+      "start": 546041,
+      "end": 557789,
+      "actions": [],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 6,
+      "say": "Record the scope, time window, affected account or session, and your findings. Refer account and grant changes to an authorized administrator.",
+      "start": 557789,
+      "end": 568962,
+      "actions": [],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    }
+  ]
+}

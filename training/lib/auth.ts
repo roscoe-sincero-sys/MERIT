@@ -63,7 +63,8 @@ export async function ensureSession(browser: Browser, user: string): Promise<str
     } else {
       throw new Error(`${user} was asked for a code but has no saved authenticator secret.`);
     }
-    await page.waitForURL(url => !url.pathname.startsWith('/account'), { timeout: 15_000 });
+    // Read-only security officers land on My profiles because they have no clinical home page.
+    await page.waitForURL(url => !url.pathname.startsWith('/account') || url.pathname === '/account/profiles', { timeout: 15_000 });
     const me = await context.request.get('/api/v1/me');
     if (!me.ok()) throw new Error(`Sign-in for ${user} did not complete (${me.status()}).`);
     await context.storageState({ path: state });

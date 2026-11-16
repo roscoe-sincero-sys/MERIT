@@ -32,6 +32,10 @@ FFmpeg already covers zooms, cards and captions. See [docs/design.md](docs/desig
 
 ## Generate
 
+The [security reports walkthrough](docs/security-reports.md) covers scoped access review, all sign-in patterns,
+audit filtering, usage and session tracing, account history, platform unknown-name investigation, and every report export.
+Build it with `npm.cmd run videos -- --id security-reports --voice piper --burn-in`.
+
 The [complete login series](docs/login-series.md) covers first sign-in, authenticator and recovery codes, optional
 email verification, password recovery and changes, blocked sign-ins, and administrator assistance. It uses its own
 local app and mail capture instances: `npm run app:login`, then `npm run videos:login` in another terminal.
