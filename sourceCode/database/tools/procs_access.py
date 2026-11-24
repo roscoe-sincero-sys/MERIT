@@ -576,6 +576,16 @@ BEGIN
     ;THROW 50000, N'@accessLevel must be read, write or full.', 1;
 END;""",
         "body": """
+-- Issue #310: serialize grant changes with auth.uspCreateSessionScope (which holds MERIT.grants Shared until commit)
+-- so under RCSI no overlapping sign-in or profile switch can read pre-change grants and commit after revocation.
+DECLARE @grantLock INT;
+EXEC @grantLock = sys.sp_getapplock @Resource = N'MERIT.grants', @LockMode = 'Exclusive',
+     @LockOwner = 'Transaction', @LockTimeout = 10000;
+IF @grantLock < 0
+BEGIN
+    ;THROW 51409, N'Authorization changes are busy; please retry.', 1;
+END;
+
 DECLARE @admin TABLE (tenantId UNIQUEIDENTIFIER PRIMARY KEY);
 INSERT @admin SELECT tenantId FROM auth.tvfAdminTenants ();
 DECLARE @platform UNIQUEIDENTIFIER = CAST (HASHBYTES ('MD5', N'tenant:PLATFORM') AS UNIQUEIDENTIFIER);
@@ -673,8 +683,9 @@ BEGIN
     VALUES (@userAssignmentId, @appUserId, @roleId, @tenantId, @includeDescendants, @accessLevel, @startDate, @endDate);
 END;
 
--- A grant change invalidates the user's resolved access: end their open sessions.
-UPDATE auth.sessionScope SET revokedUtc = SYSUTCDATETIME () WHERE appUserId = @appUserId AND revokedUtc IS NULL;
+-- A grant change invalidates the user's resolved access and any View As scopes viewing them: end their open sessions.
+UPDATE auth.sessionScope SET revokedUtc = SYSUTCDATETIME ()
+ WHERE (appUserId = @appUserId OR viewAsUserId = @appUserId) AND revokedUtc IS NULL;
 
 INSERT logs.auditEvent(appUserId,rootTenantId,owningTenantId,eventAction,entityType,entityId,administrationJson)
 SELECT @me,t.rootTenantId,ua.tenantId,@auditAction,'userAssignment',ua.userAssignmentId,
@@ -860,6 +871,15 @@ BEGIN
     ;THROW 50000, N'@grantsJson must be a JSON array of grants.', 1;
 END;""",
         "body": """
+-- Issue #310: serialize profile grant changes with auth.uspCreateSessionScope (which holds MERIT.grants Shared until commit).
+DECLARE @grantLock INT;
+EXEC @grantLock = sys.sp_getapplock @Resource = N'MERIT.grants', @LockMode = 'Exclusive',
+     @LockOwner = 'Transaction', @LockTimeout = 10000;
+IF @grantLock < 0
+BEGIN
+    ;THROW 51409, N'Authorization changes are busy; please retry.', 1;
+END;
+
 DECLARE @me UNIQUEIDENTIFIER = auth.udfSessionUserId ();
 DECLARE @msg NVARCHAR (2048);
 
