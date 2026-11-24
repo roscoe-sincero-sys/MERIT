@@ -87,7 +87,7 @@ BEGIN
 
         DECLARE @t NVARCHAR (120) = NULLIF (LTRIM (RTRIM (@text)), N'');
 
-        DECLARE @escaped NVARCHAR (200) = REPLACE (REPLACE (REPLACE (@t, N'[', N'[[]'), N'%', N'[%]'), N'_', N'[_]');
+        DECLARE @escaped NVARCHAR (600) = REPLACE (REPLACE (REPLACE (@t, N'[', N'[[]'), N'%', N'[%]'), N'_', N'[_]');
         SELECT TOP (@maxRows) x.reporterKind, x.reporterId, x.reporterName, x.cliaNumber, x.npi, x.credential, x.phone,
                x.registryStatus, x.modifiedDateUtc
           FROM (SELECT CASE WHEN EXISTS (SELECT 1 FROM dbo.organizationType AS ot WHERE ot.organizationId = o.organizationId

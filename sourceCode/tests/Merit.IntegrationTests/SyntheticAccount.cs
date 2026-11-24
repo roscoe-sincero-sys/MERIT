@@ -32,7 +32,14 @@ public sealed class SyntheticAccount : IAsyncDisposable
 
     public string Email => $"{Name}@example.test";
 
-    public string TotpCode() => Totp.Code(Totp.FromBase32(secret), DateTimeOffset.UtcNow.ToUnixTimeSeconds() / 30);
+    public string TotpCode()
+    {
+        long nowStep = DateTimeOffset.UtcNow.ToUnixTimeSeconds() / 30;
+        long nextStep = Math.Min(nowStep + 1, Math.Max(nowStep - 1, lastSignInStep + 1));
+        return Totp.Code(Totp.FromBase32(secret), nextStep);
+    }
+
+    public string TotpCodeForStep(long step) => Totp.Code(Totp.FromBase32(secret), step);
 
     public static async Task<SyntheticAccount> CreateAsync(WebApplicationFactory<Program> host, string prefix, bool mfa = true)
     {

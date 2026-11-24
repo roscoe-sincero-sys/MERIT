@@ -182,6 +182,58 @@ BEGIN
 END;
 GO
 
+CREATE OR ALTER FUNCTION auth.udfIsDeidentified ()
+RETURNS BIT
+AS
+BEGIN
+    IF USER_NAME () = N'dbo' RETURN 0;
+
+    RETURN COALESCE ((SELECT ss.isDeidentified
+                        FROM auth.sessionScope AS ss
+                       WHERE ss.sessionScopeId = TRY_CAST (SESSION_CONTEXT (N'scopeKey') AS UNIQUEIDENTIFIER)
+                         AND ss.revokedUtc IS NULL
+                         AND ss.expiresUtc > SYSUTCDATETIME ()
+                         AND ss.isDeleted = 0), 0);
+END;
+GO
+
+CREATE OR ALTER FUNCTION auth.udfHasRootPermission (@permissionCode VARCHAR (60))
+RETURNS BIT
+AS
+BEGIN
+    IF USER_NAME () = N'dbo' RETURN 1;
+
+    DECLARE @root UNIQUEIDENTIFIER = auth.udfSessionRootTenantId ();
+    IF @root IS NULL RETURN 0;
+
+    IF EXISTS (
+        SELECT 1
+          FROM auth.sessionScope AS ss
+         CROSS APPLY auth.tvfUserGrantPermissions (ss.appUserId) AS m
+         WHERE ss.sessionScopeId = TRY_CAST (SESSION_CONTEXT (N'scopeKey') AS UNIQUEIDENTIFIER)
+           AND ss.isDeleted = 0
+           AND ss.revokedUtc IS NULL
+           AND ss.expiresUtc > SYSUTCDATETIME ()
+           AND m.tenantId = @root
+           AND m.permissionCode = @permissionCode
+           AND m.grantRank >= 2
+           AND (
+                (ss.viewAsUserId IS NOT NULL
+                 AND EXISTS (SELECT 1 FROM auth.tvfUserGrantPermissions (ss.viewAsUserId) AS v
+                              WHERE v.tenantId = @root AND v.permissionCode = @permissionCode AND v.grantRank >= 2)
+                 AND EXISTS (SELECT 1 FROM auth.tvfUserGrantPermissions (ss.appUserId) AS a
+                              WHERE a.tenantId = @root AND a.permissionCode = 'tenant.administer'))
+                OR (ss.viewAsUserId IS NULL AND ss.userProfileId IS NOT NULL
+                    AND EXISTS (SELECT 1 FROM auth.tvfProfileGrantPermissions (ss.userProfileId) AS p
+                                 WHERE p.tenantId = @root AND p.permissionCode = @permissionCode AND p.grantRank >= 2))
+                OR (ss.viewAsUserId IS NULL AND ss.userProfileId IS NULL)
+           ))
+        RETURN 1;
+
+    RETURN 0;
+END;
+GO
+
 /***********************************************************************************************************************
 ObjectName:   auth.tvfAdminTenants
 Author:       MERIT build
@@ -240,5 +292,7 @@ GO
 EXEC util.uspSetObjectDescription @SchemaName = N'auth', @ObjectType = N'FUNCTION', @ObjectName = N'tvfUserGrantPermissions', @Description = N'A user''s master profile expanded to (tenant, permission, kind, highest access rank).';
 EXEC util.uspSetObjectDescription @SchemaName = N'auth', @ObjectType = N'FUNCTION', @ObjectName = N'tvfProfileGrantPermissions', @Description = N'A user-made profile expanded to (tenant, permission, kind, highest access rank); not yet clipped to the master.';
 EXEC util.uspSetObjectDescription @SchemaName = N'auth', @ObjectType = N'FUNCTION', @ObjectName = N'udfIsPlatformAdmin', @Description = N'1 for a platform administrator''s session (and dbo); fails closed.';
+EXEC util.uspSetObjectDescription @SchemaName = N'auth', @ObjectType = N'FUNCTION', @ObjectName = N'udfIsDeidentified', @Description = N'1 when the current session holds only de-identified roles (epidemiologist); 0 for dbo or identified roles.';
+EXEC util.uspSetObjectDescription @SchemaName = N'auth', @ObjectType = N'FUNCTION', @ObjectName = N'udfHasRootPermission', @Description = N'1 when the current active session (master, profile, or view-as) holds write/full permission at the data root.';
 EXEC util.uspSetObjectDescription @SchemaName = N'auth', @ObjectType = N'FUNCTION', @ObjectName = N'tvfAdminTenants', @Description = N'Tenants the current session may administer: all for a platform administrator, else its administration scope.';
 GO

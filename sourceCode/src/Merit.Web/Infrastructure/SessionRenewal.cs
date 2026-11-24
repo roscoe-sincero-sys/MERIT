@@ -9,8 +9,7 @@ namespace Merit.Web.Infrastructure;
 /// Starting and renewing the database session scope behind the session cookie, in one place (issue #21). A renewal creates
 /// the new scope first, then ends the old one and rewrites the cookie, so a failure leaves the current session working.
 /// </summary>
-public sealed class SessionRenewal(AccountService accounts, ICurrentSession session, IConfiguration configuration, ISignInEvents events,
-                                   ScreenUsageRecorder usage)
+public sealed class SessionRenewal(AccountService accounts, ICurrentSession session, IConfiguration configuration, ISignInEvents events)
 {
     public const string LifetimeSetting = "Session:LifetimeHours";
 
@@ -30,36 +29,23 @@ public sealed class SessionRenewal(AccountService accounts, ICurrentSession sess
     public async Task RenewAsync(HttpContext http, Guid? userProfileId, Guid? viewAsUserId, Guid? actingTenantId, CancellationToken ct)
     {
         var me = session.RequireUserId();
-        var lifetime = Lifetime;
-        if (session.ScopeKey is Guid currentScope)
+        var stampClaim = http.User.FindFirst(MeritClaims.SecurityStamp)?.Value;
+        if (session.ScopeKey is not Guid currentScope || !Guid.TryParse(stampClaim, out var stamp))
         {
-            var stampClaim = http.User.FindFirst(MeritClaims.SecurityStamp)?.Value;
-            if (!Guid.TryParse(stampClaim, out var stamp) || !await accounts.IsSessionValidAsync(currentScope, stamp, ct).ConfigureAwait(false))
-            {
-                await http.SignOutAsync(AuthSchemes.Session).ConfigureAwait(false);
-                throw new Merit.Application.Errors.BusinessRuleException("Your session has ended. Please sign in again.");
-            }
-
-            if (await accounts.SessionStateAsync(currentScope, ct).ConfigureAwait(false) is { } state)
-            {
-                var remaining = state.ExpiresUtc - DateTime.UtcNow;
-                if (remaining <= TimeSpan.Zero)
-                {
-                    await http.SignOutAsync(AuthSchemes.Session).ConfigureAwait(false);
-                    throw new Merit.Application.Errors.BusinessRuleException("Your session has expired. Please sign in again.");
-                }
-
-                lifetime = remaining < lifetime ? remaining : lifetime;
-            }
+            await http.SignOutAsync(AuthSchemes.Session).ConfigureAwait(false);
+            throw new Merit.Application.Errors.BusinessRuleException("Your session has ended. Please sign in again.");
         }
 
-        var scope = await accounts.CreateSessionAsync(me, lifetime, userProfileId, viewAsUserId, actingTenantId, ct)
-            .ConfigureAwait(false);
-        if (session.ScopeKey is Guid old)
+        SignedInSession scope;
+        try
         {
-            // A profile/view/working-tenant change replaces access, not the logical signed-in visit.
-            await usage.ContinueAsync(scope.Scope.Summary.SessionScopeId, ct).ConfigureAwait(false);
-            await accounts.SignOutAsync(old, ct).ConfigureAwait(false);
+            scope = await accounts.RenewSessionAsync(me, currentScope, stamp, Lifetime, userProfileId, viewAsUserId, actingTenantId, ct)
+                .ConfigureAwait(false);
+        }
+        catch (Merit.Application.Errors.PermissionDeniedException)
+        {
+            await http.SignOutAsync(AuthSchemes.Session).ConfigureAwait(false);
+            throw new Merit.Application.Errors.BusinessRuleException("Your session has ended. Please sign in again.");
         }
 
         await SessionCookie.SignInAsync(http, scope.Scope).ConfigureAwait(false);

@@ -63,13 +63,23 @@ if (!string.IsNullOrWhiteSpace(certPath))
         certPath, builder.Configuration["DataProtection:CertificatePassword"]);
     dp.ProtectKeysWithCertificate(cert);
 }
-else if (OperatingSystem.IsWindows())
+else if (builder.Environment.IsDevelopment())
 {
-    dp.ProtectKeysWithDpapi();
+    if (OperatingSystem.IsWindows())
+    {
+        // Local-machine DPAPI for single-machine local development; shared/production key rings use a certificate.
+        dp.ProtectKeysWithDpapi(protectToLocalMachine: true);
+    }
 }
-else if (!builder.Environment.IsDevelopment() && !builder.Configuration.GetValue("DataProtection:AllowUnencryptedKeys", false))
+else if (OperatingSystem.IsWindows() && builder.Configuration.GetValue("DataProtection:AllowLocalMachineDpapi", false))
 {
-    throw new InvalidOperationException("DataProtection:CertificatePath must be configured outside Development to encrypt the key ring at rest.");
+    dp.ProtectKeysWithDpapi(protectToLocalMachine: true);
+}
+else if (!builder.Configuration.GetValue("DataProtection:AllowUnencryptedKeys", false))
+{
+    throw new InvalidOperationException(
+        "DataProtection:CertificatePath must be configured outside Development to encrypt the key ring at rest across restarts and web-farm nodes. " +
+        "For a single Windows server, set DataProtection:AllowLocalMachineDpapi=true.");
 }
 
 // ---------------------------------------------------------------------------------------------- authentication

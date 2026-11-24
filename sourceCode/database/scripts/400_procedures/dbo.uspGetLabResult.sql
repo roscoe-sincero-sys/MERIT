@@ -79,6 +79,11 @@ BEGIN
             ;THROW 51403, N'You do not have permission to do this (result.view).', 1;
         END;
 
+        IF auth.udfIsDeidentified () = 1
+        BEGIN
+            ;THROW 51403, N'De-identified roles cannot open individual identifiable lab results.', 1;
+        END;
+
         IF NOT EXISTS (SELECT 1 FROM dbo.labResult WHERE labResultId = @labResultId AND isDeleted = 0)
         BEGIN
             ;THROW 51404, N'The result was not found, or you do not have access to it.', 1;

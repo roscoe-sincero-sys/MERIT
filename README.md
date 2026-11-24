@@ -122,15 +122,17 @@ cd merit\sourceCode
 # 2. Trust the local HTTPS certificate
 dotnet dev-certs https --trust
 
-# 3. Create the database, logins and demo data (safe to re-run)
+# 3. Create the database, logins and demo data (safe to re-run; -TrustServerCertificate is for local dev self-signed SQL Server only)
 cd database
 $web    = Read-Host -AsSecureString 'Password for the meritWeb login'
 $worker = Read-Host -AsSecureString 'Password for the meritWorker login'
 .\Deploy-MeritDatabase.ps1 -ServerInstance 'localhost\PORTAL' -CreateLogins `
-    -WebLoginPassword $web -WorkerLoginPassword $worker -IncludeDemoData
+    -WebLoginPassword $web -WorkerLoginPassword $worker -IncludeDemoData -TrustServerCertificate
 cd ..
 
 # 4. Give the web app and worker their connection strings (kept out of source control)
+# Local dev only: TrustServerCertificate=True trusts SQL Server's self-signed certificate.
+# In production, always use Encrypt=True;TrustServerCertificate=False with a CA-trusted certificate.
 dotnet user-secrets --project src/Merit.Web    set "ConnectionStrings:Merit" "Server=localhost\PORTAL;Database=MERIT;User ID=meritWeb;Password=<web password>;Encrypt=True;TrustServerCertificate=True"
 dotnet user-secrets --project src/Merit.Worker set "ConnectionStrings:Merit" "Server=localhost\PORTAL;Database=MERIT;User ID=meritWorker;Password=<worker password>;Encrypt=True;TrustServerCertificate=True"
 
@@ -198,7 +200,9 @@ dotnet run --project src/Merit.Web         # terminal 2: https://localhost:7243
 | `ConnectionStrings:Merit` (`ConnectionStrings__Merit`) | placeholder | Web, Worker | SQL Server connection. Web uses the `meritWeb` login; Worker uses `meritWorker`. Both are EXECUTE-only. |
 | `Session:IdleTimeoutMinutes` | `20` | Web | Sign-out after inactivity. |
 | `Session:LifetimeHours` | `12` | Web | Longest a session lasts, active or not. Each sign-in, profile switch and view-as starts a new session of this length. |
-| `DataProtection:KeyPath` | app data folder | Web | Where ASP.NET Core data-protection keys are kept. They protect MFA secrets and cookies, so share them across web servers. |
+| `DataProtection:KeyPath` | app data folder | Web | Where ASP.NET Core data-protection keys are kept. They protect MFA secrets and cookies, so share them across web servers and back them up securely. |
+| `DataProtection:CertificatePath`, `DataProtection:CertificatePassword` | none | Web | PKCS#12 (`.pfx`) certificate used to encrypt newly generated data-protection keys at rest. **Required outside Development** (especially for shared `KeyPath` web farms). Keep existing key files readable while rotating keys so enrolled MFA secrets remain decryptable, and back up both the certificate and key ring. |
+| `DataProtection:AllowLocalMachineDpapi` | `false` | Web | Opt-in for single-server Windows deployments without a certificate (uses local-machine DPAPI instead of a shared certificate; cannot be shared across machines). |
 | `Merit:SignInAttemptsPerMinute` | `30` | Web | Password attempts allowed per client address in any minute. Over the limit the client sees a **Too many attempts** page (HTTP 429 with `Retry-After`). Other clients are not affected, and repeated wrong passwords still lock the account after 5 tries. |
 | `Merit:MfaAttemptsPerMinute` | `30` | Web | The same limit for the authenticator-code and enrollment steps, counted separately. |
 | `Email:Provider`, `Email:Smtp:*` | `Disabled` | Web | Outgoing mail for email one-time codes, an optional extra second factor next to the required authenticator app. Off unless set. `Security` is `StartTls` by default; `None` is accepted only for a mail server on this machine. Put the password in user secrets or the environment, never in appsettings. See [docs/email-codes.md](docs/email-codes.md). |
@@ -246,6 +250,7 @@ outlines gets the plain latitude and longitude grid.
 | `-CreateLogins`, `-WebLoginPassword`, `-WorkerLoginPassword` | Create the application logins if they don't exist. |
 | `-IncludeDemoData` | Load the synthetic Maryland demo. Never use it in production. |
 | `-PlatformAdminUserName`, `-PlatformAdminPassword` | Create the first platform administrator. Only the password hash reaches SQL Server. |
+| `-TrustServerCertificate` | Pass `-C` to `sqlcmd` to accept a self-signed SQL Server certificate. **Local development only**; omit in production so mandatory TLS validates the server certificate. |
 
 **Test settings:**
 

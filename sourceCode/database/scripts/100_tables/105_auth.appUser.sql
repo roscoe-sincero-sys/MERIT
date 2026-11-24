@@ -38,6 +38,7 @@ BEGIN
         mfaPreferredMethod         VARCHAR (10)      NOT NULL CONSTRAINT DF_auth_appUser_mfaPreferredMethod DEFAULT ('totp'),
         passwordChangedUtc         DATETIME2 (3)     NULL,
         passwordChangeRequired     BIT               NOT NULL CONSTRAINT DF_auth_appUser_passwordChangeRequired DEFAULT (0),
+        lastTotpStep               BIGINT            NULL,
 
         -- Standard audit columns. Soft delete only. Convention: DF_<schema>_<tableName>_<fieldName>.
         isDeleted       BIT             NOT NULL CONSTRAINT DF_auth_appUser_isDeleted       DEFAULT (0),
@@ -81,6 +82,8 @@ IF COL_LENGTH (N'auth.appUser', N'passwordChangedUtc') IS NULL
     ALTER TABLE auth.appUser ADD passwordChangedUtc         DATETIME2 (3)     NULL;
 IF COL_LENGTH (N'auth.appUser', N'passwordChangeRequired') IS NULL
     ALTER TABLE auth.appUser ADD passwordChangeRequired     BIT               NOT NULL CONSTRAINT DF_auth_appUser_passwordChangeRequired DEFAULT (0);
+IF COL_LENGTH (N'auth.appUser', N'lastTotpStep') IS NULL
+    ALTER TABLE auth.appUser ADD lastTotpStep               BIGINT            NULL;
 GO
 
 -- -------------------------------------------------------------------------------------------

@@ -136,6 +136,12 @@ if (-not $sqlcmd) {
     throw 'sqlcmd was not found on PATH. Install the SQL Server command line utilities (ODBC sqlcmd 15+ or go-sqlcmd).'
 }
 
+# Explicitly enforce mandatory TLS encryption across both ODBC sqlcmd (-N) and go-sqlcmd (-N true).
+# Server certificate validation is on by default; -TrustServerCertificate opts into -C (local dev only).
+$sqlcmdHelp = & $sqlcmd.Source '-?' 2>&1 | Out-String
+$isGoSqlcmd = $sqlcmdHelp -match '--authentication-method|--encrypt-connection|go-sqlcmd'
+$sqlcmdEncryptArgs = if ($isGoSqlcmd) { @('-N', 'true') } else { @('-N') }
+
 function Get-AuthArgs {
     if ($SqlCredential) {
         # The password goes through SQLCMDPASSWORD rather than -P so it never appears on a command line.
@@ -152,7 +158,7 @@ function Invoke-Sqlcmd2 {
         [string] $Query,
         [hashtable] $Variables = @{}
     )
-    $argList = @('-S', $ServerInstance, '-d', $Database) + (Get-AuthArgs) + @('-I', '-b', '-W', '-f', '65001')
+    $argList = @('-S', $ServerInstance, '-d', $Database) + (Get-AuthArgs) + $sqlcmdEncryptArgs + @('-I', '-b', '-W', '-f', '65001')
     if ($TrustServerCertificate) { $argList += '-C' }
     foreach ($k in $Variables.Keys) { $argList += @('-v', ("{0}={1}" -f $k, $Variables[$k])) }
     if ($File)  { $argList += @('-i', $File) }

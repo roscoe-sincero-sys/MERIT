@@ -109,7 +109,7 @@ BEGIN
         END;
 
         UPDATE auth.appUser
-           SET mfaEnabled = 0, mfaSecretProtected = NULL, securityStamp = NEWID (), failedSignInCount = 0, lockoutEndUtc = NULL
+           SET mfaEnabled = 0, mfaSecretProtected = NULL, lastTotpStep = NULL, securityStamp = NEWID (), failedSignInCount = 0, lockoutEndUtc = NULL
              , mfaEmailVerifiedUtc = NULL, mfaPreferredMethod = 'totp'
          WHERE appUserId = @appUserId AND isDeleted = 0;
 

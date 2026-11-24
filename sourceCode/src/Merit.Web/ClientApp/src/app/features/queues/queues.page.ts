@@ -289,10 +289,14 @@ export class QueuesPage implements OnInit {
     this.busy.set(true);
     this.store.error.set(null);
     this.api.bulkTasks({ taskIds: [task.workTaskId], action, assignToUserId: null, note: action === 'assignToMe' ? null : (note || null) }).subscribe({
-      next: () => {
+      next: r => {
         this.busy.set(false);
         this.closePreview();
-        this.store.message.set(action === 'assignToMe' ? 'Task assigned to you.' : action === 'complete' ? 'Task completed.' : 'Task dismissed.');
+        if (r.updated > 0) {
+          this.store.message.set(action === 'assignToMe' ? 'Task assigned to you.' : action === 'complete' ? 'Task completed.' : 'Task dismissed.');
+        } else {
+          this.store.error.set('This task is no longer open or was already updated by another user. The queue has been refreshed.');
+        }
         this.loadQueues();
         this.load();
       },

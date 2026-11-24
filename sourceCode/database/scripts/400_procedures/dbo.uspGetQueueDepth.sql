@@ -126,6 +126,12 @@ EXEC util.uspSetObjectDescription
     , @Description = N'Queue depth and the oldest waiting job per tenant and job type, for the worker health endpoint and the administration screen.';
 GO
 
+IF DATABASE_PRINCIPAL_ID (N'meritWebRole') IS NOT NULL
+BEGIN
+    REVOKE EXECUTE ON dbo.uspGetQueueDepth FROM meritWebRole;
+END;
+GO
+
 IF DATABASE_PRINCIPAL_ID (N'meritWorkerRole') IS NOT NULL
 BEGIN
     GRANT EXECUTE ON dbo.uspGetQueueDepth TO meritWorkerRole;

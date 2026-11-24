@@ -48,6 +48,7 @@ CREATE OR ALTER PROCEDURE auth.uspSaveMfaEnrollment
       @appUserId              UNIQUEIDENTIFIER
       , @mfaSecretProtected     NVARCHAR (500)
       , @recoveryCodeHashesJson NVARCHAR (MAX)
+      , @initialTotpStep        BIGINT = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -97,6 +98,7 @@ BEGIN
         UPDATE auth.appUser
            SET mfaSecretProtected = @mfaSecretProtected
              , mfaEnabled         = 1
+             , lastTotpStep       = @initialTotpStep
              , securityStamp      = NEWID ()
          WHERE appUserId = @appUserId AND isDeleted = 0;
 

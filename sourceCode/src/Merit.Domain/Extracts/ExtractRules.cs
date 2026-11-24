@@ -56,16 +56,6 @@ public static class ExtractWriter
 
                 if (delimited)
                 {
-                    value = value.Replace("\r\n", " ", StringComparison.Ordinal)
-                                 .Replace('\r', ' ')
-                                 .Replace('\n', ' ');
-                    string trimmed = value.TrimStart();
-                    if (trimmed.Length > 0 && trimmed[0] is '=' or '+' or '-' or '@' or '\t'
-                        && !decimal.TryParse(trimmed, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out _))
-                    {
-                        value = "'" + value;
-                    }
-
                     parts.Add(value.Contains(delimiter, StringComparison.Ordinal) || value.Contains('"', StringComparison.Ordinal)
                         ? "\"" + value.Replace("\"", "\"\"", StringComparison.Ordinal) + "\""
                         : value);

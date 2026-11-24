@@ -269,7 +269,7 @@ SET @Comments = N'Setting changed.';
     },
     {
         "schema": "config", "name": "uspSaveAnalyte", "kind": "write", "grants": WEB, "ticket": "T050",
-        "permission": "config.edit",
+        "permission": "platform.administer",
         "desc": "Turns an analyte on or off and sets its drop-down order. Inactive analytes stay on old records.",
         "params": """@analyteId UNIQUEIDENTIFIER
 , @isActive  BIT

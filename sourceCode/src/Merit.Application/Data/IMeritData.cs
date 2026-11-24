@@ -18,13 +18,19 @@ public interface IAccountData
 
     /// <summary>Resolves a session from the master profile, one of the user's profiles, or (view as) another user's access.</summary>
     Task<SessionScopeResult> CreateSessionScopeAsync(Guid sessionScopeId, Guid appUserId, DateTime expiresUtc, Guid? userProfileId = null,
-                                                     Guid? viewAsUserId = null, Guid? actingTenantId = null, CancellationToken ct = default);
+                                                     Guid? viewAsUserId = null, Guid? actingTenantId = null,
+                                                     Guid? replacesSessionScopeId = null, Guid? expectedSecurityStamp = null,
+                                                     CancellationToken ct = default);
 
     Task<SessionScopeCheckRow?> GetSessionScopeAsync(Guid sessionScopeId, CancellationToken ct = default);
 
     Task RevokeSessionScopeAsync(Guid sessionScopeId, CancellationToken ct = default);
 
-    Task SaveMfaEnrollmentAsync(Guid appUserId, string mfaSecretProtected, IReadOnlyList<string> recoveryCodeHashes, CancellationToken ct = default);
+    Task SaveMfaEnrollmentAsync(Guid appUserId, string mfaSecretProtected, IReadOnlyList<string> recoveryCodeHashes,
+                                long? initialTotpStep = null, CancellationToken ct = default);
+
+    /// <summary>Atomically records the latest accepted TOTP time step for an account so a code cannot be replayed across instances or paths.</summary>
+    Task<bool> ConsumeTotpStepAsync(Guid appUserId, long totpStep, CancellationToken ct = default);
 
     Task<IReadOnlyList<RecoveryCodeRow>> GetRecoveryCodesAsync(Guid appUserId, CancellationToken ct = default);
 

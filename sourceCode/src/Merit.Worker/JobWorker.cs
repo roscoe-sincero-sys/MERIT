@@ -132,12 +132,19 @@ public sealed partial class JobWorker(IServiceProvider services, JobSessionHolde
         }
         finally
         {
-            if (sessions.Current is { } s)
-            {
-                await sp.GetRequiredService<IAccountData>().RevokeSessionScopeAsync(s.Summary.SessionScopeId, CancellationToken.None);
-            }
-
+            var current = sessions.Current;
             sessions.Current = null;
+            if (current is not null)
+            {
+                try
+                {
+                    await sp.GetRequiredService<IAccountData>().RevokeSessionScopeAsync(current.Summary.SessionScopeId, CancellationToken.None);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    LogCleanupError(logger, ex.GetType().Name);
+                }
+            }
         }
 
         return true;
@@ -157,6 +164,9 @@ public sealed partial class JobWorker(IServiceProvider services, JobSessionHolde
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Worker loop error: {ExceptionType}; retrying")]
     private static partial void LogLoopError(ILogger logger, string exceptionType);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Job session scope cleanup failed: {ExceptionType}")]
+    private static partial void LogCleanupError(ILogger logger, string exceptionType);
 }
 
 /// <summary>
@@ -177,43 +187,53 @@ public sealed partial class ClusterScheduler(IServiceProvider services, JobSessi
         await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken).ConfigureAwait(false);
         while (!stoppingToken.IsCancellationRequested)
         {
-            using (var scope = services.CreateScope())
+            await RunCycleAsync(stoppingToken).ConfigureAwait(false);
+            await Task.Delay(TimeSpan.FromHours(Math.Max(1, o.IntervalHours)), stoppingToken).ConfigureAwait(false);
+        }
+    }
+
+    public async Task RunCycleAsync(CancellationToken stoppingToken)
+    {
+        var o = options.Value.ClusterDetection;
+        using var scope = services.CreateScope();
+        var sp = scope.ServiceProvider;
+        try
+        {
+            var user = await sp.GetRequiredService<IAccountData>().GetUserForSignInAsync(o.RunAsUserName, stoppingToken);
+            if (user is not null && user.IsActive)
             {
-                var sp = scope.ServiceProvider;
+                sessions.Current = await sp.GetRequiredService<IAccountData>()
+                    .CreateSessionScopeAsync(Guid.NewGuid(), user.AppUserId, DateTime.UtcNow.AddHours(1), ct: stoppingToken);
+                string result = await sp.GetRequiredService<JobDispatcher>().RunAsync(new ClaimedJobRow
+                {
+                    JobId = Guid.Empty,
+                    JobType = JobTypes.ClusterDetection,
+                    RequestedByUserId = user.AppUserId,
+                    RootTenantId = user.RootTenantId,
+                    PayloadJson = "{}",
+                }, stoppingToken);
+                LogRan(logger, result);
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            LogError(logger, ex.GetType().Name);
+        }
+        finally
+        {
+            var current = sessions.Current;
+            sessions.Current = null;
+            if (current is not null)
+            {
                 try
                 {
-                    var user = await sp.GetRequiredService<IAccountData>().GetUserForSignInAsync(o.RunAsUserName, stoppingToken);
-                    if (user is not null && user.IsActive)
-                    {
-                        sessions.Current = await sp.GetRequiredService<IAccountData>()
-                            .CreateSessionScopeAsync(Guid.NewGuid(), user.AppUserId, DateTime.UtcNow.AddHours(1), ct: stoppingToken);
-                        string result = await sp.GetRequiredService<JobDispatcher>().RunAsync(new ClaimedJobRow
-                        {
-                            JobId = Guid.Empty,
-                            JobType = JobTypes.ClusterDetection,
-                            RequestedByUserId = user.AppUserId,
-                            RootTenantId = user.RootTenantId,
-                            PayloadJson = "{}",
-                        }, stoppingToken);
-                        LogRan(logger, result);
-                    }
+                    await sp.GetRequiredService<IAccountData>().RevokeSessionScopeAsync(current.Summary.SessionScopeId, CancellationToken.None);
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
-                    LogError(logger, ex.GetType().Name);
-                }
-                finally
-                {
-                    if (sessions.Current is { } s)
-                    {
-                        await sp.GetRequiredService<IAccountData>().RevokeSessionScopeAsync(s.Summary.SessionScopeId, CancellationToken.None);
-                    }
-
-                    sessions.Current = null;
+                    LogCleanupError(logger, ex.GetType().Name);
                 }
             }
-
-            await Task.Delay(TimeSpan.FromHours(Math.Max(1, o.IntervalHours)), stoppingToken).ConfigureAwait(false);
         }
     }
 
@@ -222,6 +242,9 @@ public sealed partial class ClusterScheduler(IServiceProvider services, JobSessi
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Cluster detection failed: {ExceptionType}")]
     private static partial void LogError(ILogger logger, string exceptionType);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Cluster detection session cleanup failed: {ExceptionType}")]
+    private static partial void LogCleanupError(ILogger logger, string exceptionType);
 }
 
 /// <summary>

@@ -1,5 +1,5 @@
 import { confirmAction } from '../../shared/confirmation';
-import { ChangeDetectionStrategy, Component, computed, ElementRef, inject, Injectable, input, OnInit, output, signal, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, DestroyRef, ElementRef, inject, Injectable, input, OnInit, output, signal, viewChild } from '@angular/core';
 import { ApiClient, problemMessage } from '../../api/api-client';
 import { Agreement, MatchCandidateDto, MatchDecision, MatchQueueItemDto, MatchReviewDto } from '../../api/contracts';
 import { LatestRequest } from '../../shared/latest-request';
@@ -168,6 +168,11 @@ export class CandidateHistoryComponent {
   readonly candidate = input.required<MatchCandidateDto>();
 }
 
+function readXsrfToken(): string {
+  const m = /(?:^|;\s*)XSRF-TOKEN=([^;]+)/.exec(document.cookie);
+  return m ? decodeURIComponent(m[1]) : '';
+}
+
 const SINGLE_KEYS = 'merit.match-review.single-keys';
 function readSingleKeys(): boolean {
   try { return localStorage.getItem(SINGLE_KEYS) === 'true'; } catch { return false; }
@@ -188,7 +193,7 @@ const PLACEHOLDER_NAME = /^(baby( (boy|girl))?|boy|girl|infant|newborn|unknown|u
   imports: [MatchComparisonComponent, CandidateHistoryComponent, PagerComponent],
   providers: [MatchReviewStore],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  host: { '(keydown)': 'onKey($event)' },
+  host: { '(keydown)': 'onKey($event)', '(window:pagehide)': 'onPageHide()' },
   template: `
     <h1 tabindex="-1" #heading>Person matching review</h1>
     @if (!store.queueLoaded() || store.total() > 0 || store.review() !== null) {
@@ -204,8 +209,8 @@ const PLACEHOLDER_NAME = /^(baby( (boy|girl))?|boy|girl|infant|newborn|unknown|u
     @if (store.error(); as e) { <div class="usa-alert usa-alert--error usa-alert--slim" role="alert"><div class="usa-alert__body"><p class="usa-alert__text">{{ e }}</p></div></div> }
     @if (store.message(); as m) { <div class="usa-alert usa-alert--success usa-alert--slim"><div class="usa-alert__body"><p class="usa-alert__text">{{ m }}</p></div></div> }
     @if (pendingCommit(); as p) {
-      <div class="undo-toast" role="status" aria-live="polite">
-        <span><strong>{{ p.summary }}</strong> &mdash; saving in {{ p.secondsLeft }}s</span>
+      <div class="undo-toast" role="region" aria-label="Pending decision">
+        <span><strong>{{ p.summary }}</strong> <span aria-hidden="true">&mdash; saving in {{ p.secondsLeft }}s</span></span>
         <span class="undo-toast__actions">
           <button class="usa-button usa-button--small usa-button--outline" type="button" (click)="undoPending()">Undo</button>
           <button class="usa-button usa-button--small" type="button" (click)="flushPending()">Save now</button>
@@ -259,15 +264,15 @@ const PLACEHOLDER_NAME = /^(baby( (boy|girl))?|boy|girl|infant|newborn|unknown|u
           <input class="usa-input" id="note" #note maxlength="500" [disabled]="store.busy()" />
           <div class="actions" role="group" aria-label="Decision">
             @if (store.candidate(); as c) {
-              <button class="usa-button" type="button" [class.armed]="armed() === 's'" [attr.aria-keyshortcuts]="keys('S')" [disabled]="!store.canDecide()" (click)="decide('same', note.value)">
+              <button class="usa-button" type="button" [class.armed]="armed() === 's'" [attr.aria-keyshortcuts]="keys('S')" [disabled]="!canAct()" (click)="decide('same', note.value)">
                 Same person as {{ c.personName }} ({{ hint('S') }})</button>
-              <button class="usa-button usa-button--outline" type="button" [class.armed]="armed() === 'd'" [attr.aria-keyshortcuts]="keys('D')" [disabled]="!store.canDecide()" (click)="decide('different', note.value)">
+              <button class="usa-button usa-button--outline" type="button" [class.armed]="armed() === 'd'" [attr.aria-keyshortcuts]="keys('D')" [disabled]="!canAct()" (click)="decide('different', note.value)">
                 Different person ({{ hint('D') }})</button>
             }
               <!-- With no one to compare, creating the person is the expected decision (issue #168). -->
-              <button class="usa-button" type="button" [class.usa-button--outline]="r.candidates.length > 0" [class.armed]="armed() === 'c'" [attr.aria-keyshortcuts]="keys('C')" [disabled]="!store.canDecide()" (click)="decide('newPerson', note.value)">
+              <button class="usa-button" type="button" [class.usa-button--outline]="r.candidates.length > 0" [class.armed]="armed() === 'c'" [attr.aria-keyshortcuts]="keys('C')" [disabled]="!canAct()" (click)="decide('newPerson', note.value)">
                 Create as a new person ({{ hint('C') }})</button>
-            <button class="usa-button usa-button--outline" type="button" [class.armed]="armed() === 'n'" [attr.aria-keyshortcuts]="keys('N')" [disabled]="!store.canDecide()" (click)="decide('notSure', note.value)">
+            <button class="usa-button usa-button--outline" type="button" [class.armed]="armed() === 'n'" [attr.aria-keyshortcuts]="keys('N')" [disabled]="!canAct()" (click)="decide('notSure', note.value)">
               Not sure ({{ hint('N') }})</button>
             @if (store.candidate()) {
               <button class="usa-button usa-button--unstyled" type="button" [attr.aria-keyshortcuts]="keys('H')" [disabled]="store.busy()" [attr.aria-expanded]="store.showHistory()" (click)="store.showHistory.update(v => !v)">
@@ -316,6 +321,7 @@ export class MatchReviewPage implements OnInit {
   protected readonly store = inject(MatchReviewStore);
   protected readonly display = inject(Display);
   private readonly api = inject(ApiClient);
+  private readonly destroyRef = inject(DestroyRef);
   private readonly heading = viewChild<ElementRef<HTMLElement>>('heading');
   private readonly queueLoad = new LatestRequest();
   private readonly reviewLoad = new LatestRequest();
@@ -330,6 +336,10 @@ export class MatchReviewPage implements OnInit {
   private armTimer: ReturnType<typeof setTimeout> | undefined;
 
   ngOnInit(): void {
+    this.destroyRef.onDestroy(() => {
+      clearTimeout(this.armTimer);
+      this.flushPendingOnLeave();
+    });
     this.store.escalatedOnly.set(this.escalatedParam() === 'true');
     this.loadQueue(true, 0, this.rowParam());
   }
@@ -367,6 +377,14 @@ export class MatchReviewPage implements OnInit {
 
   protected toggleEscalated(): void {
     if (this.store.busy()) return;
+    if (this.pendingCommit()) {
+      this.flushPending(() => {
+        this.store.escalatedOnly.update(v => !v);
+        this.store.page.set(1);
+        this.loadQueue(true);
+      });
+      return;
+    }
     this.store.escalatedOnly.update(v => !v);
     this.store.page.set(1);
     this.loadQueue(true);
@@ -374,11 +392,15 @@ export class MatchReviewPage implements OnInit {
 
   protected open(id: string): void {
     if (this.store.busy() || this.store.queueLoading()) return;
+    if (this.pendingCommit()) {
+      this.flushPending(() => this.openRow(id));
+      return;
+    }
     this.openRow(id);
   }
 
   protected choose(i: number): void {
-    if (this.store.busy()) return;
+    if (this.store.busy() || this.pendingCommit() !== null) return;
     const count = this.store.review()?.candidates.length ?? 0;
     if (i >= 0 && i < count) {
       this.store.selected.set(i);
@@ -386,46 +408,88 @@ export class MatchReviewPage implements OnInit {
   }
 
   protected readonly pendingCommit = signal<{ rowId: string; decision: MatchDecision; personId: string | null; note: string | null; position: number; summary: string; secondsLeft: number } | null>(null);
+  protected readonly canAct = computed(() => this.store.canDecide() && this.pendingCommit() === null);
   private pendingTimer: ReturnType<typeof setInterval> | null = null;
 
-  protected undoPending(): void {
-    if (this.pendingTimer) { clearInterval(this.pendingTimer); this.pendingTimer = null; }
-    this.pendingCommit.set(null);
-    this.store.message.set('Decision cancelled. No changes were saved.');
+  private clearPendingTimer(): void {
+    if (this.pendingTimer) {
+      clearInterval(this.pendingTimer);
+      this.pendingTimer = null;
+    }
   }
 
-  protected flushPending(): void {
+  protected onPageHide(): void {
+    this.flushPendingOnLeave();
+  }
+
+  /** Commits any pending delayed decision with keepalive when leaving the route or closing the tab. */
+  private flushPendingOnLeave(): void {
     const p = this.pendingCommit();
+    this.clearPendingTimer();
     if (!p) return;
-    if (this.pendingTimer) { clearInterval(this.pendingTimer); this.pendingTimer = null; }
     this.pendingCommit.set(null);
-    this.commitDecision(p.rowId, p.decision, p.personId, p.note, p.position);
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    const token = readXsrfToken();
+    if (token) headers['X-XSRF-TOKEN'] = token;
+    try {
+      void fetch(`/api/v1/match-review/${p.rowId}/decision`, {
+        method: 'POST',
+        keepalive: true,
+        credentials: 'same-origin',
+        headers,
+        body: JSON.stringify({ decision: p.decision, personId: p.personId, note: p.note }),
+      });
+    } catch {
+      /* Ignore unload transport errors. */
+    }
+  }
+
+  protected undoPending(): void {
+    this.clearPendingTimer();
+    this.pendingCommit.set(null);
+    this.store.message.set('Decision cancelled. No changes were saved.');
+    this.store.announcement.set('Decision cancelled. No changes were saved.');
+  }
+
+  protected flushPending(afterCommit?: () => void): void {
+    const p = this.pendingCommit();
+    if (!p) { afterCommit?.(); return; }
+    this.clearPendingTimer();
+    this.pendingCommit.set(null);
+    this.commitDecision(p.rowId, p.decision, p.personId, p.note, p.position, afterCommit);
   }
 
   protected async decide(decision: MatchDecision, note: string): Promise<void> {
-    if (this.pendingCommit()) this.flushPending();
+    if (!this.canAct()) return;
     const r = this.store.review();
-    if (!r || !this.store.canDecide()) return;
+    if (!r) return;
     const rowId = r.stagingRowId;
     const candidate = this.store.candidate();
     if ((decision === 'same' || decision === 'different') && !candidate) return;
     if (decision === 'same' && candidate?.warnings.length && !await confirmAction(
       `Link this result to ${candidate.personName}? Review the safeguards:\n${candidate.warnings.join('\n')}\nThis releases the result for processing.`)) return;
     const position = Math.max(this.store.position(), 0);
-    const label = decision === 'same' ? `Same person as ${candidate?.personName}`
-      : decision === 'different' ? `Different person from ${candidate?.personName}`
-      : decision === 'newPerson' ? 'Create as a new person'
-      : 'Send to supervisor (Not sure)';
-    this.pendingCommit.set({ rowId, decision, personId: decision === 'same' || decision === 'different' ? candidate?.personId ?? null : null, note: note.trim() || null, position, summary: label, secondsLeft: 5 });
+    const personId = decision === 'same' || decision === 'different' ? candidate?.personId ?? null : null;
+    const cleanNote = note.trim() || null;
+
+    // Only the non-match ('different') action uses the 5-second undo toast; all other decisions save immediately.
+    if (decision !== 'different') {
+      this.commitDecision(rowId, decision, personId, cleanNote, position);
+      return;
+    }
+
+    const label = `Different person from ${candidate?.personName}`;
+    this.pendingCommit.set({ rowId, decision, personId, note: cleanNote, position, summary: label, secondsLeft: 5 });
+    this.store.announcement.set(`${label} will save in 5 seconds. Press Undo to cancel.`);
     this.pendingTimer = setInterval(() => {
       const cur = this.pendingCommit();
-      if (!cur) { if (this.pendingTimer) { clearInterval(this.pendingTimer); this.pendingTimer = null; } return; }
+      if (!cur) { this.clearPendingTimer(); return; }
       if (cur.secondsLeft <= 1) { this.flushPending(); }
       else { this.pendingCommit.set({ ...cur, secondsLeft: cur.secondsLeft - 1 }); }
     }, 1000);
   }
 
-  private commitDecision(rowId: string, decision: MatchDecision, personId: string | null, note: string | null, position: number): void {
+  private commitDecision(rowId: string, decision: MatchDecision, personId: string | null, note: string | null, position: number, afterCommit?: () => void): void {
     this.queueLoad.cancel();
     this.reviewLoad.cancel();
     this.store.queueLoading.set(false);
@@ -438,7 +502,9 @@ export class MatchReviewPage implements OnInit {
         this.heading()?.nativeElement.focus();
         this.store.review.set(null);
         this.store.message.set(res.message);
-        if (res.released) {
+        if (afterCommit) {
+          afterCommit();
+        } else if (res.released) {
           this.loadQueue(false, position);
         } else if (decision === 'notSure') {
           // The record stays held (now with a supervisor), so move past it.
@@ -465,8 +531,9 @@ export class MatchReviewPage implements OnInit {
     const note = (document.getElementById('note') as HTMLInputElement | null)?.value ?? '';
     // Alone, a decision key arms its decision; the same key again within a few seconds makes it.
     const decideKey = (k: string, decision: MatchDecision): boolean => {
+      if (!this.canAct()) return true;
       if (single && this.armed() !== k) {
-        if (this.store.canDecide()) this.arm(k, decision);
+        this.arm(k, decision);
         return true;
       }
       this.disarm();
@@ -480,7 +547,10 @@ export class MatchReviewPage implements OnInit {
         case 'd': return decideKey('d', 'different');
         case 'n': return decideKey('n', 'notSure');
         case 'c': return decideKey('c', 'newPerson');
-        case 'escape': if (single && this.armed()) { this.disarm(); this.store.announcement.set('Decision cancelled.'); return true; } return false;
+        case 'escape':
+          if (this.pendingCommit()) { this.undoPending(); return true; }
+          if (single && this.armed()) { this.disarm(); this.store.announcement.set('Decision cancelled.'); return true; }
+          return false;
         case 'h': if (!this.store.busy()) { this.store.showHistory.update(v => !v); } return true;
         case 'j': this.disarm(); this.step(1); return true;
         case 'k': this.disarm(); this.step(-1); return true;
@@ -505,20 +575,34 @@ export class MatchReviewPage implements OnInit {
 
   protected goPage(page: number): void {
     if (this.store.busy() || this.store.loading()) return;
+    if (this.pendingCommit()) {
+      this.flushPending(() => {
+        this.store.page.set(page);
+        this.loadQueue(true);
+      });
+      return;
+    }
     this.store.page.set(page);
     this.loadQueue(true);
   }
 
   private step(delta: number): void {
     if (this.store.busy() || this.store.queueLoading()) return;
-    const q = this.store.queue();
-    const next = q[this.store.position() + delta];
-    if (next) this.openRow(next.stagingRowId);
-    else if (delta > 0 && this.store.page() * this.store.pageSize() < this.store.total()) {
-      this.store.page.update(p => p + 1); this.loadQueue(true);
-    } else if (delta < 0 && this.store.page() > 1) {
-      this.store.page.update(p => p - 1); this.loadQueue(true, this.store.pageSize() - 1);
+    const go = () => {
+      const q = this.store.queue();
+      const next = q[this.store.position() + delta];
+      if (next) this.openRow(next.stagingRowId);
+      else if (delta > 0 && this.store.page() * this.store.pageSize() < this.store.total()) {
+        this.store.page.update(p => p + 1); this.loadQueue(true);
+      } else if (delta < 0 && this.store.page() > 1) {
+        this.store.page.update(p => p - 1); this.loadQueue(true, this.store.pageSize() - 1);
+      }
+    };
+    if (this.pendingCommit()) {
+      this.flushPending(go);
+      return;
     }
+    go();
   }
 
   private openRow(id: string): void {

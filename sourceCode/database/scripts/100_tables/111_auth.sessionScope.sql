@@ -28,6 +28,7 @@ BEGIN
         userProfileId              UNIQUEIDENTIFIER  NULL,
         viewAsUserId               UNIQUEIDENTIFIER  NULL,
         isPlatformAdmin            BIT               NOT NULL CONSTRAINT DF_auth_sessionScope_isPlatformAdmin DEFAULT (0),
+        isDeidentified             BIT               NOT NULL CONSTRAINT DF_auth_sessionScope_isDeidentified DEFAULT (0),
         expiresUtc                 DATETIME2 (3)     NOT NULL,
         revokedUtc                 DATETIME2 (3)     NULL,
 
@@ -59,6 +60,8 @@ IF COL_LENGTH (N'auth.sessionScope', N'viewAsUserId') IS NULL
     ALTER TABLE auth.sessionScope ADD viewAsUserId               UNIQUEIDENTIFIER  NULL;
 IF COL_LENGTH (N'auth.sessionScope', N'isPlatformAdmin') IS NULL
     ALTER TABLE auth.sessionScope ADD isPlatformAdmin            BIT               NOT NULL CONSTRAINT DF_auth_sessionScope_isPlatformAdmin DEFAULT (0);
+IF COL_LENGTH (N'auth.sessionScope', N'isDeidentified') IS NULL
+    ALTER TABLE auth.sessionScope ADD isDeidentified             BIT               NOT NULL CONSTRAINT DF_auth_sessionScope_isDeidentified DEFAULT (0);
 IF COL_LENGTH (N'auth.sessionScope', N'revokedUtc') IS NULL
     ALTER TABLE auth.sessionScope ADD revokedUtc                 DATETIME2 (3)     NULL;
 GO

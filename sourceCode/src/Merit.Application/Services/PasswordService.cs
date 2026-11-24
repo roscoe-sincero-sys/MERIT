@@ -249,12 +249,12 @@ public sealed partial class PasswordService(IAccountData data, AccountService ac
             throw new ValidationException("CurrentPassword", "That is not your current password.");
         }
 
+        EnsureNotCurrent(user, newPassword);
+
         if (!await accounts.CheckAuthenticatorCodeAsync(userName, authenticatorCode, clientAddress, ct).ConfigureAwait(false))
         {
             throw new ValidationException("PasswordAuthenticatorCode", "That code did not match. Enter the current six-digit code from your authenticator app.");
         }
-
-        EnsureNotCurrent(user, newPassword);
 
         await data.ChangeMyPasswordAsync(accounts.HashPassword(newPassword!), clientAddress, ct).ConfigureAwait(false);
         LogChanged(logger, user.AppUserId, "self");

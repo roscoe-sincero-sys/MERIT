@@ -84,7 +84,7 @@ BEGIN
         -- ===== The procedure's own work starts here. Everything above and below is boilerplate. ==
         -- =========================================================================================
 
-        DECLARE @escaped NVARCHAR (200) = REPLACE (REPLACE (REPLACE (@text, N'[', N'[[]'), N'%', N'[%]'), N'_', N'[_]');
+        DECLARE @escaped NVARCHAR (600) = REPLACE (REPLACE (REPLACE (@text, N'[', N'[[]'), N'%', N'[%]'), N'_', N'[_]');
         SELECT TOP (@maxRows) pv.providerId, pv.npi, pv.lastName, pv.firstName, pv.credential, pv.registryStatus,
                l.city AS practiceCity, l.state AS practiceState
           FROM dbo.provider AS pv

@@ -174,6 +174,27 @@ BEGIN
          WHERE NOT EXISTS (SELECT 1 FROM auth.rolePermission AS x WHERE x.roleId = ro.roleId
                                                                    AND x.permissionId = pm.permissionId AND x.isDeleted = 0);
 
+        -- Issue #300: Reconcile shipped de-identified epidemiologist role permissions on upgrade and revoke open sessions.
+        DECLARE @reconciledDeidRole TABLE (roleId UNIQUEIDENTIFIER);
+        UPDATE rp
+           SET isDeleted = 1
+        OUTPUT INSERTED.roleId INTO @reconciledDeidRole (roleId)
+          FROM auth.rolePermission AS rp
+          JOIN auth.role           AS ro ON ro.roleId = rp.roleId AND ro.rootTenantId = @root AND ro.roleCode = 'epidemiologist' AND ro.isDeidentified = 1 AND ro.isDeleted = 0
+          JOIN auth.permission     AS pm ON pm.permissionId = rp.permissionId
+         WHERE rp.isDeleted = 0
+           AND pm.permissionCode NOT IN (SELECT s.[value] FROM @roles AS r CROSS APPLY STRING_SPLIT (r.permissions, ',') AS s WHERE r.roleCode = 'epidemiologist');
+
+        IF EXISTS (SELECT 1 FROM @reconciledDeidRole)
+        BEGIN
+            UPDATE ss
+               SET revokedUtc = SYSUTCDATETIME ()
+              FROM auth.sessionScope AS ss
+             WHERE ss.revokedUtc IS NULL AND ss.isDeleted = 0
+               AND (EXISTS (SELECT 1 FROM auth.userAssignment AS ua WHERE ua.appUserId = ss.appUserId AND ua.roleId IN (SELECT roleId FROM @reconciledDeidRole) AND ua.isDeleted = 0)
+                    OR (ss.viewAsUserId IS NOT NULL AND EXISTS (SELECT 1 FROM auth.userAssignment AS ua WHERE ua.appUserId = ss.viewAsUserId AND ua.roleId IN (SELECT roleId FROM @reconciledDeidRole) AND ua.isDeleted = 0)));
+        END;
+
         -- ------------------------------------------------------------------------------------------ settings
         DECLARE @settings TABLE (settingKey VARCHAR (80), settingValue NVARCHAR (2000), settingDescription NVARCHAR (500));
         INSERT @settings VALUES

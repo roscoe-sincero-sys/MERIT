@@ -105,10 +105,16 @@ BEGIN
         -- =========================================================================================
 
         DECLARE @me UNIQUEIDENTIFIER = auth.udfSessionUserId ();
+        DECLARE @deid BIT = auth.udfIsDeidentified ();
         -- The search text matches literally: LIKE wildcards in it are escaped.
-        DECLARE @like NVARCHAR (200) = REPLACE (REPLACE (REPLACE (NULLIF (LTRIM (RTRIM (@search)), N''), N'[', N'[[]'), N'%', N'[%]'), N'_', N'[_]');
+        DECLARE @like NVARCHAR (600) = REPLACE (REPLACE (REPLACE (NULLIF (LTRIM (RTRIM (@search)), N''), N'[', N'[[]'), N'%', N'[%]'), N'_', N'[_]');
 
-        SELECT c.exposureCaseId, c.caseNumber, c.personId, p.lastName, p.firstName, p.dob, a.code AS analyteCode,
+        SELECT c.exposureCaseId, c.caseNumber,
+               CASE WHEN @deid = 1 THEN CAST (0x0 AS UNIQUEIDENTIFIER) ELSE c.personId END AS personId,
+               CASE WHEN @deid = 1 THEN N'De-identified' ELSE p.lastName END AS lastName,
+               CASE WHEN @deid = 1 THEN NULL ELSE p.firstName END AS firstName,
+               CASE WHEN @deid = 1 THEN NULL ELSE p.dob END AS dob,
+               a.code AS analyteCode,
                c.population, c.classification, c.caseStatus, c.openedDate, u.displayName AS assignedToName,
                t.tenantName AS owningTenantName, COUNT (*) OVER () AS totalCount
           FROM dbo.exposureCase AS c
@@ -125,7 +131,7 @@ BEGIN
            AND (@classification IS NULL OR c.classification = @classification)
            AND (@population IS NULL OR c.population = @population)
            AND (@owningTenantId IS NULL OR c.owningTenantId = @owningTenantId)
-           AND (@like IS NULL OR c.caseNumber LIKE N'%' + @like + N'%' OR p.lastName LIKE @like + N'%')
+           AND (@like IS NULL OR c.caseNumber LIKE N'%' + @like + N'%' OR (@deid = 0 AND p.lastName LIKE @like + N'%'))
          ORDER BY CASE WHEN @sort = 'opened' AND @descending = 0 THEN c.openedDate END ASC,
                   CASE WHEN @sort = 'opened' AND @descending = 1 THEN c.openedDate END DESC,
                   CASE WHEN @sort = 'case' AND @descending = 0 THEN c.caseNumber END ASC,
@@ -135,10 +141,10 @@ BEGIN
                        THEN CASE c.classification WHEN 'confirmed' THEN 1 WHEN 'suspect' THEN 2 ELSE 3 END END ASC,
                   CASE WHEN @sort = 'classification' AND @descending = 1
                        THEN CASE c.classification WHEN 'confirmed' THEN 1 WHEN 'suspect' THEN 2 ELSE 3 END END DESC,
-                  CASE WHEN @sort = 'person' AND @descending = 0 THEN p.lastName END ASC,
-                  CASE WHEN @sort = 'person' AND @descending = 0 THEN p.firstName END ASC,
-                  CASE WHEN @sort = 'person' AND @descending = 1 THEN p.lastName END DESC,
-                  CASE WHEN @sort = 'person' AND @descending = 1 THEN p.firstName END DESC,
+                  CASE WHEN @deid = 0 AND @sort = 'person' AND @descending = 0 THEN p.lastName END ASC,
+                  CASE WHEN @deid = 0 AND @sort = 'person' AND @descending = 0 THEN p.firstName END ASC,
+                  CASE WHEN @deid = 0 AND @sort = 'person' AND @descending = 1 THEN p.lastName END DESC,
+                  CASE WHEN @deid = 0 AND @sort = 'person' AND @descending = 1 THEN p.firstName END DESC,
                   c.openedDate DESC, c.exposureCaseId
         OFFSET (@pageNumber - 1) * @pageSize ROWS
          FETCH NEXT @pageSize ROWS ONLY

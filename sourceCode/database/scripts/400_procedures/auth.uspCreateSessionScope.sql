@@ -47,12 +47,14 @@ Description:	Initial version.
 
 ***********************************************************************************************************************/
 CREATE OR ALTER PROCEDURE auth.uspCreateSessionScope
-      @sessionScopeId UNIQUEIDENTIFIER
-      , @appUserId      UNIQUEIDENTIFIER
-      , @expiresUtc     DATETIME2 (3)
-      , @userProfileId  UNIQUEIDENTIFIER = NULL
-      , @viewAsUserId   UNIQUEIDENTIFIER = NULL
-      , @actingTenantId UNIQUEIDENTIFIER = NULL
+      @sessionScopeId          UNIQUEIDENTIFIER
+      , @appUserId             UNIQUEIDENTIFIER
+      , @expiresUtc            DATETIME2 (3)
+      , @userProfileId         UNIQUEIDENTIFIER = NULL
+      , @viewAsUserId          UNIQUEIDENTIFIER = NULL
+      , @actingTenantId        UNIQUEIDENTIFIER = NULL
+      , @replacesSessionScopeId UNIQUEIDENTIFIER = NULL
+      , @expectedSecurityStamp UNIQUEIDENTIFIER = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -95,6 +97,50 @@ BEGIN
         -- =========================================================================================
 
         DECLARE @platform UNIQUEIDENTIFIER = CAST (HASHBYTES ('MD5', N'tenant:PLATFORM') AS UNIQUEIDENTIFIER);
+        DECLARE @sessionReference UNIQUEIDENTIFIER = NEWID ();
+
+        -- Issue #298: Atomic renewal locks and validates the original scope, account, and security stamp,
+        -- carries forward the original absolute expiry and logical sessionReference, and revokes the old scope
+        -- inside the same transaction.
+        IF @replacesSessionScopeId IS NOT NULL
+        BEGIN
+            DECLARE @prevExpiresUtc DATETIME2 (3), @prevReference UNIQUEIDENTIFIER;
+            SELECT @prevExpiresUtc = s.expiresUtc, @prevReference = s.sessionReference
+              FROM auth.sessionScope AS s WITH (UPDLOCK, HOLDLOCK)
+              JOIN auth.appUser      AS u WITH (UPDLOCK, HOLDLOCK) ON u.appUserId = s.appUserId
+             WHERE s.sessionScopeId = @replacesSessionScopeId
+               AND s.appUserId = @appUserId
+               AND s.isDeleted = 0
+               AND s.revokedUtc IS NULL
+               AND s.expiresUtc > SYSUTCDATETIME ()
+               AND u.isActive = 1
+               AND u.isDeleted = 0
+               AND @expectedSecurityStamp IS NOT NULL
+               AND u.securityStamp = @expectedSecurityStamp;
+
+            IF @prevExpiresUtc IS NULL
+            BEGIN
+                ;THROW 51403, N'Your session has ended or expired. Please sign in again.', 1;
+            END;
+
+            IF @prevExpiresUtc < @expiresUtc
+            BEGIN
+                SET @expiresUtc = @prevExpiresUtc;
+            END;
+
+            SET @sessionReference = @prevReference;
+
+            UPDATE auth.sessionScope
+               SET revokedUtc = SYSUTCDATETIME ()
+             WHERE sessionScopeId = @replacesSessionScopeId
+               AND revokedUtc IS NULL;
+
+            IF @@ROWCOUNT <> 1
+            BEGIN
+                ;THROW 51403, N'Your session has already been replaced or revoked. Please sign in again.', 1;
+            END;
+        END;
+
         DECLARE @isPlatformUser BIT = (SELECT CASE WHEN h.tenantType = 'platform' THEN 1 ELSE 0 END
                                           FROM auth.appUser AS u
                                           LEFT JOIN auth.tenant AS h ON h.tenantId = u.homeTenantId
@@ -192,6 +238,44 @@ BEGIN
                                              AND EXISTS (SELECT 1 FROM @x WHERE permissionCode = 'platform.administer')
                                             THEN 1 ELSE 0 END;
 
+        -- Issue #300: Track whether this scope is strictly de-identified (only isDeidentified = 1 roles).
+        DECLARE @isDeidentified BIT = 0;
+        IF @isPlatformAdmin = 0 AND EXISTS (SELECT 1 FROM @tenants)
+        BEGIN
+            IF @viewAsUserId IS NOT NULL
+            BEGIN
+                IF EXISTS (SELECT 1 FROM auth.userAssignment AS ua JOIN auth.role AS r ON r.roleId = ua.roleId AND r.isDeleted = 0
+                            WHERE ua.appUserId = @viewAsUserId AND ua.isDeleted = 0 AND ua.revokedUtc IS NULL
+                              AND ua.startDate <= auth.udfSessionToday () AND (ua.endDate IS NULL OR ua.endDate >= auth.udfSessionToday ())
+                              AND r.isDeidentified = 1)
+                   AND NOT EXISTS (SELECT 1 FROM auth.userAssignment AS ua JOIN auth.role AS r ON r.roleId = ua.roleId AND r.isDeleted = 0
+                                    WHERE ua.appUserId = @viewAsUserId AND ua.isDeleted = 0 AND ua.revokedUtc IS NULL
+                                      AND ua.startDate <= auth.udfSessionToday () AND (ua.endDate IS NULL OR ua.endDate >= auth.udfSessionToday ())
+                                      AND r.isDeidentified = 0)
+                    SET @isDeidentified = 1;
+            END
+            ELSE IF @userProfileId IS NOT NULL
+            BEGIN
+                IF EXISTS (SELECT 1 FROM auth.userProfileGrant AS g JOIN auth.role AS r ON r.roleId = g.roleId AND r.isDeleted = 0
+                            WHERE g.userProfileId = @userProfileId AND g.isDeleted = 0 AND r.isDeidentified = 1)
+                   AND NOT EXISTS (SELECT 1 FROM auth.userProfileGrant AS g JOIN auth.role AS r ON r.roleId = g.roleId AND r.isDeleted = 0
+                                    WHERE g.userProfileId = @userProfileId AND g.isDeleted = 0 AND r.isDeidentified = 0)
+                    SET @isDeidentified = 1;
+            END
+            ELSE
+            BEGIN
+                IF EXISTS (SELECT 1 FROM auth.userAssignment AS ua JOIN auth.role AS r ON r.roleId = ua.roleId AND r.isDeleted = 0
+                            WHERE ua.appUserId = @appUserId AND ua.isDeleted = 0 AND ua.revokedUtc IS NULL
+                              AND ua.startDate <= auth.udfSessionToday () AND (ua.endDate IS NULL OR ua.endDate >= auth.udfSessionToday ())
+                              AND r.isDeidentified = 1)
+                   AND NOT EXISTS (SELECT 1 FROM auth.userAssignment AS ua JOIN auth.role AS r ON r.roleId = ua.roleId AND r.isDeleted = 0
+                                    WHERE ua.appUserId = @appUserId AND ua.isDeleted = 0 AND ua.revokedUtc IS NULL
+                                      AND ua.startDate <= auth.udfSessionToday () AND (ua.endDate IS NULL OR ua.endDate >= auth.udfSessionToday ())
+                                      AND r.isDeidentified = 0)
+                    SET @isDeidentified = 1;
+            END;
+        END;
+
         -- Acting tenant: the one asked for when the scope covers it, else the highest tenant in the scope.
         DECLARE @acting UNIQUEIDENTIFIER =
             CASE WHEN EXISTS (SELECT 1 FROM @tenants WHERE tenantId = @actingTenantId)
@@ -214,9 +298,9 @@ BEGIN
 
         DECLARE @root UNIQUEIDENTIFIER = COALESCE ((SELECT rootTenantId FROM auth.tenant WHERE tenantId = @acting), @platform);
 
-        INSERT auth.sessionScope (sessionScopeId, appUserId, rootTenantId, actingTenantId, userProfileId, viewAsUserId,
-                                  isPlatformAdmin, expiresUtc)
-        VALUES (@sessionScopeId, @appUserId, @root, @acting, @userProfileId, @viewAsUserId, @isPlatformAdmin, @expiresUtc);
+        INSERT auth.sessionScope (sessionScopeId, appUserId, sessionReference, rootTenantId, actingTenantId, userProfileId, viewAsUserId,
+                                  isPlatformAdmin, isDeidentified, expiresUtc)
+        VALUES (@sessionScopeId, @appUserId, @sessionReference, @root, @acting, @userProfileId, @viewAsUserId, @isPlatformAdmin, @isDeidentified, @expiresUtc);
 
         INSERT auth.sessionScopeTenant (sessionScopeTenantId, sessionScopeId, tenantId, accessLevel, canReadRelatedContacts)
         SELECT CAST (CAST (NEWID () AS BINARY (10)) + CAST (DATEDIFF_BIG (MILLISECOND, '19700101', SYSUTCDATETIME ()) AS BINARY (6)) AS UNIQUEIDENTIFIER), @sessionScopeId, tenantId, CASE accessRank WHEN 3 THEN 'full' WHEN 2 THEN 'write' ELSE 'read' END,

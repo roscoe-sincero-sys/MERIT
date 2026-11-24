@@ -30,10 +30,14 @@ public sealed class CareService(ICareData data, IWorkData work, AuditService aud
     {
         session.Require(Permissions.PersonView); session.Require(Permissions.TaskView); session.Require(Permissions.DataExport);
         var all = new List<TestingOutreachRow>();
-        for (int page = 1; all.Count < MaxExportRows; page++)
+        for (int page = 1; ; page++)
         {
             var rows = await data.TestingOutreachAsync(query with { Page = page }, ct).ConfigureAwait(false);
-            all.AddRange(rows.Take(MaxExportRows - all.Count));
+            all.AddRange(rows);
+            if (all.Count > MaxExportRows)
+            {
+                throw new BusinessRuleException($"More than {MaxExportRows:N0} rows match these filters. Narrow your filters before exporting.");
+            }
             if (rows.Count < 50) break;
         }
         await audit.ExportedAsync("testingOutreach", null, all.Count, ct).ConfigureAwait(false);
@@ -136,10 +140,14 @@ public sealed class CareService(ICareData data, IWorkData work, AuditService aud
     {
         session.Require(Permissions.PersonView); session.Require(Permissions.DataExport);
         var all = new List<NotificationRow>();
-        for (int page = 1; all.Count < MaxExportRows; page++)
+        for (int page = 1; ; page++)
         {
             var rows = await data.NotificationsAsync(null, null, page, ct).ConfigureAwait(false);
-            all.AddRange(rows.Take(MaxExportRows - all.Count));
+            all.AddRange(rows);
+            if (all.Count > MaxExportRows)
+            {
+                throw new BusinessRuleException($"More than {MaxExportRows:N0} notification rows match this export. Narrow your scope before exporting.");
+            }
             if (rows.Count < 50) break;
         }
         await audit.ExportedAsync("notificationObligation", null, all.Count, ct).ConfigureAwait(false);

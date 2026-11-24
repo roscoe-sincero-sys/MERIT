@@ -80,7 +80,7 @@ INSERT @roles VALUES
   ('investigator', N'Investigator', 0, 0, 'person.view,person.edit,result.view,case.view,investigation.edit,task.view,task.edit,document.view,document.edit'),
   ('occupationalInvestigator', N'Occupational investigator', 0, 0, 'person.view,person.edit,result.view,result.edit,case.view,case.open,case.edit,investigation.edit,task.view,task.edit,data.export,document.view,document.edit'),
   ('supervisor', N'Supervisor', 0, 0, 'person.view,person.edit,person.view_identifiers,person.merge,result.view,result.edit,result.release_hold,case.view,case.open,case.edit,investigation.edit,task.view,task.edit,workflow.waive,intake.upload,registry.edit,data.export,extract.run,extract.submit,audit.view,usage.view,document.view,document.edit'),
-  ('epidemiologist', N'Epidemiologist (de-identified)', 0, 1, 'person.view,result.view,case.view,task.view,data.export,extract.run'),
+  ('epidemiologist', N'Epidemiologist (de-identified)', 0, 1, 'result.view,case.view,data.export,extract.run'),
   ('administrator', N'Administrator (users and configuration)', 1, 0, 'tenant.administer,tenant.create,config.edit,registry.edit,intake.configure,matching.configure,audit.view,usage.view,security.review,person.view,result.view,case.view,task.view'),
   ('userAdministrator', N'User administrator (accounts and access only)', 1, 0, 'tenant.administer,audit.view'),
   -- Issue 271: read-only security review for the tenants granted. No account changes and no patient records.
