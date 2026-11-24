@@ -63,11 +63,11 @@ public sealed partial class AccountMailService(AccountMailQueue queue, IServiceS
             }
             catch (Exception ex)
             {
-                LogFailed(logger, ex, job.GetType().Name, job.CorrelationId);
+                LogFailed(logger, ex.GetType().Name, job.GetType().Name, job.CorrelationId);
             }
         }
     }
 
-    [LoggerMessage(Level = LogLevel.Error, Message = "Account mail job {Job} failed, correlation {CorrelationId}")]
-    private static partial void LogFailed(ILogger logger, Exception exception, string job, string? correlationId);
+    [LoggerMessage(Level = LogLevel.Error, Message = "Account mail job {Job} failed ({ExceptionType}), correlation {CorrelationId}")]
+    private static partial void LogFailed(ILogger logger, string exceptionType, string job, string? correlationId);
 }

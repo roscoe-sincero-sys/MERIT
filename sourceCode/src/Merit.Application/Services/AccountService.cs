@@ -98,9 +98,25 @@ public sealed class AccountService(IAccountData data, IPasswordHasher hasher, IS
     /// the person's first sign-in, so its outcome is recorded like any code step (issue #44): a good code sets the last
     /// sign-in and writes the sign-in audit event, a wrong one counts toward the lockout.
     /// </summary>
-    public async Task<IReadOnlyList<string>> CompleteEnrollmentAsync(Guid appUserId, string secretBase32, string code, string? clientAddress = null,
-                                                                     CancellationToken ct = default)
+    public async Task<bool> IsPendingStampValidAsync(string userName, Guid securityStamp, CancellationToken ct = default)
     {
+        var user = await data.GetUserForSignInAsync(userName, ct).ConfigureAwait(false);
+        return user is not null && user.IsActive && user.SecurityStamp == securityStamp
+               && (user.LockoutEndUtc is null || user.LockoutEndUtc <= DateTime.UtcNow);
+    }
+
+    public async Task<IReadOnlyList<string>> CompleteEnrollmentAsync(Guid appUserId, string secretBase32, string code, string? clientAddress = null,
+                                                                     CancellationToken ct = default, string? userName = null)
+    {
+        if (!string.IsNullOrEmpty(userName))
+        {
+            var user = await data.GetUserForSignInAsync(userName, ct).ConfigureAwait(false);
+            if (user is null || !user.IsActive || user.MfaEnabled || (user.LockoutEndUtc is DateTime until && until > DateTime.UtcNow))
+            {
+                throw new ValidationException("Code", "Your sign-in session is no longer valid. Please sign in again.");
+            }
+        }
+
         byte[] secret = Totp.FromBase32(secretBase32);
         if (!Totp.Verify(secret, code, DateTimeOffset.UtcNow))
         {
@@ -137,7 +153,7 @@ public sealed class AccountService(IAccountData data, IPasswordHasher hasher, IS
         }
 
         byte[] secret = Totp.FromBase32(protector.Unprotect(user.MfaSecretProtected));
-        bool ok = Totp.Verify(secret, code, DateTimeOffset.UtcNow);
+        bool ok = VerifyTotpNoReplay(user.AppUserId, secret, code);
         string method = SignInMethods.Totp;
         if (!ok && code.Trim().Length > 6)
         {
@@ -281,6 +297,36 @@ public sealed class AccountService(IAccountData data, IPasswordHasher hasher, IS
 
     public string HashPassword(string password) => hasher.Hash(password);
 
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, long> LastTotpSteps = new();
+
+    private static bool VerifyTotpNoReplay(Guid appUserId, byte[] secret, string? code)
+    {
+        if (!Totp.TryVerify(secret, code, DateTimeOffset.UtcNow, out long matchedStep))
+        {
+            return false;
+        }
+
+        while (true)
+        {
+            if (LastTotpSteps.TryGetValue(appUserId, out long prev))
+            {
+                if (matchedStep <= prev)
+                {
+                    return false;
+                }
+
+                if (LastTotpSteps.TryUpdate(appUserId, matchedStep, prev))
+                {
+                    return true;
+                }
+            }
+            else if (LastTotpSteps.TryAdd(appUserId, matchedStep))
+            {
+                return true;
+            }
+        }
+    }
+
     private async Task<bool> TryRecoveryCodeAsync(Guid appUserId, string code, CancellationToken ct)
     {
         string normalized = code.Replace("-", string.Empty, StringComparison.Ordinal).ToUpperInvariant();
@@ -288,8 +334,12 @@ public sealed class AccountService(IAccountData data, IPasswordHasher hasher, IS
         {
             if (hasher.Verify(row.CodeHash, normalized) != PasswordCheck.Failed)
             {
-                await data.UseRecoveryCodeAsync(row.MfaRecoveryCodeId, ct).ConfigureAwait(false);
-                return true;
+                if (await data.UseRecoveryCodeAsync(row.MfaRecoveryCodeId, ct).ConfigureAwait(false))
+                {
+                    return true;
+                }
+
+                return false;
             }
         }
 

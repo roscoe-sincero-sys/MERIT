@@ -55,7 +55,22 @@ services.AddScoped<Merit.Web.Mapping.PersonPageBuilder>();
 string keyPath = builder.Configuration["DataProtection:KeyPath"] is { Length: > 0 } configured
     ? configured
     : Path.Combine(builder.Environment.ContentRootPath, "App_Data", "keys");
-services.AddDataProtection().SetApplicationName("MERIT").PersistKeysToFileSystem(new DirectoryInfo(keyPath));
+var dp = services.AddDataProtection().SetApplicationName("MERIT").PersistKeysToFileSystem(new DirectoryInfo(keyPath));
+string? certPath = builder.Configuration["DataProtection:CertificatePath"];
+if (!string.IsNullOrWhiteSpace(certPath))
+{
+    var cert = System.Security.Cryptography.X509Certificates.X509CertificateLoader.LoadPkcs12FromFile(
+        certPath, builder.Configuration["DataProtection:CertificatePassword"]);
+    dp.ProtectKeysWithCertificate(cert);
+}
+else if (OperatingSystem.IsWindows())
+{
+    dp.ProtectKeysWithDpapi();
+}
+else if (!builder.Environment.IsDevelopment() && !builder.Configuration.GetValue("DataProtection:AllowUnencryptedKeys", false))
+{
+    throw new InvalidOperationException("DataProtection:CertificatePath must be configured outside Development to encrypt the key ring at rest.");
+}
 
 // ---------------------------------------------------------------------------------------------- authentication
 int idleMinutes = builder.Configuration.GetValue("Session:IdleTimeoutMinutes", 20);
@@ -169,6 +184,9 @@ services.AddAuthorization(o =>
     // User access and sign-in reports: administrators, or read-only security reviewers (#271).
     o.AddPolicy(Permissions.SecurityReports, p => p.AddAuthenticationSchemes(AuthSchemes.Session).RequireAuthenticatedUser()
         .RequireClaim(MeritClaims.Permission, Permissions.TenantAdminister, Permissions.SecurityReview));
+    // Receipt-quality missing-information completion: person.edit or intake.upload (#300).
+    o.AddPolicy(Permissions.ReceiptWrite, p => p.AddAuthenticationSchemes(AuthSchemes.Session).RequireAuthenticatedUser()
+        .RequireClaim(MeritClaims.Permission, Permissions.PersonEdit, Permissions.IntakeUpload));
 });
 
 // ---------------------------------------------------------------------------------------------- MVC, API, antiforgery
@@ -186,6 +204,11 @@ services.AddControllersWithViews(o =>
     o.Filters.Add<ScreenVisitFilter>();
 });
 services.AddProblemDetails();
+services.AddHsts(o =>
+{
+    o.MaxAge = TimeSpan.FromDays(365);
+    o.IncludeSubDomains = true;
+});
 services.AddOpenApi("v1", o => o.ShouldInclude = d => d.RelativePath?.StartsWith("api/", StringComparison.OrdinalIgnoreCase) == true);
 services.AddHealthChecks();
 services.AddRateLimiter(SignInRateLimits.Configure);
@@ -229,6 +252,17 @@ app.UseHttpsRedirection();
 // The Angular build under wwwroot/app is also served straight from disk, so a client rebuild (npm run build) is picked up
 // without rebuilding the server's static asset manifest. It runs before routing because the /app/{**path} host route
 // would otherwise claim the bundle URLs. The bundles hold no data; every API call they make is authorized.
+// Block direct static serving of /app/index.html so the Angular host always goes through AppHostController with CSP & auth (#305).
+app.Use(async (http, next) =>
+{
+    if (http.Request.Path.Equals("/app/index.html", StringComparison.OrdinalIgnoreCase))
+    {
+        http.Response.StatusCode = StatusCodes.Status404NotFound;
+        return;
+    }
+
+    await next(http);
+});
 app.UseStaticFiles(new StaticFileOptions
 {
     FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(
@@ -264,7 +298,10 @@ app.UseAuthorization();
 
 // Stylesheets, scripts, fonts and icons hold no data, and the sign-in page needs them before anyone is signed in.
 app.MapStaticAssets().AllowAnonymous();
-app.MapOpenApi("/openapi/{documentName}.json").RequireAuthorization(Permissions.SignedIn);
+if (app.Environment.IsDevelopment())
+{
+    app.MapOpenApi("/openapi/{documentName}.json").RequireAuthorization(Permissions.SignedIn);
+}
 app.MapHealthChecks("/health").AllowAnonymous();
 app.MapControllers();
 app.MapControllerRoute("default", "{controller=Home}/{action=Index}/{id?}").WithStaticAssets();

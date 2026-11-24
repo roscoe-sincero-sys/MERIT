@@ -99,15 +99,15 @@ const MIN_SPAN = 0.12;
     .legend-marker path { stroke: #1b1b1b; stroke-width: 1; }
     .dot { display: inline-block; width: .8rem; height: .8rem; border-radius: 50%; margin-right: .35rem; vertical-align: -1px; }
     .dot.ring { border: 2px solid #1b1b1b; background: transparent; }
-    .swatch { display: inline-block; width: 1rem; height: .7rem; margin-right: .35rem; vertical-align: -1px; background: #f1f3f6; border: 1px solid #8d9297; }
-    .plot { position: relative; overflow: hidden; border: 1px solid #dfe1e2; background: #fcfcfb; touch-action: none; cursor: grab; }
+    .swatch { display: inline-block; width: 1rem; height: .7rem; margin-right: .35rem; vertical-align: -1px; background: #fff; border: 1px solid #8d9297; }
+    .plot { position: relative; overflow: hidden; border: 1px solid var(--merit-line, #dde3ea); border-radius: var(--merit-radius, .5rem); background: #eef3f8; touch-action: none; cursor: grab; }
     .plot:focus { outline: 3px solid #2491ff; }
     svg { display: block; }
-    .area { fill: #f1f3f6; stroke: #8d9297; stroke-width: 1; stroke-linejoin: round; }
-    .area-label { font-size: 13px; fill: #565c65; paint-order: stroke; stroke: #f1f3f6; stroke-width: 3px; }
-    .grid { stroke: #ececec; }
-    .tick { font-size: 13px; fill: #71767a; }
-    .point { stroke: #1b1b1b; stroke-width: 1.5; cursor: pointer; }
+    .area { fill: #ffffff; stroke: #b8c4d0; stroke-width: 1; stroke-linejoin: round; }
+    .area-label { font-size: 13px; fill: #454b54; paint-order: stroke; stroke: #ffffff; stroke-width: 3px; }
+    .grid { stroke: rgba(130, 148, 168, .25); }
+    .tick { font-size: 13px; fill: #565c65; }
+    .point { stroke: #1b1b1b; stroke-width: 1.5; cursor: pointer; filter: drop-shadow(0 1px 1.5px rgba(0, 0, 0, .25)); }
     .point:focus { outline:none; }
     .point:focus .marker { stroke:#1b1b1b; stroke-width:3; }
     .point-hit { fill:transparent; stroke:none; }

@@ -98,6 +98,7 @@ BEGIN
         -- =========================================================================================
 
         DECLARE @me UNIQUEIDENTIFIER = auth.udfSessionUserId ();
+        DECLARE @escaped NVARCHAR (200) = REPLACE (REPLACE (REPLACE (NULLIF (LTRIM (RTRIM (@searchText)), N''), N'[', N'[[]'), N'%', N'[%]'), N'_', N'[_]');
 
         SELECT i.investigationId, i.investigationNumber, i.investigationType, i.investigationStatus, i.requestedDate,
                i.scheduledDate, COALESCE (l.addressLine1, o.organizationName, es.sourceDescription) AS targetLabel,
@@ -110,8 +111,8 @@ BEGIN
          WHERE i.isDeleted = 0
            AND (@openOnly = 0 OR i.investigationStatus NOT IN ('cleared', 'closed'))
            AND (@assignedToMe = 0 OR i.assignedToUserId = @me)
-           AND (NULLIF (@searchText, N'') IS NULL OR i.investigationNumber LIKE N'%' + @searchText + N'%'
-                OR l.addressLine1 LIKE N'%' + @searchText + N'%' OR o.organizationName LIKE N'%' + @searchText + N'%')
+           AND (@escaped IS NULL OR i.investigationNumber LIKE N'%' + @escaped + N'%'
+                OR l.addressLine1 LIKE N'%' + @escaped + N'%' OR o.organizationName LIKE N'%' + @escaped + N'%')
            AND (NULLIF (@statusFilter, '') IS NULL OR i.investigationStatus = @statusFilter)
            AND (NULLIF (@typeFilter, '') IS NULL OR i.investigationType = @typeFilter)
            AND (NULLIF (@assignedFilter, '') IS NULL OR (@assignedFilter = 'me' AND i.assignedToUserId = @me)

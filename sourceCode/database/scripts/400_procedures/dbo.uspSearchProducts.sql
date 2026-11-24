@@ -84,9 +84,10 @@ BEGIN
         -- ===== The procedure's own work starts here. Everything above and below is boilerplate. ==
         -- =========================================================================================
 
+        DECLARE @escaped NVARCHAR (200) = REPLACE (REPLACE (REPLACE (@text, N'[', N'[[]'), N'%', N'[%]'), N'_', N'[_]');
         SELECT TOP (@maxRows) productId, brand, productName, countryOfOrigin, productType
           FROM dbo.product
-         WHERE isDeleted = 0 AND (productName LIKE N'%' + @text + N'%' OR brand LIKE N'%' + @text + N'%')
+         WHERE isDeleted = 0 AND (productName LIKE N'%' + @escaped + N'%' OR brand LIKE N'%' + @escaped + N'%')
          ORDER BY productName;
 
         -- =========================================================================================

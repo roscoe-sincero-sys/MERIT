@@ -74,9 +74,9 @@ BEGIN
 
     BEGIN TRY
 
-        IF auth.udfHasPermission (N'person.view') = 0
+        IF auth.udfHasPermission (N'person.view') = 0 OR auth.udfHasPermission (N'case.view') = 0
         BEGIN
-            ;THROW 51403, N'You do not have permission to do this (person.view).', 1;
+            ;THROW 51403, N'You do not have permission to do this (person.view and case.view).', 1;
         END;
 
         -- =========================================================================================

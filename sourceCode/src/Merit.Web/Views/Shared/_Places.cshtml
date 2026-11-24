@@ -34,7 +34,7 @@
                         <tr class="@(ended ? "merit-meta" : "")">
                             <td>
                                 @(Model.RoleLabels.GetValueOrDefault(r.Role) ?? r.Role)
-                                @if (r.IsPrimary) { <span class="merit-star" title="Primary residence">&#9733;</span><span class="usa-sr-only">Primary residence</span> }
+                                @if (r.IsPrimary) { <span class="merit-star" aria-hidden="true">&#9733;</span><span class="usa-sr-only">Primary residence</span> }
                                 @if (r.IsPrimary && r.PrimaryReason is not null) { <div class="merit-meta">@(Model.ReasonLabels.GetValueOrDefault(r.PrimaryReason) ?? r.PrimaryReason)</div> }
                             </td>
                             <td>

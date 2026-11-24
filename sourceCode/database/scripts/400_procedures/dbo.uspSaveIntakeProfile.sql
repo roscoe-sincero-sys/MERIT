@@ -105,6 +105,14 @@ BEGIN
         -- =========================================================================================
 
         DECLARE @root UNIQUEIDENTIFIER = auth.udfSessionRootTenantId ();
+        IF USER_NAME () <> N'dbo'
+           AND NOT EXISTS (SELECT 1 FROM auth.sessionScope AS ss CROSS APPLY auth.tvfUserGrantPermissions (ss.appUserId) AS m
+                            WHERE ss.sessionScopeId = TRY_CAST (SESSION_CONTEXT (N'scopeKey') AS UNIQUEIDENTIFIER)
+                              AND ss.isDeleted = 0 AND ss.revokedUtc IS NULL AND ss.expiresUtc > SYSUTCDATETIME ()
+                              AND m.tenantId = @root AND m.permissionCode = 'intake.configure' AND m.grantRank >= 2)
+        BEGIN
+            ;THROW 51403, N'Only an administrator at the data root can configure laboratory intake formats.', 1;
+        END;
         IF NOT EXISTS(SELECT 1 FROM dbo.organization o WHERE o.organizationId=@senderOrganizationId AND o.rootTenantId=@root AND o.isDeleted=0)
         BEGIN
             ;THROW 51404,N'The laboratory is unavailable in this agency.',1;

@@ -57,7 +57,7 @@ import { ContextPanelComponent } from '../../shared/context-panel.component';
           <button class="usa-button usa-button--outline" type="button" [disabled]="store.selected().size === 0 || store.loading() || busy()" (click)="bulk('assignToMe')">Assign to me</button>
           <label class="usa-sr-only" for="assignee">Assign to</label>
           <!-- No one is chosen until the user chooses, so Assign never goes to whoever is first in the list (issue #41). -->
-          <select class="usa-select assignee" id="assignee" [value]="assignee()" [disabled]="busy()" [title]="assigneeName()" (change)="assignee.set($any($event.target).value)">
+          <select class="usa-select assignee" id="assignee" [value]="assignee()" [disabled]="busy()" (change)="assignee.set($any($event.target).value)">
             <option value="">Choose a person&hellip;</option>
             @for (u of store.users(); track u.appUserId) { <option [value]="u.appUserId">{{ u.displayName }}</option> }
           </select>
@@ -75,33 +75,73 @@ import { ContextPanelComponent } from '../../shared/context-panel.component';
                          [page]="store.page()" [pageSize]="store.pageSize()" [sort]="store.sort()" [loading]="store.loading() || busy()"
                          [selectable]="display.can('task.edit')" [rowSelectable]="canSelect" [selectionDisabled]="store.loading() || busy()" [selected]="store.selected()" [rowKey]="key" [cards]="true" emptyText="No tasks in this view."
                          (sortChange)="onSort($event)" (pageChange)="onPage($event)" (selectionChange)="onSelect($event)" />
+        @if (previewTask(); as task) {
+          <aside class="triage-drawer" role="region" aria-labelledby="triage-title" (keydown.escape)="closePreview()">
+            <div class="triage-drawer__head">
+              <h3 id="triage-title" tabindex="-1">{{ task.title }}</h3>
+              <button type="button" class="usa-button usa-button--unstyled" (click)="closePreview()" aria-label="Close quick view">Close</button>
+            </div>
+            <p class="merit-meta">
+              {{ queueName(task.queueCode) }}
+              @if (task.dueDate) { &middot; Due {{ display.date(task.dueDate) }} }
+              @if (task.isUrgent) { <span class="merit-badge merit-badge--urgent">Urgent</span> }
+              @if (task.isOverdue) { <span class="merit-badge merit-badge--urgent">Overdue</span> }
+            </p>
+            @if (task.detail) { <p class="triage-drawer__detail">{{ task.detail }}</p> }
+            <div class="triage-drawer__links">
+              @if (task.personId && task.personName) { <a class="usa-button usa-button--outline usa-button--small" [href]="view.detail('/people/' + task.personId)">Open {{ task.personName }}</a> }
+              @if (task.exposureCaseId && task.caseNumber) { <a class="usa-button usa-button--outline usa-button--small" [href]="view.detail('/cases/' + task.exposureCaseId)">Open case {{ task.caseNumber }}</a> }
+            </div>
+            @if (display.can('task.edit') && task.canEdit && store.status() === 'open') {
+              <div class="triage-drawer__actions">
+                <label class="usa-label" for="drawer-note">Outcome note / dismissal reason</label>
+                <textarea class="usa-textarea" id="drawer-note" rows="2" maxlength="1000" [value]="drawerNote()" [disabled]="busy()" (input)="drawerNote.set($any($event.target).value)"></textarea>
+                <div class="triage-drawer__buttons">
+                  <button class="usa-button usa-button--outline" type="button" [disabled]="busy()" (click)="quickAction(task, 'assignToMe')">Assign to me</button>
+                  <button class="usa-button" type="button" [disabled]="busy()" (click)="quickAction(task, 'complete')">Complete</button>
+                  <button class="usa-button usa-button--secondary" type="button" [disabled]="busy()" (click)="quickAction(task, 'dismiss')">Dismiss</button>
+                </div>
+              </div>
+            }
+          </aside>
+        }
       </section>
     </merit-context-panel>
   `,
   styles: `
-    .filters, .bulk { display: flex; flex-wrap: wrap; align-items: end; gap: .5rem 1rem; margin-bottom: .75rem; }
+    .filters { display: flex; flex-wrap: wrap; align-items: end; gap: .5rem 1rem; margin-bottom: .75rem; }
+    .bulk { display: flex; flex-wrap: wrap; align-items: end; gap: .5rem 1rem; margin-bottom: .75rem; padding: .75rem 1rem; background: var(--merit-bg-soft, #f0f4f9); border: 1px solid var(--merit-line, #dde3ea); border-radius: var(--merit-radius, .5rem); }
+    .bulk--idle { display: none; }
     .filters .usa-select, .bulk .usa-select { max-width: 14rem; margin-top: 0; }
     .bulk .usa-select.assignee { max-width: 12rem; }
     .bulk .usa-input { max-width: 10rem; margin-top: 0; }
     .bulk .usa-label { margin-top: 0; }
     .bulk .stacked .usa-label { font-size: .87rem; }
     @media (max-width: 39.99em) {
-      .bulk--idle { display: none; }
-      .bulk { position: sticky; bottom: 0; z-index: 2; margin: 0 -1rem .75rem; padding: .5rem 1rem; background: #fff; border-top: 1px solid #a9aeb1; box-shadow: 0 -2px 4px rgb(0 0 0 / 10%); }
+      .bulk { position: sticky; bottom: 0; z-index: 2; margin: 0 -1rem .75rem; padding: .5rem 1rem; background: #fff; border-radius: 0; border-left: 0; border-right: 0; border-top: 1px solid #a9aeb1; box-shadow: 0 -2px 4px rgb(0 0 0 / 10%); }
       .bulk .usa-button { margin-top: 0; }
     }
+    .triage-drawer { position: fixed; top: 0; right: 0; bottom: 0; z-index: 50; width: min(26rem, 100vw); background: var(--merit-surface, #fff); border-left: 1px solid var(--merit-line, #dde3ea); box-shadow: -8px 0 24px rgba(15, 23, 42, .16); padding: 1.25rem; overflow-y: auto; }
+    .triage-drawer__head { display: flex; justify-content: space-between; align-items: start; gap: .75rem; border-bottom: 1px solid var(--merit-line, #dde3ea); padding-bottom: .75rem; margin-bottom: .75rem; }
+    .triage-drawer__head h3 { margin: 0; font-size: 1.15rem; }
+    .triage-drawer__detail { white-space: pre-wrap; margin: .75rem 0 1rem; }
+    .triage-drawer__links { display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: 1rem; }
+    .triage-drawer__actions { border-top: 1px solid var(--merit-line, #dde3ea); padding-top: .75rem; }
+    .triage-drawer__buttons { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .75rem; }
   `,
 })
 export class QueuesPage implements OnInit {
   protected readonly store = inject(QueuesStore);
   private readonly api = inject(ApiClient);
   protected readonly display = inject(Display);
-  private readonly view = inject(ViewQuery);
+  protected readonly view = inject(ViewQuery);
   private readonly queuesLoad = new LatestRequest();
   private readonly tasksLoad = new LatestRequest();
   private pendingSelectionReset = false;
   protected readonly busy = signal(false);
   protected readonly dismissReason = signal('');
+  protected readonly previewTask = signal<WorkTaskDto | null>(null);
+  protected readonly drawerNote = signal('');
   protected readonly canSelect = (t: WorkTaskDto): boolean => t.canEdit;
 
   protected readonly key = (t: WorkTaskDto): string => t.workTaskId;
@@ -109,6 +149,7 @@ export class QueuesPage implements OnInit {
   protected readonly columns: GridColumn<WorkTaskDto>[] = [
     // The detail reads under its task rather than in a squeezed column of its own (issue #154).
     { key: 'title', label: 'Task', sortable: true, cell: t => t.title, badge: t => (t.isUrgent ? 'Urgent' : null), subtext: t => t.detail, link: t => ['testingReview','testingFollowUp','testingDischarge'].includes(t.queueCode) && t.personId ? `/people/${t.personId}/care/testing#plan-${t.workTaskId}` : t.queueCode === 'notificationDue' && t.personId ? `/people/${t.personId}/care?caseId=${t.exposureCaseId ?? ''}#notifications` : ['receiptFinding','missingInformation','labReportingReview'].includes(t.queueCode) ? `/receipt-quality?taskId=${t.workTaskId}${t.personId ? '&personId=' + t.personId : ''}#task-${t.workTaskId}` : (t.personId || t.exposureCaseId) ? `/work/tasks/${t.workTaskId}` : null },
+    { key: 'quick', label: 'Quick view', nowrap: true, cell: () => 'Quick view', action: t => this.openPreview(t) },
     { key: 'queueCode', label: 'Queue', sortable: true, phoneHidden: true, cell: t => this.queueName(t.queueCode) },
     { key: 'person', label: 'Person', nowrap: true, cell: t => t.personName ?? '', link: t => (t.personId && t.personName ? this.view.detail(`/people/${t.personId}`) : null) },
     { key: 'case', label: 'Case', nowrap: true, cell: t => t.caseNumber ?? '', link: t => (t.exposureCaseId ? this.view.detail(`/cases/${t.exposureCaseId}`) : null) },
@@ -229,7 +270,37 @@ export class QueuesPage implements OnInit {
     this.view.set(this.store.query());
   }
 
-  private queueName(code: string): string {
+  protected openPreview(task: WorkTaskDto): void {
+    this.previewTask.set(task);
+    this.drawerNote.set('');
+    setTimeout(() => document.getElementById('triage-title')?.focus());
+  }
+
+  protected closePreview(): void {
+    this.previewTask.set(null);
+    this.drawerNote.set('');
+  }
+
+  protected async quickAction(task: WorkTaskDto, action: 'assignToMe' | 'complete' | 'dismiss'): Promise<void> {
+    if (this.busy() || !this.display.can('task.edit')) return;
+    const note = this.drawerNote().trim();
+    if (action === 'dismiss' && !note) { this.store.error.set('Enter a reason for dismissal.'); return; }
+    if ((action === 'complete' || action === 'dismiss') && !await confirmAction(`${action === 'complete' ? 'Complete' : 'Dismiss'} "${task.title}"?`)) return;
+    this.busy.set(true);
+    this.store.error.set(null);
+    this.api.bulkTasks({ taskIds: [task.workTaskId], action, assignToUserId: null, note: action === 'assignToMe' ? null : (note || null) }).subscribe({
+      next: () => {
+        this.busy.set(false);
+        this.closePreview();
+        this.store.message.set(action === 'assignToMe' ? 'Task assigned to you.' : action === 'complete' ? 'Task completed.' : 'Task dismissed.');
+        this.loadQueues();
+        this.load();
+      },
+      error: e => { this.busy.set(false); this.store.error.set(problemMessage(e)); },
+    });
+  }
+
+  protected queueName(code: string): string {
     return this.store.queues().find(q => q.queueCode === code)?.queueName ?? code;
   }
 

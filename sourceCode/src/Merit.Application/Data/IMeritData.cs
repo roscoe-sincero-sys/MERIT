@@ -28,7 +28,7 @@ public interface IAccountData
 
     Task<IReadOnlyList<RecoveryCodeRow>> GetRecoveryCodesAsync(Guid appUserId, CancellationToken ct = default);
 
-    Task UseRecoveryCodeAsync(Guid mfaRecoveryCodeId, CancellationToken ct = default);
+    Task<bool> UseRecoveryCodeAsync(Guid mfaRecoveryCodeId, CancellationToken ct = default);
 
     Task<EmailCodeOptionRow?> GetEmailCodeOptionAsync(Guid appUserId, CancellationToken ct = default);
 

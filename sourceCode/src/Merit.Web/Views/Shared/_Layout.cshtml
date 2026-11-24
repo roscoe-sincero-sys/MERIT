@@ -63,31 +63,46 @@
                 {
                     <form class="merit-header__search" role="search" method="get" action="/search">
                         <label class="usa-sr-only" for="header-search">Search people, cases and accession numbers</label>
-                        <input class="usa-input" id="header-search" name="q" type="search" value="@(path == "/search" ? Context.Request.Query["q"].ToString() : "")" placeholder="Name, DOB, case or accession" />
-                        <button class="usa-button usa-button--accent-cool" type="submit">Search</button>
+                        <input class="usa-input" id="header-search" name="q" type="search" value="@(path == "/search" ? Context.Request.Query["q"].ToString() : "")" placeholder="Name, DOB, case, accession" />
+                        <button class="usa-button merit-search-btn" type="submit">Search</button>
+                        <button class="usa-button merit-palette-btn" type="button" data-open-palette aria-label="Open command palette (Ctrl+K)" title="Quick jump (Ctrl+K)">Ctrl+K</button>
                     </form>
                 }
                 @if (CurrentSession.Has(Permissions.PersonView) && path.Equals("/search", StringComparison.OrdinalIgnoreCase))
                 {
                     <div class="merit-header__search merit-header__search--shortcut"><a href="#search-q" data-focus-target="search-q">Search people on this page</a></div>
                 }
+                string displayName = CurrentSession.DisplayName ?? "";
+                string initials = string.Concat(displayName.Split(' ', StringSplitOptions.RemoveEmptyEntries).Take(2).Select(w => char.ToUpperInvariant(w[0])));
+                if (string.IsNullOrEmpty(initials)) { initials = "U"; }
                 <div id="merit-user" class="merit-header__user">
-                    <span class="merit-header__who">@CurrentSession.DisplayName<br /><small>@CurrentSession.ActingTenantName</small></span>
-                    @* A control, not a caption: profiles and jurisdictions are switched here (issue #152). *@
-                    <a class="merit-header__profile merit-profile-switch" href="@profileHref">
-                        <span class="merit-profile-switch__label">Profile</span>
-                        <span class="merit-profile-switch__name">@(CurrentSession.ProfileName ?? "Master profile")</span>
-                        <span class="merit-profile-switch__action" aria-hidden="true">Switch &#x25BE;</span><span class="usa-sr-only">: switch profile or jurisdiction</span>
-                    </a>
-                    <div class="merit-header__links">
-                        @* The guides open beside the work, never over it (issue #148). *@
-                        <a class="merit-header__help" href="/help" target="_blank" rel="noopener">User guide<span class="usa-sr-only"> (opens in a new tab)</span></a>
-                        <a class="merit-header__help" href="/account/security">Sign-in methods</a>
-                        <form method="post" action="/account/signout">
-                            @Html.AntiForgeryToken()
-                            <button class="usa-button usa-button--unstyled" type="submit">Sign out</button>
-                        </form>
-                    </div>
+                    <details class="merit-account-menu">
+                        <summary class="merit-account-menu__trigger">
+                            <span class="merit-avatar" aria-hidden="true">@initials</span>
+                            <span class="merit-account-menu__id">
+                                <span class="merit-account-menu__name">@CurrentSession.DisplayName</span>
+                                <span class="merit-account-menu__tenant">@CurrentSession.ActingTenantName</span>
+                            </span>
+                            <span class="merit-account-menu__caret" aria-hidden="true">&#x25BE;</span>
+                        </summary>
+                        <div class="merit-account-menu__panel">
+                            <div class="merit-account-menu__meta">
+                                <div class="merit-account-menu__meta-label">Active profile</div>
+                                <div class="merit-account-menu__meta-value">@(CurrentSession.ProfileName ?? "Master profile")</div>
+                            </div>
+                            <ul class="merit-account-menu__list">
+                                <li><a class="merit-header__profile" href="@profileHref">Switch profile or jurisdiction</a></li>
+                                <li><a class="merit-header__help" href="/help" target="_blank" rel="noopener">User guide<span class="usa-sr-only"> (opens in a new tab)</span></a></li>
+                                <li><a class="merit-header__help" href="/account/security">Sign-in methods</a></li>
+                                <li class="merit-account-menu__divider">
+                                    <form method="post" action="/account/signout">
+                                        @Html.AntiForgeryToken()
+                                        <button class="usa-button usa-button--unstyled merit-account-menu__signout" type="submit">Sign out</button>
+                                    </form>
+                                </li>
+                            </ul>
+                        </div>
+                    </details>
                 </div>
             }
         </div>
@@ -119,21 +134,66 @@
     <footer class="merit-footer">@deployment.Footer &middot; Every view, change and export of a person, result or case is audited.</footer>
 
     <dialog id="confirmation-dialog" class="merit-dialog" aria-labelledby="confirmation-heading" aria-describedby="confirmation-message">
-        <h2 id="confirmation-heading">Confirm action</h2>
-        <p id="confirmation-message"></p>
-        <div class="merit-section__actions">
-            <button type="button" class="usa-button usa-button--outline" data-confirm-cancel autofocus>Cancel</button>
-            <button type="button" class="usa-button usa-button--secondary" data-confirm-accept>Continue</button>
+        <div class="merit-dialog__content">
+            <h2 id="confirmation-heading">Confirm action</h2>
+            <p id="confirmation-message"></p>
+            <div class="merit-section__actions">
+                <button type="button" class="usa-button usa-button--outline" data-confirm-cancel autofocus>Cancel</button>
+                <button type="button" class="usa-button usa-button--secondary" data-confirm-accept>Continue</button>
+            </div>
         </div>
     </dialog>
     <dialog id="unsaved-work-dialog" class="merit-dialog" aria-labelledby="unsaved-work-heading" aria-describedby="unsaved-work-description">
-        <h2 id="unsaved-work-heading">Leave without saving?</h2>
-        <p id="unsaved-work-description">This page has unsaved changes. Leaving will discard them. Choose Stay to review and save your work.</p>
-        <div class="merit-section__actions">
-            <button type="button" class="usa-button" data-unsaved-stay autofocus>Stay</button>
-            <button type="button" class="usa-button usa-button--outline" data-unsaved-leave>Leave without saving</button>
+        <div class="merit-dialog__content">
+            <h2 id="unsaved-work-heading">Leave without saving?</h2>
+            <p id="unsaved-work-description">This page has unsaved changes. Leaving will discard them. Choose Stay to review and save your work.</p>
+            <div class="merit-section__actions">
+                <button type="button" class="usa-button" data-unsaved-stay autofocus>Stay</button>
+                <button type="button" class="usa-button usa-button--outline" data-unsaved-leave>Leave without saving</button>
+            </div>
         </div>
     </dialog>
+
+    @if (signedIn && !minimalHeader)
+    {
+        <dialog id="command-palette" class="merit-dialog merit-palette" aria-labelledby="palette-heading">
+            <div class="merit-dialog__content">
+                <div class="merit-palette__head">
+                    <h2 id="palette-heading">Quick jump</h2>
+                    <button type="button" class="usa-button usa-button--unstyled" data-close-palette aria-label="Close quick jump">Esc</button>
+                </div>
+                <label class="usa-sr-only" for="palette-input">Filter screens or type a name, case number or accession to search</label>
+                <input class="usa-input merit-palette__input" id="palette-input" type="search" autocomplete="off" placeholder="Jump to a screen or search people, cases, accessions…" />
+                <ul id="palette-list" class="merit-palette__list" role="listbox" aria-label="Quick jump commands">
+                    @if (CurrentSession.Has(Permissions.TaskView)) { <li role="option" data-url="/" data-keywords="home dashboard kpi">Home dashboard <span class="merit-meta">/</span></li> }
+                    @if (CurrentSession.Has(Permissions.TaskView)) { <li role="option" data-url="/app/queues" data-keywords="work queues tasks overdue">Work queues <span class="merit-meta">/app/queues</span></li> }
+                    @if (CurrentSession.Has(Permissions.PersonView)) { <li role="option" data-url="/search" data-keywords="people search find patient">Find or add a person <span class="merit-meta">/search</span></li> }
+                    @if (CurrentSession.Has(Permissions.IntakeUpload)) { <li role="option" data-url="/intake" data-keywords="upload lab results import hl7 csv">Upload lab results <span class="merit-meta">/intake</span></li> }
+                    @if (CurrentSession.Has(Permissions.ResultReleaseHold)) { <li role="option" data-url="/app/held" data-keywords="held records staging errors">Held records <span class="merit-meta">/app/held</span></li> }
+                    @if (CurrentSession.Has(Permissions.ResultReleaseHold)) { <li role="option" data-url="/app/match-review" data-keywords="match review person duplicate">Match review <span class="merit-meta">/app/match-review</span></li> }
+                    @if (CurrentSession.Has(Permissions.CaseView)) { <li role="option" data-url="/cases" data-keywords="cases exposure lead">Cases <span class="merit-meta">/cases</span></li> }
+                    @if (CurrentSession.Has(Permissions.PersonView) && CurrentSession.Has(Permissions.TaskView)) { <li role="option" data-url="/testing" data-keywords="testing outreach clinical blood lead">Testing outreach <span class="merit-meta">/testing</span></li> }
+                    @if (CurrentSession.Has(Permissions.PersonView) && CurrentSession.Has(Permissions.TaskView)) { <li role="option" data-url="/notifications" data-keywords="notification deadlines compliance">Notification deadlines <span class="merit-meta">/notifications</span></li> }
+                    @if (CurrentSession.Has(Permissions.TaskView)) { <li role="option" data-url="/receipt-quality" data-keywords="receipt quality laboratory missing">Receipt quality <span class="merit-meta">/receipt-quality</span></li> }
+                    @if (CurrentSession.Has(Permissions.CaseView)) { <li role="option" data-url="/app/clusters" data-keywords="clusters outbreak">Clusters <span class="merit-meta">/app/clusters</span></li> }
+                    @if (CurrentSession.Has(Permissions.CaseView)) { <li role="option" data-url="/app/map" data-keywords="case map geography county">Case map <span class="merit-meta">/app/map</span></li> }
+                    @if (CurrentSession.Has(Permissions.ResultView)) { <li role="option" data-url="/app/results" data-keywords="lab results line list">Lab results <span class="merit-meta">/app/results</span></li> }
+                    @if (CurrentSession.Has(Permissions.ResultView) || CurrentSession.Has(Permissions.CaseView)) { <li role="option" data-url="/app/reports" data-keywords="reports charts analytics">Reports <span class="merit-meta">/app/reports</span></li> }
+                    @if (CurrentSession.Has(Permissions.ExtractRun)) { <li role="option" data-url="/extracts" data-keywords="extracts cbls ables federal">Extracts <span class="merit-meta">/extracts</span></li> }
+                    @if (CurrentSession.Has(Permissions.IntakeConfigure)) { <li role="option" data-url="/config/intake-formats" data-keywords="intake formats laboratory mapping">Lab import formats <span class="merit-meta">/config/intake-formats</span></li> }
+                    @if (!CurrentSession.IsPlatformAdmin) { <li role="option" data-url="/config/thresholds" data-keywords="configuration thresholds settings">Configuration &amp; thresholds <span class="merit-meta">/config/thresholds</span></li> }
+                    @if (CurrentSession.Has(Permissions.TenantAdminister) || CurrentSession.Has(Permissions.SecurityReview)) { <li role="option" data-url="/admin/users" data-keywords="users administration roles grants">Users <span class="merit-meta">/admin/users</span></li> }
+                    @if (CurrentSession.Has(Permissions.AuditView)) { <li role="option" data-url="/admin/audit" data-keywords="audit log history">Audit log <span class="merit-meta">/admin/audit</span></li> }
+                    <li role="option" data-url="@profileHref" data-keywords="switch profile jurisdiction agency tenant">Switch profile or jurisdiction <span class="merit-meta">/account/profiles</span></li>
+                    <li role="option" data-url="/account/security" data-keywords="security mfa password sign-in">Sign-in methods &amp; password <span class="merit-meta">/account/security</span></li>
+                </ul>
+                @if (CurrentSession.Has(Permissions.PersonView))
+                {
+                    <p id="palette-search-hint" class="merit-meta merit-palette__hint" hidden>Press <kbd>Enter</kbd> to search people, cases and accessions for <strong id="palette-search-term"></strong>.</p>
+                }
+            </div>
+        </dialog>
+    }
 
     <script src="~/lib/htmx-4.0.0/htmx.min.js" asp-append-version="true" merit-nonce></script>
     <script src="~/lib/htmx-4.0.0/hx-csp.min.js" asp-append-version="true" merit-nonce></script>

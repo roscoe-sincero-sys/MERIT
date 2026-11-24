@@ -26,5 +26,6 @@
            hx-get="@Model.Url" hx-trigger="input changed delay:400ms" hx-target="#@Model.Id-list" hx-swap="innerHTML"
            hx-vals='{"field":"@Model.Id"}' />
     <input type="hidden" id="@Model.Id" name="@Model.Name" value="@Model.Value" />
+    <p class="usa-error-message merit-combobox__unmatched" id="@Model.Id-unmatched" role="alert" hidden>Choose a match from the list, or clear this field.</p>
     <ul class="merit-listbox" id="@Model.Id-list" role="listbox" data-for="@Model.Id-text" aria-label="@Model.Label matches" hidden></ul>
 </div>

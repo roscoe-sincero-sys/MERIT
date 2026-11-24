@@ -198,7 +198,7 @@ public sealed class CareController(CareService care, PersonService people, IRefe
     }
 
     [HttpPost("receipt-quality/received")]
-    [Authorize(Policy = Permissions.TaskView)]
+    [Authorize(Policy = Permissions.ReceiptWrite)]
     public async Task<IActionResult> InformationReceived(Guid workTaskId, Guid? personId, DateOnly receivedDate, string evidence, bool confirmed, CancellationToken ct)
     {
         try { if (ModelState.IsValid) await care.ReceiveInformationAsync(workTaskId, receivedDate, evidence, confirmed, ct); }

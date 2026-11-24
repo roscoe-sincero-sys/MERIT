@@ -203,6 +203,15 @@ const PLACEHOLDER_NAME = /^(baby( (boy|girl))?|boy|girl|infant|newborn|unknown|u
     <div class="usa-sr-only" role="status" aria-live="polite">{{ store.message() }} {{ store.announcement() }}</div>
     @if (store.error(); as e) { <div class="usa-alert usa-alert--error usa-alert--slim" role="alert"><div class="usa-alert__body"><p class="usa-alert__text">{{ e }}</p></div></div> }
     @if (store.message(); as m) { <div class="usa-alert usa-alert--success usa-alert--slim"><div class="usa-alert__body"><p class="usa-alert__text">{{ m }}</p></div></div> }
+    @if (pendingCommit(); as p) {
+      <div class="undo-toast" role="status" aria-live="polite">
+        <span><strong>{{ p.summary }}</strong> &mdash; saving in {{ p.secondsLeft }}s</span>
+        <span class="undo-toast__actions">
+          <button class="usa-button usa-button--small usa-button--outline" type="button" (click)="undoPending()">Undo</button>
+          <button class="usa-button usa-button--small" type="button" (click)="flushPending()">Save now</button>
+        </span>
+      </div>
+    }
 
     <div class="layout">
       <nav aria-label="Records to review">
@@ -229,7 +238,7 @@ const PLACEHOLDER_NAME = /^(baby( (boy|girl))?|boy|girl|infant|newborn|unknown|u
         @if (store.review(); as r) {
           <h2 id="record-heading">Row {{ r.rowNumber }} of {{ r.fileName }} <span class="merit-meta">from {{ r.senderName }}</span></h2>
           <p>{{ r.reasonMessage }}</p>
-          @if (r.isEscalated) { <p class="usa-alert usa-alert--info usa-alert--slim usa-alert__text">Sent to a supervisor: {{ r.escalationNote }}</p> }
+          @if (r.isEscalated) { <div class="usa-alert usa-alert--info usa-alert--slim"><div class="usa-alert__body"><p class="usa-alert__text">Sent to a supervisor: {{ r.escalationNote }}</p></div></div> }
 
           <!-- What to weigh, for this record's situation (issue #168). -->
           <div class="usa-alert usa-alert--info usa-alert--slim guidance"><div class="usa-alert__body"><p class="usa-alert__text">{{ guidance(r) }}</p></div></div>
@@ -252,7 +261,7 @@ const PLACEHOLDER_NAME = /^(baby( (boy|girl))?|boy|girl|infant|newborn|unknown|u
             @if (store.candidate(); as c) {
               <button class="usa-button" type="button" [class.armed]="armed() === 's'" [attr.aria-keyshortcuts]="keys('S')" [disabled]="!store.canDecide()" (click)="decide('same', note.value)">
                 Same person as {{ c.personName }} ({{ hint('S') }})</button>
-              <button class="usa-button usa-button--secondary" type="button" [class.armed]="armed() === 'd'" [attr.aria-keyshortcuts]="keys('D')" [disabled]="!store.canDecide()" (click)="decide('different', note.value)">
+              <button class="usa-button usa-button--outline" type="button" [class.armed]="armed() === 'd'" [attr.aria-keyshortcuts]="keys('D')" [disabled]="!store.canDecide()" (click)="decide('different', note.value)">
                 Different person ({{ hint('D') }})</button>
             }
               <!-- With no one to compare, creating the person is the expected decision (issue #168). -->
@@ -269,7 +278,12 @@ const PLACEHOLDER_NAME = /^(baby( (boy|girl))?|boy|girl|infant|newborn|unknown|u
         } @else {
           <h2 id="record-heading">Record review</h2>
           @if (store.loading() || (store.queue().length > 0 && !store.error())) {
-            <p class="merit-indicator">Loading the record&hellip;</p>
+            <div class="merit-skeleton-page" role="status" aria-label="Loading the record">
+              <span class="usa-sr-only">Loading the record&hellip;</span>
+              <div class="merit-skeleton merit-skeleton--bar" aria-hidden="true"></div>
+              <div class="merit-skeleton merit-skeleton--row" aria-hidden="true"></div>
+              <div class="merit-skeleton merit-skeleton--row" aria-hidden="true"></div>
+            </div>
           } @else if (store.queueLoaded() && store.queue().length === 0 && !store.error()) {
             <p class="merit-empty">Nothing to review. No waiting records remain in this view.</p>
           }
@@ -291,7 +305,10 @@ const PLACEHOLDER_NAME = /^(baby( (boy|girl))?|boy|girl|infant|newborn|unknown|u
     .incoming dt { font-weight: 700; }
     .shortcut-mode { margin-bottom: .75rem; }
     .guidance { margin: .5rem 0 1rem; }
-    .actions .usa-button.armed { outline: 3px solid #e5a000; outline-offset: 2px; }
+    .actions .usa-button.armed { outline: 3px solid #946300; outline-offset: 2px; }
+    .undo-toast { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: .75rem 1rem; padding: .75rem 1rem; margin: .75rem 0; background: #162e51; color: #fff; border-radius: var(--merit-radius, .5rem); box-shadow: var(--merit-shadow-lg, 0 10px 24px rgba(15,23,42,.16)); }
+    .undo-toast__actions { display: flex; gap: .5rem; }
+    .undo-toast .usa-button--outline { background: #fff; color: #162e51; }
     @media (max-width: 64em) { .layout { grid-template-columns: minmax(0, 1fr); } }
   `,
 })
@@ -368,7 +385,25 @@ export class MatchReviewPage implements OnInit {
     }
   }
 
+  protected readonly pendingCommit = signal<{ rowId: string; decision: MatchDecision; personId: string | null; note: string | null; position: number; summary: string; secondsLeft: number } | null>(null);
+  private pendingTimer: ReturnType<typeof setInterval> | null = null;
+
+  protected undoPending(): void {
+    if (this.pendingTimer) { clearInterval(this.pendingTimer); this.pendingTimer = null; }
+    this.pendingCommit.set(null);
+    this.store.message.set('Decision cancelled. No changes were saved.');
+  }
+
+  protected flushPending(): void {
+    const p = this.pendingCommit();
+    if (!p) return;
+    if (this.pendingTimer) { clearInterval(this.pendingTimer); this.pendingTimer = null; }
+    this.pendingCommit.set(null);
+    this.commitDecision(p.rowId, p.decision, p.personId, p.note, p.position);
+  }
+
   protected async decide(decision: MatchDecision, note: string): Promise<void> {
+    if (this.pendingCommit()) this.flushPending();
     const r = this.store.review();
     if (!r || !this.store.canDecide()) return;
     const rowId = r.stagingRowId;
@@ -377,13 +412,27 @@ export class MatchReviewPage implements OnInit {
     if (decision === 'same' && candidate?.warnings.length && !await confirmAction(
       `Link this result to ${candidate.personName}? Review the safeguards:\n${candidate.warnings.join('\n')}\nThis releases the result for processing.`)) return;
     const position = Math.max(this.store.position(), 0);
+    const label = decision === 'same' ? `Same person as ${candidate?.personName}`
+      : decision === 'different' ? `Different person from ${candidate?.personName}`
+      : decision === 'newPerson' ? 'Create as a new person'
+      : 'Send to supervisor (Not sure)';
+    this.pendingCommit.set({ rowId, decision, personId: decision === 'same' || decision === 'different' ? candidate?.personId ?? null : null, note: note.trim() || null, position, summary: label, secondsLeft: 5 });
+    this.pendingTimer = setInterval(() => {
+      const cur = this.pendingCommit();
+      if (!cur) { if (this.pendingTimer) { clearInterval(this.pendingTimer); this.pendingTimer = null; } return; }
+      if (cur.secondsLeft <= 1) { this.flushPending(); }
+      else { this.pendingCommit.set({ ...cur, secondsLeft: cur.secondsLeft - 1 }); }
+    }, 1000);
+  }
+
+  private commitDecision(rowId: string, decision: MatchDecision, personId: string | null, note: string | null, position: number): void {
     this.queueLoad.cancel();
     this.reviewLoad.cancel();
     this.store.queueLoading.set(false);
     this.store.reviewLoading.set(false);
     this.store.busy.set(true);
     this.store.error.set(null);
-    this.api.matchDecision(rowId, { decision, personId: decision === 'same' || decision === 'different' ? candidate?.personId ?? null : null, note: note.trim() || null }).subscribe({
+    this.api.matchDecision(rowId, { decision, personId, note }).subscribe({
       next: res => {
         this.store.busy.set(false);
         this.heading()?.nativeElement.focus();

@@ -33,10 +33,12 @@
 
         @* A child-care or school entry is picked from organizations first; the site address fills in. *@
         <fieldset class="usa-fieldset" data-show-when="Role=childCare|school" hidden="@(!siteRole)" disabled="@(!siteRole)">
+            <legend class="usa-legend usa-sr-only">Child-care or school site</legend>
             <partial name="_Combobox" model='("place-OrganizationSite", "OrganizationSite", "Child-care provider or school", "/lookup/sites?type=" + (Model.Role == "school" ? "school" : "childCare"), siteRole ? Model.OrganizationSite : null, siteRole ? Model.OrganizationLabel : null, (string?)"Pick the provider; its site address is used.")' />
         </fieldset>
 
         <fieldset class="usa-fieldset" data-show-when="Role=residence|relativeHome|otherSite" hidden="@siteRole" disabled="@siteRole">
+            <legend class="usa-legend usa-sr-only">Residence or site address</legend>
             @* Address entry offers matching existing locations before creating a new one. *@
             <partial name="_Combobox" model='("place-LocationId", "LocationId", "Existing address", "/lookup/locations", siteRole ? null : Model.LocationId?.ToString(), siteRole ? null : Model.LocationLabel, (string?)"Start typing the street address to reuse a location already on file, or enter a new one below.")' />
             <fieldset class="usa-fieldset">

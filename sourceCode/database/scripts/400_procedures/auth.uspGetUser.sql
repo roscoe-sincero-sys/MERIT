@@ -86,17 +86,19 @@ BEGIN
         DECLARE @admin TABLE (tenantId UNIQUEIDENTIFIER PRIMARY KEY);
         INSERT @admin SELECT tenantId FROM auth.tvfAdminTenants ();
 
+        DECLARE @canManageAccount BIT = (SELECT CASE WHEN EXISTS (SELECT 1 FROM @admin AS a WHERE a.tenantId = u.homeTenantId) THEN 1 ELSE 0 END
+                                           FROM auth.appUser AS u WHERE u.appUserId = @appUserId AND u.isDeleted = 0);
+
         SELECT u.appUserId, u.userName, u.displayName, u.email, u.isActive, u.mfaEnabled, u.lastSignInUtc, u.lockoutEndUtc,
                u.passwordChangeRequired, u.passwordChangedUtc,
                u.homeTenantId, h.tenantName AS homeTenantName, h.tenantType AS homeTenantType,
-               CAST (CASE WHEN EXISTS (SELECT 1 FROM @admin AS a WHERE a.tenantId = u.homeTenantId) THEN 1 ELSE 0 END AS BIT)
-                   AS canManageAccount
+               CAST (COALESCE (@canManageAccount, 0) AS BIT) AS canManageAccount
           FROM auth.appUser AS u
           LEFT JOIN auth.tenant AS h ON h.tenantId = u.homeTenantId
          WHERE u.appUserId = @appUserId AND u.isDeleted = 0
-           AND (EXISTS (SELECT 1 FROM @admin AS a WHERE a.tenantId = u.homeTenantId)
+           AND (@canManageAccount = 1
                 OR EXISTS (SELECT 1 FROM auth.userAssignment AS ua JOIN @admin AS a ON a.tenantId = ua.tenantId
-                            WHERE ua.appUserId = u.appUserId AND ua.isDeleted = 0));
+                            WHERE ua.appUserId = u.appUserId AND ua.revokedUtc IS NULL AND ua.isDeleted = 0));
 
         SELECT ua.userAssignmentId, ua.roleId, r.roleName, ua.tenantId, t.tenantName, ua.includeDescendants, ua.accessLevel,
                ua.startDate, ua.endDate, ua.revokedUtc,
@@ -105,6 +107,7 @@ BEGIN
           JOIN auth.role   AS r ON r.roleId = ua.roleId
           JOIN auth.tenant AS t ON t.tenantId = ua.tenantId
          WHERE ua.appUserId = @appUserId AND ua.isDeleted = 0
+           AND (@canManageAccount = 1 OR EXISTS (SELECT 1 FROM @admin AS a WHERE a.tenantId = ua.tenantId))
          ORDER BY ua.startDate DESC;
 
         -- =========================================================================================

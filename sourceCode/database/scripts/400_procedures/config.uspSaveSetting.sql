@@ -98,7 +98,7 @@ BEGIN
         -- =========================================================================================
 
         DECLARE @root UNIQUEIDENTIFIER = auth.udfSessionRootTenantId ();
-        IF @settingKey='testingPolicyVersion' AND USER_NAME()<>N'dbo'
+        IF USER_NAME()<>N'dbo'
            AND NOT EXISTS(
              SELECT 1 FROM auth.sessionScope ss CROSS APPLY auth.tvfUserGrantPermissions(ss.appUserId) m
              WHERE ss.sessionScopeId=TRY_CAST(SESSION_CONTEXT(N'scopeKey') AS UNIQUEIDENTIFIER)
@@ -111,7 +111,7 @@ BEGIN
                      AND EXISTS(SELECT 1 FROM auth.tvfProfileGrantPermissions(ss.userProfileId) p WHERE p.tenantId=@root AND p.permissionCode='config.edit' AND p.grantRank>=2))
                  OR (ss.viewAsUserId IS NULL AND ss.userProfileId IS NULL)))
         BEGIN
-            ;THROW 51403,N'Only a configuration administrator at the data root can adopt or disable its testing policy.',1;
+            ;THROW 51403,N'Only a configuration administrator at the data root can change jurisdiction-wide settings.',1;
         END;
         -- Issue 289: only catalogued settings that are in use, with a value inside their definition.
         DECLARE @problem NVARCHAR (400) = config.udfSettingProblem (@settingKey, @settingValue, @root);

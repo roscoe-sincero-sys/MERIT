@@ -197,12 +197,20 @@ export class ClusterStore {
         <ul class="usa-list">
           <!-- Each task opens its work queue, where it is assigned and done (issue #48). -->
           @for (t of c.tasks; track t.workTaskId) {
-            <li><a class="usa-link" [href]="'/app/queues?queue=' + t.queueCode">{{ t.title }}</a>@if (t.isUrgent) { <strong>(urgent)</strong>}@if (t.dueDate) {, due <span class="merit-nowrap">{{ display.date(t.dueDate) }}</span>}@if (t.assignedToName) {, {{ t.assignedToName }}}</li>
+            <li><a class="usa-link" routerLink="/queues" [queryParams]="{ queue: t.queueCode }">{{ t.title }}</a>@if (t.isUrgent) { <strong>(urgent)</strong>}@if (t.dueDate) {, due <span class="merit-nowrap">{{ display.date(t.dueDate) }}</span>}@if (t.assignedToName) {, {{ t.assignedToName }}}</li>
           }
         </ul>
       }
-    } @else if (!store.error()) {
-      <p class="merit-indicator">Loading the cluster&hellip;</p>
+    } @else if (store.error()) {
+      <h1 tabindex="-1">Cluster</h1>
+    } @else {
+      <h1 tabindex="-1">Cluster</h1>
+      <div class="merit-skeleton-page" role="status" aria-label="Loading the cluster">
+        <span class="usa-sr-only">Loading the cluster&hellip;</span>
+        <div class="merit-skeleton merit-skeleton--bar" aria-hidden="true"></div>
+        <div class="merit-skeleton merit-skeleton--row" aria-hidden="true"></div>
+        <div class="merit-skeleton merit-skeleton--row" aria-hidden="true"></div>
+      </div>
     }
   `,
   styles: `

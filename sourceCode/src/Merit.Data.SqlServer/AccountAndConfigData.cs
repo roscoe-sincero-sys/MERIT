@@ -44,8 +44,8 @@ public sealed class AccountData(Db db) : IAccountData
     public Task<IReadOnlyList<RecoveryCodeRow>> GetRecoveryCodesAsync(Guid appUserId, CancellationToken ct = default)
         => db.QueryAsync<RecoveryCodeRow>("auth.uspGetRecoveryCodes", new { appUserId }, ct);
 
-    public Task UseRecoveryCodeAsync(Guid mfaRecoveryCodeId, CancellationToken ct = default)
-        => db.ExecuteAsync("auth.uspUseRecoveryCode", new { mfaRecoveryCodeId }, ct);
+    public async Task<bool> UseRecoveryCodeAsync(Guid mfaRecoveryCodeId, CancellationToken ct = default)
+        => await db.QuerySingleAsync<bool>("auth.uspUseRecoveryCode", new { mfaRecoveryCodeId }, ct).ConfigureAwait(false);
 
     public Task<EmailCodeOptionRow?> GetEmailCodeOptionAsync(Guid appUserId, CancellationToken ct = default)
         => db.QuerySingleAsync<EmailCodeOptionRow>("auth.uspGetEmailCodeOption", new { appUserId }, ct);

@@ -90,9 +90,9 @@ BEGIN
             , @ReCreatedAfterRollback = 0
             , @ExecutionLogId         = @ExecutionId OUTPUT;
 
-        IF auth.udfHasPermission (N'person.view_identifiers') = 0
+        IF auth.udfHasPermission (N'person.edit') = 0 OR auth.udfHasPermission (N'person.view_identifiers') = 0
         BEGIN
-            ;THROW 51403, N'You do not have permission to do this (person.view_identifiers).', 1;
+            ;THROW 51403, N'You do not have permission to do this (person.edit and person.view_identifiers).', 1;
         END;
 
         IF NOT EXISTS (SELECT 1 FROM dbo.person WHERE personId = @personId AND isDeleted = 0)

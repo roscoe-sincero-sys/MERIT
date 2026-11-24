@@ -16,8 +16,8 @@ public sealed class StepUp(IDataProtectionProvider protection)
     private static readonly TimeSpan Lifetime = TimeSpan.FromMinutes(10);
     private readonly ITimeLimitedDataProtector protector = protection.CreateProtector("Merit.StepUp.EmailCodes").ToTimeLimitedDataProtector();
 
-    public void Grant(HttpResponse response, Guid userId)
-        => response.Cookies.Append(CookieName, protector.Protect(userId.ToString("N", CultureInfo.InvariantCulture), Lifetime),
+    public void Grant(HttpResponse response, Guid userId, Guid? scopeKey = null)
+        => response.Cookies.Append(CookieName, protector.Protect(Payload(userId, scopeKey), Lifetime),
             new CookieOptions { HttpOnly = true, Secure = true, SameSite = SameSiteMode.Strict, Path = "/account/security", MaxAge = Lifetime, IsEssential = true });
 
     public bool Holds(HttpContext http)
@@ -28,15 +28,19 @@ public sealed class StepUp(IDataProtectionProvider protection)
             return false;
         }
 
+        Guid? scopeKey = Guid.TryParse(http.User.FindFirstValue(MeritClaims.ScopeKey), out var sk) ? sk : null;
         try
         {
-            return protector.Unprotect(value, out _) == userId.ToString("N", CultureInfo.InvariantCulture);
+            return protector.Unprotect(value, out _) == Payload(userId, scopeKey);
         }
         catch (System.Security.Cryptography.CryptographicException)
         {
             return false;
         }
     }
+
+    private static string Payload(Guid userId, Guid? scopeKey)
+        => string.Create(CultureInfo.InvariantCulture, $"{userId:N}:{(scopeKey ?? Guid.Empty):N}");
 
     public static void Release(HttpResponse response)
         => response.Cookies.Delete(CookieName, new CookieOptions { Path = "/account/security", Secure = true, SameSite = SameSiteMode.Strict });

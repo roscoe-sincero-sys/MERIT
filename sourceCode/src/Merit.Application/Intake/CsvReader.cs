@@ -1,11 +1,14 @@
 using System.Text;
+using Merit.Application.Errors;
 
 namespace Merit.Application.Intake;
 
 /// <summary>A small RFC 4180 reader for CSV, TSV and pipe-delimited intake files: quoted fields, doubled quotes, CRLF.</summary>
 public static class CsvReader
 {
-    public static IReadOnlyList<IReadOnlyList<string>> Read(string content, char delimiter)
+    public const int MaxRows = 50_000;
+
+    public static IReadOnlyList<IReadOnlyList<string>> Read(string content, char delimiter, int maxRows = MaxRows)
     {
         var rows = new List<IReadOnlyList<string>>();
         var row = new List<string>();
@@ -57,6 +60,11 @@ public static class CsvReader
                 field.Clear();
                 if (row.Count > 1 || row[0].Length > 0)
                 {
+                    if (rows.Count >= maxRows)
+                    {
+                        throw new ValidationException("file", $"The file exceeds the {maxRows:N0}-row intake limit; split the file.");
+                    }
+
                     rows.Add(row);
                 }
 

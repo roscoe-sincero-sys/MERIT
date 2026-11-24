@@ -43,7 +43,7 @@ export class ReportsStore {
           }
         </ul>
       </nav>
-      <section aria-labelledby="report-title">
+      <section [attr.aria-labelledby]="store.report() ? 'report-title' : null" [attr.aria-label]="store.report() ? null : 'Report'">
         @if (store.report(); as r) {
           <h2 id="report-title">{{ r.title }}</h2>
           <p class="merit-meta">{{ r.description }}</p>
@@ -93,7 +93,13 @@ export class ReportsStore {
             </div>
           }
         } @else if (store.loading()) {
-          <p class="merit-indicator">Running the report&hellip;</p>
+          <div class="merit-skeleton-page" role="status" aria-label="Running the report">
+            <span class="usa-sr-only">Running the report&hellip;</span>
+            <div class="merit-skeleton merit-skeleton--title" aria-hidden="true"></div>
+            <div class="merit-skeleton merit-skeleton--bar" aria-hidden="true"></div>
+            <div class="merit-skeleton merit-skeleton--row" aria-hidden="true"></div>
+            <div class="merit-skeleton merit-skeleton--row" aria-hidden="true"></div>
+          </div>
         } @else if (store.library().length === 0) {
           <p class="merit-empty">No reports are available to you.</p>
         }

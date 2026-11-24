@@ -64,6 +64,17 @@ public static class ScreenCatalog
         new("reports", "Reports", "/app/reports", Permissions.ResultView, Permissions.CaseView),
         new("usage", "Usage", "/admin/usage", Permissions.UsageView),
         new("usage.session", "Usage session", "/admin/usage/sessions/{reference}", Permissions.UsageView),
+        new("testing.outreach", "Clinical testing outreach", "/testing", Permissions.PersonView, Permissions.TaskView),
+        new("notifications", "Notification deadlines", "/notifications", Permissions.PersonView, Permissions.TaskView),
+        new("receipt.quality", "Laboratory receipt quality", "/receipt-quality", Permissions.TaskView),
+        new("contact.corrections", "Caregiver contact corrections", "/contact-corrections", Permissions.PersonEdit),
+        new("person.care", "Patient care and notifications", "/people/{id}/care", Permissions.PersonView),
+        new("person.testing", "Patient testing plans", "/people/{id}/care/testing", Permissions.PersonView),
+        new("person.work", "Patient work checklist", "/people/{id}/work", Permissions.PersonView),
+        new("work.task", "Task evidence", "/work/tasks/{id}", Permissions.TaskView),
+        new("config.intake_formats", "Laboratory import formats", "/config/intake-formats", Permissions.IntakeConfigure),
+        new("config.notification_rules", "Notification rules", "/config/notification-rules", Permissions.ConfigEdit),
+        new("config.workflows", "Program tasks configuration", "/config/workflows", Permissions.ConfigEdit),
     ];
 
     private static readonly IReadOnlyDictionary<string, string> Actions = new Dictionary<string, string>(StringComparer.Ordinal)
@@ -81,6 +92,12 @@ public static class ScreenCatalog
         ["Account.ConfirmEmailCodes"] = "account.email", ["Account.RequiredPassword"] = "account.password",
         ["Account.RecoveryCodes"] = "account.recovery", ["Help.Index"] = "help", ["Usage.Index"] = "usage",
         ["Usage.Session"] = "usage.session",
+        ["TestingOutreach.Index"] = "testing.outreach", ["Care.Notifications"] = "notifications",
+        ["Care.ReceiptQuality"] = "receipt.quality", ["ContactCorrections.Index"] = "contact.corrections",
+        ["Care.Index"] = "person.care", ["Care.Testing"] = "person.testing",
+        ["Workflow.PatientWork"] = "person.work", ["Workflow.TaskEvidence"] = "work.task",
+        ["IntakeFormats.Index"] = "config.intake_formats", ["Care.Rules"] = "config.notification_rules",
+        ["Workflow.Configuration"] = "config.workflows",
     };
 
     public static UsageScreen? Find(string? code) => All.FirstOrDefault(s => s.Code == code);

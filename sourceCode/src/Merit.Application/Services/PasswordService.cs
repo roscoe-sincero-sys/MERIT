@@ -191,7 +191,7 @@ public sealed partial class PasswordService(IAccountData data, AccountService ac
             return new PasswordResetResult(PasswordResetOutcome.InvalidLink);
         }
 
-        ValidateNew(user, newPassword, confirmPassword, link.PasswordMinLength);
+        ValidateNew(user, newPassword, confirmPassword, link.PasswordMinLength, checkNotCurrent: false);
         byte[] verifier = Verifier(passwordResetId, token!);
         string? method = await accounts.CheckSecondFactorAsync(user, code, ct).ConfigureAwait(false);
         if (method is null)
@@ -204,6 +204,8 @@ public sealed partial class PasswordService(IAccountData data, AccountService ac
             LogWrongCode(logger, user.AppUserId, left);
             return new PasswordResetResult(left > 0 ? PasswordResetOutcome.WrongCode : PasswordResetOutcome.LinkClosed, left);
         }
+
+        EnsureNotCurrent(user, newPassword);
 
         var reset = await data.CompletePasswordResetAsync(passwordResetId, verifier, accounts.HashPassword(newPassword!), clientAddress, ct)
             .ConfigureAwait(false);
@@ -237,7 +239,7 @@ public sealed partial class PasswordService(IAccountData data, AccountService ac
         var user = await data.GetUserForSignInAsync(userName, ct).ConfigureAwait(false) ?? throw new NotFoundException();
         var policy = await data.GetMyPasswordPolicyAsync(ct).ConfigureAwait(false);
         new Validator().Required("CurrentPassword", currentPassword, "Current password").ThrowIfInvalid();
-        ValidateNew(user, newPassword, confirmPassword, policy.PasswordMinLength);
+        ValidateNew(user, newPassword, confirmPassword, policy.PasswordMinLength, checkNotCurrent: false);
 
         if (!accounts.IsCurrentPassword(user, currentPassword))
         {
@@ -251,6 +253,8 @@ public sealed partial class PasswordService(IAccountData data, AccountService ac
         {
             throw new ValidationException("PasswordAuthenticatorCode", "That code did not match. Enter the current six-digit code from your authenticator app.");
         }
+
+        EnsureNotCurrent(user, newPassword);
 
         await data.ChangeMyPasswordAsync(accounts.HashPassword(newPassword!), clientAddress, ct).ConfigureAwait(false);
         LogChanged(logger, user.AppUserId, "self");
@@ -299,8 +303,8 @@ public sealed partial class PasswordService(IAccountData data, AccountService ac
         LogNotice(logger, appUserId, sent.Submitted, sent.Failure, reference);
     }
 
-    /// <summary>Password rules: the jurisdiction's minimum length, the breached-password list, a match, and not the current one.</summary>
-    private void ValidateNew(SignInUserRow user, string? newPassword, string? confirmPassword, int minLength)
+    /// <summary>Password rules: the jurisdiction's minimum length, the breached-password list, a match, and optionally not the current one.</summary>
+    private void ValidateNew(SignInUserRow user, string? newPassword, string? confirmPassword, int minLength, bool checkNotCurrent = true)
     {
         accounts.ValidateNewPassword(newPassword, minLength, "NewPassword", user.UserName);
         var v = new Validator();
@@ -308,8 +312,19 @@ public sealed partial class PasswordService(IAccountData data, AccountService ac
         try { confirmed = confirmPassword is null ? null : PasswordPolicy.Normalize(confirmPassword); }
         catch (ArgumentException) { throw new ValidationException("ConfirmPassword", "Use valid Unicode characters in the password."); }
         v.When(PasswordPolicy.Normalize(newPassword!) != confirmed, "ConfirmPassword", "The two passwords don't match.");
-        v.When(accounts.IsCurrentPassword(user, newPassword), "NewPassword", "Choose a password you are not using now.");
         v.ThrowIfInvalid();
+        if (checkNotCurrent)
+        {
+            EnsureNotCurrent(user, newPassword);
+        }
+    }
+
+    private void EnsureNotCurrent(SignInUserRow user, string? newPassword)
+    {
+        if (accounts.IsCurrentPassword(user, newPassword))
+        {
+            throw new ValidationException("NewPassword", "Choose a password you are not using now.");
+        }
     }
 
     private async Task RecordChangedAsync(Guid appUserId, string how, CancellationToken ct)

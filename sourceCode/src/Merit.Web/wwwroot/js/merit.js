@@ -583,6 +583,8 @@
         const hidden = document.getElementById(input.getAttribute("data-hidden"));
         hidden.value = option.getAttribute("data-value");
         input.value = option.getAttribute("data-label");
+        const unmatched = document.getElementById(hidden.id + "-unmatched");
+        if (unmatched) unmatched.hidden = true;
         closeCombobox(input);
         hidden.dispatchEvent(new Event("change", { bubbles: true }));
         announce("Selected " + input.value);
@@ -616,7 +618,11 @@
         const input = evt.target.closest("[role=combobox]");
         if (!input) return;
         const hidden = document.getElementById(input.getAttribute("data-hidden"));
-        if (hidden) hidden.value = "";
+        if (hidden) {
+            hidden.value = "";
+            const unmatched = document.getElementById(hidden.id + "-unmatched");
+            if (unmatched && !input.value.trim()) unmatched.hidden = true;
+        }
         closeCombobox(input);
     });
 
@@ -629,7 +635,11 @@
     });
     document.addEventListener('focusout', evt => {
         const input = evt.target.closest('[role=combobox]');
-        if (input) closeCombobox(input);
+        if (!input) return;
+        closeCombobox(input);
+        const hidden = document.getElementById(input.getAttribute("data-hidden"));
+        const unmatched = hidden ? document.getElementById(hidden.id + "-unmatched") : null;
+        if (unmatched) unmatched.hidden = !(input.value.trim() && !hidden.value);
     });
     document.addEventListener('htmx:before:request', evt => {
         const input = evt.detail?.ctx?.sourceElement;
@@ -793,6 +803,10 @@ updateResultReview();
 document.addEventListener('submit', async event => {
     const form = event.target;
     let message = form.dataset.confirm;
+    if (!message && form.dataset.confirmDeactivate) {
+        const active = form.querySelector('#IsActive');
+        if (active && !active.checked) message = form.dataset.confirmDeactivate;
+    }
     if (message && form.dataset.confirmDate) {
         const date = document.getElementById(form.dataset.confirmDate)?.value;
         if (date) message += ` End date: ${date}.`;
@@ -831,6 +845,28 @@ document.addEventListener('click', async event => {
 });
 document.addEventListener('change', event => {
     if (event.target.id === 'saved-codes') document.querySelector('[data-recovery-submit]').disabled = !event.target.checked;
+});
+(() => {
+    const saved = document.getElementById('saved-codes');
+    const submit = document.querySelector('[data-recovery-submit]');
+    if (saved && submit) submit.disabled = !saved.checked;
+})();
+
+// Close header account/nav disclosure menus on outside click or Escape, and allow "/" to jump to global search.
+document.addEventListener('click', event => {
+    document.querySelectorAll('.merit-account-menu[open], .merit-nav-group[open]').forEach(menu => {
+        if (!menu.contains(event.target)) menu.open = false;
+    });
+});
+document.addEventListener('keydown', event => {
+    if (event.key === 'Escape') {
+        document.querySelectorAll('.merit-account-menu[open], .merit-nav-group[open]').forEach(menu => { menu.open = false; });
+    } else if (event.key === '/' && !event.ctrlKey && !event.metaKey && !event.altKey) {
+        const tag = document.activeElement?.tagName;
+        if (tag && ['INPUT', 'TEXTAREA', 'SELECT'].includes(tag)) return;
+        const search = document.getElementById('header-search') || document.getElementById('search-q');
+        if (search) { event.preventDefault(); search.focus(); }
+    }
 });
 
 document.addEventListener('click', event => {
@@ -884,3 +920,143 @@ document.addEventListener('click', function (event) {
     target.setAttribute('tabindex', '-1');
     requestAnimationFrame(function () { target.focus({ preventScroll: true }); target.scrollIntoView({ block: 'start' }); });
 });
+
+// Global Command Palette (Ctrl+K / Cmd+K) (#307 Phase 3)
+(() => {
+    const palette = document.getElementById('command-palette');
+    const input = document.getElementById('palette-input');
+    const list = document.getElementById('palette-list');
+    if (!palette || !input || !list) return;
+    const searchHint = document.getElementById('palette-search-hint');
+    const searchTerm = document.getElementById('palette-search-term');
+    const items = [...list.querySelectorAll('[role="option"]')];
+    let activeIndex = 0;
+
+    const visibleItems = () => items.filter(i => !i.hidden);
+    const highlight = idx => {
+        const vis = visibleItems();
+        activeIndex = vis.length ? Math.max(0, Math.min(idx, vis.length - 1)) : -1;
+        vis.forEach((el, i) => el.setAttribute('aria-selected', i === activeIndex ? 'true' : 'false'));
+        if (activeIndex >= 0) vis[activeIndex].scrollIntoView({ block: 'nearest' });
+    };
+    const filter = () => {
+        const q = input.value.trim().toLowerCase();
+        items.forEach(el => {
+            const text = (el.textContent + ' ' + (el.dataset.keywords || '')).toLowerCase();
+            el.hidden = !!q && !text.includes(q);
+        });
+        const vis = visibleItems();
+        if (searchHint && searchTerm) {
+            searchHint.hidden = !(q && vis.length === 0);
+            searchTerm.textContent = input.value.trim();
+        }
+        highlight(0);
+    };
+    const openPalette = () => {
+        if (palette.open) return;
+        input.value = '';
+        filter();
+        palette.showModal();
+        input.focus();
+    };
+    const closePalette = () => { if (palette.open) palette.close(); };
+
+    document.addEventListener('keydown', e => {
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+            e.preventDefault();
+            palette.open ? closePalette() : openPalette();
+        }
+    });
+    document.addEventListener('click', e => {
+        if (e.target.closest('[data-open-palette]')) openPalette();
+        else if (e.target.closest('[data-close-palette]') || e.target === palette) closePalette();
+        else {
+            const opt = e.target.closest('#palette-list [role="option"]');
+            if (opt?.dataset.url) { closePalette(); location.assign(opt.dataset.url); }
+        }
+    });
+    input.addEventListener('input', filter);
+    input.addEventListener('keydown', e => {
+        const vis = visibleItems();
+        if (e.key === 'ArrowDown') { e.preventDefault(); highlight(activeIndex + 1); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); highlight(activeIndex - 1); }
+        else if (e.key === 'Enter') {
+            e.preventDefault();
+            if (activeIndex >= 0 && vis[activeIndex]?.dataset.url) {
+                const url = vis[activeIndex].dataset.url;
+                closePalette();
+                location.assign(url);
+            } else if (input.value.trim() && searchHint) {
+                const q = encodeURIComponent(input.value.trim());
+                closePalette();
+                location.assign('/search?q=' + q);
+            }
+        }
+    });
+})();
+
+// Client-side Intake Pre-Flight Dropzone (zero storage, inspects first 8 KB structure only; never shows PHI) (#307 Phase 3)
+(() => {
+    const zone = document.querySelector('[data-intake-dropzone]');
+    const fileInput = document.getElementById('file');
+    const preflight = document.getElementById('intake-preflight');
+    const profileSelect = document.getElementById('intakeProfileId');
+    if (!zone || !fileInput || !preflight) return;
+
+    const inspectFile = async file => {
+        if (!file) { preflight.hidden = true; preflight.replaceChildren(); return; }
+        const maxBytes = 20 * 1024 * 1024;
+        const sizeLabel = file.size >= 1048576 ? (file.size / 1048576).toFixed(2) + ' MB' : Math.max(1, Math.round(file.size / 1024)) + ' KB';
+        const opt = profileSelect?.selectedOptions[0];
+        const expectedType = (opt?.dataset.fileType || '').toLowerCase();
+        const headerRow = Math.max(1, parseInt(opt?.dataset.headerRow || '1', 10));
+        const warnings = [];
+        const notes = [`Selected: ${file.name} (${sizeLabel})`];
+
+        if (file.size > maxBytes) warnings.push('File exceeds the 20 MB upload limit and will be rejected.');
+        const ext = (file.name.split('.').pop() || '').toLowerCase();
+        if (['xlsx', 'xls', 'xlsm', 'pdf', 'doc', 'docx'].includes(ext)) {
+            warnings.push(`".${ext}" is not a plain-text CSV/TSV/pipe or HL7 file. Export as CSV/TSV or upload the laboratory HL7 message.`);
+        }
+        try {
+            const bytes = new Uint8Array(await file.slice(0, 8).arrayBuffer());
+            if (bytes[0] === 0x50 && bytes[1] === 0x4B) warnings.push('File starts with a ZIP/Excel workbook signature (PK); save as plain-text CSV/TSV instead.');
+            else if (bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46) warnings.push('File is a PDF document, not a laboratory data file.');
+            else {
+                const sample = await file.slice(0, 8192).text();
+                const lines = sample.split(/\r\n|\n|\r/).filter(l => l.length > 0);
+                const first = lines[0] || '';
+                const looksHl7 = first.startsWith('MSH|') || first.startsWith('FHS|') || first.startsWith('BHS|');
+                if (expectedType === 'hl7' && !looksHl7) warnings.push('Selected profile expects HL7 (starting with MSH|), but this file does not begin with an HL7 header.');
+                else if (expectedType && expectedType !== 'hl7' && looksHl7) warnings.push(`Selected profile expects ${expectedType.toUpperCase()}, but this file looks like an HL7 message.`);
+                else if (looksHl7) notes.push('Detected format: HL7 message header (MSH).');
+                else if (lines.length >= headerRow) {
+                    const hdr = lines[headerRow - 1];
+                    const delim = expectedType === 'tsv' ? '\t' : expectedType === 'pipe' ? '|' : ',';
+                    const cols = hdr.split(delim).length;
+                    if (cols < 3) warnings.push(`Header row ${headerRow} has only ${cols} column(s) for ${expectedType.toUpperCase() || 'delimited'} format — check the sender profile or delimiter.`);
+                    else notes.push(`Detected ${cols} columns on header row ${headerRow}.`);
+                }
+            }
+        } catch { /* ignore read errors; server validates authoritatively */ }
+
+        preflight.replaceChildren();
+        preflight.className = 'merit-preflight ' + (warnings.length ? 'merit-preflight--warn' : 'merit-preflight--ok');
+        notes.forEach(t => { const p = document.createElement('p'); p.textContent = t; preflight.appendChild(p); });
+        warnings.forEach(w => { const p = document.createElement('p'); p.className = 'merit-preflight__warn'; p.textContent = 'Check before uploading: ' + w; preflight.appendChild(p); });
+        preflight.hidden = false;
+    };
+
+    fileInput.addEventListener('change', () => inspectFile(fileInput.files?.[0]));
+    profileSelect?.addEventListener('change', () => inspectFile(fileInput.files?.[0]));
+    ['dragenter', 'dragover'].forEach(ev => zone.addEventListener(ev, e => { e.preventDefault(); zone.classList.add('merit-dropzone--over'); }));
+    ['dragleave', 'drop'].forEach(ev => zone.addEventListener(ev, e => { e.preventDefault(); zone.classList.remove('merit-dropzone--over'); }));
+    zone.addEventListener('drop', e => {
+        const file = e.dataTransfer?.files?.[0];
+        if (!file) return;
+        const dt = new DataTransfer();
+        dt.items.add(file);
+        fileInput.files = dt.files;
+        inspectFile(file);
+    });
+})();

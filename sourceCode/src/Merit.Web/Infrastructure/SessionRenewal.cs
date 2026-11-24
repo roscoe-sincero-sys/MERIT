@@ -1,6 +1,7 @@
 using Merit.Application.Security;
 using Merit.Application.Services;
 using Merit.Application.Data;
+using Microsoft.AspNetCore.Authentication;
 
 namespace Merit.Web.Infrastructure;
 
@@ -29,7 +30,30 @@ public sealed class SessionRenewal(AccountService accounts, ICurrentSession sess
     public async Task RenewAsync(HttpContext http, Guid? userProfileId, Guid? viewAsUserId, Guid? actingTenantId, CancellationToken ct)
     {
         var me = session.RequireUserId();
-        var scope = await accounts.CreateSessionAsync(me, Lifetime, userProfileId, viewAsUserId, actingTenantId, ct)
+        var lifetime = Lifetime;
+        if (session.ScopeKey is Guid currentScope)
+        {
+            var stampClaim = http.User.FindFirst(MeritClaims.SecurityStamp)?.Value;
+            if (!Guid.TryParse(stampClaim, out var stamp) || !await accounts.IsSessionValidAsync(currentScope, stamp, ct).ConfigureAwait(false))
+            {
+                await http.SignOutAsync(AuthSchemes.Session).ConfigureAwait(false);
+                throw new Merit.Application.Errors.BusinessRuleException("Your session has ended. Please sign in again.");
+            }
+
+            if (await accounts.SessionStateAsync(currentScope, ct).ConfigureAwait(false) is { } state)
+            {
+                var remaining = state.ExpiresUtc - DateTime.UtcNow;
+                if (remaining <= TimeSpan.Zero)
+                {
+                    await http.SignOutAsync(AuthSchemes.Session).ConfigureAwait(false);
+                    throw new Merit.Application.Errors.BusinessRuleException("Your session has expired. Please sign in again.");
+                }
+
+                lifetime = remaining < lifetime ? remaining : lifetime;
+            }
+        }
+
+        var scope = await accounts.CreateSessionAsync(me, lifetime, userProfileId, viewAsUserId, actingTenantId, ct)
             .ConfigureAwait(false);
         if (session.ScopeKey is Guid old)
         {

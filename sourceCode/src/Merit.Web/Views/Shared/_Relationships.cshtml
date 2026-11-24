@@ -28,7 +28,7 @@
                                 @if (r.OtherDob is not null) { <span class="merit-meta">b. @Options.Date(r.OtherDob)</span> }
                                 @if (r.OtherIsContactOnly) { <span class="merit-badge">Contact only</span> }</td>
                             <td>@r.RoleLabel @if (r.HasLegalCustody) { <span class="merit-badge">Legal custody</span> }</td>
-                            <td>@if (r.IsPrimaryContact) { <span class="merit-star" aria-label="Primary contact">&#9733;</span> <span>Primary contact</span> }</td>
+                            <td>@if (r.IsPrimaryContact) { <span class="merit-star" aria-hidden="true">&#9733;</span> <span>Primary contact</span> }</td>
                             <td>@Options.Date(r.StartDate)@(r.EndDate is null ? "" : " to " + Options.Date(r.EndDate))</td>
                             <td>@Options.Humanize(r.Source)@if (r.VerifiedDate is null) { <span class="merit-meta"> (unverified)</span> }</td>
                             <td>

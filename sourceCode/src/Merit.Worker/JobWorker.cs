@@ -196,7 +196,6 @@ public sealed partial class ClusterScheduler(IServiceProvider services, JobSessi
                             PayloadJson = "{}",
                         }, stoppingToken);
                         LogRan(logger, result);
-                        await sp.GetRequiredService<IAccountData>().RevokeSessionScopeAsync(sessions.Current.Summary.SessionScopeId, stoppingToken);
                     }
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
@@ -205,6 +204,11 @@ public sealed partial class ClusterScheduler(IServiceProvider services, JobSessi
                 }
                 finally
                 {
+                    if (sessions.Current is { } s)
+                    {
+                        await sp.GetRequiredService<IAccountData>().RevokeSessionScopeAsync(s.Summary.SessionScopeId, CancellationToken.None);
+                    }
+
                     sessions.Current = null;
                 }
             }

@@ -37,7 +37,15 @@ app.MapGet("/health/queues", async (IServiceProvider sp, CancellationToken ct) =
 {
     using var scope = sp.CreateScope();
     var depth = await scope.ServiceProvider.GetRequiredService<IWorkData>().GetQueueDepthAsync(ct);
-    return Results.Ok(depth.Select(d => new { d.TenantName, d.JobType, d.Queued, d.Running, d.Failed, d.OldestWaitingUtc }));
+    var summary = depth.GroupBy(d => d.JobType).Select(g => new
+    {
+        JobType = g.Key,
+        Queued = g.Sum(x => x.Queued),
+        Running = g.Sum(x => x.Running),
+        Failed = g.Sum(x => x.Failed),
+        OldestWaitingUtc = g.Min(x => x.OldestWaitingUtc),
+    });
+    return Results.Ok(summary);
 });
 
 app.Run();

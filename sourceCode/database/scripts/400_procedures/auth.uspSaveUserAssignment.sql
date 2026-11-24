@@ -156,9 +156,10 @@ BEGIN
             END;
 
             DECLARE @roleRoot UNIQUEIDENTIFIER = (SELECT rootTenantId FROM auth.role WHERE roleId = @roleId AND isDeleted = 0);
-            DECLARE @targetIsPlatform BIT = (SELECT CASE WHEN h.tenantType = 'platform' THEN 1 ELSE 0 END
-                                               FROM auth.appUser AS u JOIN auth.tenant AS h ON h.tenantId = u.homeTenantId
-                                              WHERE u.appUserId = @appUserId AND u.isDeleted = 0);
+            DECLARE @targetRoot UNIQUEIDENTIFIER, @targetIsPlatform BIT;
+            SELECT @targetRoot = u.rootTenantId, @targetIsPlatform = CASE WHEN h.tenantType = 'platform' THEN 1 ELSE 0 END
+              FROM auth.appUser AS u JOIN auth.tenant AS h ON h.tenantId = u.homeTenantId
+             WHERE u.appUserId = @appUserId AND u.isDeleted = 0;
 
             IF @roleRoot IS NULL OR @targetIsPlatform IS NULL
             BEGIN
@@ -170,6 +171,11 @@ BEGIN
             IF @roleIsPlatform <> @tenantIsPlatform OR @roleIsPlatform <> @targetIsPlatform
             BEGIN
                 ;THROW 51422, N'Platform accounts hold only platform roles, granted at the platform; everyone else holds record roles at a region, state, tribe or jurisdiction.', 1;
+            END;
+
+            IF auth.udfIsPlatformAdmin () = 0 AND @targetRoot <> @roleRoot
+            BEGIN
+                ;THROW 51403, N'You can grant roles only to accounts in the same data root.', 1;
             END;
 
             IF @roleRoot <> @platform

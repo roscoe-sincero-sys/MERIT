@@ -113,6 +113,14 @@ BEGIN
         -- =========================================================================================
 
         DECLARE @root UNIQUEIDENTIFIER = auth.udfSessionRootTenantId ();
+        IF USER_NAME () <> N'dbo'
+           AND NOT EXISTS (SELECT 1 FROM auth.sessionScope AS ss CROSS APPLY auth.tvfUserGrantPermissions (ss.appUserId) AS m
+                            WHERE ss.sessionScopeId = TRY_CAST (SESSION_CONTEXT (N'scopeKey') AS UNIQUEIDENTIFIER)
+                              AND ss.isDeleted = 0 AND ss.revokedUtc IS NULL AND ss.expiresUtc > SYSUTCDATETIME ()
+                              AND m.tenantId = @root AND m.permissionCode = 'config.edit' AND m.grantRank >= 2)
+        BEGIN
+            ;THROW 51403, N'Only a configuration administrator at the data root can change jurisdiction-wide thresholds.', 1;
+        END;
 
         DECLARE @oldState NVARCHAR(MAX),@newState NVARCHAR(MAX),@wasActive BIT;
         SELECT @wasActive=isActive,@oldState=(SELECT thresholdId,analyteSpecimenId,population,ageMinMonths,ageMaxMonths,thresholdType,actionCodeId,dueIntervalDays,lowerValue,upperValue,comparator,effectiveFrom,effectiveTo,isActive FOR JSON PATH,INCLUDE_NULL_VALUES,WITHOUT_ARRAY_WRAPPER)

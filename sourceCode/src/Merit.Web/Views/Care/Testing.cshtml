@@ -11,7 +11,8 @@
 }
 <p><a href="/people/@patient.PersonId/care">Back to patient follow-up</a></p>
 <h1>Blood lead testing plan</h1>
-<p><strong>@patient.LastName, @patient.FirstName</strong> · Birth date: @patient.Dob</p>
+<partial name="_PatientWorkspaceNav" model='(patient.PersonId, "testing", false)' />
+<p><strong>@patient.LastName, @patient.FirstName</strong> &middot; Birth date: @(patient.Dob is null ? "DOB missing" : Options.Date(patient.Dob))</p>
 @if (!policyActive) {
 <p>No testing policy is active for this patient's state. Ask the state administrator to configure an approved policy.</p>
 @if(!ViewData.ModelState.IsValid) { <div class="usa-alert usa-alert--error" role="alert"><div asp-validation-summary="All"></div></div> }
@@ -39,7 +40,7 @@
 @if(p.CompletedUtc is DateTime done) { <p>Recorded @Clock.ToLocal(done).ToString("yyyy-MM-dd HH:mm"): @p.ResolutionNote</p> }
 @if(edit && p.TaskStatus == "open" && p.QueueCode == "testingFollowUp" && (p.ExposureCaseId is null || Session.Has(Permissions.CaseEdit))) {
 <details><summary>Record actual test or clinical reason to stop this plan</summary>
-<form asp-antiforgery="true" method="post" action="@root/resolve" class="usa-form" data-unsaved-work>
+<form id="testing-resolve-@p.WorkTaskId" asp-antiforgery="true" method="post" action="@root/resolve" class="usa-form" data-unsaved-work>
 <input type="hidden" name="workTaskId" value="@p.WorkTaskId" />
 <label class="usa-label" for="outcome-@p.WorkTaskId">Outcome</label><select class="usa-select" name="dismiss" id="outcome-@p.WorkTaskId"><option value="false">Test actually completed</option><option value="true">Dismiss with clinician/source-based reason</option></select>
 <label class="usa-label" for="result-@p.WorkTaskId">Actual completed blood test (required for completion)</label><select class="usa-select" name="completedLabResultId" id="result-@p.WorkTaskId"><option value="">Choose result</option>@foreach(var r in bloodResults) { <option value="@r.LabResultId">@r.CollectedDate · @r.Operator @r.ValueCanonical @r.UnitCanonical · @r.SampleType · @r.ResultRowStatus</option> }</select>

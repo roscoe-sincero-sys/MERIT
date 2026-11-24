@@ -3461,7 +3461,6 @@
   "name": "dbo.uspGetQueueDepth",
   "kind": "read",
   "grants": [
-   "meritWebRole",
    "meritWorkerRole"
   ],
   "permission": null,

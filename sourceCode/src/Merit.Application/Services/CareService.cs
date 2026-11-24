@@ -24,14 +24,16 @@ public sealed class CareService(ICareData data, IWorkData work, AuditService aud
         return (result.Rows, result.Total, result.Page);
     }
 
+    public const int MaxExportRows = 10_000;
+
     public async Task<IReadOnlyList<TestingOutreachRow>> ExportTestingAsync(TestingOutreachQuery query, CancellationToken ct)
     {
         session.Require(Permissions.PersonView); session.Require(Permissions.TaskView); session.Require(Permissions.DataExport);
         var all = new List<TestingOutreachRow>();
-        for (int page = 1; ; page++)
+        for (int page = 1; all.Count < MaxExportRows; page++)
         {
             var rows = await data.TestingOutreachAsync(query with { Page = page }, ct).ConfigureAwait(false);
-            all.AddRange(rows);
+            all.AddRange(rows.Take(MaxExportRows - all.Count));
             if (rows.Count < 50) break;
         }
         await audit.ExportedAsync("testingOutreach", null, all.Count, ct).ConfigureAwait(false);
@@ -134,10 +136,10 @@ public sealed class CareService(ICareData data, IWorkData work, AuditService aud
     {
         session.Require(Permissions.PersonView); session.Require(Permissions.DataExport);
         var all = new List<NotificationRow>();
-        for (int page = 1; ; page++)
+        for (int page = 1; all.Count < MaxExportRows; page++)
         {
             var rows = await data.NotificationsAsync(null, null, page, ct).ConfigureAwait(false);
-            all.AddRange(rows);
+            all.AddRange(rows.Take(MaxExportRows - all.Count));
             if (rows.Count < 50) break;
         }
         await audit.ExportedAsync("notificationObligation", null, all.Count, ct).ConfigureAwait(false);
