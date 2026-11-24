@@ -1,0 +1,57 @@
+name: Nightly SQL Integration Tests
+
+on:
+  schedule:
+    # 06:00 UTC daily
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly-integration-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  sql-integration-tests:
+    name: SQL Server 2022 integration tests
+    runs-on: windows-latest
+    timeout-minutes: 60
+    env:
+      MERIT_IT_REQUIRED: '1'
+      MERIT_IT_DATABASE: MERIT_IT
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Ensure SQL Server 2022 Express and sqlcmd are available
+        shell: pwsh
+        run: |
+          if (-not [string]::IsNullOrWhiteSpace("${{ vars.MERIT_IT_SERVER }}")) {
+            "MERIT_IT_SERVER=${{ vars.MERIT_IT_SERVER }}" | Out-File -FilePath $env:GITHUB_ENV -Append
+            Write-Host "Using configured MERIT_IT_SERVER=${{ vars.MERIT_IT_SERVER }}"
+            exit 0
+          }
+
+          choco install sql-server-2022 sqlserver-cmdlineutils -y --no-progress
+          $svc = Get-Service -Name 'MSSQL$SQLEXPRESS' -ErrorAction SilentlyContinue
+          if ($null -eq $svc) {
+            $svc = Get-Service -Name 'MSSQLSERVER' -ErrorAction SilentlyContinue
+            $server = 'localhost'
+          } else {
+            $server = 'localhost\SQLEXPRESS'
+          }
+          if ($null -ne $svc -and $svc.Status -ne 'Running') {
+            Start-Service $svc.Name
+          }
+          "MERIT_IT_SERVER=$server" | Out-File -FilePath $env:GITHUB_ENV -Append
+          Write-Host "Using local SQL Server instance: $server"
+
+      - name: Run SQL integration tests (fail if SQL Server is unreachable)
+        shell: pwsh
+        run: dotnet test sourceCode/tests/Merit.IntegrationTests/Merit.IntegrationTests.csproj --configuration Release -p:SkipAngularBuild=true --verbosity normal

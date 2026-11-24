@@ -1,0 +1,75 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dotnet-unit-tests:
+    name: .NET build & unit tests
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Build solution
+        run: dotnet build sourceCode/Merit.sln --configuration Release -p:SkipAngularBuild=true
+
+      - name: Run unit tests
+        run: dotnet test sourceCode/tests/Merit.Tests/Merit.Tests.csproj --configuration Release --no-build --verbosity normal
+
+  angular-build:
+    name: Angular production build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sourceCode/src/Merit.Web/ClientApp
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: sourceCode/src/Merit.Web/ClientApp/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Angular client
+        run: npm run build
+
+  database-generator-parity:
+    name: Database generator parity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Run generator parity unit tests
+        run: python -m unittest discover -s sourceCode/database/tools -p "test_*.py" -v
+
+      - name: Verify clean regeneration (no drift)
+        run: |
+          python sourceCode/database/tools/generateTables.py
+          python sourceCode/database/tools/generateProcedures.py
+          git diff --exit-code

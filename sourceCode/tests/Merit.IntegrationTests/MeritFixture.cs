@@ -32,6 +32,7 @@ public sealed partial class MeritFixture : IDisposable
 
     public MeritFixture()
     {
+        TestEnvironment.ThrowIfUnavailableAndRequired();
         if (TestEnvironment.SkipReason is not null)
         {
             return;
