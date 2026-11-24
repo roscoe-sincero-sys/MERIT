@@ -349,7 +349,7 @@ public sealed class PersonService(
 
         var open = (await data.GetCasesAsync(input.PersonId, ct).ConfigureAwait(false)).FirstOrDefault(c => c.CaseStatus != "closed");
         await places.SaveExposureSourceAsync(new ExposureSourceSave(input.ExposureSourceId ?? TimeOrderedId.New(), input.PersonId, existing is null ? open?.ExposureCaseId : existing.ExposureCaseId,
-            input.SourceType, Clean(input.Description), productId, existing?.LocationId, input.StartDate, input.EndDate, input.IsConfirmed, false, input.OriginalModifiedUtc), ct)
+            input.SourceType, CleanSingleLine(input.Description), productId, existing?.LocationId, input.StartDate, input.EndDate, input.IsConfirmed, false, input.OriginalModifiedUtc), ct)
             .ConfigureAwait(false);
         await audit.ChangedAsync("person", input.PersonId, ct).ConfigureAwait(false);
     }
@@ -415,4 +415,40 @@ public sealed class PersonService(
     }
 
     private static string? Clean(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
+
+    /// <summary>Trims and collapses embedded CR/LF sequences to a single space so single-line fields stay on one line.</summary>
+    public static string? CleanSingleLine(string? s)
+    {
+        if (string.IsNullOrWhiteSpace(s))
+        {
+            return null;
+        }
+
+        string trimmed = s.Trim();
+        if (trimmed.IndexOfAny(['\r', '\n']) < 0)
+        {
+            return trimmed;
+        }
+
+        var sb = new System.Text.StringBuilder(trimmed.Length);
+        bool inBreak = false;
+        foreach (char c in trimmed)
+        {
+            if (c is '\r' or '\n')
+            {
+                if (!inBreak)
+                {
+                    sb.Append(' ');
+                    inBreak = true;
+                }
+            }
+            else
+            {
+                sb.Append(c);
+                inBreak = false;
+            }
+        }
+
+        return sb.ToString();
+    }
 }
