@@ -20,7 +20,8 @@
 <div class="merit-grid-2">
     @if (Model.CanManageAccount)
     {
-        <form class="usa-form" method="post" action="/admin/users">
+        <form id="admin-user-form" class="usa-form" method="post" action="/admin/users" data-unsaved-work
+              data-confirm-deactivate="@(Model.AppUserId is not null && Model.IsActive ? "Deactivate this account? All active sessions for this user will be signed out immediately." : null)">
             @Html.AntiForgeryToken()
             <input type="hidden" name="AppUserId" value="@Model.AppUserId" />
             <div class="usa-form-group"><label class="usa-label" for="UserName">User name</label><input class="usa-input" id="UserName" name="UserName" value="@Model.UserName" readonly="@(Model.AppUserId is not null)" required /></div>

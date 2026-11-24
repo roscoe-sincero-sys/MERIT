@@ -17,7 +17,7 @@ public static class JobSessions
         // A profile that was deactivated, or a view-as the administrator may no longer use, is refused here with its
         // own message, which the worker records on the failed job.
         var scope = await accounts.CreateSessionScopeAsync(Guid.NewGuid(), job.RequestedByUserId, expiresUtc, job.RequestedProfileId,
-            job.RequestedViewAsUserId, job.RequestedActingTenantId, ct).ConfigureAwait(false);
+            job.RequestedViewAsUserId, job.RequestedActingTenantId, ct: ct).ConfigureAwait(false);
 
         // The scope falls back to another tenant when the requester has lost the one they were working in; running the
         // job there would put its records in the wrong place.

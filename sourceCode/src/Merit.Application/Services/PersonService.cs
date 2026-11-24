@@ -104,8 +104,12 @@ public sealed class PersonService(
         var header = await data.GetPersonAsync(personId, ct).ConfigureAwait(false);
         var relationships = data.GetRelationshipsAsync(personId, ct);
         var placeRows = data.GetPlacesAsync(personId, ct);
-        var results = data.GetResultsAsync(personId, null, ct);
-        var caseRows = data.GetCasesAsync(personId, ct);
+        var results = session.Has(Permissions.ResultView)
+            ? data.GetResultsAsync(personId, null, ct)
+            : Task.FromResult<IReadOnlyList<PersonResultRow>>([]);
+        var caseRows = session.Has(Permissions.CaseView)
+            ? data.GetCasesAsync(personId, ct)
+            : Task.FromResult<IReadOnlyList<PersonCaseRow>>([]);
         var jobs = data.GetEmploymentAsync(personId, ct);
         var sources = data.GetExposureSourcesAsync(personId, ct);
         var pregnancies = data.GetPregnanciesAsync(personId, ct);
@@ -141,10 +145,16 @@ public sealed class PersonService(
         => Read(() => data.GetPregnanciesAsync(personId, ct));
 
     public Task<IReadOnlyList<PersonResultRow>> GetResultsAsync(Guid personId, Guid? analyteId, CancellationToken ct = default)
-        => Read(() => data.GetResultsAsync(personId, analyteId, ct));
+    {
+        session.Require(Permissions.ResultView);
+        return Read(() => data.GetResultsAsync(personId, analyteId, ct));
+    }
 
     public Task<IReadOnlyList<PersonCaseRow>> GetCasesAsync(Guid personId, CancellationToken ct = default)
-        => Read(() => data.GetCasesAsync(personId, ct));
+    {
+        session.Require(Permissions.CaseView);
+        return Read(() => data.GetCasesAsync(personId, ct));
+    }
 
     public async Task<PersonSaveOutcome> SaveAsync(PersonInput input, CancellationToken ct = default)
     {
@@ -225,6 +235,7 @@ public sealed class PersonService(
 
     public async Task SaveIdentifierAsync(Guid personId, string type, string value, string? facility, CancellationToken ct = default)
     {
+        session.Require(Permissions.PersonEdit);
         session.Require(Permissions.PersonViewIdentifiers);
         new Validator().Required("IdentifierValue", value, "Identifier").ThrowIfInvalid();
         await data.SaveIdentifierAsync(TimeOrderedId.New(), personId, type, value.Trim(), Clean(facility), "staff",

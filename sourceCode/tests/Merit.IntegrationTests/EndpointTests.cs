@@ -252,7 +252,9 @@ public sealed partial class EndpointTests(MeritFixture fixture, ITestOutputHelpe
         var nowOpen = await OpenSignInScopesAsync("supervisor");
         var before = await ScopeAsync(Assert.Single(open.Except(nowOpen)));
         var after = await ScopeAsync(Assert.Single(nowOpen.Except(open)));
-        Assert.InRange(after.Expires - after.Created, TimeSpan.FromHours(12) - TimeSpan.FromMinutes(1), TimeSpan.FromHours(12) + TimeSpan.FromMinutes(1));
+        // #298: renewing a session scope must not extend the original session's remaining lifetime.
+        Assert.True(after.Expires <= before.Expires.AddSeconds(5), $"Renewed scope expiry {after.Expires:O} exceeded original {before.Expires:O}.");
+        Assert.InRange(after.Expires - after.Created, TimeSpan.FromHours(11), TimeSpan.FromHours(12) + TimeSpan.FromMinutes(1));
         Assert.NotNull(before.Revoked);
     }
 

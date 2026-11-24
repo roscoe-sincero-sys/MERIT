@@ -31,6 +31,9 @@ public static class PatientDocumentValidator
                     var name = entry.FullName;
                     if (name.Contains("..", StringComparison.Ordinal) || name.StartsWith('/') || name.Contains('\\')
                         || name.Contains("vbaProject", StringComparison.OrdinalIgnoreCase)
+                        || name.Contains("macrosheets/", StringComparison.OrdinalIgnoreCase)
+                        || name.Contains("dialogsheets/", StringComparison.OrdinalIgnoreCase)
+                        || name.Contains("activeX/", StringComparison.OrdinalIgnoreCase)
                         || name.Contains("embeddings/", StringComparison.OrdinalIgnoreCase)
                         || name.Contains("externalLinks/", StringComparison.OrdinalIgnoreCase)
                         || Path.GetExtension(name).ToLowerInvariant() is ".exe" or ".dll" or ".bin" or ".js" or ".html")

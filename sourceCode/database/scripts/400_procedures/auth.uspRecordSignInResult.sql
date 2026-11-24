@@ -91,6 +91,13 @@ BEGIN
         -- ===== The procedure's own work starts here. Everything above and below is boilerplate. ==
         -- =========================================================================================
 
+        IF @appUserId IS NOT NULL
+        BEGIN
+            DECLARE @userLock INT;
+            DECLARE @userLockName NVARCHAR (255) = CONCAT (N'MERIT.totp.', @appUserId);
+            EXEC @userLock = sys.sp_getapplock @Resource = @userLockName, @LockMode = 'Exclusive', @LockOwner = 'Transaction', @LockTimeout = 5000;
+        END;
+
         DECLARE @root UNIQUEIDENTIFIER = (SELECT rootTenantId FROM auth.appUser WHERE appUserId = @appUserId);
 
         IF @appUserId IS NOT NULL AND @succeeded = 1

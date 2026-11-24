@@ -22,6 +22,7 @@
     <ProjectReference Include="..\..\src\Merit.Application\Merit.Application.csproj" />
     <ProjectReference Include="..\..\src\Merit.Data.SqlServer\Merit.Data.SqlServer.csproj" />
     <ProjectReference Include="..\..\src\Merit.Web\Merit.Web.csproj" />
+    <ProjectReference Include="..\..\src\Merit.Worker\Merit.Worker.csproj" />
   </ItemGroup>
   <ItemGroup>
     <Using Include="Xunit" />

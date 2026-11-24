@@ -1,0 +1,15 @@
+@model (Guid PersonId, string Active, bool ContactOnly)
+@inject ICurrentSession Session
+@if (!Model.ContactOnly)
+{
+    <nav class="merit-patient-tabs" aria-label="Patient workspace">
+        <a href="/people/@Model.PersonId" aria-current="@(Model.Active == "overview" ? "page" : null)">Overview</a>
+        <a href="/people/@Model.PersonId/care" aria-current="@(Model.Active == "care" ? "page" : null)">Care &amp; notifications</a>
+        @if (Session.Has(Permissions.TaskView))
+        {
+            <a href="/people/@Model.PersonId/care/testing" aria-current="@(Model.Active == "testing" ? "page" : null)">Testing plan</a>
+            <a href="/people/@Model.PersonId/work" aria-current="@(Model.Active == "work" ? "page" : null)">Work checklist</a>
+        }
+        <a href="/app/people/@Model.PersonId/timeline" aria-current="@(Model.Active == "timeline" ? "page" : null)">Timeline</a>
+    </nav>
+}

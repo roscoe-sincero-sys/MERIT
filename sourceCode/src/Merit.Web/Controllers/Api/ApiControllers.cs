@@ -201,7 +201,7 @@ public sealed class ResultsApiController(ResultService results, PersonService pe
         return new PagedResult<ResultListItemDto>(rows.Select(r => new ResultListItemDto(r.LabResultId, r.PersonId,
                 r.LastName is null ? null : $"{r.LastName}, {r.FirstName}", r.Dob, r.AnalyteCode, r.Specimen, r.CollectedDate, r.ReceivedUtc,
                 r.Operator, r.ValueCanonical, r.UnitCanonical, r.SampleType, r.TestMethod, r.Population, r.ResultStatus, r.ResultRowStatus,
-                r.IsIndeterminate, r.LabName)).ToList(),
+                r.IsIndeterminate, r.LabName, r.IsMatched, r.IsIdentified)).ToList(),
             rows.FirstOrDefault()?.TotalCount ?? 0, page, pageSize);
     }
 
@@ -213,9 +213,12 @@ public sealed class ResultsApiController(ResultService results, PersonService pe
         var page = await people.GetPageAsync(id, ct);
         var names = (await reference.GetAsync(ct)).Names;
         var events = new List<TimelineEventDto>();
-        events.AddRange(page.Results.Where(r => r.ResultRowStatus == "valid").Select(r => new TimelineEventDto(r.CollectedDate, null, "result",
-            $"{r.AnalyteCode} {(r.Operator == "=" ? string.Empty : r.Operator)}{r.ValueCanonical:0.##} {r.UnitCanonical}",
-            r.LabName, r.ValueCanonical, r.UnitCanonical, r.SampleType, r.AnalyteCode, session.Has(Permissions.ResultView) ? $"/results/{r.LabResultId}" : null)));
+        if (session.Has(Permissions.ResultView))
+        {
+            events.AddRange(page.Results.Where(r => r.ResultRowStatus == "valid").Select(r => new TimelineEventDto(r.CollectedDate, null, "result",
+                $"{r.AnalyteCode} {(r.Operator == "=" ? string.Empty : r.Operator)}{r.ValueCanonical:0.##} {r.UnitCanonical}",
+                r.LabName, r.ValueCanonical, r.UnitCanonical, r.SampleType, r.AnalyteCode, $"/results/{r.LabResultId}")));
+        }
         events.AddRange(page.Places.Select(p => new TimelineEventDto(p.StartDate, p.EndDate, "place",
             $"{(p.IsPrimary ? "Primary residence" : names.Of(p.Role))}: {p.AddressLabel}", p.CountyName, null, null, null, null)));
         events.AddRange(page.Employment.Where(e => e.StartDate is not null).Select(e => new TimelineEventDto(e.StartDate!.Value, e.EndDate, "job",

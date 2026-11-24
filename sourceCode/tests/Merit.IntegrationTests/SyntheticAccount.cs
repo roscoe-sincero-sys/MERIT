@@ -15,10 +15,16 @@ namespace Merit.IntegrationTests;
 /// </summary>
 public sealed class SyntheticAccount : IAsyncDisposable
 {
+    private readonly WebApplicationFactory<Program> host;
     private readonly string secret = Totp.ToBase32(Totp.NewSecret());
     private readonly string prefix;
+    private long lastSignInStep = long.MinValue;
 
-    private SyntheticAccount(string prefix) => this.prefix = prefix;
+    private SyntheticAccount(WebApplicationFactory<Program> host, string prefix)
+    {
+        this.host = host;
+        this.prefix = prefix;
+    }
 
     public Guid Id { get; } = Guid.NewGuid();
 
@@ -26,11 +32,18 @@ public sealed class SyntheticAccount : IAsyncDisposable
 
     public string Email => $"{Name}@example.test";
 
-    public string TotpCode() => Totp.Code(Totp.FromBase32(secret), DateTimeOffset.UtcNow.ToUnixTimeSeconds() / 30);
+    public string TotpCode()
+    {
+        long nowStep = DateTimeOffset.UtcNow.ToUnixTimeSeconds() / 30;
+        long nextStep = Math.Min(nowStep + 1, Math.Max(nowStep - 1, lastSignInStep + 1));
+        return Totp.Code(Totp.FromBase32(secret), nextStep);
+    }
+
+    public string TotpCodeForStep(long step) => Totp.Code(Totp.FromBase32(secret), step);
 
     public static async Task<SyntheticAccount> CreateAsync(WebApplicationFactory<Program> host, string prefix, bool mfa = true)
     {
-        var account = new SyntheticAccount(prefix);
+        var account = new SyntheticAccount(host, prefix);
         string protectedSecret = host.Services.GetRequiredService<ISecretProtector>().Protect(account.secret);
         await account.ScalarAsync<int>("""
             INSERT auth.appUser (appUserId, rootTenantId, homeTenantId, userName, displayName, email, passwordHash, securityStamp,
@@ -51,7 +64,22 @@ public sealed class SyntheticAccount : IAsyncDisposable
             MeritClient.Form(page, ("UserName", Name), ("Password", password), ("ReturnUrl", returnUrl)));
         Assert.Equal("/account/mfa", step.Headers.Location?.OriginalString);
         string mfa = await client.Http.GetStringAsync("/account/mfa");
-        using var done = await client.NoRedirect.PostAsync("/account/mfa", MeritClient.Form(mfa, ("Code", TotpCode())));
+        long nowStep = DateTimeOffset.UtcNow.ToUnixTimeSeconds() / 30;
+        long signInStep = Math.Max(nowStep - 1, lastSignInStep + 1);
+        string code;
+        if (signInStep <= nowStep + 1)
+        {
+            lastSignInStep = signInStep;
+            code = Totp.Code(Totp.FromBase32(secret), signInStep);
+        }
+        else
+        {
+            // #302: TOTP replay protection allows at most 3 distinct steps (now-1, now, now+1) per 30s window;
+            // use a one-time recovery code (without hyphens, matching TryRecoveryCodeAsync normalization) if a test signs the same account in 4+ times within 30s.
+            code = "TEST" + Guid.NewGuid().ToString("N")[..10].ToUpperInvariant();
+            await AddRecoveryCodeAsync(host, code);
+        }
+        using var done = await client.NoRedirect.PostAsync("/account/mfa", MeritClient.Form(mfa, ("Code", code)));
         Assert.Equal(HttpStatusCode.Redirect, done.StatusCode);
     }
 

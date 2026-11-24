@@ -24,6 +24,8 @@
     <PackageReference Include="QRCoder" />
     <!-- SMTP for email one-time codes (Infrastructure/Email). -->
     <PackageReference Include="MailKit" />
+    <!-- Pin patched transitive dependency from MimeKit (#306). -->
+    <PackageReference Include="System.Security.Cryptography.Pkcs" />
   </ItemGroup>
 
   <ItemGroup>

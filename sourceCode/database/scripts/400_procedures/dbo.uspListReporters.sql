@@ -87,6 +87,7 @@ BEGIN
 
         DECLARE @t NVARCHAR (120) = NULLIF (LTRIM (RTRIM (@text)), N'');
 
+        DECLARE @escaped NVARCHAR (600) = REPLACE (REPLACE (REPLACE (@t, N'[', N'[[]'), N'%', N'[%]'), N'_', N'[_]');
         SELECT TOP (@maxRows) x.reporterKind, x.reporterId, x.reporterName, x.cliaNumber, x.npi, x.credential, x.phone,
                x.registryStatus, x.modifiedDateUtc
           FROM (SELECT CASE WHEN EXISTS (SELECT 1 FROM dbo.organizationType AS ot WHERE ot.organizationId = o.organizationId
@@ -98,13 +99,13 @@ BEGIN
                        o.modifiedDateUtc
                   FROM dbo.organization AS o
                  WHERE o.isDeleted = 0 AND o.isActive = 1 AND (o.cliaNumber IS NOT NULL OR o.npi IS NOT NULL)
-                   AND (@t IS NULL OR o.organizationName LIKE N'%' + @t + N'%' OR o.cliaNumber = @t OR o.npi = @t)
+                   AND (@t IS NULL OR o.organizationName LIKE N'%' + @escaped + N'%' OR o.cliaNumber = @t OR o.npi = @t)
                 UNION ALL
                 SELECT 'provider', pv.providerId, CONCAT (pv.lastName, CASE WHEN pv.firstName IS NULL THEN N'' ELSE N', ' + pv.firstName END),
                        NULL, pv.npi, pv.credential, NULL, pv.registryStatus, pv.modifiedDateUtc
                   FROM dbo.provider AS pv
                  WHERE pv.isDeleted = 0
-                   AND (@t IS NULL OR pv.lastName LIKE @t + N'%' OR pv.firstName LIKE @t + N'%' OR pv.npi = @t)) AS x
+                   AND (@t IS NULL OR pv.lastName LIKE @escaped + N'%' OR pv.firstName LIKE @escaped + N'%' OR pv.npi = @t)) AS x
          WHERE @kind IS NULL OR x.reporterKind = @kind
          ORDER BY x.reporterKind, x.reporterName;
 

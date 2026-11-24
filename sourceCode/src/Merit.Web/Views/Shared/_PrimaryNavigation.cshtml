@@ -19,9 +19,12 @@
         (Label: "Lab imports", Links: new[] {
             (Text: "Upload lab results", Url: "/intake", Visible: CurrentSession.Has(Permissions.IntakeUpload)),
             (Text: "Held records", Url: "/app/held", Visible: CurrentSession.Has(Permissions.ResultReleaseHold)),
-            (Text: "Match review", Url: "/app/match-review", Visible: CurrentSession.Has(Permissions.ResultReleaseHold)) }),
+            (Text: "Match review", Url: "/app/match-review", Visible: CurrentSession.Has(Permissions.ResultReleaseHold)),
+            (Text: "Receipt quality", Url: "/receipt-quality", Visible: CurrentSession.Has(Permissions.TaskView)) }),
         (Label: "Case management", Links: new[] {
             (Text: "Cases", Url: "/cases", Visible: CurrentSession.Has(Permissions.CaseView)),
+            (Text: "Testing outreach", Url: "/testing", Visible: CurrentSession.Has(Permissions.PersonView) && CurrentSession.Has(Permissions.TaskView)),
+            (Text: "Notification deadlines", Url: "/notifications", Visible: CurrentSession.Has(Permissions.PersonView) && CurrentSession.Has(Permissions.TaskView)),
             (Text: "Clusters", Url: "/app/clusters", Visible: CurrentSession.Has(Permissions.CaseView)),
             (Text: "Map", Url: "/app/map", Visible: CurrentSession.Has(Permissions.CaseView)),
             (Text: "Investigations", Url: "/investigations", Visible: CurrentSession.Has(Permissions.CaseView)) }),
@@ -33,6 +36,7 @@
         (Label: "Administration", Links: new[] {
             (Text: "Usage", Url: "/admin/usage", Visible: CurrentSession.Has(Permissions.UsageView)),
             (Text: CurrentSession.Has(Permissions.ConfigEdit) ? "Configuration" : "Reference levels", Url: "/config/thresholds", Visible: !CurrentSession.IsPlatformAdmin),
+            (Text: "Lab import formats", Url: "/config/intake-formats", Visible: CurrentSession.Has(Permissions.IntakeConfigure)),
             (Text: "Users", Url: "/admin/users", Visible: CurrentSession.Has(Permissions.TenantAdminister) || CurrentSession.Has(Permissions.SecurityReview)),
             (Text: "Tenants", Url: "/admin/tenants", Visible: CurrentSession.Has(Permissions.TenantCreate)),
             (Text: "Sign-in activity", Url: "/admin/sign-in-activity", Visible: CurrentSession.Has(Permissions.TenantAdminister) || CurrentSession.Has(Permissions.SecurityReview)),

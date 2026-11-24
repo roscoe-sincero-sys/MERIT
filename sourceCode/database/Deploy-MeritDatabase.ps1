@@ -58,6 +58,7 @@ param(
     [Parameter()] [ValidatePattern('^[A-Za-z][A-Za-z0-9_]{0,63}$')] [string] $DatabaseName = 'MERIT',
     [Parameter()] [System.Management.Automation.PSCredential] $SqlCredential,
     [Parameter()] [switch] $CreateLogins,
+    [Parameter()] [switch] $TrustServerCertificate,
     [Parameter()] [ValidatePattern('^[A-Za-z][A-Za-z0-9_]{0,63}$')] [string] $WebLogin = 'meritWeb',
     [Parameter()] [ValidatePattern('^[A-Za-z][A-Za-z0-9_]{0,63}$')] [string] $WorkerLogin = 'meritWorker',
     [Parameter()] [securestring] $WebLoginPassword,
@@ -135,6 +136,12 @@ if (-not $sqlcmd) {
     throw 'sqlcmd was not found on PATH. Install the SQL Server command line utilities (ODBC sqlcmd 15+ or go-sqlcmd).'
 }
 
+# Explicitly enforce mandatory TLS encryption across both ODBC sqlcmd (-N) and go-sqlcmd (-N true).
+# Server certificate validation is on by default; -TrustServerCertificate opts into -C (local dev only).
+$sqlcmdHelp = & $sqlcmd.Source '-?' 2>&1 | Out-String
+$isGoSqlcmd = $sqlcmdHelp -match '--authentication-method|--encrypt-connection|go-sqlcmd'
+$sqlcmdEncryptArgs = if ($isGoSqlcmd) { @('-N', 'true') } else { @('-N') }
+
 function Get-AuthArgs {
     if ($SqlCredential) {
         # The password goes through SQLCMDPASSWORD rather than -P so it never appears on a command line.
@@ -151,7 +158,8 @@ function Invoke-Sqlcmd2 {
         [string] $Query,
         [hashtable] $Variables = @{}
     )
-    $argList = @('-S', $ServerInstance, '-d', $Database) + (Get-AuthArgs) + @('-I', '-C', '-b', '-W', '-f', '65001')
+    $argList = @('-S', $ServerInstance, '-d', $Database) + (Get-AuthArgs) + $sqlcmdEncryptArgs + @('-I', '-b', '-W', '-f', '65001')
+    if ($TrustServerCertificate) { $argList += '-C' }
     foreach ($k in $Variables.Keys) { $argList += @('-v', ("{0}={1}" -f $k, $Variables[$k])) }
     if ($File)  { $argList += @('-i', $File) }
     if ($Query) { $argList += @('-Q', $Query) }
@@ -165,6 +173,7 @@ function Invoke-Sqlcmd2 {
     return [pscustomobject]@{ ExitCode = $code; Output = ($output | Out-String) }
 }
 
+try {
 # ----------------------------------------------------------------------------------------------- server check
 Write-Step "Connecting to $ServerInstance"
 $probe = Invoke-Sqlcmd2 -Database 'master' -Query "SET NOCOUNT ON; SELECT CAST(SERVERPROPERTY('ProductMajorVersion') AS int);"
@@ -199,10 +208,14 @@ if ($CreateLogins) {
         $exists = Invoke-Sqlcmd2 -Database 'master' -Query "SET NOCOUNT ON; SELECT CASE WHEN SUSER_ID(N'$name') IS NULL THEN 0 ELSE 1 END;"
         if ($exists.Output -match '(?m)^\s*1\s*$') { Write-Step "Login $name exists."; continue }
         if (-not $secure) { throw "Login $name does not exist; pass -$(if ($name -eq $WebLogin) {'WebLoginPassword'} else {'WorkerLoginPassword'})." }
-        $plain = (ConvertTo-PlainText $secure).Replace("'", "''")
-        $q = "CREATE LOGIN [$name] WITH PASSWORD = N'$plain', DEFAULT_DATABASE = [$DatabaseName], CHECK_POLICY = ON, CHECK_EXPIRATION = OFF;"
-        $r = Invoke-Sqlcmd2 -Database 'master' -Query $q
-        $plain = $null
+        $env:MeritNewLoginPassword = (ConvertTo-PlainText $secure).Replace("'", "''")
+        try {
+            $q = "CREATE LOGIN [$name] WITH PASSWORD = N'`$(MeritNewLoginPassword)', DEFAULT_DATABASE = [$DatabaseName], CHECK_POLICY = ON, CHECK_EXPIRATION = OFF;"
+            $r = Invoke-Sqlcmd2 -Database 'master' -Query $q
+        }
+        finally {
+            Remove-Item Env:\MeritNewLoginPassword -ErrorAction SilentlyContinue
+        }
         if ($r.ExitCode -ne 0) { throw "Could not create login $name.`n$($r.Output)" }
         Write-Step "Created login $name."
     }
@@ -254,5 +267,8 @@ Write-Host $r.Output
 
 $elapsed = (Get-Date) - $started
 Write-Step ("Deployment of {0} on {1} complete: {2} script(s) in {3:mm\:ss}." -f $DatabaseName, $ServerInstance, $count, $elapsed)
-Remove-Item Env:\SQLCMDPASSWORD -ErrorAction SilentlyContinue
-Remove-Item Env:\PlatformAdminUserName, Env:\PlatformAdminPasswordHash -ErrorAction SilentlyContinue
+}
+finally {
+    Remove-Item Env:\SQLCMDPASSWORD, Env:\MeritNewLoginPassword -ErrorAction SilentlyContinue
+    Remove-Item Env:\PlatformAdminUserName, Env:\PlatformAdminPasswordHash -ErrorAction SilentlyContinue
+}

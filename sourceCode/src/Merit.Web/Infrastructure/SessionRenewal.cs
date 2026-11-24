@@ -1,6 +1,7 @@
 using Merit.Application.Security;
 using Merit.Application.Services;
 using Merit.Application.Data;
+using Microsoft.AspNetCore.Authentication;
 
 namespace Merit.Web.Infrastructure;
 
@@ -8,8 +9,7 @@ namespace Merit.Web.Infrastructure;
 /// Starting and renewing the database session scope behind the session cookie, in one place (issue #21). A renewal creates
 /// the new scope first, then ends the old one and rewrites the cookie, so a failure leaves the current session working.
 /// </summary>
-public sealed class SessionRenewal(AccountService accounts, ICurrentSession session, IConfiguration configuration, ISignInEvents events,
-                                   ScreenUsageRecorder usage)
+public sealed class SessionRenewal(AccountService accounts, ICurrentSession session, IConfiguration configuration, ISignInEvents events)
 {
     public const string LifetimeSetting = "Session:LifetimeHours";
 
@@ -17,9 +17,9 @@ public sealed class SessionRenewal(AccountService accounts, ICurrentSession sess
     public TimeSpan Lifetime => TimeSpan.FromHours(Math.Max(1, configuration.GetValue(LifetimeSetting, 12)));
 
     /// <summary>A new session for a person who has just signed in: always the master profile.</summary>
-    public async Task SignInAsync(HttpContext http, Guid userId, CancellationToken ct)
+    public async Task SignInAsync(HttpContext http, Guid userId, CancellationToken ct, Guid? expectedSecurityStamp = null)
     {
-        var scope = await accounts.CreateSessionAsync(userId, Lifetime, ct: ct).ConfigureAwait(false);
+        var scope = await accounts.CreateSessionAsync(userId, Lifetime, expectedSecurityStamp: expectedSecurityStamp, ct: ct).ConfigureAwait(false);
         await SessionCookie.SignInAsync(http, scope.Scope).ConfigureAwait(false);
         await events.RecordAsync(new SignInEvent(SignInEventTypes.SessionStarted, SignInSteps.Session, AppUserId: userId,
             SessionScopeId: scope.Scope.Summary.SessionScopeId), ct).ConfigureAwait(false);
@@ -29,13 +29,25 @@ public sealed class SessionRenewal(AccountService accounts, ICurrentSession sess
     public async Task RenewAsync(HttpContext http, Guid? userProfileId, Guid? viewAsUserId, Guid? actingTenantId, CancellationToken ct)
     {
         var me = session.RequireUserId();
-        var scope = await accounts.CreateSessionAsync(me, Lifetime, userProfileId, viewAsUserId, actingTenantId, ct)
-            .ConfigureAwait(false);
-        if (session.ScopeKey is Guid old)
+        var stampClaim = http.User.FindFirst(MeritClaims.SecurityStamp)?.Value;
+        if (session.ScopeKey is not Guid currentScope || !Guid.TryParse(stampClaim, out var stamp))
         {
-            // A profile/view/working-tenant change replaces access, not the logical signed-in visit.
-            await usage.ContinueAsync(scope.Scope.Summary.SessionScopeId, ct).ConfigureAwait(false);
-            await accounts.SignOutAsync(old, ct).ConfigureAwait(false);
+            await http.SignOutAsync(AuthSchemes.Session).ConfigureAwait(false);
+            throw new Merit.Application.Errors.BusinessRuleException("Your session has ended. Please sign in again.");
+        }
+
+        SignedInSession scope;
+        try
+        {
+            scope = await accounts.RenewSessionAsync(me, currentScope, stamp, Lifetime, userProfileId, viewAsUserId, actingTenantId, ct)
+                .ConfigureAwait(false);
+        }
+        catch (Merit.Application.Errors.SessionEndedException)
+        {
+            // Only an ended/expired/replaced source scope or mismatched security stamp (SQL 51401) ends the cookie;
+            // ordinary 51403 authorization denials (e.g., unauthorized view-as) keep the current valid session intact.
+            await http.SignOutAsync(AuthSchemes.Session).ConfigureAwait(false);
+            throw new Merit.Application.Errors.BusinessRuleException("Your session has ended. Please sign in again.");
         }
 
         await SessionCookie.SignInAsync(http, scope.Scope).ConfigureAwait(false);

@@ -86,6 +86,7 @@ BEGIN
              , u.securityStamp
              , u.mfaSecretProtected
              , u.mfaEnabled
+             , u.lastTotpStep
              , u.failedSignInCount
              , u.lockoutEndUtc
              , u.isActive

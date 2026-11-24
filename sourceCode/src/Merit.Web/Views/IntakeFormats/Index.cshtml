@@ -14,7 +14,7 @@
 <section class="merit-section"><h2>@(Model.PreviousProfileId is null?"Add a format":"Create updated version")</h2>
 @if(Model.Senders.Count==0) { <p><a href="/reporters">Register a laboratory</a> before configuring its format.</p> }
 else {
-<form method="post" action="/config/intake-formats" class="usa-form merit-form--wide" data-unsaved-work>
+<form id="intake-format-form" method="post" action="/config/intake-formats" class="usa-form merit-form--wide" data-unsaved-work>
 @Html.AntiForgeryToken()<input type="hidden" asp-for="PreviousProfileId" />
 <label class="usa-label" asp-for="SenderOrganizationId">Laboratory</label><select class="usa-select" asp-for="SenderOrganizationId">@foreach(var sender in Model.Senders) { <option value="@sender.OrganizationId">@sender.OrganizationName (@sender.CliaNumber)</option> }</select>
 <label class="usa-label" asp-for="ProfileName">Format name</label><input class="usa-input" asp-for="ProfileName" required maxlength="120" />

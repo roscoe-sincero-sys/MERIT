@@ -20,6 +20,8 @@ public sealed class SignInUserRow
 
     public bool MfaEnabled { get; init; }
 
+    public long? LastTotpStep { get; init; }
+
     public int FailedSignInCount { get; init; }
 
     public DateTime? LockoutEndUtc { get; init; }

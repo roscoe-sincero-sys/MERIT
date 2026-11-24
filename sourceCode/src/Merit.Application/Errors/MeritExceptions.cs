@@ -29,6 +29,15 @@ public sealed class PermissionDeniedException : MeritException
     public string Permission { get; }
 }
 
+/// <summary>The caller's current session scope is revoked, expired, replaced, or its security stamp changed.</summary>
+public sealed class SessionEndedException : MeritException
+{
+    public SessionEndedException(string message = "Your session has ended. Please sign in again.", Exception? inner = null)
+        : base(message, inner)
+    {
+    }
+}
+
 /// <summary>Someone else changed the record since it was read (row version mismatch).</summary>
 public sealed class ConcurrencyException : MeritException
 {

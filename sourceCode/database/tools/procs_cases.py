@@ -168,7 +168,18 @@ SET @Comments = N'Result attached to case.';
                 "linked investigations, open tasks, and the person's primary contact.",
         "params": "@exposureCaseId UNIQUEIDENTIFIER",
         "key": "CONCAT (N'exposureCaseId=', @exposureCaseId)",
-        "validate": CASE_VISIBLE,
+        "validate": """DECLARE @caseOwner UNIQUEIDENTIFIER, @casePerson UNIQUEIDENTIFIER;
+SELECT @caseOwner = owningTenantId, @casePerson = personId
+  FROM dbo.exposureCase WHERE exposureCaseId = @exposureCaseId AND isDeleted = 0;
+IF @caseOwner IS NULL
+BEGIN
+    ;THROW 51404, N'The case was not found, or you do not have access to it.', 1;
+END;
+
+IF auth.udfCanReadIdentified (@caseOwner, 'case.view', NULL) = 0
+BEGIN
+    ;THROW 51403, N'De-identified roles cannot open individual case charts.', 1;
+END;""",
         "body": """
 DECLARE @personId UNIQUEIDENTIFIER, @analyteId UNIQUEIDENTIFIER;
 SELECT @personId = personId, @analyteId = analyteId FROM dbo.exposureCase WHERE exposureCaseId = @exposureCaseId;
@@ -277,15 +288,29 @@ BEGIN
 END;""",
         "body": """
 DECLARE @me UNIQUEIDENTIFIER = auth.udfSessionUserId ();
+DECLARE @isDbo BIT = CASE WHEN USER_NAME () = N'dbo' THEN 1 ELSE 0 END;
+DECLARE @idTenants TABLE (tenantId UNIQUEIDENTIFIER PRIMARY KEY);
+IF @isDbo = 0
+BEGIN
+    INSERT @idTenants (tenantId)
+    SELECT tenantId
+      FROM auth.tvfIdentifiedTenants ('case.view');
+END;
 -- The search text matches literally: LIKE wildcards in it are escaped.
-DECLARE @like NVARCHAR (200) = REPLACE (REPLACE (REPLACE (NULLIF (LTRIM (RTRIM (@search)), N''), N'[', N'[[]'), N'%', N'[%]'), N'_', N'[_]');
+DECLARE @like NVARCHAR (600) = REPLACE (REPLACE (REPLACE (NULLIF (LTRIM (RTRIM (@search)), N''), N'[', N'[[]'), N'%', N'[%]'), N'_', N'[_]');
 
-SELECT c.exposureCaseId, c.caseNumber, c.personId, p.lastName, p.firstName, p.dob, a.code AS analyteCode,
+SELECT c.exposureCaseId, c.caseNumber,
+       CASE WHEN @isDbo = 1 OR idt.tenantId IS NOT NULL THEN c.personId ELSE CAST (0x0 AS UNIQUEIDENTIFIER) END AS personId,
+       CASE WHEN @isDbo = 1 OR idt.tenantId IS NOT NULL THEN p.lastName ELSE N'De-identified' END AS lastName,
+       CASE WHEN @isDbo = 1 OR idt.tenantId IS NOT NULL THEN p.firstName ELSE NULL END AS firstName,
+       CASE WHEN @isDbo = 1 OR idt.tenantId IS NOT NULL THEN p.dob ELSE NULL END AS dob,
+       a.code AS analyteCode,
        c.population, c.classification, c.caseStatus, c.openedDate, u.displayName AS assignedToName,
        t.tenantName AS owningTenantName, COUNT (*) OVER () AS totalCount
   FROM dbo.exposureCase AS c
   JOIN dbo.person AS p ON p.personId = c.personId
   JOIN config.analyte AS a ON a.analyteId = c.analyteId
+  LEFT JOIN @idTenants AS idt ON idt.tenantId = c.owningTenantId
   LEFT JOIN auth.appUser AS u ON u.appUserId = c.assignedToUserId
   LEFT JOIN auth.tenant AS t ON t.tenantId = c.owningTenantId
  WHERE c.isDeleted = 0
@@ -297,7 +322,7 @@ SELECT c.exposureCaseId, c.caseNumber, c.personId, p.lastName, p.firstName, p.do
    AND (@classification IS NULL OR c.classification = @classification)
    AND (@population IS NULL OR c.population = @population)
    AND (@owningTenantId IS NULL OR c.owningTenantId = @owningTenantId)
-   AND (@like IS NULL OR c.caseNumber LIKE N'%' + @like + N'%' OR p.lastName LIKE @like + N'%')
+   AND (@like IS NULL OR c.caseNumber LIKE N'%' + @like + N'%' OR ((@isDbo = 1 OR idt.tenantId IS NOT NULL) AND p.lastName LIKE @like + N'%'))
  ORDER BY CASE WHEN @sort = 'opened' AND @descending = 0 THEN c.openedDate END ASC,
           CASE WHEN @sort = 'opened' AND @descending = 1 THEN c.openedDate END DESC,
           CASE WHEN @sort = 'case' AND @descending = 0 THEN c.caseNumber END ASC,
@@ -307,10 +332,10 @@ SELECT c.exposureCaseId, c.caseNumber, c.personId, p.lastName, p.firstName, p.do
                THEN CASE c.classification WHEN 'confirmed' THEN 1 WHEN 'suspect' THEN 2 ELSE 3 END END ASC,
           CASE WHEN @sort = 'classification' AND @descending = 1
                THEN CASE c.classification WHEN 'confirmed' THEN 1 WHEN 'suspect' THEN 2 ELSE 3 END END DESC,
-          CASE WHEN @sort = 'person' AND @descending = 0 THEN p.lastName END ASC,
-          CASE WHEN @sort = 'person' AND @descending = 0 THEN p.firstName END ASC,
-          CASE WHEN @sort = 'person' AND @descending = 1 THEN p.lastName END DESC,
-          CASE WHEN @sort = 'person' AND @descending = 1 THEN p.firstName END DESC,
+          CASE WHEN @sort = 'person' AND @descending = 0 AND (@isDbo = 1 OR idt.tenantId IS NOT NULL) THEN p.lastName END ASC,
+          CASE WHEN @sort = 'person' AND @descending = 0 AND (@isDbo = 1 OR idt.tenantId IS NOT NULL) THEN p.firstName END ASC,
+          CASE WHEN @sort = 'person' AND @descending = 1 AND (@isDbo = 1 OR idt.tenantId IS NOT NULL) THEN p.lastName END DESC,
+          CASE WHEN @sort = 'person' AND @descending = 1 AND (@isDbo = 1 OR idt.tenantId IS NOT NULL) THEN p.firstName END DESC,
           c.openedDate DESC, c.exposureCaseId
 OFFSET (@pageNumber - 1) * @pageSize ROWS
  FETCH NEXT @pageSize ROWS ONLY
@@ -970,6 +995,7 @@ BEGIN
 END;""",
         "body": """
 DECLARE @me UNIQUEIDENTIFIER = auth.udfSessionUserId ();
+DECLARE @escaped NVARCHAR (600) = REPLACE (REPLACE (REPLACE (NULLIF (LTRIM (RTRIM (@searchText)), N''), N'[', N'[[]'), N'%', N'[%]'), N'_', N'[_]');
 
 SELECT i.investigationId, i.investigationNumber, i.investigationType, i.investigationStatus, i.requestedDate,
        i.scheduledDate, COALESCE (l.addressLine1, o.organizationName, es.sourceDescription) AS targetLabel,
@@ -982,8 +1008,8 @@ SELECT i.investigationId, i.investigationNumber, i.investigationType, i.investig
  WHERE i.isDeleted = 0
    AND (@openOnly = 0 OR i.investigationStatus NOT IN ('cleared', 'closed'))
    AND (@assignedToMe = 0 OR i.assignedToUserId = @me)
-   AND (NULLIF (@searchText, N'') IS NULL OR i.investigationNumber LIKE N'%' + @searchText + N'%'
-        OR l.addressLine1 LIKE N'%' + @searchText + N'%' OR o.organizationName LIKE N'%' + @searchText + N'%')
+   AND (@escaped IS NULL OR i.investigationNumber LIKE N'%' + @escaped + N'%'
+        OR l.addressLine1 LIKE N'%' + @escaped + N'%' OR o.organizationName LIKE N'%' + @escaped + N'%')
    AND (NULLIF (@statusFilter, '') IS NULL OR i.investigationStatus = @statusFilter)
    AND (NULLIF (@typeFilter, '') IS NULL OR i.investigationType = @typeFilter)
    AND (NULLIF (@assignedFilter, '') IS NULL OR (@assignedFilter = 'me' AND i.assignedToUserId = @me)

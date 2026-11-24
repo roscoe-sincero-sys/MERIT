@@ -80,7 +80,12 @@ public static class Totp
 
     /// <summary>Accepts the current code and one step either side, for clock drift.</summary>
     public static bool Verify(byte[] secret, string? code, DateTimeOffset now)
+        => TryVerify(secret, code, now, out _);
+
+    /// <summary>Accepts the current code and one step either side, returning the matched 30-second time step for replay prevention.</summary>
+    public static bool TryVerify(byte[] secret, string? code, DateTimeOffset now, out long matchedStep)
     {
+        matchedStep = 0;
         if (code is null)
         {
             return false;
@@ -97,6 +102,7 @@ public static class Totp
         {
             if (CryptographicOperations.FixedTimeEquals(Encoding.ASCII.GetBytes(Code(secret, s)), Encoding.ASCII.GetBytes(digits)))
             {
+                matchedStep = s;
                 return true;
             }
         }

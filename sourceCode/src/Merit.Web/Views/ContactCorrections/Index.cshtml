@@ -7,7 +7,7 @@
 @if(!ViewData.ModelState.IsValid) { <div role="alert" class="usa-alert usa-alert--error"><h2>Correction was not saved</h2><div asp-validation-summary="All"></div></div> }
 @if(Model.PatientContext && Model.Request.CaregiverId != Guid.Empty) {
 <section class="merit-section"><h2>Request a contact correction</h2>
-<form method="post" action="/contact-corrections" class="usa-form" data-unsaved-work>
+<form id="contact-correction-form" method="post" action="/contact-corrections" class="usa-form" data-unsaved-work>
 @Html.AntiForgeryToken()<input type="hidden" asp-for="Request.PersonId" /><input type="hidden" asp-for="Request.CaregiverId" />
 <label class="usa-label" asp-for="Request.ContactType">Contact to correct</label><select class="usa-select" asp-for="Request.ContactType"><option value="phone">Phone</option><option value="email">Email</option><option value="address">Mailing residence address</option></select>
 <label class="usa-label" asp-for="Request.ProposedValue">Proposed phone, email or street address</label><input class="usa-input" asp-for="Request.ProposedValue" required maxlength="200" />

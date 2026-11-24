@@ -1,17 +1,22 @@
 /* Drafts live only in this document's memory. Never store patient text in browser storage. */
 (() => {
     'use strict';
-    const selector = '[data-preserve-drafts] form[id], form[data-unsaved-work][id]';
+    const selector = '[data-preserve-drafts] form[id], form[data-unsaved-work]';
     const baseline = new Map();
     const forced = new Set();
+    let autoId = 0;
+    const keyOf = form => form.id || (form.id = `merit-unsaved-${++autoId}`);
     const forms = () => [...document.querySelectorAll(selector)];
     const value = form => JSON.stringify([...form.elements]
         .filter(el => el.name && !['hidden', 'submit', 'button'].includes(el.type))
         .map(el => [el.name, el.type === 'checkbox' || el.type === 'radio' ? el.checked : el.value]));
     const capture = () => {
-        for (const form of forms()) if (!baseline.has(form.id)) {
-            baseline.set(form.id, value(form));
-            if (form.dataset.unsavedDirty === 'True' || form.dataset.unsavedDirty === 'true') forced.add(form.id);
+        for (const form of forms()) {
+            const id = keyOf(form);
+            if (!baseline.has(id)) {
+                baseline.set(id, value(form));
+                if (form.dataset.unsavedDirty === 'True' || form.dataset.unsavedDirty === 'true') forced.add(id);
+            }
         }
         for (const id of baseline.keys()) if (!document.getElementById(id)) { baseline.delete(id); forced.delete(id); }
     };

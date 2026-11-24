@@ -83,11 +83,13 @@ BEGIN
         -- ===== The procedure's own work starts here. Everything above and below is boilerplate. ==
         -- =========================================================================================
 
+        DECLARE @root UNIQUEIDENTIFIER = auth.udfSessionRootTenantId ();
+
         SELECT u.appUserId, u.userName, u.displayName, h.tenantName AS homeTenantName
           FROM auth.appUser AS u
           JOIN auth.tenant  AS h ON h.tenantId = u.homeTenantId
          WHERE u.userName = @userName AND u.isDeleted = 0 AND u.isActive = 1
-           AND (h.tenantType <> 'platform' OR auth.udfIsPlatformAdmin () = 1);
+           AND (auth.udfIsPlatformAdmin () = 1 OR (h.tenantType <> 'platform' AND u.rootTenantId = @root));
 
         -- =========================================================================================
         -- ===== End of the procedure's own work. ===================================================

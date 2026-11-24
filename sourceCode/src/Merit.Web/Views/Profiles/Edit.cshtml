@@ -10,7 +10,7 @@
     <partial name="_ErrorSummary" model='new ErrorSummaryModel(["ProfileName", "ProfileDescription", "IsActive"], new Dictionary<string, string> { ["ProfileName"] = "ProfileName", ["ProfileDescription"] = "ProfileDescription", ["IsActive"] = "IsActive" }, SummaryId: "profiles-edit-errors")' />
 }
 <div class="merit-grid-2">
-    <form class="usa-form usa-form--large" method="post" action="/account/profiles">
+    <form id="profile-edit-form" class="usa-form usa-form--large" method="post" action="/account/profiles" data-unsaved-work>
         @Html.AntiForgeryToken()
         <input type="hidden" name="UserProfileId" value="@Model.UserProfileId" />
         <div class="usa-form-group"><label class="usa-label" for="ProfileName">Name</label>

@@ -85,18 +85,18 @@ interface DrawnEvent {
     </svg>
   `,
   styles: `
-    .timeline { display:block; box-sizing:border-box; width: 100%; height: auto; border: 1px solid #dfe1e2; }
+    .timeline { display:block; box-sizing:border-box; width: 100%; height: auto; background: #fcfcfb; border: 1px solid var(--merit-line, #dde3ea); border-radius: var(--merit-radius, .5rem); }
     .lane { stroke: #dfe1e2; }
     .lane-label { font-size: 12px; font-weight: 700; fill: #1b1b1b; }
-    .tick { stroke: #f0f0f0; }
+    .tick { stroke: #ebeff3; }
     .tick-label { font-size: 12px; fill: #565c65; }
     .point { fill: #fff; stroke: #1a4480; stroke-width: 2; cursor: pointer; }
     .point.venous { fill: #1a4480; }
-    .bar { fill: #73b3e7; cursor: pointer; }
-    .bar--place { fill: #97d4ea; }
-    .bar--job { fill: #ffbe2e; }
-    .bar--case { fill: #d54309; }
-    .bar--pregnancy { fill: #f2938c; }
+    .bar { fill: #1d63b8; stroke: #162e51; stroke-width: 1; cursor: pointer; }
+    .bar--place { fill: #0e8558; stroke: #0a5c3d; stroke-width: 1; }
+    .bar--job { fill: #a86800; stroke: #6e4400; stroke-width: 1; }
+    .bar--case { fill: #c84b18; stroke: #8a310e; stroke-width: 1; }
+    .bar--pregnancy { fill: #b8326a; stroke: #7d1f46; stroke-width: 1; }
     .event-marker { cursor:pointer; }
     .event-marker:focus { outline:none; }
     .event-marker:focus .event-hit { stroke:#2491ff; stroke-width:2; }
@@ -228,9 +228,16 @@ export class TimelineStore {
         @for (e of t.events; track $index) { <li>{{ display.date(e.date) }}@if (e.endDate && e.endDate !== e.date) { &ndash; {{ display.date(e.endDate) }} }: {{ e.label }} @if(e.detail) { <span class="merit-meta">{{ e.detail }}</span> } @if(e.href) { <a [href]="e.href">Open source record</a> }</li> }
       </ol>
     } @else if (store.error(); as e) {
+      <h1 tabindex="-1">Timeline</h1>
       <div class="usa-alert usa-alert--error usa-alert--slim" role="alert"><div class="usa-alert__body"><p class="usa-alert__text">{{ e }}</p></div></div>
     } @else {
-      <p class="merit-indicator">Loading the timeline&hellip;</p>
+      <h1 tabindex="-1">Timeline</h1>
+      <div class="merit-skeleton-page" role="status" aria-label="Loading the timeline">
+        <span class="usa-sr-only">Loading the timeline&hellip;</span>
+        <div class="merit-skeleton merit-skeleton--bar" aria-hidden="true"></div>
+        <div class="merit-skeleton merit-skeleton--row" aria-hidden="true"></div>
+        <div class="merit-skeleton merit-skeleton--row" aria-hidden="true"></div>
+      </div>
     }
   `,
   styles: `.controls { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; margin-bottom: .5rem; }`,

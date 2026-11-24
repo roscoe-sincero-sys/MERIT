@@ -103,14 +103,39 @@ BEGIN
         -- ===== The procedure's own work starts here. Everything above and below is boilerplate. ==
         -- =========================================================================================
 
-        SELECT r.labResultId, r.personId, p.lastName, p.firstName, p.dob, a.code AS analyteCode, s.specimen, r.collectedDate,
+        DECLARE @isDbo BIT = CASE WHEN USER_NAME () = N'dbo' THEN 1 ELSE 0 END;
+        DECLARE @idTenants TABLE (tenantId UNIQUEIDENTIFIER PRIMARY KEY);
+        IF @isDbo = 0
+        BEGIN
+            INSERT @idTenants (tenantId)
+            SELECT tenantId
+              FROM auth.tvfIdentifiedTenants ('result.view');
+        END;
+
+        SELECT r.labResultId,
+               CASE WHEN id.isIdentified = 1 THEN r.personId ELSE NULL END AS personId,
+               CASE WHEN id.isIdentified = 1 THEN p.lastName ELSE NULL END AS lastName,
+               CASE WHEN id.isIdentified = 1 THEN p.firstName ELSE NULL END AS firstName,
+               CASE WHEN id.isIdentified = 1 THEN p.dob ELSE NULL END AS dob,
+               CAST (CASE WHEN r.personId IS NOT NULL THEN 1 ELSE 0 END AS BIT) AS isMatched,
+               id.isIdentified,
+               a.code AS analyteCode, s.specimen, r.collectedDate,
                r.receivedUtc, r.operator, r.valueCanonical, r.unitCanonical, r.sampleType, r.testMethod, r.population,
                r.resultStatus, r.resultRowStatus, r.isIndeterminate, lab.organizationName AS labName,
                COUNT (*) OVER () AS totalCount
           FROM dbo.labResult AS r
           JOIN config.analyteSpecimen AS s ON s.analyteSpecimenId = r.analyteSpecimenId
           JOIN config.analyte AS a ON a.analyteId = s.analyteId
-          LEFT JOIN dbo.person AS p ON p.personId = r.personId
+         CROSS APPLY (SELECT CAST (CASE WHEN @isDbo = 1
+                                          OR EXISTS (SELECT 1 FROM @idTenants AS idt WHERE idt.tenantId = r.owningTenantId)
+                                          OR (r.personId IS NOT NULL
+                                              AND EXISTS (SELECT 1
+                                                            FROM dbo.personAccess AS pa
+                                                            JOIN @idTenants       AS idt ON idt.tenantId = pa.tenantId
+                                                           WHERE pa.personId = r.personId
+                                                             AND pa.isDeleted = 0))
+                                        THEN 1 ELSE 0 END AS BIT) AS isIdentified) AS id
+          LEFT JOIN dbo.person AS p ON p.personId = r.personId AND id.isIdentified = 1
           LEFT JOIN dbo.organization AS lab ON lab.organizationId = r.labOrganizationId
          WHERE r.isDeleted = 0
            AND (@analyteId IS NULL OR a.analyteId = @analyteId)
@@ -124,8 +149,8 @@ BEGIN
                   CASE WHEN @sortBy = 'collectedDate'  AND @sortDescending = 1 THEN r.collectedDate END DESC,
                   CASE WHEN @sortBy = 'valueCanonical' AND @sortDescending = 0 THEN r.valueCanonical END ASC,
                   CASE WHEN @sortBy = 'valueCanonical' AND @sortDescending = 1 THEN r.valueCanonical END DESC,
-                  CASE WHEN @sortBy = 'lastName'       AND @sortDescending = 0 THEN p.lastName END ASC,
-                  CASE WHEN @sortBy = 'lastName'       AND @sortDescending = 1 THEN p.lastName END DESC,
+                  CASE WHEN @sortBy = 'lastName' AND @sortDescending = 0 AND id.isIdentified = 1 THEN p.lastName END ASC,
+                  CASE WHEN @sortBy = 'lastName' AND @sortDescending = 1 AND id.isIdentified = 1 THEN p.lastName END DESC,
                   CASE WHEN @sortBy = 'analyteCode'    AND @sortDescending = 0 THEN a.code END ASC,
                   CASE WHEN @sortBy = 'analyteCode'    AND @sortDescending = 1 THEN a.code END DESC,
                   CASE WHEN @sortBy = 'receivedUtc'    AND @sortDescending = 0 THEN r.receivedUtc END ASC,

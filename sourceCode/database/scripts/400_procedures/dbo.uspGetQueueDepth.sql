@@ -128,7 +128,7 @@ GO
 
 IF DATABASE_PRINCIPAL_ID (N'meritWebRole') IS NOT NULL
 BEGIN
-    GRANT EXECUTE ON dbo.uspGetQueueDepth TO meritWebRole;
+    REVOKE EXECUTE ON dbo.uspGetQueueDepth FROM meritWebRole;
 END;
 GO
 

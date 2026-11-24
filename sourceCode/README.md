@@ -44,8 +44,10 @@ cd sourceCode\database
 $web    = Read-Host -AsSecureString 'meritWeb password'
 $worker = Read-Host -AsSecureString 'meritWorker password'
 .\Deploy-MeritDatabase.ps1 -ServerInstance 'localhost\PORTAL' -CreateLogins `
-    -WebLoginPassword $web -WorkerLoginPassword $worker -IncludeDemoData
+    -WebLoginPassword $web -WorkerLoginPassword $worker -IncludeDemoData -TrustServerCertificate
 ```
+
+- `-TrustServerCertificate` accepts a self-signed certificate for local development only; omit it in production so mandatory TLS validates the server certificate.
 
 - `-CreateLogins` creates or updates the `meritWeb` and `meritWorker` SQL logins and maps them to `meritWebRole` and
   `meritWorkerRole`. Those roles have EXECUTE on their own procedures and no table access.
@@ -61,7 +63,7 @@ The scripts in `database/scripts` are generated. To change a table or procedure,
 
 ## 2. Configure the connection strings
 
-`appsettings.json` contains placeholders only. For local development, set the passwords you chose in step 1:
+`appsettings.json` contains placeholders only. For local development (self-signed SQL Server), set the passwords you chose in step 1 (in production, always use `Encrypt=True;TrustServerCertificate=False` with a CA-trusted certificate):
 
 ```powershell
 cd sourceCode

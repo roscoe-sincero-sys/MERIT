@@ -20,7 +20,16 @@
     </div>
 }
 @* Angular bootstraps into this element. ngCspNonce lets component styles load under the Content Security Policy. *@
-<app-root ngCspNonce="@Nonce.Value"><p class="merit-indicator">Loading&hellip;</p></app-root>
+<app-root ngCspNonce="@Nonce.Value">
+    <div class="merit-skeleton-page" role="status" aria-label="Loading workspace">
+        <span class="usa-sr-only">Loading&hellip;</span>
+        <div class="merit-skeleton merit-skeleton--title" aria-hidden="true"></div>
+        <div class="merit-skeleton merit-skeleton--bar" aria-hidden="true"></div>
+        <div class="merit-skeleton merit-skeleton--row" aria-hidden="true"></div>
+        <div class="merit-skeleton merit-skeleton--row" aria-hidden="true"></div>
+        <div class="merit-skeleton merit-skeleton--row" aria-hidden="true"></div>
+    </div>
+</app-root>
 @section Scripts {
     @foreach (var s in Model.Scripts)
     {

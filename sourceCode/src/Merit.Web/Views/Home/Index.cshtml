@@ -10,28 +10,36 @@
     <span class="merit-meta">@Model.TenantName</span>
 </div>
 
-<section class="merit-section" aria-labelledby="start-heading">
-<h2 id="start-heading">Start your work</h2>
-<p>MERIT imports patient lab results and tracks required follow-up. These actions use your current profile and working agency.</p>
-<div class="merit-section__actions">
-@if(caseWork) { <a class="usa-button" href="/app/queues?mine=true">Work on my assigned follow-up</a><a class="usa-button usa-button--outline" href="/app/queues?overdue=true">Review overdue work</a> }
-@if(Session.Has(Permissions.IntakeUpload)) { <a class="usa-button @(caseWork ? "usa-button--outline":"")" href="/intake">Import lab results</a> }
-@if(Session.Has(Permissions.PersonView)) { <a class="usa-button usa-button--outline" href="/search">@(Session.Has(Permissions.ResultEdit) ? "Find a patient / enter a paper result":"Find a patient")</a> }
-@if(Session.Has(Permissions.TaskView) && !caseWork) { <a class="usa-button usa-button--outline" href="/app/queues?mine=true">Review assigned work</a> }
-@if(Session.Has(Permissions.ConfigEdit)) { <a class="usa-button usa-button--outline" href="/config/thresholds">Review program configuration</a> }
-@if(Session.Has(Permissions.TenantAdminister)) { <a class="usa-button usa-button--outline" href="/admin/users">Manage user access</a> }
-</div>
-@if(Session.Has(Permissions.ResultEdit) && Session.Has(Permissions.PersonView)) { <p>For a fax or paper report, find the patient, check their birth date, then choose <strong>Enter a result</strong>. For a file from a laboratory, use <strong>Import lab results</strong> when available in this profile.</p> }
-<p><a href="/help" target="_blank" rel="noopener">Open task guides<span class="usa-sr-only"> (opens in a new tab)</span></a>. You can start routine work without reading a guide first.</p>
-</section>
 <ul class="merit-tiles" aria-label="Your work">
     @* Each label says what it counts, so the held tile and the Held records queue below read as different numbers (issue #158). *@
-    <li><a class="merit-tile" href="/cases?assigned=me"><span class="merit-tile__count">@c.MyOpenCases</span><span class="merit-tile__label">Open cases assigned to me</span></a></li>
-    <li><a class="merit-tile" href="/app/queues?mine=true"><span class="merit-tile__count">@c.MyOpenTasks</span><span class="merit-tile__label">Open tasks assigned to me</span></a></li>
-    <li><a class="merit-tile @(c.OverdueTasks > 0 ? "merit-tile--urgent" : "")" href="/app/queues?overdue=true"><span class="merit-tile__count">@c.OverdueTasks</span><span class="merit-tile__label">Overdue tasks, all queues</span></a></li>
-    <li><a class="merit-tile @(c.UrgentHeld > 0 ? "merit-tile--urgent" : "")" href="/app/held"><span class="merit-tile__count">@c.UrgentHeld</span><span class="merit-tile__label">Held results with an elevated value</span></a></li>
-    <li><a class="merit-tile" href="/cases"><span class="merit-tile__count">@c.OpenCasesInScope</span><span class="merit-tile__label">Open cases in your scope</span></a></li>
+    <li><a class="merit-tile @(c.MyOpenCases == 0 ? "merit-tile--calm" : "")" href="/cases?assigned=me"><span class="merit-tile__count">@c.MyOpenCases</span><span class="merit-tile__label">Open cases assigned to me</span></a></li>
+    <li><a class="merit-tile @(c.MyOpenTasks == 0 ? "merit-tile--calm" : "")" href="/app/queues?mine=true"><span class="merit-tile__count">@c.MyOpenTasks</span><span class="merit-tile__label">Open tasks assigned to me</span></a></li>
+    <li><a class="merit-tile @(c.OverdueTasks > 0 ? "merit-tile--urgent" : "merit-tile--calm")" href="/app/queues?overdue=true"><span class="merit-tile__count">@c.OverdueTasks</span><span class="merit-tile__label">Overdue tasks, all queues</span></a></li>
+    <li><a class="merit-tile @(c.UrgentHeld > 0 ? "merit-tile--urgent" : "merit-tile--calm")" href="/app/held"><span class="merit-tile__count">@c.UrgentHeld</span><span class="merit-tile__label">Held results with an elevated value</span></a></li>
+    <li><a class="merit-tile @(c.OpenCasesInScope == 0 ? "merit-tile--calm" : "")" href="/cases"><span class="merit-tile__count">@c.OpenCasesInScope</span><span class="merit-tile__label">Open cases in your scope</span></a></li>
 </ul>
+
+<section class="merit-section" aria-labelledby="start-heading">
+    <div class="merit-section__head">
+        <h2 id="start-heading">Quick actions</h2>
+        <a class="usa-link merit-meta" href="/help" target="_blank" rel="noopener">Open task guides<span class="usa-sr-only"> (opens in a new tab)</span></a>
+    </div>
+    <div class="merit-section__actions">
+        @if(caseWork) { <a class="usa-button" href="/app/queues?mine=true">Work on my assigned follow-up</a><a class="usa-button usa-button--outline" href="/app/queues?overdue=true">Review overdue work</a> }
+        @if(Session.Has(Permissions.IntakeUpload)) { <a class="usa-button @(caseWork ? "usa-button--outline":"")" href="/intake">Import lab results</a> }
+        @if(Session.Has(Permissions.PersonView)) { <a class="usa-button usa-button--outline" href="/search">@(Session.Has(Permissions.ResultEdit) ? "Find a patient / enter a paper result":"Find a patient")</a> }
+        @if(Session.Has(Permissions.TaskView) && !caseWork) { <a class="usa-button usa-button--outline" href="/app/queues?mine=true">Review assigned work</a> }
+        @if(Session.Has(Permissions.ConfigEdit)) { <a class="usa-button usa-button--outline" href="/config/thresholds">Review program configuration</a> }
+        @if(Session.Has(Permissions.TenantAdminister)) { <a class="usa-button usa-button--outline" href="/admin/users">Manage user access</a> }
+    </div>
+    @if(Session.Has(Permissions.ResultEdit) && Session.Has(Permissions.PersonView))
+    {
+        <details class="merit-quick-guide">
+            <summary>Paper report &amp; file import tips</summary>
+            <p class="merit-meta">For a fax or paper report, find the patient, check their birth date, then choose <strong>Enter a result</strong>. For a file from a laboratory, use <strong>Import lab results</strong> when available in this profile. Actions use your current profile and working agency.</p>
+        </details>
+    }
+</section>
 
 <section class="merit-section" aria-labelledby="urgent-heading">
     <h2 id="urgent-heading">Needs attention</h2>
@@ -74,7 +82,18 @@
                             </td>
                             <td>@i.Detail</td>
                             <td class="merit-nowrap">@Options.Date(i.DueDate)</td>
-                            <td class="merit-nowrap">@Options.Date(i.WaitingSinceUtc)</td>
+                            @{
+                                string ageText = "";
+                                if (i.WaitingSinceUtc is DateTime since)
+                                {
+                                    var age = DateTime.UtcNow - since;
+                                    ageText = age.TotalDays >= 2 ? $"{(int)age.TotalDays}d ago"
+                                        : age.TotalHours >= 24 ? "1d ago"
+                                        : age.TotalHours >= 1 ? $"{(int)age.TotalHours}h ago"
+                                        : "Just now";
+                                }
+                            }
+                            <td class="merit-nowrap"><span title="@Options.Date(i.WaitingSinceUtc)">@ageText</span></td>
                         </tr>
                     }
                 </tbody>
@@ -99,14 +118,16 @@
     }
     else
     {
-        <ul class="usa-list usa-list--unstyled">
+        <ul class="usa-list usa-list--unstyled merit-recent-cases">
             @foreach (var k in Model.Data.MyCases)
             {
-                <li>
-                    <a class="usa-link" href="/cases/@k.ExposureCaseId">@k.CaseNumber</a> &middot;
-                    <a class="usa-link" href="/people/@k.PersonId">@k.LastName, @k.FirstName</a>
-                    <span class="merit-badge merit-badge--@k.Classification">@Options.Humanize(k.Classification)</span>
-                    <span class="merit-meta">opened @Options.Date(k.OpenedDate)</span>
+                <li class="merit-recent-cases__row">
+                    <span>
+                        <a class="usa-link merit-mono" href="/cases/@k.ExposureCaseId">@k.CaseNumber</a> &middot;
+                        <a class="usa-link" href="/people/@k.PersonId">@k.LastName, @k.FirstName</a>
+                        <span class="merit-badge merit-badge--@k.Classification">@Options.Humanize(k.Classification)</span>
+                    </span>
+                    <span class="merit-meta merit-nowrap">opened @Options.Date(k.OpenedDate)</span>
                 </li>
             }
         </ul>
