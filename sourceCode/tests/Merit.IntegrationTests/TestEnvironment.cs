@@ -39,8 +39,26 @@ public static partial class TestEnvironment
 
     private static readonly Lazy<string?> Unavailable = new(Probe);
 
-    /// <summary>Null when the server answers; otherwise why the suite is skipped.</summary>
-    public static string? SkipReason => Unavailable.Value;
+    /// <summary>
+    /// When MERIT_IT_REQUIRED=1 (such as in CI), an unreachable SQL Server fails the run instead of skipping [SqlFact]/[SqlTheory].
+    /// </summary>
+    public static bool IsRequired => IsRequiredValue(Environment.GetEnvironmentVariable("MERIT_IT_REQUIRED"));
+
+    internal static bool IsRequiredValue(string? value)
+        => string.Equals(value, "1", StringComparison.Ordinal)
+           || string.Equals(value, "true", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Null when the server answers (or when MERIT_IT_REQUIRED forces failure instead of skipping); otherwise why the suite is skipped.</summary>
+    public static string? SkipReason => IsRequired ? null : Unavailable.Value;
+
+    /// <summary>Fails fast when MERIT_IT_REQUIRED is set and the SQL Server instance is unreachable.</summary>
+    public static void ThrowIfUnavailableAndRequired()
+    {
+        if (IsRequired && Unavailable.Value is { } reason)
+        {
+            throw new InvalidOperationException($"MERIT_IT_REQUIRED is set, so SQL integration tests cannot be skipped: {reason}");
+        }
+    }
 
     private static string? Probe()
     {
