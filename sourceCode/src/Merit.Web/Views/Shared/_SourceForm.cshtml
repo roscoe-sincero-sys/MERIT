@@ -13,7 +13,7 @@
             <div class="usa-form-group"><label class="usa-label" for="source-StartDate">Since</label><input class="usa-input" id="source-StartDate" name="StartDate" type="date" value="@Options.Iso(Model.StartDate)" /></div>
         </div>
         <div class="usa-form-group"><label class="usa-label" for="source-Description">Description (product, brand, country of origin; sent as the ABLES Process narrative)</label>
-            <textarea class="usa-textarea" id="source-Description" name="Description" rows="2">@Model.Description</textarea></div>
+            <input class="usa-input" id="source-Description" name="Description" value="@Model.Description" maxlength="1000" /></div>
         <fieldset class="usa-fieldset"><legend class="usa-legend">Product (for the product registry)</legend>
             <div class="merit-form-row">
                 <div class="usa-form-group"><label class="usa-label" for="source-ProductName">Product name</label><input class="usa-input" id="source-ProductName" name="ProductName" value="@Model.ProductName" /></div>

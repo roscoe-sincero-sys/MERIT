@@ -48,6 +48,14 @@ public static class ExtractWriter
                     issues.Add(new ExtractIssue(recordId, f.FieldName, "Required by the layout but blank."));
                 }
 
+                if (value.IndexOfAny(['\r', '\n']) >= 0)
+                {
+                    value = value.Replace("\r\n", " ", StringComparison.Ordinal)
+                                 .Replace('\r', ' ')
+                                 .Replace('\n', ' ');
+                    issues.Add(new ExtractIssue(recordId, f.FieldName, "Line break replaced with a space."));
+                }
+
                 if (value.Length > f.FieldWidth)
                 {
                     issues.Add(new ExtractIssue(recordId, f.FieldName, $"Longer than {f.FieldWidth} characters; truncated."));
