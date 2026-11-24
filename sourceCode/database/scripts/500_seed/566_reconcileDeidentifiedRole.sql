@@ -13,6 +13,8 @@ DECLARE @revokedRoles TABLE (roleId UNIQUEIDENTIFIER);
 
 UPDATE rp
    SET isDeleted = 1
+     , modifiedBy = ORIGINAL_LOGIN ()
+     , modifiedDateUtc = SYSUTCDATETIME ()
 OUTPUT INSERTED.roleId INTO @revokedRoles (roleId)
   FROM auth.rolePermission AS rp
   JOIN auth.role           AS r  ON r.roleId = rp.roleId AND r.isDeleted = 0
@@ -20,7 +22,7 @@ OUTPUT INSERTED.roleId INTO @revokedRoles (roleId)
  WHERE rp.isDeleted = 0
    AND r.roleCode = 'epidemiologist'
    AND r.isDeidentified = 1
-   AND pm.permissionCode NOT IN ('result.view', 'case.view', 'data.export', 'extract.run');
+   AND pm.permissionCode NOT IN ('result.view', 'case.view', 'data.export');
 
 IF EXISTS (SELECT 1 FROM @revokedRoles)
 BEGIN

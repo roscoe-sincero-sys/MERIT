@@ -17,9 +17,9 @@ public sealed class SessionRenewal(AccountService accounts, ICurrentSession sess
     public TimeSpan Lifetime => TimeSpan.FromHours(Math.Max(1, configuration.GetValue(LifetimeSetting, 12)));
 
     /// <summary>A new session for a person who has just signed in: always the master profile.</summary>
-    public async Task SignInAsync(HttpContext http, Guid userId, CancellationToken ct)
+    public async Task SignInAsync(HttpContext http, Guid userId, CancellationToken ct, Guid? expectedSecurityStamp = null)
     {
-        var scope = await accounts.CreateSessionAsync(userId, Lifetime, ct: ct).ConfigureAwait(false);
+        var scope = await accounts.CreateSessionAsync(userId, Lifetime, expectedSecurityStamp: expectedSecurityStamp, ct: ct).ConfigureAwait(false);
         await SessionCookie.SignInAsync(http, scope.Scope).ConfigureAwait(false);
         await events.RecordAsync(new SignInEvent(SignInEventTypes.SessionStarted, SignInSteps.Session, AppUserId: userId,
             SessionScopeId: scope.Scope.Summary.SessionScopeId), ct).ConfigureAwait(false);
@@ -42,8 +42,10 @@ public sealed class SessionRenewal(AccountService accounts, ICurrentSession sess
             scope = await accounts.RenewSessionAsync(me, currentScope, stamp, Lifetime, userProfileId, viewAsUserId, actingTenantId, ct)
                 .ConfigureAwait(false);
         }
-        catch (Merit.Application.Errors.PermissionDeniedException)
+        catch (Merit.Application.Errors.SessionEndedException)
         {
+            // Only an ended/expired/replaced source scope or mismatched security stamp (SQL 51401) ends the cookie;
+            // ordinary 51403 authorization denials (e.g., unauthorized view-as) keep the current valid session intact.
             await http.SignOutAsync(AuthSchemes.Session).ConfigureAwait(false);
             throw new Merit.Application.Errors.BusinessRuleException("Your session has ended. Please sign in again.");
         }

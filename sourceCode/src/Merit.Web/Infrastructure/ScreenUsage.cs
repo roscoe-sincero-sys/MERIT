@@ -11,6 +11,7 @@ public sealed partial class ScreenUsageRecorder(IScreenUsageData data, ICurrentS
                                                 ILogger<ScreenUsageRecorder> logger)
 {
     public bool Enabled => configuration.GetValue("ScreenVisit:Enabled", true);
+    /// <summary>Retained for direct callers and unit tests; scope renewal carries sessionReference atomically inside auth.uspCreateSessionScope.</summary>
     public async Task ContinueAsync(Guid newScope, CancellationToken ct = default)
     {
         if (!Enabled) return;

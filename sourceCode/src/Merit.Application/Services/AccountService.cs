@@ -106,15 +106,18 @@ public sealed class AccountService(IAccountData data, IPasswordHasher hasher, IS
     }
 
     public async Task<IReadOnlyList<string>> CompleteEnrollmentAsync(Guid appUserId, string secretBase32, string code, string? clientAddress = null,
-                                                                     CancellationToken ct = default, string? userName = null)
+                                                                     CancellationToken ct = default, string? userName = null, Guid? expectedSecurityStamp = null)
     {
         if (!string.IsNullOrEmpty(userName))
         {
             var user = await data.GetUserForSignInAsync(userName, ct).ConfigureAwait(false);
-            if (user is null || !user.IsActive || user.MfaEnabled || (user.LockoutEndUtc is DateTime until && until > DateTime.UtcNow))
+            if (user is null || !user.IsActive || user.MfaEnabled || (user.LockoutEndUtc is DateTime until && until > DateTime.UtcNow)
+                || (expectedSecurityStamp is Guid expected && user.SecurityStamp != expected))
             {
                 throw new ValidationException("Code", "Your sign-in session is no longer valid. Please sign in again.");
             }
+
+            expectedSecurityStamp ??= user.SecurityStamp;
         }
 
         byte[] secret = Totp.FromBase32(secretBase32);
@@ -127,18 +130,26 @@ public sealed class AccountService(IAccountData data, IPasswordHasher hasher, IS
         }
 
         var codes = Enumerable.Range(0, 10).Select(_ => NewRecoveryCode()).ToList();
-        await data.SaveMfaEnrollmentAsync(appUserId, protector.Protect(secretBase32), codes.Select(hasher.Hash).ToList(), enrolledStep, ct)
-            .ConfigureAwait(false);
+        try
+        {
+            await data.SaveMfaEnrollmentAsync(appUserId, protector.Protect(secretBase32), codes.Select(hasher.Hash).ToList(), enrolledStep, expectedSecurityStamp, ct)
+                .ConfigureAwait(false);
+        }
+        catch (ConcurrencyException)
+        {
+            throw new ValidationException("Code", "Your sign-in session is no longer valid. Please sign in again.");
+        }
         await events.RecordAsync(new SignInEvent(SignInEventTypes.MfaEnrolled, SignInSteps.Enrollment, SignInMethods.Totp, AppUserId: appUserId), ct)
             .ConfigureAwait(false);
         await data.RecordSignInResultAsync(appUserId, true, MaxFailedAttempts, LockoutMinutes, clientAddress, ct).ConfigureAwait(false);
         return codes;
     }
 
-    public async Task<bool> VerifyMfaAsync(string userName, string code, string? clientAddress, CancellationToken ct = default)
+    public async Task<bool> VerifyMfaAsync(string userName, string code, string? clientAddress, CancellationToken ct = default,
+                                           Guid? expectedSecurityStamp = null)
     {
         var user = await data.GetUserForSignInAsync(userName, ct).ConfigureAwait(false);
-        if (user?.MfaSecretProtected is null || !user.IsActive)
+        if (user?.MfaSecretProtected is null || !user.IsActive || (expectedSecurityStamp is Guid expected && user.SecurityStamp != expected))
         {
             await events.RecordAsync(new SignInEvent(SignInEventTypes.MfaFailed, SignInSteps.SecondFactor, Reason: "accountUnavailable",
                 AppUserId: user?.AppUserId), ct).ConfigureAwait(false);
@@ -153,7 +164,7 @@ public sealed class AccountService(IAccountData data, IPasswordHasher hasher, IS
         }
 
         byte[] secret = Totp.FromBase32(protector.Unprotect(user.MfaSecretProtected));
-        bool ok = await VerifyTotpNoReplayAsync(user.AppUserId, secret, code, ct).ConfigureAwait(false);
+        bool ok = await VerifyTotpNoReplayAsync(user.AppUserId, secret, code, user.SecurityStamp, ct).ConfigureAwait(false);
         string method = SignInMethods.Totp;
         if (!ok && code.Trim().Length > 6)
         {
@@ -193,7 +204,7 @@ public sealed class AccountService(IAccountData data, IPasswordHasher hasher, IS
         }
 
         byte[] secret = Totp.FromBase32(protector.Unprotect(user.MfaSecretProtected));
-        if (await VerifyTotpNoReplayAsync(user.AppUserId, secret, (code ?? string.Empty).Trim(), ct).ConfigureAwait(false))
+        if (await VerifyTotpNoReplayAsync(user.AppUserId, secret, (code ?? string.Empty).Trim(), user.SecurityStamp, ct).ConfigureAwait(false))
         {
             return true;
         }
@@ -233,7 +244,7 @@ public sealed class AccountService(IAccountData data, IPasswordHasher hasher, IS
         }
 
         byte[] secret = Totp.FromBase32(protector.Unprotect(user.MfaSecretProtected));
-        if (await VerifyTotpNoReplayAsync(user.AppUserId, secret, typed, ct).ConfigureAwait(false))
+        if (await VerifyTotpNoReplayAsync(user.AppUserId, secret, typed, user.SecurityStamp, ct).ConfigureAwait(false))
         {
             return SignInMethods.Totp;
         }
@@ -254,11 +265,11 @@ public sealed class AccountService(IAccountData data, IPasswordHasher hasher, IS
     /// user's access. The database decides what each may see; a refusal comes back as PermissionDeniedException.
     /// </summary>
     public async Task<SignedInSession> CreateSessionAsync(Guid appUserId, TimeSpan lifetime, Guid? userProfileId = null, Guid? viewAsUserId = null,
-                                                          Guid? actingTenantId = null, CancellationToken ct = default)
+                                                          Guid? actingTenantId = null, Guid? expectedSecurityStamp = null, CancellationToken ct = default)
     {
         // The scope key travels in the cookie and is the row-level security key: random, not time-ordered.
         var scope = await data.CreateSessionScopeAsync(Guid.NewGuid(), appUserId, DateTime.UtcNow.Add(lifetime), userProfileId, viewAsUserId,
-            actingTenantId, ct: ct).ConfigureAwait(false);
+            actingTenantId, expectedSecurityStamp: expectedSecurityStamp, ct: ct).ConfigureAwait(false);
         return new SignedInSession(scope);
     }
 
@@ -310,14 +321,14 @@ public sealed class AccountService(IAccountData data, IPasswordHasher hasher, IS
 
     public string HashPassword(string password) => hasher.Hash(password);
 
-    private async Task<bool> VerifyTotpNoReplayAsync(Guid appUserId, byte[] secret, string? code, CancellationToken ct)
+    private async Task<bool> VerifyTotpNoReplayAsync(Guid appUserId, byte[] secret, string? code, Guid expectedSecurityStamp, CancellationToken ct)
     {
         if (!Totp.TryVerify(secret, code, DateTimeOffset.UtcNow, out long matchedStep))
         {
             return false;
         }
 
-        return await data.ConsumeTotpStepAsync(appUserId, matchedStep, ct).ConfigureAwait(false);
+        return await data.ConsumeTotpStepAsync(appUserId, matchedStep, expectedSecurityStamp, ct).ConfigureAwait(false);
     }
 
     private async Task<bool> TryRecoveryCodeAsync(Guid appUserId, string code, CancellationToken ct)

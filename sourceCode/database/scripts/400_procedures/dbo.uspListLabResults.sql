@@ -103,13 +103,11 @@ BEGIN
         -- ===== The procedure's own work starts here. Everything above and below is boilerplate. ==
         -- =========================================================================================
 
-        DECLARE @deid BIT = auth.udfIsDeidentified ();
-
         SELECT r.labResultId,
-               CASE WHEN @deid = 1 THEN NULL ELSE r.personId END AS personId,
-               CASE WHEN @deid = 1 THEN NULL ELSE p.lastName END AS lastName,
-               CASE WHEN @deid = 1 THEN NULL ELSE p.firstName END AS firstName,
-               CASE WHEN @deid = 1 THEN NULL ELSE p.dob END AS dob,
+               CASE WHEN auth.udfCanReadIdentified (r.owningTenantId, 'result.view', r.personId) = 1 THEN r.personId ELSE NULL END AS personId,
+               CASE WHEN auth.udfCanReadIdentified (r.owningTenantId, 'result.view', r.personId) = 1 THEN p.lastName ELSE NULL END AS lastName,
+               CASE WHEN auth.udfCanReadIdentified (r.owningTenantId, 'result.view', r.personId) = 1 THEN p.firstName ELSE NULL END AS firstName,
+               CASE WHEN auth.udfCanReadIdentified (r.owningTenantId, 'result.view', r.personId) = 1 THEN p.dob ELSE NULL END AS dob,
                a.code AS analyteCode, s.specimen, r.collectedDate,
                r.receivedUtc, r.operator, r.valueCanonical, r.unitCanonical, r.sampleType, r.testMethod, r.population,
                r.resultStatus, r.resultRowStatus, r.isIndeterminate, lab.organizationName AS labName,
@@ -117,7 +115,7 @@ BEGIN
           FROM dbo.labResult AS r
           JOIN config.analyteSpecimen AS s ON s.analyteSpecimenId = r.analyteSpecimenId
           JOIN config.analyte AS a ON a.analyteId = s.analyteId
-          LEFT JOIN dbo.person AS p ON p.personId = r.personId AND @deid = 0
+          LEFT JOIN dbo.person AS p ON p.personId = r.personId AND auth.udfCanReadIdentified (r.owningTenantId, 'result.view', r.personId) = 1
           LEFT JOIN dbo.organization AS lab ON lab.organizationId = r.labOrganizationId
          WHERE r.isDeleted = 0
            AND (@analyteId IS NULL OR a.analyteId = @analyteId)
@@ -131,8 +129,8 @@ BEGIN
                   CASE WHEN @sortBy = 'collectedDate'  AND @sortDescending = 1 THEN r.collectedDate END DESC,
                   CASE WHEN @sortBy = 'valueCanonical' AND @sortDescending = 0 THEN r.valueCanonical END ASC,
                   CASE WHEN @sortBy = 'valueCanonical' AND @sortDescending = 1 THEN r.valueCanonical END DESC,
-                  CASE WHEN @deid = 0 AND @sortBy = 'lastName' AND @sortDescending = 0 THEN p.lastName END ASC,
-                  CASE WHEN @deid = 0 AND @sortBy = 'lastName' AND @sortDescending = 1 THEN p.lastName END DESC,
+                  CASE WHEN @sortBy = 'lastName' AND @sortDescending = 0 AND auth.udfCanReadIdentified (r.owningTenantId, 'result.view', r.personId) = 1 THEN p.lastName END ASC,
+                  CASE WHEN @sortBy = 'lastName' AND @sortDescending = 1 AND auth.udfCanReadIdentified (r.owningTenantId, 'result.view', r.personId) = 1 THEN p.lastName END DESC,
                   CASE WHEN @sortBy = 'analyteCode'    AND @sortDescending = 0 THEN a.code END ASC,
                   CASE WHEN @sortBy = 'analyteCode'    AND @sortDescending = 1 THEN a.code END DESC,
                   CASE WHEN @sortBy = 'receivedUtc'    AND @sortDescending = 0 THEN r.receivedUtc END ASC,

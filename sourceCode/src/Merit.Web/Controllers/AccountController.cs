@@ -105,7 +105,8 @@ public sealed class AccountController(AccountService accounts, EmailCodeService 
         var secret = User.FindFirstValue(MeritClaims.EnrollSecret);
         var userName = User.FindFirstValue(MeritClaims.UserName);
         var userId = Guid.Parse(User.FindFirstValue(MeritClaims.UserId)!, CultureInfo.InvariantCulture);
-        if (secret is null || !await IsPendingValidAsync(ct))
+        Guid.TryParse(User.FindFirstValue(MeritClaims.SecurityStamp), CultureInfo.InvariantCulture, out var pendingStamp);
+        if (secret is null || pendingStamp == Guid.Empty || !await IsPendingValidAsync(ct))
         {
             await HttpContext.SignOutAsync(AuthSchemes.PendingMfa);
             return RedirectToAction(nameof(SignIn));
@@ -113,7 +114,7 @@ public sealed class AccountController(AccountService accounts, EmailCodeService 
 
         try
         {
-            var codes = await accounts.CompleteEnrollmentAsync(userId, secret, model.Code ?? string.Empty, ClientAddress(), ct, userName);
+            var codes = await accounts.CompleteEnrollmentAsync(userId, secret, model.Code ?? string.Empty, ClientAddress(), ct, userName, pendingStamp);
             var destination = await PendingReturnAsync();
             await CompleteSignInAsync(userId, ct);
             // Until acknowledged, every other page leads back to these codes (issue #156).
@@ -158,7 +159,14 @@ public sealed class AccountController(AccountService accounts, EmailCodeService 
 
         var userName = User.FindFirstValue(MeritClaims.UserName)!;
         var userId = Guid.Parse(User.FindFirstValue(MeritClaims.UserId)!, CultureInfo.InvariantCulture);
-        if (!await accounts.VerifyMfaAsync(userName, model.Code!, ClientAddress(), ct))
+        Guid.TryParse(User.FindFirstValue(MeritClaims.SecurityStamp), CultureInfo.InvariantCulture, out var pendingStamp);
+        if (pendingStamp == Guid.Empty)
+        {
+            await HttpContext.SignOutAsync(AuthSchemes.PendingMfa);
+            return RedirectToAction(nameof(SignIn));
+        }
+
+        if (!await accounts.VerifyMfaAsync(userName, model.Code!, ClientAddress(), ct, pendingStamp))
         {
             model.Email = await PendingEmailOptionAsync(ct);
             model.Message = model.UseRecoveryCode
@@ -170,7 +178,15 @@ public sealed class AccountController(AccountService accounts, EmailCodeService 
         }
 
         var destination = await PendingReturnAsync();
-        await CompleteSignInAsync(userId, ct);
+        try
+        {
+            await CompleteSignInAsync(userId, ct, pendingStamp);
+        }
+        catch (SessionEndedException)
+        {
+            return RedirectToAction(nameof(SignIn));
+        }
+
         return LocalRedirect(destination);
     }
 
@@ -778,7 +794,7 @@ public sealed class AccountController(AccountService accounts, EmailCodeService 
         return View("Error", new AlertModel("warning", "Not permitted", "Your profile does not allow this page."));
     }
 
-    private async Task CompleteSignInAsync(Guid userId, CancellationToken ct)
+    private async Task CompleteSignInAsync(Guid userId, CancellationToken ct, Guid? expectedSecurityStamp = null)
     {
         // The attempt id rides in the pending-MFA cookie; keep it for the sessionStarted event once that cookie is gone.
         var pending = await HttpContext.AuthenticateAsync(AuthSchemes.PendingMfa);
@@ -789,7 +805,7 @@ public sealed class AccountController(AccountService accounts, EmailCodeService 
 
         // Every sign-in starts on the master profile; the person switches from the header when they want another.
         await HttpContext.SignOutAsync(AuthSchemes.PendingMfa);
-        await sessions.SignInAsync(HttpContext, userId, ct);
+        await sessions.SignInAsync(HttpContext, userId, ct, expectedSecurityStamp);
     }
 
     private EnrollModel BuildEnroll(string secret)

@@ -79,14 +79,17 @@ BEGIN
             ;THROW 51403, N'You do not have permission to do this (case.view).', 1;
         END;
 
-        IF auth.udfIsDeidentified () = 1
-        BEGIN
-            ;THROW 51403, N'De-identified roles cannot open individual case charts.', 1;
-        END;
-
-        IF NOT EXISTS (SELECT 1 FROM dbo.exposureCase WHERE exposureCaseId = @exposureCaseId AND isDeleted = 0)
+        DECLARE @caseOwner UNIQUEIDENTIFIER, @casePerson UNIQUEIDENTIFIER;
+        SELECT @caseOwner = owningTenantId, @casePerson = personId
+          FROM dbo.exposureCase WHERE exposureCaseId = @exposureCaseId AND isDeleted = 0;
+        IF @caseOwner IS NULL
         BEGIN
             ;THROW 51404, N'The case was not found, or you do not have access to it.', 1;
+        END;
+
+        IF auth.udfCanReadIdentified (@caseOwner, 'case.view', @casePerson) = 0
+        BEGIN
+            ;THROW 51403, N'De-identified roles cannot open individual case charts.', 1;
         END;
 
         -- =========================================================================================

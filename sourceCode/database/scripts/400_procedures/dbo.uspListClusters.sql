@@ -90,7 +90,10 @@ BEGIN
         -- ===== The procedure's own work starts here. Everything above and below is boilerplate. ==
         -- =========================================================================================
 
-        SELECT cl.clusterId, cl.clusterType, cl.title, cl.clusterStatus, cl.windowStart, cl.windowEnd, cl.notes,
+        SELECT cl.clusterId, cl.clusterType,
+               CASE WHEN auth.udfCanReadIdentified (cl.owningTenantId, 'case.view', NULL) = 1 THEN cl.title ELSE N'De-identified cluster' END AS title,
+               cl.clusterStatus, cl.windowStart, cl.windowEnd,
+               CASE WHEN auth.udfCanReadIdentified (cl.owningTenantId, 'case.view', NULL) = 1 THEN cl.notes ELSE NULL END AS notes,
                cl.createdDateUtc, t.tenantName AS owningTenantName,
                (SELECT COUNT (*) FROM dbo.caseCluster AS cc WHERE cc.clusterId = cl.clusterId AND cc.leftDate IS NULL
                    AND cc.isDeleted = 0) AS memberCount,

@@ -99,11 +99,29 @@ BEGIN
         DECLARE @platform UNIQUEIDENTIFIER = CAST (HASHBYTES ('MD5', N'tenant:PLATFORM') AS UNIQUEIDENTIFIER);
         DECLARE @sessionReference UNIQUEIDENTIFIER = NEWID ();
 
-        -- Issue #298: Atomic renewal locks and validates the original scope, account, and security stamp,
-        -- carries forward the original absolute expiry and logical sessionReference, and revokes the old scope
-        -- inside the same transaction.
+        -- Issue #298: Atomic renewal locks the logical session (serialized with sign-out via sp_getapplock),
+        -- validates the original scope, account, and security stamp, carries forward the original absolute expiry
+        -- and logical sessionReference, and revokes the old scope inside the same transaction.
+        -- Uses distinct error 51401 (SessionEnded) so ordinary 51403 denials (e.g., unauthorized view-as) keep the session.
         IF @replacesSessionScopeId IS NOT NULL
         BEGIN
+            DECLARE @lockRef UNIQUEIDENTIFIER = (SELECT sessionReference FROM auth.sessionScope
+                                                  WHERE sessionScopeId = @replacesSessionScopeId
+                                                    AND appUserId = @appUserId
+                                                    AND isDeleted = 0);
+            IF @lockRef IS NULL
+            BEGIN
+                ;THROW 51401, N'Your session has ended or expired. Please sign in again.', 1;
+            END;
+
+            DECLARE @sessionLock INT;
+            DECLARE @sessionLockName NVARCHAR (255) = CONCAT (N'MERIT.session.', @appUserId, N'.', @lockRef);
+            EXEC @sessionLock = sys.sp_getapplock @Resource = @sessionLockName, @LockMode = 'Exclusive', @LockOwner = 'Transaction', @LockTimeout = 5000;
+            IF @sessionLock < 0
+            BEGIN
+                ;THROW 51401, N'Your session is busy or has ended. Please sign in again.', 1;
+            END;
+
             DECLARE @prevExpiresUtc DATETIME2 (3), @prevReference UNIQUEIDENTIFIER;
             SELECT @prevExpiresUtc = s.expiresUtc, @prevReference = s.sessionReference
               FROM auth.sessionScope AS s WITH (UPDLOCK, HOLDLOCK)
@@ -120,7 +138,7 @@ BEGIN
 
             IF @prevExpiresUtc IS NULL
             BEGIN
-                ;THROW 51403, N'Your session has ended or expired. Please sign in again.', 1;
+                ;THROW 51401, N'Your session has ended or expired. Please sign in again.', 1;
             END;
 
             IF @prevExpiresUtc < @expiresUtc
@@ -137,17 +155,22 @@ BEGIN
 
             IF @@ROWCOUNT <> 1
             BEGIN
-                ;THROW 51403, N'Your session has already been replaced or revoked. Please sign in again.', 1;
+                ;THROW 51401, N'Your session has already been replaced or revoked. Please sign in again.', 1;
             END;
         END;
 
         DECLARE @isPlatformUser BIT = (SELECT CASE WHEN h.tenantType = 'platform' THEN 1 ELSE 0 END
                                           FROM auth.appUser AS u
                                           LEFT JOIN auth.tenant AS h ON h.tenantId = u.homeTenantId
-                                         WHERE u.appUserId = @appUserId AND u.isActive = 1 AND u.isDeleted = 0);
+                                         WHERE u.appUserId = @appUserId AND u.isActive = 1 AND u.isDeleted = 0
+                                           AND (@expectedSecurityStamp IS NULL OR u.securityStamp = @expectedSecurityStamp));
 
         IF @isPlatformUser IS NULL
         BEGIN
+            IF @expectedSecurityStamp IS NOT NULL
+            BEGIN
+                ;THROW 51401, N'Your sign-in session is no longer valid. Please sign in again.', 1;
+            END;
             ;THROW 51404, N'The account is not active.', 1;
         END;
 
@@ -238,43 +261,77 @@ BEGIN
                                              AND EXISTS (SELECT 1 FROM @x WHERE permissionCode = 'platform.administer')
                                             THEN 1 ELSE 0 END;
 
-        -- Issue #300: Track whether this scope is strictly de-identified (only isDeidentified = 1 roles).
-        DECLARE @isDeidentified BIT = 0;
-        IF @isPlatformAdmin = 0 AND EXISTS (SELECT 1 FROM @tenants)
+        -- Issue #300: Derive identified clinical read access per (tenant, permission) from the effective active grant
+        -- so a non-clinical role (e.g., userAdministrator) or a clinical role in another tenant never unmasks a
+        -- de-identified epidemiologist's rows.
+        DECLARE @masterIdentified TABLE (tenantId UNIQUEIDENTIFIER, permissionCode VARCHAR (60), PRIMARY KEY (tenantId, permissionCode));
+        INSERT @masterIdentified (tenantId, permissionCode)
+        SELECT DISTINCT tc.descendantTenantId, pm.permissionCode
+          FROM auth.userAssignment AS ua
+          JOIN auth.role           AS r  ON r.roleId = ua.roleId AND r.isDeleted = 0 AND r.isDeidentified = 0
+          JOIN auth.tenantClosure  AS tc ON tc.ancestorTenantId = ua.tenantId
+                                        AND (ua.includeDescendants = 1 OR tc.depth = 0)
+                                        AND tc.isDeleted = 0
+          JOIN auth.tenant         AS t  ON t.tenantId = tc.descendantTenantId AND t.isActive = 1 AND t.isDeleted = 0
+          JOIN auth.rolePermission AS rp ON rp.roleId = ua.roleId AND rp.isDeleted = 0
+          JOIN auth.permission     AS pm ON pm.permissionId = rp.permissionId AND pm.isDeleted = 0
+         WHERE ua.appUserId = @appUserId
+           AND ua.isDeleted = 0
+           AND ua.startDate <= auth.udfSessionToday ()
+           AND (ua.endDate IS NULL OR ua.endDate >= auth.udfSessionToday ())
+           AND ua.revokedUtc IS NULL
+           AND pm.permissionCode IN ('result.view', 'case.view');
+
+        DECLARE @identified TABLE (tenantId UNIQUEIDENTIFIER, permissionCode VARCHAR (60), PRIMARY KEY (tenantId, permissionCode));
+        IF @viewAsUserId IS NOT NULL
         BEGIN
-            IF @viewAsUserId IS NOT NULL
-            BEGIN
-                IF EXISTS (SELECT 1 FROM auth.userAssignment AS ua JOIN auth.role AS r ON r.roleId = ua.roleId AND r.isDeleted = 0
-                            WHERE ua.appUserId = @viewAsUserId AND ua.isDeleted = 0 AND ua.revokedUtc IS NULL
-                              AND ua.startDate <= auth.udfSessionToday () AND (ua.endDate IS NULL OR ua.endDate >= auth.udfSessionToday ())
-                              AND r.isDeidentified = 1)
-                   AND NOT EXISTS (SELECT 1 FROM auth.userAssignment AS ua JOIN auth.role AS r ON r.roleId = ua.roleId AND r.isDeleted = 0
-                                    WHERE ua.appUserId = @viewAsUserId AND ua.isDeleted = 0 AND ua.revokedUtc IS NULL
-                                      AND ua.startDate <= auth.udfSessionToday () AND (ua.endDate IS NULL OR ua.endDate >= auth.udfSessionToday ())
-                                      AND r.isDeidentified = 0)
-                    SET @isDeidentified = 1;
-            END
-            ELSE IF @userProfileId IS NOT NULL
-            BEGIN
-                IF EXISTS (SELECT 1 FROM auth.userProfileGrant AS g JOIN auth.role AS r ON r.roleId = g.roleId AND r.isDeleted = 0
-                            WHERE g.userProfileId = @userProfileId AND g.isDeleted = 0 AND r.isDeidentified = 1)
-                   AND NOT EXISTS (SELECT 1 FROM auth.userProfileGrant AS g JOIN auth.role AS r ON r.roleId = g.roleId AND r.isDeleted = 0
-                                    WHERE g.userProfileId = @userProfileId AND g.isDeleted = 0 AND r.isDeidentified = 0)
-                    SET @isDeidentified = 1;
-            END
-            ELSE
-            BEGIN
-                IF EXISTS (SELECT 1 FROM auth.userAssignment AS ua JOIN auth.role AS r ON r.roleId = ua.roleId AND r.isDeleted = 0
-                            WHERE ua.appUserId = @appUserId AND ua.isDeleted = 0 AND ua.revokedUtc IS NULL
-                              AND ua.startDate <= auth.udfSessionToday () AND (ua.endDate IS NULL OR ua.endDate >= auth.udfSessionToday ())
-                              AND r.isDeidentified = 1)
-                   AND NOT EXISTS (SELECT 1 FROM auth.userAssignment AS ua JOIN auth.role AS r ON r.roleId = ua.roleId AND r.isDeleted = 0
-                                    WHERE ua.appUserId = @appUserId AND ua.isDeleted = 0 AND ua.revokedUtc IS NULL
-                                      AND ua.startDate <= auth.udfSessionToday () AND (ua.endDate IS NULL OR ua.endDate >= auth.udfSessionToday ())
-                                      AND r.isDeidentified = 0)
-                    SET @isDeidentified = 1;
-            END;
+            INSERT @identified (tenantId, permissionCode)
+            SELECT DISTINCT tc.descendantTenantId, pm.permissionCode
+              FROM auth.userAssignment AS ua
+              JOIN auth.role           AS r  ON r.roleId = ua.roleId AND r.isDeleted = 0 AND r.isDeidentified = 0
+              JOIN auth.tenantClosure  AS tc ON tc.ancestorTenantId = ua.tenantId
+                                            AND (ua.includeDescendants = 1 OR tc.depth = 0)
+                                            AND tc.isDeleted = 0
+              JOIN auth.tenant         AS t  ON t.tenantId = tc.descendantTenantId AND t.isActive = 1 AND t.isDeleted = 0
+              JOIN auth.rolePermission AS rp ON rp.roleId = ua.roleId AND rp.isDeleted = 0
+              JOIN auth.permission     AS pm ON pm.permissionId = rp.permissionId AND pm.isDeleted = 0
+              JOIN @masterIdentified   AS mi ON mi.tenantId = tc.descendantTenantId AND mi.permissionCode = pm.permissionCode
+              JOIN @adminScope         AS a  ON a.tenantId = tc.descendantTenantId
+             WHERE ua.appUserId = @viewAsUserId
+               AND ua.isDeleted = 0
+               AND ua.startDate <= auth.udfSessionToday ()
+               AND (ua.endDate IS NULL OR ua.endDate >= auth.udfSessionToday ())
+               AND ua.revokedUtc IS NULL
+               AND pm.permissionCode IN ('result.view', 'case.view');
+        END
+        ELSE IF @userProfileId IS NOT NULL
+        BEGIN
+            INSERT @identified (tenantId, permissionCode)
+            SELECT DISTINCT tc.descendantTenantId, pm.permissionCode
+              FROM auth.userProfile      AS up
+              JOIN auth.userProfileGrant AS g  ON g.userProfileId = up.userProfileId AND g.isDeleted = 0
+              JOIN auth.role             AS r  ON r.roleId = g.roleId AND r.isDeleted = 0 AND r.isDeidentified = 0
+              JOIN auth.tenantClosure    AS tc ON tc.ancestorTenantId = g.tenantId
+                                              AND (g.includeDescendants = 1 OR tc.depth = 0)
+                                              AND tc.isDeleted = 0
+              JOIN auth.tenant           AS t  ON t.tenantId = tc.descendantTenantId AND t.isActive = 1 AND t.isDeleted = 0
+              JOIN auth.rolePermission   AS rp ON rp.roleId = g.roleId AND rp.isDeleted = 0
+              JOIN auth.permission       AS pm ON pm.permissionId = rp.permissionId AND pm.isDeleted = 0
+              JOIN @masterIdentified     AS mi ON mi.tenantId = tc.descendantTenantId AND mi.permissionCode = pm.permissionCode
+             WHERE up.userProfileId = @userProfileId
+               AND up.isDeleted = 0
+               AND pm.permissionCode IN ('result.view', 'case.view');
+        END
+        ELSE
+        BEGIN
+            INSERT @identified (tenantId, permissionCode)
+            SELECT tenantId, permissionCode FROM @masterIdentified;
         END;
+
+        DECLARE @isDeidentified BIT = CASE WHEN @isPlatformAdmin = 0
+                                            AND EXISTS (SELECT 1 FROM @tenants)
+                                            AND NOT EXISTS (SELECT 1 FROM @identified)
+                                           THEN 1 ELSE 0 END;
 
         -- Acting tenant: the one asked for when the scope covers it, else the highest tenant in the scope.
         DECLARE @acting UNIQUEIDENTIFIER =
@@ -302,9 +359,11 @@ BEGIN
                                   isPlatformAdmin, isDeidentified, expiresUtc)
         VALUES (@sessionScopeId, @appUserId, @sessionReference, @root, @acting, @userProfileId, @viewAsUserId, @isPlatformAdmin, @isDeidentified, @expiresUtc);
 
-        INSERT auth.sessionScopeTenant (sessionScopeTenantId, sessionScopeId, tenantId, accessLevel, canReadRelatedContacts)
-        SELECT CAST (CAST (NEWID () AS BINARY (10)) + CAST (DATEDIFF_BIG (MILLISECOND, '19700101', SYSUTCDATETIME ()) AS BINARY (6)) AS UNIQUEIDENTIFIER), @sessionScopeId, tenantId, CASE accessRank WHEN 3 THEN 'full' WHEN 2 THEN 'write' ELSE 'read' END,
-         CASE WHEN EXISTS(SELECT 1 FROM @x x WHERE x.tenantId=t.tenantId AND x.permissionCode='person.edit' AND x.grantRank>=2) THEN 1 ELSE 0 END
+        INSERT auth.sessionScopeTenant (sessionScopeTenantId, sessionScopeId, tenantId, accessLevel, canReadRelatedContacts, canReadIdentifiedResults, canReadIdentifiedCases)
+        SELECT CAST (CAST (NEWID () AS BINARY (10)) + CAST (DATEDIFF_BIG (MILLISECOND, '19700101', SYSUTCDATETIME ()) AS BINARY (6)) AS UNIQUEIDENTIFIER), @sessionScopeId, t.tenantId, CASE t.accessRank WHEN 3 THEN 'full' WHEN 2 THEN 'write' ELSE 'read' END,
+         CASE WHEN EXISTS(SELECT 1 FROM @x x WHERE x.tenantId=t.tenantId AND x.permissionCode='person.edit' AND x.grantRank>=2) THEN 1 ELSE 0 END,
+         CASE WHEN EXISTS(SELECT 1 FROM @identified i WHERE i.tenantId=t.tenantId AND i.permissionCode='result.view') THEN 1 ELSE 0 END,
+         CASE WHEN EXISTS(SELECT 1 FROM @identified i WHERE i.tenantId=t.tenantId AND i.permissionCode='case.view') THEN 1 ELSE 0 END
         FROM @tenants t;
 
         INSERT auth.sessionScopeRoot (sessionScopeRootId, sessionScopeId, rootTenantId, accessLevel)

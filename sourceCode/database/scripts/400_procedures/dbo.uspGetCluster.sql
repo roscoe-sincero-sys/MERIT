@@ -88,17 +88,30 @@ BEGIN
         -- ===== The procedure's own work starts here. Everything above and below is boilerplate. ==
         -- =========================================================================================
 
-        SELECT cl.clusterId, cl.clusterType, cl.sharedKey, cl.title, cl.clusterStatus, cl.windowStart, cl.windowEnd, cl.notes,
+        SELECT cl.clusterId, cl.clusterType,
+               CASE WHEN auth.udfCanReadIdentified (cl.owningTenantId, 'case.view', NULL) = 1 THEN cl.sharedKey ELSE NULL END AS sharedKey,
+               CASE WHEN auth.udfCanReadIdentified (cl.owningTenantId, 'case.view', NULL) = 1 THEN cl.title ELSE N'De-identified cluster' END AS title,
+               cl.clusterStatus, cl.windowStart, cl.windowEnd,
+               CASE WHEN auth.udfCanReadIdentified (cl.owningTenantId, 'case.view', NULL) = 1 THEN cl.notes ELSE NULL END AS notes,
                cl.createdDateUtc, t.tenantName AS owningTenantName, cl.rowVersion,
                CAST (CASE WHEN EXISTS (SELECT 1 FROM auth.tvfTenantWritePredicate (cl.rootTenantId, cl.owningTenantId, cl.isDeleted)) THEN 1 ELSE 0 END AS BIT) AS canEdit
           FROM dbo.cluster AS cl
           LEFT JOIN auth.tenant AS t ON t.tenantId = cl.owningTenantId
          WHERE cl.clusterId = @clusterId;
 
-        SELECT cc.caseClusterId, cc.exposureCaseId, c.caseNumber, c.personId, p.lastName, p.firstName, a.code AS analyteCode,
+        SELECT cc.caseClusterId, cc.exposureCaseId, c.caseNumber,
+               CASE WHEN auth.udfCanReadIdentified (c.owningTenantId, 'case.view', c.personId) = 1 THEN c.personId ELSE CAST (0x0 AS UNIQUEIDENTIFIER) END AS personId,
+               CASE WHEN auth.udfCanReadIdentified (c.owningTenantId, 'case.view', c.personId) = 1 THEN p.lastName ELSE N'De-identified' END AS lastName,
+               CASE WHEN auth.udfCanReadIdentified (c.owningTenantId, 'case.view', c.personId) = 1 THEN p.firstName ELSE NULL END AS firstName,
+               a.code AS analyteCode,
                c.population, c.classification, c.caseStatus, c.openedDate, h.valueCanonical AS highestValue,
-               h.unitCanonical AS highestUnit, cc.joinedDate, cc.leftDate, l.locationId, l.addressLine1, l.unit, l.city,
-               l.latitude, l.longitude
+               h.unitCanonical AS highestUnit, cc.joinedDate, cc.leftDate,
+               CASE WHEN auth.udfCanReadIdentified (c.owningTenantId, 'case.view', c.personId) = 1 THEN l.locationId ELSE NULL END AS locationId,
+               CASE WHEN auth.udfCanReadIdentified (c.owningTenantId, 'case.view', c.personId) = 1 THEN l.addressLine1 ELSE NULL END AS addressLine1,
+               CASE WHEN auth.udfCanReadIdentified (c.owningTenantId, 'case.view', c.personId) = 1 THEN l.unit ELSE NULL END AS unit,
+               CASE WHEN auth.udfCanReadIdentified (c.owningTenantId, 'case.view', c.personId) = 1 THEN l.city ELSE NULL END AS city,
+               CASE WHEN auth.udfCanReadIdentified (c.owningTenantId, 'case.view', c.personId) = 1 THEN l.latitude ELSE NULL END AS latitude,
+               CASE WHEN auth.udfCanReadIdentified (c.owningTenantId, 'case.view', c.personId) = 1 THEN l.longitude ELSE NULL END AS longitude
           FROM dbo.caseCluster AS cc
           JOIN dbo.exposureCase AS c ON c.exposureCaseId = cc.exposureCaseId
           JOIN dbo.person AS p ON p.personId = c.personId

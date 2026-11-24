@@ -25,6 +25,8 @@ BEGIN
         tenantId                   UNIQUEIDENTIFIER  NOT NULL,
         accessLevel                VARCHAR (10)      NOT NULL CONSTRAINT DF_auth_sessionScopeTenant_accessLevel DEFAULT ('read'),
         canReadRelatedContacts     BIT               NOT NULL CONSTRAINT DF_auth_sessionScopeTenant_canReadRelatedContacts DEFAULT (0),
+        canReadIdentifiedResults   BIT               NOT NULL CONSTRAINT DF_auth_sessionScopeTenant_canReadIdentifiedResults DEFAULT (0),
+        canReadIdentifiedCases     BIT               NOT NULL CONSTRAINT DF_auth_sessionScopeTenant_canReadIdentifiedCases DEFAULT (0),
 
         -- Standard audit columns. Soft delete only. Convention: DF_<schema>_<tableName>_<fieldName>.
         isDeleted       BIT             NOT NULL CONSTRAINT DF_auth_sessionScopeTenant_isDeleted       DEFAULT (0),
@@ -48,6 +50,10 @@ IF COL_LENGTH (N'auth.sessionScopeTenant', N'accessLevel') IS NULL
     ALTER TABLE auth.sessionScopeTenant ADD accessLevel                VARCHAR (10)      NOT NULL CONSTRAINT DF_auth_sessionScopeTenant_accessLevel DEFAULT ('read');
 IF COL_LENGTH (N'auth.sessionScopeTenant', N'canReadRelatedContacts') IS NULL
     ALTER TABLE auth.sessionScopeTenant ADD canReadRelatedContacts     BIT               NOT NULL CONSTRAINT DF_auth_sessionScopeTenant_canReadRelatedContacts DEFAULT (0);
+IF COL_LENGTH (N'auth.sessionScopeTenant', N'canReadIdentifiedResults') IS NULL
+    ALTER TABLE auth.sessionScopeTenant ADD canReadIdentifiedResults   BIT               NOT NULL CONSTRAINT DF_auth_sessionScopeTenant_canReadIdentifiedResults DEFAULT (0);
+IF COL_LENGTH (N'auth.sessionScopeTenant', N'canReadIdentifiedCases') IS NULL
+    ALTER TABLE auth.sessionScopeTenant ADD canReadIdentifiedCases     BIT               NOT NULL CONSTRAINT DF_auth_sessionScopeTenant_canReadIdentifiedCases DEFAULT (0);
 GO
 
 -- -------------------------------------------------------------------------------------------

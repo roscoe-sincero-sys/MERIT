@@ -87,19 +87,33 @@ BEGIN
         -- ===== The procedure's own work starts here. Everything above and below is boilerplate. ==
         -- =========================================================================================
 
-        DECLARE @user UNIQUEIDENTIFIER, @root UNIQUEIDENTIFIER;
+        DECLARE @user UNIQUEIDENTIFIER, @root UNIQUEIDENTIFIER, @ref UNIQUEIDENTIFIER;
 
-        UPDATE auth.sessionScope
-           SET revokedUtc = SYSUTCDATETIME ()
-             , @user      = appUserId
-             , @root      = rootTenantId
+        SELECT @user = appUserId, @root = rootTenantId, @ref = sessionReference
+          FROM auth.sessionScope
          WHERE sessionScopeId = @sessionScopeId
-           AND revokedUtc IS NULL;
+           AND isDeleted = 0;
 
-        IF @user IS NOT NULL
+        IF @user IS NOT NULL AND @ref IS NOT NULL
         BEGIN
-            INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId)
-            VALUES (@user, @root, 'signOut', 'appUser', @user);
+            -- Serialize sign-out with concurrent scope renewal on the same logical session (#298) and revoke
+            -- any active scope sharing (appUserId, sessionReference) without affecting other sign-ins.
+            DECLARE @sessionLock INT;
+            DECLARE @sessionLockName NVARCHAR (255) = CONCAT (N'MERIT.session.', @user, N'.', @ref);
+            EXEC @sessionLock = sys.sp_getapplock @Resource = @sessionLockName, @LockMode = 'Exclusive', @LockOwner = 'Transaction', @LockTimeout = 5000;
+
+            UPDATE auth.sessionScope
+               SET revokedUtc = SYSUTCDATETIME ()
+             WHERE appUserId = @user
+               AND sessionReference = @ref
+               AND revokedUtc IS NULL
+               AND isDeleted = 0;
+
+            IF @@ROWCOUNT > 0
+            BEGIN
+                INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId)
+                VALUES (@user, @root, 'signOut', 'appUser', @user);
+            END;
         END;
 
         SET @Comments = N'Session scope revoked.';

@@ -86,10 +86,20 @@ BEGIN
         -- ===== The procedure's own work starts here. Everything above and below is boilerplate. ==
         -- =========================================================================================
 
-        SELECT TOP (5000) c.exposureCaseId, c.caseNumber, c.personId, p.lastName, p.firstName, a.code AS analyteCode,
+        SELECT TOP (5000) c.exposureCaseId, c.caseNumber,
+               CASE WHEN auth.udfCanReadIdentified (c.owningTenantId, 'case.view', c.personId) = 1 THEN c.personId ELSE CAST (0x0 AS UNIQUEIDENTIFIER) END AS personId,
+               CASE WHEN auth.udfCanReadIdentified (c.owningTenantId, 'case.view', c.personId) = 1 THEN p.lastName ELSE N'De-identified' END AS lastName,
+               CASE WHEN auth.udfCanReadIdentified (c.owningTenantId, 'case.view', c.personId) = 1 THEN p.firstName ELSE NULL END AS firstName,
+               a.code AS analyteCode,
                c.population, c.classification, c.caseStatus, c.openedDate, h.valueCanonical AS highestValue,
-               h.unitCanonical AS highestUnit, l.locationId, l.addressLine1, l.city, l.countyFips, l.latitude, l.longitude,
-               l.geocodeQuality,
+               h.unitCanonical AS highestUnit,
+               CASE WHEN auth.udfCanReadIdentified (c.owningTenantId, 'case.view', c.personId) = 1 THEN l.locationId ELSE NULL END AS locationId,
+               CASE WHEN auth.udfCanReadIdentified (c.owningTenantId, 'case.view', c.personId) = 1 THEN l.addressLine1 ELSE NULL END AS addressLine1,
+               CASE WHEN auth.udfCanReadIdentified (c.owningTenantId, 'case.view', c.personId) = 1 THEN l.city ELSE NULL END AS city,
+               l.countyFips,
+               CASE WHEN auth.udfCanReadIdentified (c.owningTenantId, 'case.view', c.personId) = 1 THEN l.latitude ELSE NULL END AS latitude,
+               CASE WHEN auth.udfCanReadIdentified (c.owningTenantId, 'case.view', c.personId) = 1 THEN l.longitude ELSE NULL END AS longitude,
+               CASE WHEN auth.udfCanReadIdentified (c.owningTenantId, 'case.view', c.personId) = 1 THEN l.geocodeQuality ELSE NULL END AS geocodeQuality,
                (SELECT COUNT (*) FROM dbo.caseCluster AS cc
                   JOIN dbo.cluster AS cl ON cl.clusterId = cc.clusterId AND cl.clusterStatus <> 'closed' AND cl.isDeleted = 0
                  WHERE cc.exposureCaseId = c.exposureCaseId AND cc.leftDate IS NULL AND cc.isDeleted = 0) AS openClusterCount

@@ -1,5 +1,6 @@
 import { confirmAction } from '../../shared/confirmation';
 import { ChangeDetectionStrategy, Component, computed, DestroyRef, ElementRef, inject, Injectable, input, OnInit, output, signal, viewChild } from '@angular/core';
+import { firstValueFrom } from 'rxjs';
 import { ApiClient, problemMessage } from '../../api/api-client';
 import { Agreement, MatchCandidateDto, MatchDecision, MatchQueueItemDto, MatchReviewDto } from '../../api/contracts';
 import { LatestRequest } from '../../shared/latest-request';
@@ -168,11 +169,6 @@ export class CandidateHistoryComponent {
   readonly candidate = input.required<MatchCandidateDto>();
 }
 
-function readXsrfToken(): string {
-  const m = /(?:^|;\s*)XSRF-TOKEN=([^;]+)/.exec(document.cookie);
-  return m ? decodeURIComponent(m[1]) : '';
-}
-
 const SINGLE_KEYS = 'merit.match-review.single-keys';
 function readSingleKeys(): boolean {
   try { return localStorage.getItem(SINGLE_KEYS) === 'true'; } catch { return false; }
@@ -193,7 +189,7 @@ const PLACEHOLDER_NAME = /^(baby( (boy|girl))?|boy|girl|infant|newborn|unknown|u
   imports: [MatchComparisonComponent, CandidateHistoryComponent, PagerComponent],
   providers: [MatchReviewStore],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  host: { '(keydown)': 'onKey($event)', '(window:pagehide)': 'onPageHide()' },
+  host: { '(keydown)': 'onKey($event)', '(window:beforeunload)': 'onBeforeUnload($event)' },
   template: `
     <h1 tabindex="-1" #heading>Person matching review</h1>
     @if (!store.queueLoaded() || store.total() > 0 || store.review() !== null) {
@@ -221,15 +217,15 @@ const PLACEHOLDER_NAME = /^(baby( (boy|girl))?|boy|girl|infant|newborn|unknown|u
     <div class="layout">
       <nav aria-label="Records to review">
         <div class="usa-checkbox">
-          <input class="usa-checkbox__input" id="escalated" type="checkbox" [checked]="store.escalatedOnly()" [disabled]="store.busy()" (change)="toggleEscalated()" />
+          <input class="usa-checkbox__input" id="escalated" type="checkbox" [checked]="store.escalatedOnly()" [disabled]="store.busy() || pendingCommit() !== null" (change)="toggleEscalated()" />
           <label class="usa-checkbox__label" for="escalated">Show only records sent to a supervisor</label>
         </div>
-        <merit-pager label="Match records" [page]="store.page()" [size]="store.pageSize()" [total]="store.total()" [busy]="store.busy() || store.loading()" (change)="goPage($event)" />
+        <merit-pager label="Match records" [page]="store.page()" [size]="store.pageSize()" [total]="store.total()" [busy]="store.busy() || store.loading() || pendingCommit() !== null" (change)="goPage($event)" />
         <ol class="queue">
           @for (q of store.queue(); track q.stagingRowId) {
             <li>
               <button type="button" class="usa-button usa-button--unstyled" [attr.aria-current]="q.stagingRowId === store.currentId() ? 'true' : null"
-                      [disabled]="store.busy() || store.queueLoading()" (click)="open(q.stagingRowId)">
+                      [disabled]="store.busy() || store.queueLoading() || pendingCommit() !== null" (click)="open(q.stagingRowId)">
                 {{ q.patientName ?? '(no name)' }}@if (q.dob) { &middot; {{ q.dob }}}
               </button>
               @if (q.isUrgent) { <span class="badge urgent">Urgent</span> }
@@ -338,7 +334,8 @@ export class MatchReviewPage implements OnInit {
   ngOnInit(): void {
     this.destroyRef.onDestroy(() => {
       clearTimeout(this.armTimer);
-      this.flushPendingOnLeave();
+      this.clearPendingTimer();
+      this.pendingCommit.set(null);
     });
     this.store.escalatedOnly.set(this.escalatedParam() === 'true');
     this.loadQueue(true, 0, this.rowParam());
@@ -376,26 +373,14 @@ export class MatchReviewPage implements OnInit {
   }
 
   protected toggleEscalated(): void {
-    if (this.store.busy()) return;
-    if (this.pendingCommit()) {
-      this.flushPending(() => {
-        this.store.escalatedOnly.update(v => !v);
-        this.store.page.set(1);
-        this.loadQueue(true);
-      });
-      return;
-    }
+    if (this.store.busy() || this.pendingCommit() !== null) return;
     this.store.escalatedOnly.update(v => !v);
     this.store.page.set(1);
     this.loadQueue(true);
   }
 
   protected open(id: string): void {
-    if (this.store.busy() || this.store.queueLoading()) return;
-    if (this.pendingCommit()) {
-      this.flushPending(() => this.openRow(id));
-      return;
-    }
+    if (this.store.busy() || this.store.queueLoading() || this.pendingCommit() !== null) return;
     this.openRow(id);
   }
 
@@ -418,29 +403,34 @@ export class MatchReviewPage implements OnInit {
     }
   }
 
-  protected onPageHide(): void {
-    this.flushPendingOnLeave();
+  protected onBeforeUnload(event: BeforeUnloadEvent): void {
+    if (this.pendingCommit()) {
+      event.preventDefault();
+    }
   }
 
-  /** Commits any pending delayed decision with keepalive when leaving the route or closing the tab. */
-  private flushPendingOnLeave(): void {
+  /**
+   * Route guard: preserves the Undo window on in-app navigation and ensures a failed save is shown rather than dropped.
+   */
+  async canDeactivate(): Promise<boolean> {
     const p = this.pendingCommit();
+    if (!p) return true;
+    const saveAndLeave = await confirmAction(
+      `You have a pending decision ("${p.summary}"). Choose OK to save it before leaving, or Cancel to stay on this page so you can Undo or wait.`);
+    if (!saveAndLeave) return false;
+
     this.clearPendingTimer();
-    if (!p) return;
     this.pendingCommit.set(null);
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    const token = readXsrfToken();
-    if (token) headers['X-XSRF-TOKEN'] = token;
+    this.store.busy.set(true);
+    this.store.error.set(null);
     try {
-      void fetch(`/api/v1/match-review/${p.rowId}/decision`, {
-        method: 'POST',
-        keepalive: true,
-        credentials: 'same-origin',
-        headers,
-        body: JSON.stringify({ decision: p.decision, personId: p.personId, note: p.note }),
-      });
-    } catch {
-      /* Ignore unload transport errors. */
+      await firstValueFrom(this.api.matchDecision(p.rowId, { decision: p.decision, personId: p.personId, note: p.note }));
+      this.store.busy.set(false);
+      return true;
+    } catch (e) {
+      this.store.busy.set(false);
+      this.store.error.set(problemMessage(e));
+      return false;
     }
   }
 
@@ -574,35 +564,21 @@ export class MatchReviewPage implements OnInit {
   }
 
   protected goPage(page: number): void {
-    if (this.store.busy() || this.store.loading()) return;
-    if (this.pendingCommit()) {
-      this.flushPending(() => {
-        this.store.page.set(page);
-        this.loadQueue(true);
-      });
-      return;
-    }
+    if (this.store.busy() || this.store.loading() || this.pendingCommit() !== null) return;
     this.store.page.set(page);
     this.loadQueue(true);
   }
 
   private step(delta: number): void {
-    if (this.store.busy() || this.store.queueLoading()) return;
-    const go = () => {
-      const q = this.store.queue();
-      const next = q[this.store.position() + delta];
-      if (next) this.openRow(next.stagingRowId);
-      else if (delta > 0 && this.store.page() * this.store.pageSize() < this.store.total()) {
-        this.store.page.update(p => p + 1); this.loadQueue(true);
-      } else if (delta < 0 && this.store.page() > 1) {
-        this.store.page.update(p => p - 1); this.loadQueue(true, this.store.pageSize() - 1);
-      }
-    };
-    if (this.pendingCommit()) {
-      this.flushPending(go);
-      return;
+    if (this.store.busy() || this.store.queueLoading() || this.pendingCommit() !== null) return;
+    const q = this.store.queue();
+    const next = q[this.store.position() + delta];
+    if (next) this.openRow(next.stagingRowId);
+    else if (delta > 0 && this.store.page() * this.store.pageSize() < this.store.total()) {
+      this.store.page.update(p => p + 1); this.loadQueue(true);
+    } else if (delta < 0 && this.store.page() > 1) {
+      this.store.page.update(p => p - 1); this.loadQueue(true, this.store.pageSize() - 1);
     }
-    go();
   }
 
   private openRow(id: string): void {

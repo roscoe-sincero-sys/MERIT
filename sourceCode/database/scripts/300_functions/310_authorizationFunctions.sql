@@ -197,6 +197,36 @@ BEGIN
 END;
 GO
 
+CREATE OR ALTER FUNCTION auth.udfCanReadIdentified (@owningTenantId UNIQUEIDENTIFIER, @permissionCode VARCHAR (60), @personId UNIQUEIDENTIFIER = NULL)
+RETURNS BIT
+AS
+BEGIN
+    IF USER_NAME () = N'dbo' RETURN 1;
+    IF @owningTenantId IS NULL AND @personId IS NULL RETURN 0;
+
+    IF EXISTS (
+        SELECT 1
+          FROM auth.sessionScope       AS ss
+          JOIN auth.sessionScopeTenant AS st ON st.sessionScopeId = ss.sessionScopeId
+                                            AND st.isDeleted = 0
+         WHERE ss.sessionScopeId = TRY_CAST (SESSION_CONTEXT (N'scopeKey') AS UNIQUEIDENTIFIER)
+           AND ss.revokedUtc IS NULL
+           AND ss.expiresUtc > SYSUTCDATETIME ()
+           AND ss.isDeleted = 0
+           AND ((@permissionCode = 'result.view' AND st.canReadIdentifiedResults = 1)
+                OR (@permissionCode = 'case.view' AND st.canReadIdentifiedCases = 1))
+           AND (st.tenantId = @owningTenantId
+                OR (@personId IS NOT NULL
+                    AND EXISTS (SELECT 1 FROM dbo.personAccess AS pa
+                                 WHERE pa.personId = @personId
+                                   AND pa.tenantId = st.tenantId
+                                   AND pa.isDeleted = 0))))
+        RETURN 1;
+
+    RETURN 0;
+END;
+GO
+
 CREATE OR ALTER FUNCTION auth.udfHasRootPermission (@permissionCode VARCHAR (60))
 RETURNS BIT
 AS
@@ -293,6 +323,7 @@ EXEC util.uspSetObjectDescription @SchemaName = N'auth', @ObjectType = N'FUNCTIO
 EXEC util.uspSetObjectDescription @SchemaName = N'auth', @ObjectType = N'FUNCTION', @ObjectName = N'tvfProfileGrantPermissions', @Description = N'A user-made profile expanded to (tenant, permission, kind, highest access rank); not yet clipped to the master.';
 EXEC util.uspSetObjectDescription @SchemaName = N'auth', @ObjectType = N'FUNCTION', @ObjectName = N'udfIsPlatformAdmin', @Description = N'1 for a platform administrator''s session (and dbo); fails closed.';
 EXEC util.uspSetObjectDescription @SchemaName = N'auth', @ObjectType = N'FUNCTION', @ObjectName = N'udfIsDeidentified', @Description = N'1 when the current session holds only de-identified roles (epidemiologist); 0 for dbo or identified roles.';
+EXEC util.uspSetObjectDescription @SchemaName = N'auth', @ObjectType = N'FUNCTION', @ObjectName = N'udfCanReadIdentified', @Description = N'1 when the current active session holds a non-de-identified grant for the specified permission at @owningTenantId; 1 for dbo; fails closed.';
 EXEC util.uspSetObjectDescription @SchemaName = N'auth', @ObjectType = N'FUNCTION', @ObjectName = N'udfHasRootPermission', @Description = N'1 when the current active session (master, profile, or view-as) holds write/full permission at the data root.';
 EXEC util.uspSetObjectDescription @SchemaName = N'auth', @ObjectType = N'FUNCTION', @ObjectName = N'tvfAdminTenants', @Description = N'Tenants the current session may administer: all for a platform administrator, else its administration scope.';
 GO

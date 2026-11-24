@@ -46,8 +46,9 @@ Description:	Initial version: atomic DB-backed TOTP replay prevention.
 
 ***********************************************************************************************************************/
 CREATE OR ALTER PROCEDURE auth.uspConsumeTotpStep
-      @appUserId UNIQUEIDENTIFIER
-      , @totpStep BIGINT
+      @appUserId               UNIQUEIDENTIFIER
+      , @totpStep              BIGINT
+      , @expectedSecurityStamp UNIQUEIDENTIFIER = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -104,6 +105,9 @@ BEGIN
              WHERE appUserId = @appUserId
                AND isDeleted = 0
                AND isActive = 1
+               AND mfaEnabled = 1
+               AND mfaSecretProtected IS NOT NULL
+               AND (@expectedSecurityStamp IS NULL OR securityStamp = @expectedSecurityStamp)
                AND (lastTotpStep IS NULL OR lastTotpStep < @totpStep);
 
             DECLARE @accepted BIT = CASE WHEN @@ROWCOUNT = 1 THEN 1 ELSE 0 END;

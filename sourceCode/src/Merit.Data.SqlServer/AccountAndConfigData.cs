@@ -40,12 +40,12 @@ public sealed class AccountData(Db db) : IAccountData
         => db.ExecuteAsync("auth.uspRevokeSessionScope", new { sessionScopeId }, ct);
 
     public Task SaveMfaEnrollmentAsync(Guid appUserId, string mfaSecretProtected, IReadOnlyList<string> recoveryCodeHashes,
-                                       long? initialTotpStep = null, CancellationToken ct = default)
+                                       long? initialTotpStep = null, Guid? expectedSecurityStamp = null, CancellationToken ct = default)
         => db.ExecuteAsync("auth.uspSaveMfaEnrollment",
-            new { appUserId, mfaSecretProtected, recoveryCodeHashesJson = JsonSerializer.Serialize(recoveryCodeHashes), initialTotpStep }, ct);
+            new { appUserId, mfaSecretProtected, recoveryCodeHashesJson = JsonSerializer.Serialize(recoveryCodeHashes), initialTotpStep, expectedSecurityStamp }, ct);
 
-    public async Task<bool> ConsumeTotpStepAsync(Guid appUserId, long totpStep, CancellationToken ct = default)
-        => await db.QuerySingleAsync<bool>("auth.uspConsumeTotpStep", new { appUserId, totpStep }, ct).ConfigureAwait(false);
+    public async Task<bool> ConsumeTotpStepAsync(Guid appUserId, long totpStep, Guid? expectedSecurityStamp = null, CancellationToken ct = default)
+        => await db.QuerySingleAsync<bool>("auth.uspConsumeTotpStep", new { appUserId, totpStep, expectedSecurityStamp }, ct).ConfigureAwait(false);
 
     public Task<IReadOnlyList<RecoveryCodeRow>> GetRecoveryCodesAsync(Guid appUserId, CancellationToken ct = default)
         => db.QueryAsync<RecoveryCodeRow>("auth.uspGetRecoveryCodes", new { appUserId }, ct);

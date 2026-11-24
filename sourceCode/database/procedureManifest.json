@@ -319,6 +319,12 @@
     "type": "BIGINT",
     "hasDefault": false,
     "isOutput": false
+   },
+   {
+    "name": "expectedSecurityStamp",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": true,
+    "isOutput": false
    }
   ]
  },
@@ -785,6 +791,12 @@
    {
     "name": "initialTotpStep",
     "type": "BIGINT",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "expectedSecurityStamp",
+    "type": "UNIQUEIDENTIFIER",
     "hasDefault": true,
     "isOutput": false
    }

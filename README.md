@@ -222,6 +222,22 @@ dotnet run --project src/Merit.Web         # terminal 2: https://localhost:7243
 Program settings such as levels, case definitions and extract options are kept per state in the database. Change them
 on the **Configuration** screens.
 
+**Upgrading existing Data Protection key rings.** Non-Development deployments now fail fast at startup unless
+`DataProtection:CertificatePath` (recommended, required for shared `DataProtection:KeyPath` web farms) or
+`DataProtection:AllowLocalMachineDpapi=true` (single-server Windows opt-in) is configured. When adding a certificate to
+an existing deployment:
+
+1. Store `DataProtection:KeyPath` and its backups on an encrypted volume (for example BitLocker, EFS, or KMS-encrypted
+   storage) with ACLs restricted to the web service identity.
+2. Configure `DataProtection:CertificatePath` and `DataProtection:CertificatePassword` and restart the web nodes.
+   ASP.NET Core automatically continues reading legacy unencrypted XML keys to decrypt existing enrolled MFA secrets
+   (`auth.appUser.mfaSecretProtected`) and protected records while encrypting all newly generated keys with the
+   certificate.
+3. Verify that existing users can sign in with their enrolled authenticator apps after the restart.
+4. Once all persisted protected payloads (such as `mfaSecretProtected`) have been re-wrapped under a certificate-protected
+   key or re-enrolled, retire and securely delete the legacy plaintext XML key files from `DataProtection:KeyPath` and
+   old backups. Always back up both the `.pfx` certificate and the encrypted key ring before rotating.
+
 **Time zone.** Each data root (a state, tribe, region or stand-alone jurisdiction) has a time zone, chosen on
 **Tenants** when the root is created. Everything dated "today" follows it, in the application and in the procedures:
 cases opened, activities, form defaults, report periods. So does every time shown on screen. Times are stored in UTC. A

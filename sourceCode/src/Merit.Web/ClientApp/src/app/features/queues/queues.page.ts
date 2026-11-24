@@ -294,11 +294,14 @@ export class QueuesPage implements OnInit {
         this.closePreview();
         if (r.updated > 0) {
           this.store.message.set(action === 'assignToMe' ? 'Task assigned to you.' : action === 'complete' ? 'Task completed.' : 'Task dismissed.');
+          this.loadQueues();
+          this.load();
         } else {
-          this.store.error.set('This task is no longer open or was already updated by another user. The queue has been refreshed.');
+          this.store.message.set(null);
+          this.store.error.set('No change was made. The task may already be closed or assigned to you. The queue has been refreshed.');
+          this.loadQueues(true);
+          this.load(false, true);
         }
-        this.loadQueues();
-        this.load();
       },
       error: e => { this.busy.set(false); this.store.error.set(problemMessage(e)); },
     });
@@ -315,13 +318,13 @@ export class QueuesPage implements OnInit {
     });
   }
 
-  private load(resetSelection = false): void {
+  private load(resetSelection = false, preserveError = false): void {
     if (resetSelection || this.pendingSelectionReset) {
       this.pendingSelectionReset = true;
       this.store.selected.set(new Set<string>());
       this.store.result.set({ items: [], totalCount: 0, pageNumber: 1, pageSize: this.store.pageSize() });
     }
-    this.store.error.set(null);
+    if (!preserveError) this.store.error.set(null);
     this.store.loading.set(true);
     this.tasksLoad.run(this.api.tasks(this.store.query()), {
       next: r => {

@@ -49,6 +49,7 @@ CREATE OR ALTER PROCEDURE auth.uspSaveMfaEnrollment
       , @mfaSecretProtected     NVARCHAR (500)
       , @recoveryCodeHashesJson NVARCHAR (MAX)
       , @initialTotpStep        BIGINT = NULL
+      , @expectedSecurityStamp  UNIQUEIDENTIFIER = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -95,12 +96,25 @@ BEGIN
         -- ===== The procedure's own work starts here. Everything above and below is boilerplate. ==
         -- =========================================================================================
 
+        DECLARE @enrollLock INT;
+        DECLARE @enrollLockName NVARCHAR (255) = CONCAT (N'MERIT.totp.', @appUserId);
+        EXEC @enrollLock = sys.sp_getapplock @Resource = @enrollLockName, @LockMode = 'Exclusive', @LockOwner = 'Transaction', @LockTimeout = 5000;
+
         UPDATE auth.appUser
            SET mfaSecretProtected = @mfaSecretProtected
              , mfaEnabled         = 1
              , lastTotpStep       = @initialTotpStep
              , securityStamp      = NEWID ()
-         WHERE appUserId = @appUserId AND isDeleted = 0;
+         WHERE appUserId = @appUserId
+           AND isDeleted = 0
+           AND isActive = 1
+           AND mfaEnabled = 0
+           AND (@expectedSecurityStamp IS NULL OR securityStamp = @expectedSecurityStamp);
+
+        IF @@ROWCOUNT <> 1
+        BEGIN
+            ;THROW 51409, N'Your sign-in session is no longer valid or MFA was already enrolled. Please sign in again.', 1;
+        END;
 
         UPDATE auth.mfaRecoveryCode SET isDeleted = 1 WHERE appUserId = @appUserId AND isDeleted = 0;
 

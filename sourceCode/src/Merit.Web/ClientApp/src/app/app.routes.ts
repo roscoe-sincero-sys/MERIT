@@ -25,6 +25,7 @@ export const routes: Routes = [
   ...guarded({
     path: 'match-review',
     loadComponent: () => import('./features/match-review/match-review.page').then(m => m.MatchReviewPage),
+    canDeactivate: [(component: { canDeactivate?: () => boolean | Promise<boolean> }) => component?.canDeactivate?.() ?? true],
     title: 'Person matching review - MERIT',
   }, 'result.release_hold'),
   ...guarded({ path: 'map', loadComponent: () => import('./features/map/case-map.page').then(m => m.CaseMapPage), title: 'Case map - MERIT' }, 'case.view'),
