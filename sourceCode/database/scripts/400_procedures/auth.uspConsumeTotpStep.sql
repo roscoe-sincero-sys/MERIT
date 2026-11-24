@@ -9,13 +9,11 @@ GO
 /***********************************************************************************************************************
 ObjectName:   auth.uspConsumeTotpStep
 Author:       MERIT build
-CreateDate:   2026-11-24
+CreateDate:   2026-10-24
 ========================================================================================================================
 Description:
 
-Atomically records the latest accepted TOTP 30-second time step for an account so a code cannot be replayed across
-instances, restarts, or different verification paths (#302). Returns 1 if the step was accepted (strictly greater than
-any previously accepted step) and 0 if already used or out of order.
+Atomically records the latest accepted TOTP 30-second step for an account so codes cannot be replayed across instances or verification paths.
 
 ========================================================================================================================
 Requirements and Key Dependencies:
@@ -27,20 +25,21 @@ logs.uspStartExecutionLogging and logs.uspRecordExecutionError (scripts/000_infr
 ========================================================================================================================
 Notes:
 
-Rule 8 full instrumentation. Runs inside an explicit transaction.
+Rule 8 full instrumentation, generated from templates/procedure.sql by tools/generateProcedures.py. Row-level security applies to every table read
+or written here: SESSION_CONTEXT (N'scopeKey') decides what the caller can see.
 
 ========================================================================================================================
 Example Usage and Performance:
 
-exec auth.uspConsumeTotpStep @appUserId = ..., @totpStep = ...
+exec auth.uspConsumeTotpStep ...
 
 ========================================================================================================================
 Modification History:
 
-Date:		2026-11-24
-Author:		Antigravity (Google DeepMind)
+Date:		2026-10-24
+Author:		MERIT build
 Ticket:		#302
-Description:	Initial version: atomic DB-backed TOTP replay prevention.
+Description:	Initial version.
 
 -----------------------------------------------------------------------------------------------------------------------
 

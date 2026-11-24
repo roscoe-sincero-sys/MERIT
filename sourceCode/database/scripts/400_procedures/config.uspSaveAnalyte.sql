@@ -25,7 +25,7 @@ logs.uspStartExecutionLogging and logs.uspRecordExecutionError (scripts/000_infr
 ========================================================================================================================
 Notes:
 
-Requires permission config.edit (auth.udfHasPermission); refuses with 51403 otherwise.
+Requires permission platform.administer (auth.udfHasPermission); refuses with 51403 otherwise.
 
 Rule 8 full instrumentation, generated from templates/procedure.sql by tools/generateProcedures.py. Row-level security applies to every table read
 or written here: SESSION_CONTEXT (N'scopeKey') decides what the caller can see.

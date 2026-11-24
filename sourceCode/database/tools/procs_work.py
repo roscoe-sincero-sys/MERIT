@@ -48,7 +48,7 @@ END;
 
 DECLARE @root UNIQUEIDENTIFIER = auth.udfSessionRootTenantId ();
 DECLARE @owner UNIQUEIDENTIFIER = COALESCE ((SELECT owningTenantId FROM dbo.exposureCase WHERE exposureCaseId = @exposureCaseId),
-                                            @owningTenantId, dbo.udfPatientWorkOwner(@personId), auth.udfSessionActingTenantId ());
+                                            @owningTenantId, dbo.udfWritableWorkOwner (@root, dbo.udfPatientWorkOwner(@personId)), auth.udfSessionActingTenantId ()); -- issue 268: inferred patient owner must be writable
 
 IF NOT EXISTS (SELECT 1 FROM dbo.workTask
                 WHERE queueCode = @queueCode AND taskStatus = 'open' AND isDeleted = 0 AND title = @title
@@ -572,9 +572,27 @@ SET @Comments = CONCAT ((SELECT COUNT (*) FROM @new), N' new cluster(s).');
 , @clientAddress VARCHAR (45) = NULL""",
         "key": "CONCAT (N'eventAction=', @eventAction, N', entityType=', @entityType, N', entityId=', @entityId)",
         "body": """
-INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, recordCount, clientAddress)
+-- Issue 270: stamp the owner the actor's own session can see now, so a tenant-scoped reviewer later sees events on
+-- that tenant's records without needing row access to the records themselves.
+DECLARE @owner UNIQUEIDENTIFIER;
+IF @entityId IS NOT NULL
+BEGIN
+    SET @owner = CASE @entityType
+        WHEN 'person'                 THEN dbo.udfPatientWorkOwner (@entityId)
+        WHEN 'patientCare'            THEN dbo.udfPatientWorkOwner (@entityId)
+        WHEN 'labResult'              THEN dbo.udfPatientWorkOwner ((SELECT personId FROM dbo.labResult WHERE labResultId = @entityId))
+        WHEN 'exposureCase'           THEN (SELECT owningTenantId FROM dbo.exposureCase WHERE exposureCaseId = @entityId)
+        WHEN 'investigation'          THEN (SELECT owningTenantId FROM dbo.investigation WHERE investigationId = @entityId)
+        WHEN 'workTask'               THEN (SELECT owningTenantId FROM dbo.workTask WHERE workTaskId = @entityId)
+        WHEN 'testingPlan'            THEN (SELECT owningTenantId FROM dbo.workTask WHERE workTaskId = @entityId)
+        WHEN 'notificationObligation' THEN (SELECT owningTenantId FROM dbo.notificationObligation WHERE notificationObligationId = @entityId)
+        WHEN 'stagingRow'             THEN (SELECT owningTenantId FROM dbo.stagingRow WHERE stagingRowId = @entityId)
+    END;
+END;
+
+INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, recordCount, clientAddress, owningTenantId)
 VALUES (auth.udfSessionUserId (), auth.udfSessionRootTenantId (), @eventAction, @entityType, @entityId, @recordCount,
-        @clientAddress);
+        @clientAddress, @owner);
 
 SET @Comments = N'Audit event recorded.';
 """,
@@ -582,7 +600,7 @@ SET @Comments = N'Audit event recorded.';
     {
         "schema": "logs", "name": "uspSearchAuditEvents", "kind": "read", "grants": WEB, "ticket": "T051",
         "permission": "audit.view",
-        "desc": "Searches the audit ledger within the caller's root tenant by user, record, action, record type and time, "
+        "desc": "Searches the audit ledger within what the caller reviews (whole data roots it reviews at the root; elsewhere events by its users or on its tenants' records, issue 270) by user, record, action, record type and time, "
                 "newest first, one page at a time with the total. Record type 'report' covers every report.",
         "params": """@appUserId   UNIQUEIDENTIFIER = NULL
 , @entityId    UNIQUEIDENTIFIER = NULL

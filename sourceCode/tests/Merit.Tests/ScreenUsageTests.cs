@@ -91,7 +91,6 @@ public sealed class ScreenUsageTests
         var recorder = new ScreenUsageRecorder(data, actor, new ConfigurationBuilder().Build(), NullLogger<ScreenUsageRecorder>.Instance);
         await recorder.RecordAsync(new ScreenVisitInput(Guid.NewGuid(), "home"));
         await recorder.DurationAsync(Guid.NewGuid(), int.MaxValue);
-        await recorder.ContinueAsync(Guid.NewGuid());
         var disabled = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["ScreenVisit:Enabled"] = "false" }).Build();
         data.Throw = false;
         await new ScreenUsageRecorder(data, actor, disabled, NullLogger<ScreenUsageRecorder>.Instance).RecordAsync(new ScreenVisitInput(Guid.NewGuid(), "home"));
@@ -116,7 +115,6 @@ public sealed class ScreenUsageTests
         public bool Throw { get; set; }
         public Task<bool> RecordAsync(ScreenVisitInput v, CancellationToken ct = default) { if (Throw) throw new InvalidOperationException("secret must not be logged"); Visits.Add(v); return Task.FromResult(false); }
         public Task DurationAsync(Guid id, int ms, CancellationToken ct = default) => Throw ? Task.FromException(new InvalidOperationException()) : Task.CompletedTask;
-        public Task ContinueSessionAsync(Guid id, CancellationToken ct = default) => DurationAsync(id, 0, ct);
         public Task<ScreenUsageReport> ReportAsync(int days, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<ScreenSessionReport> SessionAsync(Guid reference, int days, int page, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<int> PurgeAsync(int days, CancellationToken ct = default) => throw new NotSupportedException();

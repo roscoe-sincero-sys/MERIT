@@ -84,22 +84,6 @@
   ]
  },
  {
-  "name": "auth.uspContinueUsageSession",
-  "kind": "write",
-  "grants": [
-   "meritWebRole"
-  ],
-  "permission": null,
-  "params": [
-   {
-    "name": "newSessionScopeId",
-    "type": "UNIQUEIDENTIFIER",
-    "hasDefault": false,
-    "isOutput": false
-   }
-  ]
- },
- {
   "name": "auth.uspCreateEmailChallenge",
   "kind": "write",
   "grants": [
@@ -575,7 +559,10 @@
   "grants": [
    "meritWebRole"
   ],
-  "permission": "tenant.administer",
+  "permission": [
+   "tenant.administer",
+   "security.review"
+  ],
   "params": []
  },
  {
@@ -3719,6 +3706,22 @@
   ],
   "permission": "case.view",
   "params": []
+ },
+ {
+  "name": "dbo.uspListCaseTransferTargets",
+  "kind": "read",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": "case.edit",
+  "params": [
+   {
+    "name": "exposureCaseId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   }
+  ]
  },
  {
   "name": "dbo.uspListClusters",
@@ -7552,6 +7555,40 @@
   ]
  },
  {
+  "name": "dbo.uspTransferExposureCase",
+  "kind": "write",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": "case.edit",
+  "params": [
+   {
+    "name": "exposureCaseId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "toTenantId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "reason",
+    "type": "NVARCHAR (500)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "rowVersion",
+    "type": "BINARY (8)",
+    "hasDefault": false,
+    "isOutput": false
+   }
+  ]
+ },
+ {
   "name": "dbo.uspUpdateCluster",
   "kind": "write",
   "grants": [
@@ -7910,7 +7947,10 @@
   "grants": [
    "meritWebRole"
   ],
-  "permission": "tenant.administer",
+  "permission": [
+   "tenant.administer",
+   "security.review"
+  ],
   "params": [
    {
     "name": "hours",
@@ -7953,7 +7993,10 @@
   "grants": [
    "meritWebRole"
   ],
-  "permission": "tenant.administer",
+  "permission": [
+   "tenant.administer",
+   "security.review"
+  ],
   "params": [
    {
     "name": "appUserId",

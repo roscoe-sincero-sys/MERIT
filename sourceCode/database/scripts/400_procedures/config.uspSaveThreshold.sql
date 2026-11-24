@@ -113,6 +113,7 @@ BEGIN
         -- =========================================================================================
 
         DECLARE @root UNIQUEIDENTIFIER = auth.udfSessionRootTenantId ();
+
         IF auth.udfHasRootPermission ('config.edit') = 0
         BEGIN
             ;THROW 51403, N'Only a configuration administrator at the data root can change jurisdiction-wide thresholds.', 1;

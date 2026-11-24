@@ -97,9 +97,6 @@ BEGIN
 
         IF @user IS NOT NULL AND @ref IS NOT NULL
         BEGIN
-            -- Serialize sign-out with concurrent scope renewal on the same logical session (#298).
-            -- Explicit sign-out (@revokeLogicalSession = 1) revokes any active scope sharing (appUserId, sessionReference);
-            -- idle-expiry and worker cleanup (@revokeLogicalSession = 0) revoke only the exact @sessionScopeId.
             DECLARE @sessionLock INT;
             DECLARE @sessionLockName NVARCHAR (255) = CONCAT (N'MERIT.session.', @user, N'.', @ref);
             EXEC @sessionLock = sys.sp_getapplock @Resource = @sessionLockName, @LockMode = 'Exclusive', @LockOwner = 'Transaction', @LockTimeout = 5000;

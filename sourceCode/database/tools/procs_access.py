@@ -335,7 +335,7 @@ SET @Comments = CONCAT (N'Session scope created: ', @profileName, N'.');
     },
     {
         "schema": "auth", "name": "uspListUsers", "kind": "read", "grants": WEB, "ticket": "T160",
-        "permission": "tenant.administer",
+        "permission": ["tenant.administer", "security.review"],
         "desc": "The accounts an administrator can see: people whose home tenant they administer, and people holding a "
                 "grant at a tenant they administer (whose accounts they cannot change). Every account for a platform "
                 "administrator.",
@@ -343,6 +343,12 @@ SET @Comments = CONCAT (N'Session scope created: ', @profileName, N'.');
         "key": "NULL",
         "body": f"""
 {ADMIN_TENANTS}
+-- Issues 271/278: the accounts that can reach, or did reach, the reviewed tenants, read-only for a reviewer;
+-- canManageAccount stays administration-only.
+DECLARE @review TABLE (tenantId UNIQUEIDENTIFIER PRIMARY KEY);
+INSERT @review SELECT tenantId FROM auth.tvfReviewTenants ('security.review');
+DECLARE @accounts TABLE (appUserId UNIQUEIDENTIFIER PRIMARY KEY);
+INSERT @accounts SELECT appUserId FROM auth.tvfReviewAccounts ('security.review');
 
 SELECT u.appUserId, u.userName, u.displayName, u.email, u.isActive, u.mfaEnabled, u.lastSignInUtc, u.lockoutEndUtc
      , h.tenantName AS homeTenantName, h.tenantType AS homeTenantType
@@ -355,14 +361,15 @@ SELECT u.appUserId, u.userName, u.displayName, u.email, u.isActive, u.mfaEnabled
           JOIN auth.role   AS r ON r.roleId = ua.roleId
           JOIN auth.tenant AS t ON t.tenantId = ua.tenantId
          WHERE ua.appUserId = u.appUserId AND ua.isDeleted = 0
-           AND (ua.endDate IS NULL OR ua.endDate >= auth.udfSessionToday ()) AND ua.revokedUtc IS NULL) AS assignments
+           AND (ua.endDate IS NULL OR ua.endDate >= auth.udfSessionToday ()) AND ua.revokedUtc IS NULL
+           -- #278: an outside actor's grants elsewhere are not the reviewer's business; show those reaching here.
+           AND (EXISTS (SELECT 1 FROM @admin AS a WHERE a.tenantId = u.homeTenantId)
+                OR EXISTS (SELECT 1 FROM auth.tenantClosure AS tc JOIN @review AS rv ON rv.tenantId = tc.descendantTenantId
+                            WHERE tc.ancestorTenantId = ua.tenantId AND tc.isDeleted = 0 AND (ua.includeDescendants = 1 OR tc.depth = 0)))) AS assignments
   FROM auth.appUser AS u
   LEFT JOIN auth.tenant AS h ON h.tenantId = u.homeTenantId
  WHERE u.isDeleted = 0
-   AND (EXISTS (SELECT 1 FROM @admin AS a WHERE a.tenantId = u.homeTenantId)
-        OR EXISTS (SELECT 1 FROM auth.userAssignment AS ua JOIN @admin AS a ON a.tenantId = ua.tenantId
-                    WHERE ua.appUserId = u.appUserId AND ua.isDeleted = 0
-                      AND (ua.endDate IS NULL OR ua.endDate >= auth.udfSessionToday ()) AND ua.revokedUtc IS NULL))
+   AND EXISTS (SELECT 1 FROM @accounts AS x WHERE x.appUserId = u.appUserId)
  ORDER BY u.displayName;
 """,
     },

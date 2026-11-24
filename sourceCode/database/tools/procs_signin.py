@@ -8,12 +8,11 @@ reveal audited in the ledger.
 """
 from procs_common import NEWID, WEB, WORKER
 
-# Accounts the caller may see events for: home tenant administered, or everything with security.investigate.
+# Accounts the caller may see events for: administered or reviewed tenants, or everything with security.investigate.
 SCOPE = """DECLARE @all BIT = auth.udfHasPermission (N'security.investigate');
-DECLARE @admin TABLE (tenantId UNIQUEIDENTIFIER PRIMARY KEY);
-INSERT @admin SELECT tenantId FROM auth.tvfAdminTenants ();
+-- Issues 270/271/278: the accounts that can reach, or did reach, the tenants the caller administers or reviews.
 DECLARE @accounts TABLE (appUserId UNIQUEIDENTIFIER PRIMARY KEY);
-INSERT @accounts SELECT u.appUserId FROM auth.appUser AS u JOIN @admin AS a ON a.tenantId = u.homeTenantId WHERE u.isDeleted = 0;"""
+INSERT @accounts SELECT appUserId FROM auth.tvfReviewAccounts ('security.review');"""
 
 FAILURES = "'passwordFailed', 'unknownUser', 'mfaFailed', 'attemptWhileLocked', 'accountInactive'"
 
@@ -81,7 +80,7 @@ SET @Comments = CONCAT (N'Sign-in event ', @eventType, N'.');
     },
     {
         "schema": "logs", "name": "uspListSignInEvents", "kind": "read", "grants": WEB, "ticket": "T213",
-        "permission": "tenant.administer",
+        "permission": ["tenant.administer", "security.review"],
         "desc": "One account's sign-in history, newest first, for an administrator of its home tenant (or a holder of "
                 "security.investigate). Never returns attempted names.",
         "params": """@appUserId UNIQUEIDENTIFIER
@@ -103,7 +102,7 @@ SELECT TOP (CASE WHEN @top BETWEEN 1 AND 1000 THEN @top ELSE 100 END)
     },
     {
         "schema": "logs", "name": "uspGetSignInActivity", "kind": "read", "grants": WEB, "ticket": "T213",
-        "permission": "tenant.administer",
+        "permission": ["tenant.administer", "security.review"],
         "desc": "Suspicious sign-in patterns over the last @hours: failures by address and by account, one address "
                 "trying many accounts (spraying), many addresses trying one account (stuffing), a full sign-in after "
                 "repeated failures, and lockouts and rate-limit refusals. Tenant administrators see their accounts; "

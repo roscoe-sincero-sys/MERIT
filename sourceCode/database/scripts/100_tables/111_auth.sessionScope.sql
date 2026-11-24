@@ -79,7 +79,6 @@ BEGIN
         ON auth.sessionScope (rootTenantId, sessionScopeId);
 END;
 GO
-
 IF NOT EXISTS (SELECT 1
                  FROM sys.indexes
                 WHERE name      = N'IX_auth_sessionScope_appUserId_sessionReference'

@@ -1095,7 +1095,8 @@ TABLES = [
             c("reasonCode", "VARCHAR (30)", "System-defined hold reason.", null=False,
               check="reasonCode IN ('unknownSender', 'unknownTestCode', 'unknownUnit', 'inactiveAnalyte', "
                     "'missingResultValue', 'missingDob', 'unusableAddress', 'possibleDuplicate', 'uncertainMatch', "
-                    "'outOfJurisdiction', 'impossibleDates')"),
+                    "'outOfJurisdiction', 'impossibleDates', 'permissionDenied')",
+              check_addition="permissionDenied"),
             c("fieldName", "VARCHAR (60)", "Field the problem is in."),
             c("reasonMessage", "NVARCHAR (500)", "Plain-language message.", null=False),
             c("reportedValue", "NVARCHAR (200)", "The value that caused the hold, as reported; grouping key for fixes."),

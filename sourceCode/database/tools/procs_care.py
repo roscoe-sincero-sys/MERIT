@@ -168,7 +168,7 @@ BEGIN
     ;THROW 51409, N'Notification evaluation is busy. Retry shortly.', 1;
 END;
 SELECT TOP (500) """ + NEWID + """ AS notificationObligationId, """ + NEWID + """ AS workTaskId,
-       r.personId, r.labResultId, r.rootTenantId, COALESCE (c.owningTenantId, r.owningTenantId) AS owningTenantId,
+       r.personId, r.labResultId, r.rootTenantId, dbo.udfWritableWorkOwner (r.rootTenantId, COALESCE (c.owningTenantId, r.owningTenantId)) AS owningTenantId, -- issue 268
        c.exposureCaseId, n.notificationRuleId, n.ruleName, n.recipientKind, n.timeZoneId, n.triggerEvent,
        CAST (r.receivedUtc AT TIME ZONE 'UTC' AT TIME ZONE n.timeZoneId AS DATE) AS anchorDate,
        config.udfNotificationDueDate (CAST (r.receivedUtc AT TIME ZONE 'UTC' AT TIME ZONE n.timeZoneId AS DATE),

@@ -7,25 +7,6 @@ import generateTables as gt
 from generateProcedures import manifest_entry
 from procs_setup import PROCS as SETUP_PROCS
 
-# Procedures whose shipped .sql files already differed from procs_*.py at the PR base commit.
-# No procedure modified by this PR is allowed in this set; every other procedure must match
-# generateProcedures.py verbatim (body, parameters, grants, revokes) modulo comments/whitespace.
-BASE_COMMIT_DRIFT_ALLOWLIST = frozenset({
-    "auth.uspListUsers",
-    "dbo.uspCreateWorkTask",
-    "dbo.uspOpenExposureCase",
-    "dbo.uspReconcileNotifications",
-    "dbo.uspReconcileReceiptQuality",
-    "dbo.uspSavePerson",
-    "logs.uspGetScreenSession",
-    "logs.uspGetScreenUsage",
-    "logs.uspGetSignInActivity",
-    "logs.uspListSignInEvents",
-    "logs.uspRecordAuditEvent",
-    "logs.uspSearchAuditEvents",
-})
-
-
 BASE_COMMIT_HANDWRITTEN_PROCS = gp.HANDWRITTEN
 
 
@@ -63,7 +44,7 @@ class ManifestTests(unittest.TestCase):
     def test_no_parameters(self):
         self.assertEqual([], manifest_entry({"schema": "dbo", "name": "test", "kind": "read"})["params"])
 
-    def test_generator_matches_all_non_allowlisted_shipped_procedures(self):
+    def test_generator_matches_all_shipped_procedures(self):
         loaded = {}
         for mod_name in gp.MODULES:
             for p in importlib.import_module(mod_name).PROCS:
@@ -83,21 +64,16 @@ class ManifestTests(unittest.TestCase):
             if _normalize_sql(rendered) != _normalize_sql(disk):
                 drifted.append(proc_name)
 
-        unexpected = sorted(set(drifted) - BASE_COMMIT_DRIFT_ALLOWLIST)
         self.assertEqual(
             [],
-            unexpected,
-            f"Shipped SQL procedures drifted from generateProcedures.py definitions: {unexpected}",
+            sorted(drifted),
+            f"Shipped SQL procedures drifted from generateProcedures.py definitions: {sorted(drifted)}",
         )
 
-    def test_table_generator_matches_shipped_auth_schema_changes(self):
-        tracked_tables = {"auth.appUser", "auth.sessionScope", "auth.sessionScopeTenant"}
-        matched = set()
+    def test_table_generator_matches_all_shipped_tables(self):
+        self.assertTrue(len(gt.TABLES) > 0)
         for i, table_def in enumerate(gt.TABLES, start=1):
             full_name = f"{table_def['schema']}.{table_def['name']}"
-            if full_name not in tracked_tables:
-                continue
-            matched.add(full_name)
             with self.subTest(table=full_name):
                 shipped_path = gt.ROOT / "100_tables" / f"{100 + i:03d}_{full_name}.sql"
                 self.assertTrue(shipped_path.exists(), f"Missing {shipped_path}")
@@ -108,7 +84,6 @@ class ManifestTests(unittest.TestCase):
                     _normalize_sql(disk),
                     f"Shipped table script {shipped_path.name} drifted from tableDefinitions.py / generateTables.py",
                 )
-        self.assertEqual(tracked_tables, matched)
 
     def test_cleanup_preserves_handwritten_procedures(self):
         loaded_names = set()

@@ -93,6 +93,7 @@ BEGIN
         BEGIN
             ;THROW 51422, N'Choose a valid page.', 1;
         END;
+
         DECLARE @from DATETIME2 (3) = DATEADD (DAY, -@days, SYSUTCDATETIME ());
         -- Issue 277: the tenants this session reviews usage for (administered, or holding usage.view, clipped by profile
         -- and view-as), matched on the visit's working tenant at the time. A security officer has no record or administered

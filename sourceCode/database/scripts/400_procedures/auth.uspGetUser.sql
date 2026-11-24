@@ -85,7 +85,6 @@ BEGIN
 
         DECLARE @admin TABLE (tenantId UNIQUEIDENTIFIER PRIMARY KEY);
         INSERT @admin SELECT tenantId FROM auth.tvfAdminTenants ();
-
         DECLARE @canManageAccount BIT = (SELECT CASE WHEN EXISTS (SELECT 1 FROM @admin AS a WHERE a.tenantId = u.homeTenantId) THEN 1 ELSE 0 END
                                            FROM auth.appUser AS u WHERE u.appUserId = @appUserId AND u.isDeleted = 0);
 

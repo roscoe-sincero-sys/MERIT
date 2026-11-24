@@ -37,10 +37,7 @@ CREATE_DATE = "2026-10-24"
 MODULES = ["procs_corrections", "procs_auth", "procs_config", "procs_person", "procs_places", "procs_results", "procs_cases",
            "procs_work", "procs_intake", "procs_extracts", "procs_setup", "procs_review", "procs_mfa", "procs_password", "procs_signin", "procs_usage", "procs_care", "procs_receipt", "procs_testing", "procs_workflow"]
 # Hand-written procedures that are checked in under 400_procedures/ and must be preserved when regenerating.
-HANDWRITTEN = frozenset({
-    "dbo.uspListCaseTransferTargets",
-    "dbo.uspTransferExposureCase",
-})
+HANDWRITTEN = frozenset()
 
 PROLOGUE = """-- SET XACT_ABORT ON sits ABOVE the header block deliberately: sys.sql_modules stores only the batch containing
 -- CREATE, so the header must be the last thing before CREATE with no GO between them.
@@ -61,7 +58,8 @@ def header(p: dict) -> str:
     deps = p.get("deps", "See the procedure body.")
     notes = p.get("notes", "")
     perm = p.get("permission")
-    perm_note = (f"Requires permission {perm} (auth.udfHasPermission); refuses with 51403 otherwise.\n\n" if perm else "")
+    perm_label = " or ".join(perm) if isinstance(perm, list) else perm
+    perm_note = (f"Requires permission {perm_label} (auth.udfHasPermission); refuses with 51403 otherwise.\n\n" if perm else "")
     instr = ("Rule 8 full instrumentation, generated from templates/procedure.sql by tools/generateProcedures.py."
              if p["kind"] == "write" else
              "Rule 8 error-only instrumentation (a procedure that only reads), generated from "
@@ -132,7 +130,7 @@ END;
     cond = " AND ".join(f"auth.udfHasPermission (N'{x}') = 0" for x in perms)
     return indent(f"""IF {cond}
 BEGIN
-    ;THROW 51403, N'You do not have permission to do this ({", ".join(perms)}).', 1;
+    ;THROW 51403, N'You do not have permission to do this ({" or ".join(perms)}).', 1;
 END;
 """, pad) + "\n\n"
 

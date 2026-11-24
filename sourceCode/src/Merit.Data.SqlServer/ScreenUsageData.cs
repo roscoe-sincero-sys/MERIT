@@ -11,9 +11,6 @@ public sealed class ScreenUsageData(Db db) : IScreenUsageData
     public Task DurationAsync(Guid visitId, int durationMs, CancellationToken ct = default)
         => db.ExecuteAsync("logs.uspSetScreenDuration", new { screenVisitId = visitId, durationMs }, ct);
 
-    public Task ContinueSessionAsync(Guid newSessionScopeId, CancellationToken ct = default)
-        => db.ExecuteAsync("auth.uspContinueUsageSession", new { newSessionScopeId }, ct);
-
     public Task<ScreenUsageReport> ReportAsync(int days, CancellationToken ct = default)
         => db.MultipleAsync("logs.uspGetScreenUsage", new { days }, async g => new ScreenUsageReport(
             (await g.ReadAsync<ScreenCountRow>().ConfigureAwait(false)).AsList(),
