@@ -24,6 +24,8 @@ public sealed class CareService(ICareData data, IWorkData work, AuditService aud
         return (result.Rows, result.Total, result.Page);
     }
 
+    public const int MaxExportRows = 10_000;
+
     public async Task<IReadOnlyList<TestingOutreachRow>> ExportTestingAsync(TestingOutreachQuery query, CancellationToken ct)
     {
         session.Require(Permissions.PersonView); session.Require(Permissions.TaskView); session.Require(Permissions.DataExport);
@@ -32,6 +34,10 @@ public sealed class CareService(ICareData data, IWorkData work, AuditService aud
         {
             var rows = await data.TestingOutreachAsync(query with { Page = page }, ct).ConfigureAwait(false);
             all.AddRange(rows);
+            if (all.Count > MaxExportRows)
+            {
+                throw new BusinessRuleException($"More than {MaxExportRows:N0} rows match these filters. Narrow your filters before exporting.");
+            }
             if (rows.Count < 50) break;
         }
         await audit.ExportedAsync("testingOutreach", null, all.Count, ct).ConfigureAwait(false);
@@ -138,6 +144,10 @@ public sealed class CareService(ICareData data, IWorkData work, AuditService aud
         {
             var rows = await data.NotificationsAsync(null, null, page, ct).ConfigureAwait(false);
             all.AddRange(rows);
+            if (all.Count > MaxExportRows)
+            {
+                throw new BusinessRuleException($"More than {MaxExportRows:N0} notification rows match this export. Narrow your scope before exporting.");
+            }
             if (rows.Count < 50) break;
         }
         await audit.ExportedAsync("notificationObligation", null, all.Count, ct).ConfigureAwait(false);

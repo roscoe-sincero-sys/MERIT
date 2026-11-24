@@ -59,17 +59,17 @@
         <summary>Aliases, race and ethnicity, contact methods@(Model.CanViewIdentifiers ? " and identifiers" : "")</summary>
         <div class="merit-grid-2">
             <div>
-                <h3>Names as reported</h3>
+                <h2 class="merit-subheading">Names as reported</h2>
                 @if (h.Aliases.Count == 0) { <p class="merit-empty">No aliases recorded.</p> }
                 else
                 {
                     <ul class="usa-list">@foreach (var a in h.Aliases) { <li>@a.LastName, @a.FirstName <span class="merit-meta">@Options.Humanize(a.AliasType), @Options.Humanize(a.Source), last seen @Options.Date(a.LastSeen)</span></li> }</ul>
                 }
-                <h3>Race and ethnicity</h3>
+                <h2 class="merit-subheading">Race and ethnicity</h2>
                 <p>@(h.Races.Count == 0 ? "Race not recorded" : string.Join(", ", h.Races.Select(r => r.DisplayName ?? r.RaceCode))) &middot; @Options.Humanize(p.Ethnicity)</p>
                 @if (Model.CanViewIdentifiers)
                 {
-                    <h3>External identifiers</h3>
+                    <h2 class="merit-subheading">External identifiers</h2>
                     @if (h.Identifiers.Count == 0) { <p class="merit-empty">No identifiers recorded.</p> }
                     else
                     {
@@ -88,7 +88,7 @@
                 }
             </div>
             <div>
-                <h3>Contact methods</h3>
+                <h2 class="merit-subheading">Contact methods</h2>
                 @if (h.ContactMethods.Count == 0) { <p class="merit-empty">No phone or email recorded.</p> }
                 else
                 {

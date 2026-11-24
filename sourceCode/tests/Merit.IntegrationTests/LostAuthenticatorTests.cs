@@ -91,7 +91,7 @@ public sealed class LostAuthenticatorTests(MeritFixture fixture)
         Assert.Contains("That recovery code did not work", await oldCode.Content.ReadAsStringAsync());
         Assert.Equal(HttpStatusCode.Unauthorized, (await later.NoRedirect.GetAsync("/api/v1/me")).StatusCode);
         var mfaPage = await later.Http.GetStringAsync("/account/mfa");
-        using var verified = await later.NoRedirect.PostAsync("/account/mfa", MeritClient.Form(mfaPage, ("Code", Code(newSecret))));
+        using var verified = await later.NoRedirect.PostAsync("/account/mfa", MeritClient.Form(mfaPage, ("Code", Code(newSecret, 1))));
         Assert.Equal(Destination, verified.Headers.Location?.ToString());
         Assert.Equal(HttpStatusCode.OK, (await later.NoRedirect.GetAsync("/api/v1/me")).StatusCode);
     }
@@ -118,7 +118,7 @@ public sealed class LostAuthenticatorTests(MeritFixture fixture)
         return (secret, codes);
     }
 
-    private static string Code(string secret) => Totp.Code(Totp.FromBase32(secret), DateTimeOffset.UtcNow.ToUnixTimeSeconds() / 30);
+    private static string Code(string secret, long stepOffset = 0) => Totp.Code(Totp.FromBase32(secret), (DateTimeOffset.UtcNow.ToUnixTimeSeconds() / 30) + stepOffset);
 
     private sealed class TestAccount : IAsyncDisposable
     {

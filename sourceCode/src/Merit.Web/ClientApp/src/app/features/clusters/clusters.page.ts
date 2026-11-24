@@ -158,8 +158,8 @@ export class ClusterStore {
         <tbody>
           @for (m of c.members; track m.exposureCaseId) {
             <tr [class.left]="m.leftDate">
-              <th scope="row"><a class="usa-link" [href]="'/cases/' + m.exposureCaseId">{{ m.caseNumber }}</a></th>
-              <td><a class="usa-link" [href]="'/people/' + m.personId">{{ m.personName }}</a></td>
+              <th scope="row">@if (isIdentified(m.personId)) { <a class="usa-link" [href]="'/cases/' + m.exposureCaseId">{{ m.caseNumber }}</a> } @else { {{ m.caseNumber }} }</th>
+              <td>@if (isIdentified(m.personId)) { <a class="usa-link" [href]="'/people/' + m.personId">{{ m.personName }}</a> } @else { {{ m.personName }} }</td>
               <td>{{ display.of(m.analyteCode) }} &middot; {{ display.of(m.classification) }} ({{ display.of(m.population).toLowerCase() }})</td>
               <td>{{ m.highestValue ?? '—' }} {{ m.highestUnit }}</td>
               <td>{{ m.addressLabel ?? '—' }}</td>
@@ -197,12 +197,20 @@ export class ClusterStore {
         <ul class="usa-list">
           <!-- Each task opens its work queue, where it is assigned and done (issue #48). -->
           @for (t of c.tasks; track t.workTaskId) {
-            <li><a class="usa-link" [href]="'/app/queues?queue=' + t.queueCode">{{ t.title }}</a>@if (t.isUrgent) { <strong>(urgent)</strong>}@if (t.dueDate) {, due <span class="merit-nowrap">{{ display.date(t.dueDate) }}</span>}@if (t.assignedToName) {, {{ t.assignedToName }}}</li>
+            <li><a class="usa-link" routerLink="/queues" [queryParams]="{ queue: t.queueCode }">{{ t.title }}</a>@if (t.isUrgent) { <strong>(urgent)</strong>}@if (t.dueDate) {, due <span class="merit-nowrap">{{ display.date(t.dueDate) }}</span>}@if (t.assignedToName) {, {{ t.assignedToName }}}</li>
           }
         </ul>
       }
-    } @else if (!store.error()) {
-      <p class="merit-indicator">Loading the cluster&hellip;</p>
+    } @else if (store.error()) {
+      <h1 tabindex="-1">Cluster</h1>
+    } @else {
+      <h1 tabindex="-1">Cluster</h1>
+      <div class="merit-skeleton-page" role="status" aria-label="Loading the cluster">
+        <span class="usa-sr-only">Loading the cluster&hellip;</span>
+        <div class="merit-skeleton merit-skeleton--bar" aria-hidden="true"></div>
+        <div class="merit-skeleton merit-skeleton--row" aria-hidden="true"></div>
+        <div class="merit-skeleton merit-skeleton--row" aria-hidden="true"></div>
+      </div>
     }
   `,
   styles: `
@@ -278,7 +286,15 @@ export class ClusterPage implements OnInit {
     return STATUS_LABELS[s];
   }
 
-  protected openCase(id: string): void { window.location.assign('/cases/' + encodeURIComponent(id)); }
+  protected isIdentified(personId: string | null | undefined): boolean {
+    return !!personId && personId !== '00000000-0000-0000-0000-000000000000';
+  }
+
+  protected openCase(id: string): void {
+    const member = this.store.cluster()?.members.find(m => m.exposureCaseId === id);
+    if (member && !this.isIdentified(member.personId)) return;
+    window.location.assign('/cases/' + encodeURIComponent(id));
+  }
 
   protected save(event: Event): void {
     event.preventDefault();

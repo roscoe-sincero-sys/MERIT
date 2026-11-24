@@ -177,4 +177,43 @@ public sealed class Hl7ReaderTests
         };
         Assert.Contains("Mapped " + field, Assert.Throws<Hl7ParseException>(() => Hl7Reader.Read(message)).Message);
     }
+
+    [Fact]
+    public void EnforcesCumulativeStagingBudgetAcrossMultipleOrderGroupsAndMessages()
+    {
+        var single = Message();
+        var singleRows = Hl7Reader.Read(single);
+        Assert.Single(singleRows);
+
+        // Build a multi-group, multi-message upload where each group individually stays below the budget
+        // but the cumulative staging expansion across groups exceeds it.
+        var multi = string.Concat(Enumerable.Range(1, 5).Select(i =>
+            Message().Replace("MSG-1", $"MSG-{i}").Replace("ACC-1", $"ACC-{i}")));
+        Assert.Equal(5, Hl7Reader.Read(multi).Count);
+
+        var ex = Assert.Throws<Hl7ParseException>(() => Hl7Reader.Read(multi, maxStagingBytes: 2500));
+        Assert.Contains("50 MB staging limit", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void EnforcesStagingBudgetAgainstActualUtf8JsonSerializedBytes()
+    {
+        // Characters like quotes and angle brackets expand sharply in System.Text.Json UTF-8 output (\u0022, \u003C, \\).
+        string heavy = new string('"', 300) + new string('<', 300);
+        string message = Message().Replace("10 Test Street", heavy);
+        var row = Assert.Single(Hl7Reader.Read(message));
+
+        int rawCharEstimate = row.Sum(kv => kv.Key.Length + (kv.Value?.Length ?? 0) + 6);
+        int actualJsonUtf8Bytes = JsonSerializer.SerializeToUtf8Bytes(row).Length;
+        Assert.True(actualJsonUtf8Bytes > rawCharEstimate + 1000,
+            $"Expected JSON UTF-8 bytes ({actualJsonUtf8Bytes}) to substantially exceed raw character count ({rawCharEstimate}).");
+
+        // A budget strictly between the raw char count and actual UTF-8 JSON byte count must reject the message.
+        int budget = rawCharEstimate + ((actualJsonUtf8Bytes - rawCharEstimate) / 2);
+        var ex = Assert.Throws<Hl7ParseException>(() => Hl7Reader.Read(message, maxStagingBytes: budget));
+        Assert.Contains("50 MB staging limit", ex.Message, StringComparison.OrdinalIgnoreCase);
+
+        // And at the exact actual UTF-8 JSON byte count it succeeds.
+        Assert.Single(Hl7Reader.Read(message, maxStagingBytes: actualJsonUtf8Bytes));
+    }
 }

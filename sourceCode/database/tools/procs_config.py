@@ -82,6 +82,11 @@ SELECT th.thresholdId, th.analyteSpecimenId, a.code AS analyteCode, a.displayNam
         "body": """
 DECLARE @root UNIQUEIDENTIFIER = auth.udfSessionRootTenantId ();
 
+IF auth.udfHasRootPermission ('config.edit') = 0
+BEGIN
+    ;THROW 51403, N'Only a configuration administrator at the data root can change jurisdiction-wide thresholds.', 1;
+END;
+
 DECLARE @oldState NVARCHAR(MAX),@newState NVARCHAR(MAX),@wasActive BIT;
 SELECT @wasActive=isActive,@oldState=(SELECT thresholdId,analyteSpecimenId,population,ageMinMonths,ageMaxMonths,thresholdType,actionCodeId,dueIntervalDays,lowerValue,upperValue,comparator,effectiveFrom,effectiveTo,isActive FOR JSON PATH,INCLUDE_NULL_VALUES,WITHOUT_ARRAY_WRAPPER)
  FROM config.threshold WITH(UPDLOCK,HOLDLOCK) WHERE thresholdId=@thresholdId AND isDeleted=0;
@@ -168,20 +173,9 @@ SELECT s.jurisdictionSettingId, s.settingKey, s.settingValue, s.effectiveFrom, s
         "key": "CONCAT (N'settingKey=', @settingKey, N', effectiveFrom=', @effectiveFrom)",
         "body": """
 DECLARE @root UNIQUEIDENTIFIER = auth.udfSessionRootTenantId ();
-IF @settingKey='testingPolicyVersion' AND USER_NAME()<>N'dbo'
-   AND NOT EXISTS(
-     SELECT 1 FROM auth.sessionScope ss CROSS APPLY auth.tvfUserGrantPermissions(ss.appUserId) m
-     WHERE ss.sessionScopeId=TRY_CAST(SESSION_CONTEXT(N'scopeKey') AS UNIQUEIDENTIFIER)
-       AND ss.isDeleted=0 AND ss.revokedUtc IS NULL AND ss.expiresUtc>SYSUTCDATETIME()
-       AND m.tenantId=@root AND m.permissionCode='config.edit' AND m.grantRank>=2
-       AND ((ss.viewAsUserId IS NOT NULL
-             AND EXISTS(SELECT 1 FROM auth.tvfUserGrantPermissions(ss.viewAsUserId) v WHERE v.tenantId=@root AND v.permissionCode='config.edit' AND v.grantRank>=2)
-             AND EXISTS(SELECT 1 FROM auth.tvfUserGrantPermissions(ss.appUserId) a WHERE a.tenantId=@root AND a.permissionCode='tenant.administer'))
-         OR (ss.viewAsUserId IS NULL AND ss.userProfileId IS NOT NULL
-             AND EXISTS(SELECT 1 FROM auth.tvfProfileGrantPermissions(ss.userProfileId) p WHERE p.tenantId=@root AND p.permissionCode='config.edit' AND p.grantRank>=2))
-         OR (ss.viewAsUserId IS NULL AND ss.userProfileId IS NULL)))
+IF auth.udfHasRootPermission ('config.edit') = 0
 BEGIN
-    ;THROW 51403,N'Only a configuration administrator at the data root can adopt or disable its testing policy.',1;
+    ;THROW 51403,N'Only a configuration administrator at the data root can change jurisdiction-wide settings.',1;
 END;
 -- Issue 289: only catalogued settings that are in use, with a value inside their definition.
 DECLARE @problem NVARCHAR (400) = config.udfSettingProblem (@settingKey, @settingValue, @root);
@@ -269,7 +263,11 @@ SET @Comments = N'Setting changed.';
     },
     {
         "schema": "config", "name": "uspSaveAnalyte", "kind": "write", "grants": WEB, "ticket": "T050",
-        "permission": "config.edit",
+        "permission": "platform.administer",
+        "permission_check": """IF USER_NAME () <> N'dbo' AND (auth.udfHasPermission (N'platform.administer') = 0 OR auth.udfIsPlatformAdmin () = 0)
+BEGIN
+    ;THROW 51403, N'Only a platform administrator can modify global analytes (platform.administer).', 1;
+END;""",
         "desc": "Turns an analyte on or off and sets its drop-down order. Inactive analytes stay on old records.",
         "params": """@analyteId UNIQUEIDENTIFIER
 , @isActive  BIT

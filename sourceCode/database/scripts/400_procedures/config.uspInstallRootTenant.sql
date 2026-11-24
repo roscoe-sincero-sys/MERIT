@@ -148,7 +148,7 @@ BEGIN
           ('investigator', N'Investigator', 0, 0, 'person.view,person.edit,result.view,case.view,investigation.edit,task.view,task.edit,document.view,document.edit'),
           ('occupationalInvestigator', N'Occupational investigator', 0, 0, 'person.view,person.edit,result.view,result.edit,case.view,case.open,case.edit,investigation.edit,task.view,task.edit,data.export,document.view,document.edit'),
           ('supervisor', N'Supervisor', 0, 0, 'person.view,person.edit,person.view_identifiers,person.merge,result.view,result.edit,result.release_hold,case.view,case.open,case.edit,investigation.edit,task.view,task.edit,workflow.waive,intake.upload,registry.edit,data.export,extract.run,extract.submit,audit.view,usage.view,document.view,document.edit'),
-          ('epidemiologist', N'Epidemiologist (de-identified)', 0, 1, 'person.view,result.view,case.view,task.view,data.export,extract.run'),
+          ('epidemiologist', N'Epidemiologist (de-identified)', 0, 1, 'result.view,case.view,data.export'),
           ('administrator', N'Administrator (users and configuration)', 1, 0, 'tenant.administer,tenant.create,config.edit,registry.edit,intake.configure,matching.configure,audit.view,usage.view,security.review,person.view,result.view,case.view,task.view'),
           ('userAdministrator', N'User administrator (accounts and access only)', 1, 0, 'tenant.administer,audit.view'),
           -- Issue 271: read-only security review for the tenants granted. No account changes and no patient records.
@@ -173,6 +173,29 @@ BEGIN
           JOIN auth.permission AS pm ON pm.permissionCode = s.[value] AND pm.isDeleted = 0
          WHERE NOT EXISTS (SELECT 1 FROM auth.rolePermission AS x WHERE x.roleId = ro.roleId
                                                                    AND x.permissionId = pm.permissionId AND x.isDeleted = 0);
+
+        -- Issue #300: Reconcile shipped de-identified epidemiologist role permissions on upgrade and revoke open sessions.
+        DECLARE @reconciledDeidRole TABLE (roleId UNIQUEIDENTIFIER);
+        UPDATE rp
+           SET isDeleted = 1
+             , modifiedBy = ORIGINAL_LOGIN ()
+             , modifiedDateUtc = SYSUTCDATETIME ()
+        OUTPUT INSERTED.roleId INTO @reconciledDeidRole (roleId)
+          FROM auth.rolePermission AS rp
+          JOIN auth.role           AS ro ON ro.roleId = rp.roleId AND ro.rootTenantId = @root AND ro.roleCode = 'epidemiologist' AND ro.isDeidentified = 1 AND ro.isDeleted = 0
+          JOIN auth.permission     AS pm ON pm.permissionId = rp.permissionId
+         WHERE rp.isDeleted = 0
+           AND pm.permissionCode NOT IN (SELECT s.[value] FROM @roles AS r CROSS APPLY STRING_SPLIT (r.permissions, ',') AS s WHERE r.roleCode = 'epidemiologist');
+
+        IF EXISTS (SELECT 1 FROM @reconciledDeidRole)
+        BEGIN
+            UPDATE ss
+               SET revokedUtc = SYSUTCDATETIME ()
+              FROM auth.sessionScope AS ss
+             WHERE ss.revokedUtc IS NULL AND ss.isDeleted = 0
+               AND (EXISTS (SELECT 1 FROM auth.userAssignment AS ua WHERE ua.appUserId = ss.appUserId AND ua.roleId IN (SELECT roleId FROM @reconciledDeidRole) AND ua.isDeleted = 0)
+                    OR (ss.viewAsUserId IS NOT NULL AND EXISTS (SELECT 1 FROM auth.userAssignment AS ua WHERE ua.appUserId = ss.viewAsUserId AND ua.roleId IN (SELECT roleId FROM @reconciledDeidRole) AND ua.isDeleted = 0)));
+        END;
 
         -- ------------------------------------------------------------------------------------------ settings
         DECLARE @settings TABLE (settingKey VARCHAR (80), settingValue NVARCHAR (2000), settingDescription NVARCHAR (500));

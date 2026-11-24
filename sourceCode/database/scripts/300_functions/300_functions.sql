@@ -103,7 +103,20 @@ CREATE OR ALTER FUNCTION auth.udfSessionUserId ()
 RETURNS UNIQUEIDENTIFIER
 AS
 BEGIN
-    RETURN TRY_CAST (SESSION_CONTEXT (N'appUserId') AS UNIQUEIDENTIFIER);
+    DECLARE @userId UNIQUEIDENTIFIER = TRY_CAST (SESSION_CONTEXT (N'appUserId') AS UNIQUEIDENTIFIER);
+    DECLARE @scopeKey UNIQUEIDENTIFIER = TRY_CAST (SESSION_CONTEXT (N'scopeKey') AS UNIQUEIDENTIFIER);
+    IF @userId IS NULL OR @scopeKey IS NULL
+    BEGIN
+        RETURN NULL;
+    END;
+
+    RETURN (SELECT ss.appUserId
+              FROM auth.sessionScope AS ss
+             WHERE ss.sessionScopeId = @scopeKey
+               AND ss.appUserId = @userId
+               AND ss.revokedUtc IS NULL
+               AND ss.expiresUtc > SYSUTCDATETIME ()
+               AND ss.isDeleted = 0);
 END;
 GO
 

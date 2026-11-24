@@ -85,9 +85,9 @@ BEGIN
             , @ReCreatedAfterRollback = 0
             , @ExecutionLogId         = @ExecutionId OUTPUT;
 
-        IF auth.udfHasPermission (N'config.edit') = 0
+        IF USER_NAME () <> N'dbo' AND (auth.udfHasPermission (N'platform.administer') = 0 OR auth.udfIsPlatformAdmin () = 0)
         BEGIN
-            ;THROW 51403, N'You do not have permission to do this (config.edit).', 1;
+            ;THROW 51403, N'Only a platform administrator can modify global analytes (platform.administer).', 1;
         END;
 
         BEGIN TRANSACTION;

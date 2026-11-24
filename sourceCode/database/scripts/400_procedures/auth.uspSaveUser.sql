@@ -170,7 +170,7 @@ BEGIN
                 SELECT @me, rootTenantId, homeTenantId, 'mfaEmailDisabled', 'appUser', @appUserId FROM auth.appUser WHERE appUserId = @appUserId;
             END;
 
-            IF @isActive = 0
+            IF @isActive = 0 OR @passwordHash IS NOT NULL
             BEGIN
                 UPDATE auth.sessionScope SET revokedUtc = SYSUTCDATETIME () WHERE appUserId = @appUserId AND revokedUtc IS NULL;
             END;

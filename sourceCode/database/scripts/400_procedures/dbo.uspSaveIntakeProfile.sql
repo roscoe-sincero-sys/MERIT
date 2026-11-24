@@ -105,6 +105,10 @@ BEGIN
         -- =========================================================================================
 
         DECLARE @root UNIQUEIDENTIFIER = auth.udfSessionRootTenantId ();
+        IF auth.udfHasRootPermission ('intake.configure') = 0
+        BEGIN
+            ;THROW 51403, N'Only an administrator at the data root can configure laboratory intake formats.', 1;
+        END;
         IF NOT EXISTS(SELECT 1 FROM dbo.organization o WHERE o.organizationId=@senderOrganizationId AND o.rootTenantId=@root AND o.isDeleted=0)
         BEGIN
             ;THROW 51404,N'The laboratory is unavailable in this agency.',1;

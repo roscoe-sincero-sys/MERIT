@@ -91,7 +91,9 @@ BEGIN
            SET usedUtc = SYSUTCDATETIME ()
          WHERE mfaRecoveryCodeId = @mfaRecoveryCodeId AND usedUtc IS NULL AND isDeleted = 0;
 
-        SET @Comments = CONCAT (@@ROWCOUNT, N' code(s) used.');
+        DECLARE @consumed BIT = CAST (CASE WHEN @@ROWCOUNT = 1 THEN 1 ELSE 0 END AS BIT);
+        SET @Comments = CONCAT (CAST (@consumed AS INT), N' code(s) used.');
+        SELECT @consumed AS consumed;
 
         -- =========================================================================================
         -- ===== End of the procedure's own work. ===================================================

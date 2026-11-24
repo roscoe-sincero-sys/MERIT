@@ -290,6 +290,10 @@ public sealed class ResultListRow
 
     public DateOnly? Dob { get; init; }
 
+    public bool IsMatched { get; init; } = true;
+
+    public bool IsIdentified { get; init; } = true;
+
     public string AnalyteCode { get; init; } = string.Empty;
 
     public string Specimen { get; init; } = string.Empty;

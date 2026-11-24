@@ -121,7 +121,7 @@ public sealed class ConfigService(IConfigData config, IReferenceDataProvider ref
 
     public async Task SaveAnalyteAsync(Guid analyteId, bool isActive, int sortOrder, CancellationToken ct = default)
     {
-        session.Require(Permissions.ConfigEdit);
+        session.Require(Permissions.PlatformAdminister);
         await config.SaveAnalyteAsync(analyteId, isActive, sortOrder, ct).ConfigureAwait(false);
         reference.Invalidate();
     }

@@ -15,9 +15,10 @@ namespace Merit.Web.Infrastructure;
 
 /// <summary>
 /// The keyed hash and encryption for user names that matched no account (#191). The hash key is SignInLog:NameHashKey
-/// (base64, 32+ bytes, the same on every web server), or EmailCodes:VerifierKey when that is set. Without either, a random
-/// key is used for this process and a warning logged: hashes then don't match across restarts or servers. Encryption is
-/// ASP.NET Core data protection under its own purpose, on the key ring that already protects authenticator secrets.
+/// (base64, 32+ bytes, the same on every web server), or EmailCodes:VerifierKey when that is set. Outside Development
+/// and Testing, startup fails fast if neither key is configured; in Development a random key is used for this process
+/// and a warning is logged. Encryption is ASP.NET Core data protection under its own purpose, on the key ring that
+/// already protects authenticator secrets.
 /// </summary>
 public sealed class AttemptedNameProtection : IAttemptedNameProtection
 {
@@ -26,7 +27,8 @@ public sealed class AttemptedNameProtection : IAttemptedNameProtection
     private readonly byte[] key;
     private readonly IDataProtector protector;
 
-    public AttemptedNameProtection(IDataProtectionProvider protection, IConfiguration configuration, ILogger<AttemptedNameProtection> logger)
+    public AttemptedNameProtection(IDataProtectionProvider protection, IConfiguration configuration, ILogger<AttemptedNameProtection> logger,
+                                   IHostEnvironment? environment = null)
     {
         protector = protection.CreateProtector("Merit.SignInLog.AttemptedUserName");
         string? configured = configuration[KeySetting] is { Length: > 0 } own ? own : configuration["EmailCodes:VerifierKey"];
@@ -46,6 +48,10 @@ public sealed class AttemptedNameProtection : IAttemptedNameProtection
         if (decoded is { Length: >= 32 })
         {
             key = decoded;
+        }
+        else if (environment is not null && !environment.IsDevelopment() && !environment.IsEnvironment("Testing"))
+        {
+            throw new InvalidOperationException($"{KeySetting} (or EmailCodes:VerifierKey) must be configured as a base64 key of at least 32 bytes outside Development.");
         }
         else
         {
@@ -102,7 +108,7 @@ public sealed class SignInEventRecorder(IHttpContextAccessor http, IAccountData 
             Guid? attempt = context?.Items[AttemptItem] as Guid? ?? await PendingAttemptAsync(context).ConfigureAwait(false);
             string? address = e.ClientAddress ?? context?.Connection.RemoteIpAddress?.ToString();
             string? forwarded = Forwarded(context);
-            string? agent = context?.Request.Headers.UserAgent.ToString() is { Length: > 0 } ua ? Truncate(ua, 400) : null;
+            string? agent = context?.Request.Headers.UserAgent.ToString() is { Length: > 0 } ua ? SanitizeLogText(Truncate(ua, 400)) : null;
             string? trace = e.TraceId ?? Activity.Current?.TraceId.ToString() ?? context?.TraceIdentifier;
 
             await data.RecordSignInEventAsync(new SignInEventInput(e.Type, e.Step, e.Method, e.Reason, appUserId, e.ActorUserId, hash, protectedName,
@@ -112,7 +118,7 @@ public sealed class SignInEventRecorder(IHttpContextAccessor http, IAccountData 
         }
         catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
-            SignInLogMessages.Failed(logger, ex, e.Type);
+            SignInLogMessages.Failed(logger, ex.GetType().Name, e.Type);
         }
     }
 
@@ -145,6 +151,9 @@ public sealed class SignInEventRecorder(IHttpContextAccessor http, IAccountData 
         => Guid.TryParse(user?.FindFirstValue(type), CultureInfo.InvariantCulture, out var id) ? id : null;
 
     private static string Truncate(string value, int length) => value.Length <= length ? value : value[..length];
+
+    private static string SanitizeLogText(string value)
+        => value.Replace('\r', ' ').Replace('\n', ' ').Replace('\t', ' ');
 }
 
 /// <summary>
@@ -166,10 +175,21 @@ public sealed class SessionExpiryMiddleware(RequestDelegate next)
                 && Guid.TryParse(ticket.Principal.FindFirstValue(MeritClaims.UserId), CultureInfo.InvariantCulture, out var user))
             {
                 var services = http.RequestServices;
-                await services.GetRequiredService<ISignInEvents>().RecordAsync(new SignInEvent(SignInEventTypes.SessionExpired, SignInSteps.Session,
-                    Reason: "idle", AppUserId: user, SessionScopeId: scope), http.RequestAborted).ConfigureAwait(false);
-                await services.GetRequiredService<AccountService>().SignOutAsync(scope, http.RequestAborted).ConfigureAwait(false);
-                options.CookieManager.DeleteCookie(http, options.Cookie.Name!, options.Cookie.Build(http));
+                try
+                {
+                    await services.GetRequiredService<ISignInEvents>().RecordAsync(new SignInEvent(SignInEventTypes.SessionExpired, SignInSteps.Session,
+                        Reason: "idle", AppUserId: user, SessionScopeId: scope), http.RequestAborted).ConfigureAwait(false);
+                    // Idle expiry revokes only this expired scope, never a renewed successor sharing the logical session.
+                    await services.GetRequiredService<AccountService>().SignOutAsync(scope, http.RequestAborted, revokeLogicalSession: false).ConfigureAwait(false);
+                }
+                catch (Merit.Application.Errors.ConcurrencyException)
+                {
+                    // Session lock was busy; still drop the expired browser cookie cleanly.
+                }
+                finally
+                {
+                    options.CookieManager.DeleteCookie(http, options.Cookie.Name!, options.Cookie.Build(http));
+                }
             }
         }
 
@@ -186,6 +206,6 @@ internal static partial class SignInLogMessages
     public static partial void Event(ILogger logger, string eventType, string? step, string? method, string? reason, Guid? appUserId, Guid? actorUserId,
                                      string? nameHash, string? clientAddress, string? userAgent, Guid? attemptId, string? traceId);
 
-    [LoggerMessage(Level = LogLevel.Error, Message = "Sign-in event {EventType} could not be recorded")]
-    public static partial void Failed(ILogger logger, Exception exception, string eventType);
+    [LoggerMessage(Level = LogLevel.Error, Message = "Sign-in event {EventType} could not be recorded ({ExceptionType})")]
+    public static partial void Failed(ILogger logger, string exceptionType, string eventType);
 }

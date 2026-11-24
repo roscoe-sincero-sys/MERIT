@@ -56,6 +56,34 @@
   ]
  },
  {
+  "name": "auth.uspConsumeTotpStep",
+  "kind": "write",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": null,
+  "params": [
+   {
+    "name": "appUserId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "totpStep",
+    "type": "BIGINT",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "expectedSecurityStamp",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
   "name": "auth.uspContinueUsageSession",
   "kind": "write",
   "grants": [
@@ -282,6 +310,18 @@
    },
    {
     "name": "actingTenantId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "replacesSessionScopeId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "expectedSecurityStamp",
     "type": "UNIQUEIDENTIFIER",
     "hasDefault": true,
     "isOutput": false
@@ -719,6 +759,12 @@
     "type": "UNIQUEIDENTIFIER",
     "hasDefault": false,
     "isOutput": false
+   },
+   {
+    "name": "revokeLogicalSession",
+    "type": "BIT",
+    "hasDefault": true,
+    "isOutput": false
    }
   ]
  },
@@ -746,6 +792,18 @@
     "name": "recoveryCodeHashesJson",
     "type": "NVARCHAR (MAX)",
     "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "initialTotpStep",
+    "type": "BIGINT",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "expectedSecurityStamp",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": true,
     "isOutput": false
    }
   ]
@@ -1506,7 +1564,7 @@
   "grants": [
    "meritWebRole"
   ],
-  "permission": "config.edit",
+  "permission": "platform.administer",
   "params": [
    {
     "name": "analyteId",
@@ -3461,7 +3519,6 @@
   "name": "dbo.uspGetQueueDepth",
   "kind": "read",
   "grants": [
-   "meritWebRole",
    "meritWorkerRole"
   ],
   "permission": null,

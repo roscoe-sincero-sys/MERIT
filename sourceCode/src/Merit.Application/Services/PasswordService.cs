@@ -191,10 +191,10 @@ public sealed partial class PasswordService(IAccountData data, AccountService ac
             return new PasswordResetResult(PasswordResetOutcome.InvalidLink);
         }
 
-        ValidateNew(user, newPassword, confirmPassword, link.PasswordMinLength);
+        ValidateNew(user, newPassword, confirmPassword, link.PasswordMinLength, checkNotCurrent: false);
         byte[] verifier = Verifier(passwordResetId, token!);
-        string? method = await accounts.CheckSecondFactorAsync(user, code, ct).ConfigureAwait(false);
-        if (method is null)
+        var verified = await accounts.VerifySecondFactorWithoutConsumingAsync(user, code, ct).ConfigureAwait(false);
+        if (verified is null)
         {
             await data.RecordSignInResultAsync(user.AppUserId, false, AccountService.MaxFailedAttempts, AccountService.LockoutMinutes, clientAddress, ct)
                 .ConfigureAwait(false);
@@ -204,6 +204,22 @@ public sealed partial class PasswordService(IAccountData data, AccountService ac
             LogWrongCode(logger, user.AppUserId, left);
             return new PasswordResetResult(left > 0 ? PasswordResetOutcome.WrongCode : PasswordResetOutcome.LinkClosed, left);
         }
+
+        // Check current-password reuse AFTER factor verification (never leaking the current password to an unverified
+        // caller) and BEFORE consuming the factor (so a one-time recovery code or TOTP step is not burned on form correction).
+        EnsureNotCurrent(user, newPassword);
+
+        if (!await accounts.ConsumeVerifiedSecondFactorAsync(user.AppUserId, user.SecurityStamp, verified, ct).ConfigureAwait(false))
+        {
+            await data.RecordSignInResultAsync(user.AppUserId, false, AccountService.MaxFailedAttempts, AccountService.LockoutMinutes, clientAddress, ct)
+                .ConfigureAwait(false);
+            await accounts.RecordFailureAsync(user, SignInEventTypes.MfaFailed, SignInSteps.PasswordReset, verified.Method, "wrongCode", ct).ConfigureAwait(false);
+            int left = await data.RecordPasswordResetFailureAsync(passwordResetId, verifier, ct).ConfigureAwait(false);
+            LogWrongCode(logger, user.AppUserId, left);
+            return new PasswordResetResult(left > 0 ? PasswordResetOutcome.WrongCode : PasswordResetOutcome.LinkClosed, left);
+        }
+
+        string method = verified.Method;
 
         var reset = await data.CompletePasswordResetAsync(passwordResetId, verifier, accounts.HashPassword(newPassword!), clientAddress, ct)
             .ConfigureAwait(false);
@@ -237,7 +253,7 @@ public sealed partial class PasswordService(IAccountData data, AccountService ac
         var user = await data.GetUserForSignInAsync(userName, ct).ConfigureAwait(false) ?? throw new NotFoundException();
         var policy = await data.GetMyPasswordPolicyAsync(ct).ConfigureAwait(false);
         new Validator().Required("CurrentPassword", currentPassword, "Current password").ThrowIfInvalid();
-        ValidateNew(user, newPassword, confirmPassword, policy.PasswordMinLength);
+        ValidateNew(user, newPassword, confirmPassword, policy.PasswordMinLength, checkNotCurrent: false);
 
         if (!accounts.IsCurrentPassword(user, currentPassword))
         {
@@ -246,6 +262,8 @@ public sealed partial class PasswordService(IAccountData data, AccountService ac
             await accounts.RecordFailureAsync(user, SignInEventTypes.PasswordFailed, SignInSteps.Account, null, "changePassword", ct).ConfigureAwait(false);
             throw new ValidationException("CurrentPassword", "That is not your current password.");
         }
+
+        EnsureNotCurrent(user, newPassword);
 
         if (!await accounts.CheckAuthenticatorCodeAsync(userName, authenticatorCode, clientAddress, ct).ConfigureAwait(false))
         {
@@ -299,8 +317,8 @@ public sealed partial class PasswordService(IAccountData data, AccountService ac
         LogNotice(logger, appUserId, sent.Submitted, sent.Failure, reference);
     }
 
-    /// <summary>Password rules: the jurisdiction's minimum length, the breached-password list, a match, and not the current one.</summary>
-    private void ValidateNew(SignInUserRow user, string? newPassword, string? confirmPassword, int minLength)
+    /// <summary>Password rules: the jurisdiction's minimum length, the breached-password list, a match, and optionally not the current one.</summary>
+    private void ValidateNew(SignInUserRow user, string? newPassword, string? confirmPassword, int minLength, bool checkNotCurrent = true)
     {
         accounts.ValidateNewPassword(newPassword, minLength, "NewPassword", user.UserName);
         var v = new Validator();
@@ -308,8 +326,19 @@ public sealed partial class PasswordService(IAccountData data, AccountService ac
         try { confirmed = confirmPassword is null ? null : PasswordPolicy.Normalize(confirmPassword); }
         catch (ArgumentException) { throw new ValidationException("ConfirmPassword", "Use valid Unicode characters in the password."); }
         v.When(PasswordPolicy.Normalize(newPassword!) != confirmed, "ConfirmPassword", "The two passwords don't match.");
-        v.When(accounts.IsCurrentPassword(user, newPassword), "NewPassword", "Choose a password you are not using now.");
         v.ThrowIfInvalid();
+        if (checkNotCurrent)
+        {
+            EnsureNotCurrent(user, newPassword);
+        }
+    }
+
+    private void EnsureNotCurrent(SignInUserRow user, string? newPassword)
+    {
+        if (accounts.IsCurrentPassword(user, newPassword))
+        {
+            throw new ValidationException("NewPassword", "Choose a password you are not using now.");
+        }
     }
 
     private async Task RecordChangedAsync(Guid appUserId, string how, CancellationToken ct)

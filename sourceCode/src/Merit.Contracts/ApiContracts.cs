@@ -95,7 +95,9 @@ public sealed record ResultListItemDto(
     string ResultStatus,
     string ResultRowStatus,
     bool IsIndeterminate,
-    string? LabName);
+    string? LabName,
+    bool IsMatched = true,
+    bool IsIdentified = true);
 
 public sealed record AnalyteOptionDto(Guid AnalyteId, string Code, string DisplayName);
 

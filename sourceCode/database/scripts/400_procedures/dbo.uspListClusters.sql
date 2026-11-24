@@ -90,12 +90,25 @@ BEGIN
         -- ===== The procedure's own work starts here. Everything above and below is boilerplate. ==
         -- =========================================================================================
 
-        SELECT cl.clusterId, cl.clusterType, cl.title, cl.clusterStatus, cl.windowStart, cl.windowEnd, cl.notes,
+        DECLARE @isDbo BIT = CASE WHEN USER_NAME () = N'dbo' THEN 1 ELSE 0 END;
+        DECLARE @idTenants TABLE (tenantId UNIQUEIDENTIFIER PRIMARY KEY);
+        IF @isDbo = 0
+        BEGIN
+            INSERT @idTenants (tenantId)
+            SELECT tenantId
+              FROM auth.tvfIdentifiedTenants ('case.view');
+        END;
+
+        SELECT cl.clusterId, cl.clusterType,
+               CASE WHEN @isDbo = 1 OR idt.tenantId IS NOT NULL THEN cl.title ELSE N'De-identified cluster' END AS title,
+               cl.clusterStatus, cl.windowStart, cl.windowEnd,
+               CASE WHEN @isDbo = 1 OR idt.tenantId IS NOT NULL THEN cl.notes ELSE NULL END AS notes,
                cl.createdDateUtc, t.tenantName AS owningTenantName,
                (SELECT COUNT (*) FROM dbo.caseCluster AS cc WHERE cc.clusterId = cl.clusterId AND cc.leftDate IS NULL
                    AND cc.isDeleted = 0) AS memberCount,
                COUNT (*) OVER () AS totalCount
           FROM dbo.cluster AS cl
+          LEFT JOIN @idTenants AS idt ON idt.tenantId = cl.owningTenantId
           LEFT JOIN auth.tenant AS t ON t.tenantId = cl.owningTenantId
          WHERE cl.isDeleted = 0 AND (@clusterStatus IS NULL OR cl.clusterStatus = @clusterStatus)
          ORDER BY CASE cl.clusterStatus WHEN 'open' THEN 0 WHEN 'underReview' THEN 1 ELSE 2 END, cl.createdDateUtc DESC,

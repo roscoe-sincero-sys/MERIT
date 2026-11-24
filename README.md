@@ -122,15 +122,17 @@ cd merit\sourceCode
 # 2. Trust the local HTTPS certificate
 dotnet dev-certs https --trust
 
-# 3. Create the database, logins and demo data (safe to re-run)
+# 3. Create the database, logins and demo data (safe to re-run; -TrustServerCertificate is for local dev self-signed SQL Server only)
 cd database
 $web    = Read-Host -AsSecureString 'Password for the meritWeb login'
 $worker = Read-Host -AsSecureString 'Password for the meritWorker login'
 .\Deploy-MeritDatabase.ps1 -ServerInstance 'localhost\PORTAL' -CreateLogins `
-    -WebLoginPassword $web -WorkerLoginPassword $worker -IncludeDemoData
+    -WebLoginPassword $web -WorkerLoginPassword $worker -IncludeDemoData -TrustServerCertificate
 cd ..
 
 # 4. Give the web app and worker their connection strings (kept out of source control)
+# Local dev only: TrustServerCertificate=True trusts SQL Server's self-signed certificate.
+# In production, always use Encrypt=True;TrustServerCertificate=False with a CA-trusted certificate.
 dotnet user-secrets --project src/Merit.Web    set "ConnectionStrings:Merit" "Server=localhost\PORTAL;Database=MERIT;User ID=meritWeb;Password=<web password>;Encrypt=True;TrustServerCertificate=True"
 dotnet user-secrets --project src/Merit.Worker set "ConnectionStrings:Merit" "Server=localhost\PORTAL;Database=MERIT;User ID=meritWorker;Password=<worker password>;Encrypt=True;TrustServerCertificate=True"
 
@@ -198,7 +200,9 @@ dotnet run --project src/Merit.Web         # terminal 2: https://localhost:7243
 | `ConnectionStrings:Merit` (`ConnectionStrings__Merit`) | placeholder | Web, Worker | SQL Server connection. Web uses the `meritWeb` login; Worker uses `meritWorker`. Both are EXECUTE-only. |
 | `Session:IdleTimeoutMinutes` | `20` | Web | Sign-out after inactivity. |
 | `Session:LifetimeHours` | `12` | Web | Longest a session lasts, active or not. Each sign-in, profile switch and view-as starts a new session of this length. |
-| `DataProtection:KeyPath` | app data folder | Web | Where ASP.NET Core data-protection keys are kept. They protect MFA secrets and cookies, so share them across web servers. |
+| `DataProtection:KeyPath` | app data folder | Web | Where ASP.NET Core data-protection keys are kept. They protect MFA secrets and cookies, so share them across web servers and back them up securely. |
+| `DataProtection:CertificatePath`, `DataProtection:CertificatePassword` | none | Web | PKCS#12 (`.pfx`) certificate used to encrypt newly generated data-protection keys at rest. **Required outside Development** (especially for shared `KeyPath` web farms). Keep existing key files readable while rotating keys so enrolled MFA secrets remain decryptable, and back up both the certificate and key ring. |
+| `DataProtection:AllowLocalMachineDpapi` | `false` | Web | Opt-in for single-server Windows deployments without a certificate (uses local-machine DPAPI instead of a shared certificate; cannot be shared across machines). |
 | `Merit:SignInAttemptsPerMinute` | `30` | Web | Password attempts allowed per client address in any minute. Over the limit the client sees a **Too many attempts** page (HTTP 429 with `Retry-After`). Other clients are not affected, and repeated wrong passwords still lock the account after 5 tries. |
 | `Merit:MfaAttemptsPerMinute` | `30` | Web | The same limit for the authenticator-code and enrollment steps, counted separately. |
 | `Email:Provider`, `Email:Smtp:*` | `Disabled` | Web | Outgoing mail for email one-time codes, an optional extra second factor next to the required authenticator app. Off unless set. `Security` is `StartTls` by default; `None` is accepted only for a mail server on this machine. Put the password in user secrets or the environment, never in appsettings. See [docs/email-codes.md](docs/email-codes.md). |
@@ -206,7 +210,7 @@ dotnet run --project src/Merit.Web         # terminal 2: https://localhost:7243
 | `EmailCodes:LifetimeSeconds`, `MaxAttempts`, `ResendCooldownSeconds`, `MaxCodesPerAccount`, `MaxCodesPerAddress`, `LimitWindowMinutes` | `300`, `5`, `30`, `5`, `20`, `15` | Web | Email-code expiry, wrong-entry limit, resend wait and send limits. |
 | `Merit:PublicBaseUrl` | none | Web | The https address people use, for example `https://merit.health.example.gov`. Password-reset links are built from it, never from the request's host. Required outside Development for **Forgot your password?**. See [docs/password-self-service.md](docs/password-self-service.md). |
 | `PasswordReset:LinkLifetimeMinutes`, `MaxCodeAttempts`, `CooldownSeconds`, `MaxLinksPerAccount`, `MaxLinksPerAddress`, `LimitWindowMinutes` | `20`, `5`, `60`, `3`, `10`, `60` | Web | Reset-link expiry, wrong second-factor codes per link, and send limits. |
-| `SignInLog:NameHashKey` | `EmailCodes:VerifierKey`, else random per process | Web | Base64 key (32+ bytes) for hashing user names that matched no account in the sign-in event log. Use the same key on every web server so attempts group and the lookup works; without one a warning is logged. See [docs/sign-in-event-log.md](docs/sign-in-event-log.md). |
+| `SignInLog:NameHashKey` | `EmailCodes:VerifierKey` (random per process in Development only) | Web | Base64 key (32+ bytes) for hashing user names that matched no account in the sign-in event log. **Required outside Development** (either `SignInLog:NameHashKey` or `EmailCodes:VerifierKey`) and validated at startup before the web app serves traffic or reports healthy. Use the same key on every web server. See [docs/sign-in-event-log.md](docs/sign-in-event-log.md). |
 | `SignInLog:RetentionDays` | `365` (at least 30) | Worker | Age after which a sign-in event loses its address, user agent and attempted name. |
 | `Merit:EmailCodeSendsPerMinute` | `10` | Web | Email-code send requests allowed per client address in any minute. |
 | `Merit:ForwardedHeaders:KnownProxies` | empty | Web | Addresses of reverse proxies whose `X-Forwarded-For` is trusted. Set it behind a proxy or load balancer, or every client shares the proxy's address and its limit. |
@@ -217,6 +221,31 @@ dotnet run --project src/Merit.Web         # terminal 2: https://localhost:7243
 
 Program settings such as levels, case definitions and extract options are kept per state in the database. Change them
 on the **Configuration** screens.
+
+**Upgrading an existing deployment.** Stop `Merit.Web` and `Merit.Worker` before running
+`sourceCode/database/Deploy-MeritDatabase.ps1`, then restart them after deployment completes (the security migration
+temporarily updates row-level security predicates, and `566_reconcileDeidentifiedRole.sql` also takes the exclusive
+`MERIT.grants` transaction lock to serialize with `auth.uspCreateSessionScope`).
+
+**Upgrading existing Data Protection key rings and sign-in hash keys.** Non-Development deployments now fail fast at
+startup unless:
+- `DataProtection:CertificatePath` (recommended, required for shared `DataProtection:KeyPath` web farms) or
+  `DataProtection:AllowLocalMachineDpapi=true` (single-server Windows opt-in) is configured, **and**
+- `SignInLog:NameHashKey` (or `EmailCodes:VerifierKey`) is configured as a base64 key of at least 32 bytes (even when
+  outgoing email is disabled).
+
+When adding a certificate to an existing deployment:
+
+1. Store `DataProtection:KeyPath` and its backups on an encrypted volume (for example BitLocker, EFS, or KMS-encrypted
+   storage) with ACLs restricted to the web service identity.
+2. Configure `DataProtection:CertificatePath` and `DataProtection:CertificatePassword` and restart the web nodes.
+   ASP.NET Core automatically continues reading legacy unencrypted XML keys to decrypt existing enrolled MFA secrets
+   (`auth.appUser.mfaSecretProtected`) and protected records while encrypting all newly generated keys with the
+   certificate.
+3. Verify that existing users can sign in with their enrolled authenticator apps after the restart.
+4. Once all persisted protected payloads (such as `mfaSecretProtected`) have been re-wrapped under a certificate-protected
+   key or re-enrolled, retire and securely delete the legacy plaintext XML key files from `DataProtection:KeyPath` and
+   old backups. Always back up both the `.pfx` certificate and the encrypted key ring before rotating.
 
 **Time zone.** Each data root (a state, tribe, region or stand-alone jurisdiction) has a time zone, chosen on
 **Tenants** when the root is created. Everything dated "today" follows it, in the application and in the procedures:
@@ -246,6 +275,7 @@ outlines gets the plain latitude and longitude grid.
 | `-CreateLogins`, `-WebLoginPassword`, `-WorkerLoginPassword` | Create the application logins if they don't exist. |
 | `-IncludeDemoData` | Load the synthetic Maryland demo. Never use it in production. |
 | `-PlatformAdminUserName`, `-PlatformAdminPassword` | Create the first platform administrator. Only the password hash reaches SQL Server. |
+| `-TrustServerCertificate` | Pass `-C` to `sqlcmd` to accept a self-signed SQL Server certificate. **Local development only**; omit in production so mandatory TLS validates the server certificate. |
 
 **Test settings:**
 

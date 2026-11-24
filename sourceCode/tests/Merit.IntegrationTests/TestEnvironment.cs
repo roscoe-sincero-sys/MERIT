@@ -88,7 +88,7 @@ public static partial class TestEnvironment
 
         var script = Path.Combine(SourceRoot, "database", "Deploy-MeritDatabase.ps1");
         var psi = new ProcessStartInfo("powershell.exe",
-            $"-NoProfile -ExecutionPolicy Bypass -File \"{script}\" -ServerInstance \"{Server}\" -DatabaseName {Database} -IncludeDemoData")
+            $"-NoProfile -ExecutionPolicy Bypass -File \"{script}\" -ServerInstance \"{Server}\" -DatabaseName {Database} -IncludeDemoData -TrustServerCertificate")
         {
             RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false,
             WorkingDirectory = Path.GetDirectoryName(script)!,

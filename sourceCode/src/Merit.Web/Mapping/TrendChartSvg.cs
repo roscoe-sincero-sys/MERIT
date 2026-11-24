@@ -35,6 +35,7 @@ public static class TrendChartSvg
         var sb = new StringBuilder();
         sb.Append(CultureInfo.InvariantCulture, $"<svg class=\"merit-chart\" data-chart-width=\"640\" viewBox=\"0 0 {N(W)} {N(H)}\" role=\"group\" aria-labelledby=\"{E(id)}\">");
         sb.Append(CultureInfo.InvariantCulture, $"<title id=\"{E(id)}\">{E(title)}</title>");
+        sb.Append(CultureInfo.InvariantCulture, $"<rect class=\"plot-bg\" x=\"{N(L)}\" y=\"{N(T)}\" width=\"{N(W - L - R)}\" height=\"{N(H - T - B)}\" rx=\"3\" />");
         for (int i = 0; i <= 4; i++)
         {
             double v = top * i / 4;
@@ -54,6 +55,10 @@ public static class TrendChartSvg
 
         if (pts.Count > 1)
         {
+            var areaPoints = $"{N(X(pts[0].Date))},{N(H - B)} " +
+                             string.Join(' ', pts.Select(p => $"{N(X(p.Date))},{N(Y((double)p.Value))}")) +
+                             $" {N(X(pts[^1].Date))},{N(H - B)}";
+            sb.Append(CultureInfo.InvariantCulture, $"<polygon class=\"area-fill\" points=\"{areaPoints}\" />");
             sb.Append("<polyline class=\"line\" points=\"")
               .AppendJoin(' ', pts.Select(p => $"{N(X(p.Date))},{N(Y((double)p.Value))}"))
               .Append("\" />");
@@ -70,6 +75,11 @@ public static class TrendChartSvg
         }
 
         sb.Append(CultureInfo.InvariantCulture, $"<text x=\"{N(L)}\" y=\"{N(H - 8)}\">{minDate.ToString("MMM d, yyyy", CultureInfo.InvariantCulture)}</text>");
+        if (span > 60)
+        {
+            var midDate = DateOnly.FromDayNumber(minDate.DayNumber + (int)(span / 2));
+            sb.Append(CultureInfo.InvariantCulture, $"<text x=\"{N(X(midDate))}\" y=\"{N(H - 8)}\" text-anchor=\"middle\">{midDate.ToString("MMM d, yyyy", CultureInfo.InvariantCulture)}</text>");
+        }
         sb.Append(CultureInfo.InvariantCulture, $"<text x=\"{N(W - R)}\" y=\"{N(H - 8)}\" text-anchor=\"end\">{maxDate.ToString("MMM d, yyyy", CultureInfo.InvariantCulture)}</text>");
         sb.Append("</svg>");
         return new HtmlString(sb.ToString());

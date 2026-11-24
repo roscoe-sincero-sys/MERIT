@@ -42,8 +42,8 @@ public sealed partial class MeritFixture : IDisposable
         {
             c.Open();
             Exec(c, """
-                UPDATE auth.appUser SET mfaEnabled = 0, mfaSecretProtected = NULL, failedSignInCount = 0, lockoutEndUtc = NULL
-                 WHERE mfaEnabled = 1 OR mfaSecretProtected IS NOT NULL OR failedSignInCount > 0 OR lockoutEndUtc IS NOT NULL;
+                UPDATE auth.appUser SET mfaEnabled = 0, mfaSecretProtected = NULL, lastTotpStep = NULL, failedSignInCount = 0, lockoutEndUtc = NULL
+                 WHERE mfaEnabled = 1 OR mfaSecretProtected IS NOT NULL OR lastTotpStep IS NOT NULL OR failedSignInCount > 0 OR lockoutEndUtc IS NOT NULL;
                 DELETE auth.mfaRecoveryCode;
                 """);
             Ids = LoadIds(c);

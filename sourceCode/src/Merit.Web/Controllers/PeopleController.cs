@@ -114,6 +114,7 @@ public sealed class PeopleController(IClock clock, PersonService people, PersonP
     }
 
     [HttpPost("{id:guid}/identifiers")]
+    [Authorize(Policy = Permissions.PersonEdit)]
     [Authorize(Policy = Permissions.PersonViewIdentifiers)]
     public async Task<IActionResult> AddIdentifier(Guid id, string identifierType, string identifierValue, string? assigningFacility,
                                                    CancellationToken ct)
@@ -134,6 +135,7 @@ public sealed class PeopleController(IClock clock, PersonService people, PersonP
 
     [HttpGet("{id:guid}/results")]
     [Authorize(Policy = Permissions.PersonView)]
+    [Authorize(Policy = Permissions.ResultView)]
     public async Task<IActionResult> Results(Guid id, Guid? analyteId, CancellationToken ct)
     {
         if (!Request.IsPartial())
@@ -147,6 +149,7 @@ public sealed class PeopleController(IClock clock, PersonService people, PersonP
 
     [HttpGet("{id:guid}/cases")]
     [Authorize(Policy = Permissions.PersonView)]
+    [Authorize(Policy = Permissions.CaseView)]
     public async Task<IActionResult> Cases(Guid id, CancellationToken ct)
         => await SectionAsync(id, "_Cases", m => m.Cases, ct);
 

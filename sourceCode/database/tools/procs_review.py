@@ -211,12 +211,25 @@ SET @Comments = CONCAT (N'Decision ', @decision, N' recorded.');
         "key": "CONCAT (N'clusterStatus=', @clusterStatus, N', pageNumber=', @pageNumber)",
         "validate": PAGING,
         "body": """
-SELECT cl.clusterId, cl.clusterType, cl.title, cl.clusterStatus, cl.windowStart, cl.windowEnd, cl.notes,
+DECLARE @isDbo BIT = CASE WHEN USER_NAME () = N'dbo' THEN 1 ELSE 0 END;
+DECLARE @idTenants TABLE (tenantId UNIQUEIDENTIFIER PRIMARY KEY);
+IF @isDbo = 0
+BEGIN
+    INSERT @idTenants (tenantId)
+    SELECT tenantId
+      FROM auth.tvfIdentifiedTenants ('case.view');
+END;
+
+SELECT cl.clusterId, cl.clusterType,
+       CASE WHEN @isDbo = 1 OR idt.tenantId IS NOT NULL THEN cl.title ELSE N'De-identified cluster' END AS title,
+       cl.clusterStatus, cl.windowStart, cl.windowEnd,
+       CASE WHEN @isDbo = 1 OR idt.tenantId IS NOT NULL THEN cl.notes ELSE NULL END AS notes,
        cl.createdDateUtc, t.tenantName AS owningTenantName,
        (SELECT COUNT (*) FROM dbo.caseCluster AS cc WHERE cc.clusterId = cl.clusterId AND cc.leftDate IS NULL
            AND cc.isDeleted = 0) AS memberCount,
        COUNT (*) OVER () AS totalCount
   FROM dbo.cluster AS cl
+  LEFT JOIN @idTenants AS idt ON idt.tenantId = cl.owningTenantId
   LEFT JOIN auth.tenant AS t ON t.tenantId = cl.owningTenantId
  WHERE cl.isDeleted = 0 AND (@clusterStatus IS NULL OR cl.clusterStatus = @clusterStatus)
  ORDER BY CASE cl.clusterStatus WHEN 'open' THEN 0 WHEN 'underReview' THEN 1 ELSE 2 END, cl.createdDateUtc DESC,
@@ -234,21 +247,51 @@ OFFSET (@pageNumber - 1) * @pageSize ROWS
         "key": "CONCAT (N'clusterId=', @clusterId)",
         "validate": CLUSTER_VISIBLE,
         "body": """
-SELECT cl.clusterId, cl.clusterType, cl.sharedKey, cl.title, cl.clusterStatus, cl.windowStart, cl.windowEnd, cl.notes,
+DECLARE @isDbo BIT = CASE WHEN USER_NAME () = N'dbo' THEN 1 ELSE 0 END;
+DECLARE @canViewTasks BIT = CASE WHEN @isDbo = 1 THEN 1 ELSE auth.udfHasPermission (N'task.view') END;
+DECLARE @idTenants TABLE (tenantId UNIQUEIDENTIFIER PRIMARY KEY);
+IF @isDbo = 0
+BEGIN
+    INSERT @idTenants (tenantId)
+    SELECT tenantId
+      FROM auth.tvfIdentifiedTenants ('case.view');
+END;
+
+DECLARE @clusterIdentified BIT = CASE WHEN @isDbo = 1
+                                        OR EXISTS (SELECT 1 FROM dbo.cluster AS cl
+                                                     JOIN @idTenants AS idt ON idt.tenantId = cl.owningTenantId
+                                                    WHERE cl.clusterId = @clusterId)
+                                      THEN 1 ELSE 0 END;
+
+SELECT cl.clusterId, cl.clusterType,
+       CASE WHEN @clusterIdentified = 1 THEN cl.sharedKey ELSE NULL END AS sharedKey,
+       CASE WHEN @clusterIdentified = 1 THEN cl.title ELSE N'De-identified cluster' END AS title,
+       cl.clusterStatus, cl.windowStart, cl.windowEnd,
+       CASE WHEN @clusterIdentified = 1 THEN cl.notes ELSE NULL END AS notes,
        cl.createdDateUtc, t.tenantName AS owningTenantName, cl.rowVersion,
        CAST (CASE WHEN EXISTS (SELECT 1 FROM auth.tvfTenantWritePredicate (cl.rootTenantId, cl.owningTenantId, cl.isDeleted)) THEN 1 ELSE 0 END AS BIT) AS canEdit
   FROM dbo.cluster AS cl
   LEFT JOIN auth.tenant AS t ON t.tenantId = cl.owningTenantId
  WHERE cl.clusterId = @clusterId;
 
-SELECT cc.caseClusterId, cc.exposureCaseId, c.caseNumber, c.personId, p.lastName, p.firstName, a.code AS analyteCode,
+SELECT cc.caseClusterId, cc.exposureCaseId, c.caseNumber,
+       CASE WHEN @isDbo = 1 OR idt.tenantId IS NOT NULL THEN c.personId ELSE CAST (0x0 AS UNIQUEIDENTIFIER) END AS personId,
+       CASE WHEN @isDbo = 1 OR idt.tenantId IS NOT NULL THEN p.lastName ELSE N'De-identified' END AS lastName,
+       CASE WHEN @isDbo = 1 OR idt.tenantId IS NOT NULL THEN p.firstName ELSE NULL END AS firstName,
+       a.code AS analyteCode,
        c.population, c.classification, c.caseStatus, c.openedDate, h.valueCanonical AS highestValue,
-       h.unitCanonical AS highestUnit, cc.joinedDate, cc.leftDate, l.locationId, l.addressLine1, l.unit, l.city,
-       l.latitude, l.longitude
+       h.unitCanonical AS highestUnit, cc.joinedDate, cc.leftDate,
+       CASE WHEN @isDbo = 1 OR idt.tenantId IS NOT NULL THEN l.locationId ELSE NULL END AS locationId,
+       CASE WHEN @isDbo = 1 OR idt.tenantId IS NOT NULL THEN l.addressLine1 ELSE NULL END AS addressLine1,
+       CASE WHEN @isDbo = 1 OR idt.tenantId IS NOT NULL THEN l.unit ELSE NULL END AS unit,
+       CASE WHEN @isDbo = 1 OR idt.tenantId IS NOT NULL THEN l.city ELSE NULL END AS city,
+       CASE WHEN @isDbo = 1 OR idt.tenantId IS NOT NULL THEN l.latitude ELSE NULL END AS latitude,
+       CASE WHEN @isDbo = 1 OR idt.tenantId IS NOT NULL THEN l.longitude ELSE NULL END AS longitude
   FROM dbo.caseCluster AS cc
   JOIN dbo.exposureCase AS c ON c.exposureCaseId = cc.exposureCaseId
   JOIN dbo.person AS p ON p.personId = c.personId
   JOIN config.analyte AS a ON a.analyteId = c.analyteId
+  LEFT JOIN @idTenants AS idt ON idt.tenantId = c.owningTenantId
   LEFT JOIN dbo.labResult AS h ON h.labResultId = c.highestLabResultId
  OUTER APPLY (SELECT TOP (1) x.locationId, x.addressLine1, x.unit, x.city, x.latitude, x.longitude
                 FROM dbo.personLocation AS pl
@@ -260,10 +303,18 @@ SELECT cc.caseClusterId, cc.exposureCaseId, c.caseNumber, c.personId, p.lastName
  WHERE cc.clusterId = @clusterId AND cc.isDeleted = 0
  ORDER BY CASE WHEN cc.leftDate IS NULL THEN 0 ELSE 1 END, c.openedDate;
 
-SELECT w.workTaskId, w.queueCode, w.title, w.detail, w.dueDate, w.isUrgent, u.displayName AS assignedToName
+SELECT w.workTaskId, w.queueCode,
+       CASE WHEN @isDbo = 1 OR (@clusterIdentified = 1 AND idt.tenantId IS NOT NULL) THEN w.title ELSE N'Cluster alert' END AS title,
+       CASE WHEN @isDbo = 1 OR (@clusterIdentified = 1 AND idt.tenantId IS NOT NULL) THEN w.detail ELSE NULL END AS detail,
+       w.dueDate, w.isUrgent,
+       CASE WHEN @isDbo = 1 OR (@clusterIdentified = 1 AND idt.tenantId IS NOT NULL) THEN u.displayName ELSE NULL END AS assignedToName
   FROM dbo.workTask AS w
+  LEFT JOIN @idTenants AS idt ON idt.tenantId = w.owningTenantId
   LEFT JOIN auth.appUser AS u ON u.appUserId = w.assignedToUserId
- WHERE w.clusterId = @clusterId AND w.taskStatus = 'open' AND w.isDeleted = 0;
+ WHERE w.clusterId = @clusterId
+   AND w.taskStatus = 'open'
+   AND w.isDeleted = 0
+   AND @canViewTasks = 1;
 """,
     },
     {
@@ -354,16 +405,36 @@ SET @Comments = CONCAT (N'Case ', @caseNumber, CASE @isMember WHEN 1 THEN N' joi
 , @openOnly   BIT = 1""",
         "key": "CONCAT (N'analyteId=', @analyteId, N', openOnly=', @openOnly)",
         "body": """
-SELECT TOP (5000) c.exposureCaseId, c.caseNumber, c.personId, p.lastName, p.firstName, a.code AS analyteCode,
+DECLARE @isDbo BIT = CASE WHEN USER_NAME () = N'dbo' THEN 1 ELSE 0 END;
+DECLARE @idTenants TABLE (tenantId UNIQUEIDENTIFIER PRIMARY KEY);
+IF @isDbo = 0
+BEGIN
+    INSERT @idTenants (tenantId)
+    SELECT tenantId
+      FROM auth.tvfIdentifiedTenants ('case.view');
+END;
+
+SELECT TOP (5000) c.exposureCaseId, c.caseNumber,
+       CASE WHEN @isDbo = 1 OR idt.tenantId IS NOT NULL THEN c.personId ELSE CAST (0x0 AS UNIQUEIDENTIFIER) END AS personId,
+       CASE WHEN @isDbo = 1 OR idt.tenantId IS NOT NULL THEN p.lastName ELSE N'De-identified' END AS lastName,
+       CASE WHEN @isDbo = 1 OR idt.tenantId IS NOT NULL THEN p.firstName ELSE NULL END AS firstName,
+       a.code AS analyteCode,
        c.population, c.classification, c.caseStatus, c.openedDate, h.valueCanonical AS highestValue,
-       h.unitCanonical AS highestUnit, l.locationId, l.addressLine1, l.city, l.countyFips, l.latitude, l.longitude,
-       l.geocodeQuality,
+       h.unitCanonical AS highestUnit,
+       CASE WHEN @isDbo = 1 OR idt.tenantId IS NOT NULL THEN l.locationId ELSE NULL END AS locationId,
+       CASE WHEN @isDbo = 1 OR idt.tenantId IS NOT NULL THEN l.addressLine1 ELSE NULL END AS addressLine1,
+       CASE WHEN @isDbo = 1 OR idt.tenantId IS NOT NULL THEN l.city ELSE NULL END AS city,
+       l.countyFips,
+       CASE WHEN @isDbo = 1 OR idt.tenantId IS NOT NULL THEN l.latitude ELSE NULL END AS latitude,
+       CASE WHEN @isDbo = 1 OR idt.tenantId IS NOT NULL THEN l.longitude ELSE NULL END AS longitude,
+       CASE WHEN @isDbo = 1 OR idt.tenantId IS NOT NULL THEN l.geocodeQuality ELSE NULL END AS geocodeQuality,
        (SELECT COUNT (*) FROM dbo.caseCluster AS cc
           JOIN dbo.cluster AS cl ON cl.clusterId = cc.clusterId AND cl.clusterStatus <> 'closed' AND cl.isDeleted = 0
          WHERE cc.exposureCaseId = c.exposureCaseId AND cc.leftDate IS NULL AND cc.isDeleted = 0) AS openClusterCount
   FROM dbo.exposureCase AS c
   JOIN dbo.person AS p ON p.personId = c.personId
   JOIN config.analyte AS a ON a.analyteId = c.analyteId
+  LEFT JOIN @idTenants AS idt ON idt.tenantId = c.owningTenantId
   LEFT JOIN dbo.labResult AS h ON h.labResultId = c.highestLabResultId
  OUTER APPLY (SELECT TOP (1) x.locationId, x.addressLine1, x.city, x.countyFips, x.latitude, x.longitude,
                      x.geocodeQuality

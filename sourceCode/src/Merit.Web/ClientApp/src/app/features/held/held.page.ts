@@ -1,6 +1,6 @@
 import { confirmAction } from '../../shared/confirmation';
 import { of, switchMap } from 'rxjs';
-import { Router } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { ChangeDetectionStrategy, Component, computed, inject, Injectable, input, OnInit, signal } from '@angular/core';
 import { ApiClient, problemMessage } from '../../api/api-client';
 import { HeldGroupDto, HeldRowDto, PagedResult } from '../../api/contracts';
@@ -49,7 +49,7 @@ export function needsMatchReview(r: HeldRowDto): boolean {
  */
 @Component({
   selector: 'merit-held-page',
-  imports: [DataGridComponent],
+  imports: [DataGridComponent, RouterLink],
   providers: [HeldStore],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
@@ -59,8 +59,8 @@ export function needsMatchReview(r: HeldRowDto): boolean {
     @if (store.message(); as m) { <div class="usa-alert usa-alert--success usa-alert--slim" role="status"><div class="usa-alert__body"><p class="usa-alert__text">{{ m }}</p></div></div> }
 
     @if (store.batch()) {
-      <p class="usa-alert usa-alert--info usa-alert--slim">Showing batch: <strong>{{ store.batchFileName() ?? store.batch() }}</strong>.
-        <button type="button" class="usa-button usa-button--unstyled merit-touch-action" [disabled]="store.busy()" (click)="clearBatch()">Show all batches</button></p>
+      <div class="usa-alert usa-alert--info usa-alert--slim"><div class="usa-alert__body"><p class="usa-alert__text">Showing batch: <strong>{{ store.batchFileName() ?? store.batch() }}</strong>.
+        <button type="button" class="usa-button usa-button--unstyled merit-touch-action" [disabled]="store.busy()" (click)="clearBatch()">Show all batches</button></p></div></div>
     }
     <h2>By cause</h2>
     @if (store.groupsLoaded() && store.groups().length === 0) { <p class="merit-empty">Nothing is held.</p> }
@@ -101,7 +101,7 @@ export function needsMatchReview(r: HeldRowDto): boolean {
         Showing every held row{{ store.batch() ? ' in this batch' : '' }}.
       }
     </p>
-    <div class="bulk" role="group" aria-label="Actions on selected rows" aria-describedby="held-scope">
+    <div class="bulk" [class.bulk--idle]="store.selected().size === 0" role="group" aria-label="Actions on selected rows" aria-describedby="held-scope">
       <button class="usa-button" type="button" [disabled]="store.loading() || store.busy() || store.releasable().length === 0" (click)="release()"
               [attr.aria-describedby]="store.selectedForMatch().length > 0 ? 'release-match-note' : null">Release selected</button>
       <label class="usa-label" for="reject-reason">Reject reason</label>
@@ -115,7 +115,7 @@ export function needsMatchReview(r: HeldRowDto): boolean {
         } @else {
           {{ store.selectedForMatch().length }} of the selected rows wait for a match decision; Release leaves them held.
         }
-        <a class="usa-link" href="/app/match-review">Open Match review</a>.
+        <a class="usa-link" routerLink="/match-review">Open Match review</a>.
       </p>
     }
     <merit-data-grid gridId="held" [cards]="true" caption="Held rows" [columns]="columns" [rows]="store.rows().items" [total]="store.rows().totalCount"
@@ -128,7 +128,7 @@ export function needsMatchReview(r: HeldRowDto): boolean {
         <p>Held for: {{ r.reasons }}. Corrections are separate from bulk row selection.</p>
         @if (needsMatch(r)) {
           <p id="held-row-match-note">Choose the correct person before release. Releasing cannot make this decision.</p>
-          <a class="usa-button usa-button--outline" [href]="'/app/match-review?row=' + r.stagingRowId">Review the match for row {{ r.rowNumber }}</a>
+          <a class="usa-button usa-button--outline" routerLink="/match-review" [queryParams]="{ row: r.stagingRowId }">Review the match for row {{ r.rowNumber }}</a>
         }
         <table role="table" class="usa-table usa-table--borderless usa-table--compact held-detail-table">
           <thead><tr><th scope="col">Field</th><th scope="col">As reported</th><th scope="col">Correction</th></tr></thead>
@@ -155,8 +155,9 @@ export function needsMatchReview(r: HeldRowDto): boolean {
     }
     .groups { list-style: none; padding: 0; }
     .groups li { margin: .35rem 0; }
-    .urgent { margin-left: .5rem; padding: 0 .4rem; border-radius: 1rem; background: #b50909; color: #fff; font-size: .8rem; font-weight: 700; }
-    .bulk { display: flex; flex-wrap: wrap; align-items: end; gap: .5rem 1rem; margin-bottom: .75rem; }
+    .urgent { margin-left: .5rem; padding: .05rem .45rem; border-radius: 1rem; background: var(--merit-urgent, #b50909); color: #fff; font-size: .8rem; font-weight: 700; }
+    .bulk { display: flex; flex-wrap: wrap; align-items: end; gap: .5rem 1rem; margin-bottom: .75rem; padding: .75rem 1rem; background: var(--merit-bg-soft, #f0f4f9); border: 1px solid var(--merit-line, #dde3ea); border-radius: var(--merit-radius, .5rem); }
+    .bulk--idle { display: none; }
     .bulk .usa-input { max-width: 18rem; margin-top: 0; }
     .bulk .usa-label { margin-top: 0; }
   `,
@@ -272,9 +273,12 @@ export class HeldPage implements OnInit {
   protected async correctGroup(field: string, value: string, entire: boolean): Promise<void> {
     const g = this.store.group(); if (!g || !field || this.store.busy() || this.store.loading()) return;
     // Say exactly what will be written where, and on how many rows (issue #155).
-    const where = `${g.rowCount === 1 ? 'the 1 row' : `all ${g.rowCount} rows`} in this cause, sender and batch`;
+    const count = entire ? g.rowCount : this.store.selected().size;
+    const where = entire
+      ? `${g.rowCount === 1 ? 'the 1 row' : `all ${g.rowCount} rows`} in this cause, sender and batch`
+      : `${this.display.count(count, 'selected row')}`;
     const what = value ? `Change ${this.display.field(field)} to "${value}" on ${where}?` : `Restore the reported ${this.display.field(field)} on ${where}?`;
-    if (entire && !await confirmAction(`${what} Release the rows afterwards to rerun validation.`)) return;
+    if ((entire || count > 1) && !await confirmAction(`${what} Release the rows afterwards to rerun validation.`)) return;
     this.beginWrite();
     this.api.correctHeldGroup({ reason: g.reasonCode, reportedValue: g.reportedValue, sender: g.senderOrganizationId,
       batch: this.store.batch(), field, value: value || null, selectedIds: entire ? null : [...this.store.selected()] }).subscribe({

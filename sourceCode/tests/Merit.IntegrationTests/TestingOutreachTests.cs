@@ -153,11 +153,9 @@ public sealed partial class PatientCareTests
             Assert.Contains("2446 Outreach Way",csv,StringComparison.Ordinal);
             Assert.Contains("\"'=FORMULA_SENTINEL ContactSentinel\"",csv,StringComparison.Ordinal);
             var epi=await fixture.SignedInAsync("epi");
-            var restricted=await epi.Http.GetStringAsync("/testing.csv?planKind=early");
-            Assert.DoesNotContain("ContactSentinel",restricted,StringComparison.Ordinal);
-            Assert.DoesNotContain("15555552446",restricted,StringComparison.Ordinal);
-            Assert.DoesNotContain("outreach-caregiver@example.test",restricted,StringComparison.Ordinal);
-            Assert.DoesNotContain("2446 Outreach Way",restricted,StringComparison.Ordinal);
+            // #300: de-identified epidemiologists do not hold person.view/task.view and cannot export patient outreach rosters.
+            using var epiResponse=await epi.Http.GetAsync("/testing.csv?planKind=early");
+            Assert.Equal(HttpStatusCode.Forbidden,epiResponse.StatusCode);
             var county=await fixture.SignedInAsync("cmbaltco");
             Assert.DoesNotContain(patient.ToString(),await county.Http.GetStringAsync("/testing"),StringComparison.Ordinal);
             await Sql(c,"""

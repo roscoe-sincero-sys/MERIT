@@ -19,11 +19,15 @@ public sealed record Hl7PatientIdentifier(string Type, string Value, string? Aut
 /// </summary>
 public static class Hl7Reader
 {
-    public static IReadOnlyList<Dictionary<string, string?>> Read(string content, string? senderClia = null)
+    public const long MaxStagingBytes = 50_000_000;
+    public const string StagingLimitMessage = "The HL7 file expands past MERIT's 50 MB staging limit; split the file.";
+
+    public static IReadOnlyList<Dictionary<string, string?>> Read(string content, string? senderClia = null, long maxStagingBytes = MaxStagingBytes)
     {
         var rows = new List<Dictionary<string, string?>>();
         var message = new List<string>();
         int number = 0;
+        long totalSerialized = 0;
         foreach (var source in content.TrimStart('\uFEFF').Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries))
         {
             var line = source.Trim('\u000b', '\u001c'); // File exports may retain MLLP frame boundaries.
@@ -33,19 +37,20 @@ public static class Hl7Reader
             if (tag is "FHS" or "BHS" or "BTS" or "FTS") continue;
             if (tag == "MSH")
             {
-                if (message.Count > 0) ParseMessage(message, number, senderClia, rows);
+                if (message.Count > 0) ParseMessage(message, number, senderClia, rows, ref totalSerialized, maxStagingBytes);
                 message = [];
                 number++;
             }
             if (number == 0) throw new Hl7ParseException("HL7 file must begin with an MSH message header (optional batch envelopes are allowed).");
             message.Add(line);
         }
-        if (message.Count > 0) ParseMessage(message, number, senderClia, rows);
+        if (message.Count > 0) ParseMessage(message, number, senderClia, rows, ref totalSerialized, maxStagingBytes);
         if (rows.Count == 0) throw new Hl7ParseException("HL7 file contains no OBX observations.");
         return rows;
     }
 
-    private static void ParseMessage(List<string> lines, int number, string? senderClia, List<Dictionary<string, string?>> output)
+    private static void ParseMessage(List<string> lines, int number, string? senderClia, List<Dictionary<string, string?>> output,
+                                     ref long totalSerialized, long maxStagingBytes)
     {
         void Fail(string reason) => throw new Hl7ParseException($"HL7 message {number}: {reason}");
         var header = lines[0];
@@ -91,6 +96,7 @@ public static class Hl7Reader
                 case "ORC": orc = segment; break;
                 case "NK1":
                     if(patient is null) Fail("NK1 requires a preceding PID.");
+                    if (guardians.Count >= 20) Fail("A patient in an HL7 message cannot have more than 20 NK1 guardian segments.");
                     guardians.Add(segment); break;
                 case "OBR":
                     if (patient is null) Fail("OBR requires a preceding PID.");
@@ -133,7 +139,19 @@ public static class Hl7Reader
                 var type = Part(4) switch { "MR" => "mrn", "MA" => "medicaid", "SS" => "other", _ => "other" };
                 return new Hl7PatientIdentifier(type, Part(0), Part(3).Length > 0 ? Part(3) : sendingFacility);
             }).Where(i => i.Value.Length > 0).ToArray();
+            if (identifiers.Length > 20) Fail("A patient in an HL7 message cannot have more than 20 PID-3 identifiers.");
             if (identifiers.Any(i => i.Value.Length > 60 || i.Authority?.Length > 120)) Fail("PID-3 identifier or assigning authority exceeds MERIT's identifier limits.");
+            var rawPidNames = pid.Raw(5);
+            var rawPidAddresses = pid.Raw(11);
+            if (rawPidNames.Length > 2048 || rawPidAddresses.Length > 2048) Fail("PID-5 or PID-11 exceeds MERIT's field length limit.");
+            static string Phone(Segment s, int field) => !string.IsNullOrWhiteSpace(s.Component(field)) ? s.Component(field) : s.Component(field, 6) + s.Component(field, 7);
+            var contacts = group.Guardians.Select(g => new Dictionary<string, string?>
+            {
+                ["guardianName"] = g.Component(2) + ", " + g.Component(2, 2), ["guardianPhone"] = Phone(g, 5), ["guardianEmail"] = g.Component(5, 4),
+                ["guardianAddressLine1"] = g.Component(4), ["guardianCity"] = g.Component(4, 3), ["guardianState"] = g.Component(4, 4), ["guardianZip5"] = g.Component(4, 5),
+            }).Where(g => !string.IsNullOrWhiteSpace(g["guardianName"]?.Replace(",", "", StringComparison.Ordinal))).ToArray();
+            var contactsJson = JsonSerializer.Serialize(contacts);
+            var identifiersJson = JsonSerializer.Serialize(identifiers);
             int observationIndex = 0;
             foreach (var observation in group.Observations)
             {
@@ -170,19 +188,13 @@ public static class Hl7Reader
                     var sampleType = specimen?.ToUpperInvariant() switch { "BLDV" or "VEN" => "venous", "BLDC" or "CAP" => "capillary", _ => "unknown" };
                     var performingClia = observation.Component(23, 10);
                     var county = Address(8);
-                    static string Phone(Segment s,int field) => !string.IsNullOrWhiteSpace(s.Component(field)) ? s.Component(field) : s.Component(field,6)+s.Component(field,7);
-                    var contacts=group.Guardians.Select(g=>new Dictionary<string,string?>
-                    {
-                        ["guardianName"]=g.Component(2)+", "+g.Component(2,2),["guardianPhone"]=Phone(g,5),["guardianEmail"]=g.Component(5,4),
-                        ["guardianAddressLine1"]=g.Component(4),["guardianCity"]=g.Component(4,3),["guardianState"]=g.Component(4,4),["guardianZip5"]=g.Component(4,5),
-                    }).Where(g=>!string.IsNullOrWhiteSpace(g["guardianName"]?.Replace(",","",StringComparison.Ordinal))).ToArray();
                     var fields = new Dictionary<string, string?>(StringComparer.Ordinal)
                     {
                         ["lastName"] = syntax.Value(RawName(0).Split(syntax.Subcomponent)[0]), ["firstName"] = Name(1), ["middleName"] = Name(2),
                         ["dob"] = Date(pid.Component(7)), ["sex"] = pid.Text(8) switch { "M" => "male", "F" => "female", _ => "unknown" },
-                        ["phone"]=Phone(pid,13),["race"]=pid.Component(10),["ethnicity"]=pid.Component(22),
-                        ["guardianContactsJson"]=JsonSerializer.Serialize(contacts),
-                        ["guardianName"]=contacts.FirstOrDefault()?.GetValueOrDefault("guardianName"),["guardianPhone"]=contacts.FirstOrDefault()?.GetValueOrDefault("guardianPhone"),
+                        ["phone"] = Phone(pid, 13), ["race"] = pid.Component(10), ["ethnicity"] = pid.Component(22),
+                        ["guardianContactsJson"] = contactsJson,
+                        ["guardianName"] = contacts.FirstOrDefault()?.GetValueOrDefault("guardianName"), ["guardianPhone"] = contacts.FirstOrDefault()?.GetValueOrDefault("guardianPhone"),
                         ["providerName"]=string.Join(' ',new[] {group.Request.Component(16,3),group.Request.Component(16,2)}.Where(v=>!string.IsNullOrWhiteSpace(v))),
                         ["labName"]=observation.Component(23),
                         ["addressLine1"] = syntax.Value(RawAddress(0).Split(syntax.Subcomponent)[0]), ["addressUnit"] = Address(1),
@@ -205,12 +217,15 @@ public static class Hl7Reader
                         ["hl7ObservationIdentifier"] = observation.Raw(3),
                         ["hl7ObservationKey"] = observationKey,
                         ["hl7OrderIndex"] = orderIndex.ToString(CultureInfo.InvariantCulture), ["hl7ObservationIndex"] = observationIndex.ToString(CultureInfo.InvariantCulture),
-                        ["hl7PatientIdentifiersJson"] = JsonSerializer.Serialize(identifiers),
+                        ["hl7PatientIdentifiersJson"] = identifiersJson,
                         ["hl7PatientLastNameKey"]=MatchKeys.NameKey(syntax.Value(RawName(0).Split(syntax.Subcomponent)[0])),
                         ["hl7PatientFirstNameKey"]=MatchKeys.NameKey(Name(1)),
-                        ["hl7PatientNames"] = pid.Raw(5), ["hl7PatientAddresses"] = pid.Raw(11), ["hl7SpecimenId"] = group.Specimen?.Raw(2),
+                        ["hl7PatientNames"] = rawPidNames, ["hl7PatientAddresses"] = rawPidAddresses, ["hl7SpecimenId"] = group.Specimen?.Raw(2),
                         ["hl7SpecimenType"] = specimen,
                     };
+                    // Measure the actual JSON-encoded UTF-8 staging size (including escaping of nested JSON quotes/backslashes).
+                    totalSerialized += JsonSerializer.SerializeToUtf8Bytes(fields).Length;
+                    if (totalSerialized > maxStagingBytes) Fail(StagingLimitMessage);
                     // Bound values destined for SQL columns and held-record diagnostics before any rows are saved.
                     foreach (var (key, limit) in new[] { ("value", 60), ("unit", 20), ("testMethod", 30), ("accessionNumber", 60),
                                  ("loinc", 200), ("dob", 200), ("collectedDate", 200), ("reportedDate", 200) })

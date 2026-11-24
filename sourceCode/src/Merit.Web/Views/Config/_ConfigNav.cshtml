@@ -7,5 +7,6 @@
         <li class="usa-button-group__item"><a class="usa-button @(Model == "analytes" ? "" : "usa-button--outline")" aria-current="@(Model == "analytes" ? "page" : null)" href="/config/analytes">Analytes</a></li>
         @if(Session.Has(Permissions.ConfigEdit)) { <li class="usa-button-group__item"><a class="usa-button @(Model == "notifications" ? "" : "usa-button--outline")" aria-current="@(Model == "notifications" ? "page" : null)" href="/config/notification-rules">Notification rules</a></li> }
         @if(Session.Has(Permissions.ConfigEdit)) { <li class="usa-button-group__item"><a class="usa-button @(Model == "workflows" ? "" : "usa-button--outline")" aria-current="@(Model == "workflows" ? "page" : null)" href="/config/workflows">Program tasks</a></li> }
+        @if(Session.Has(Permissions.IntakeConfigure)) { <li class="usa-button-group__item"><a class="usa-button @(Model == "intake-formats" ? "" : "usa-button--outline")" aria-current="@(Model == "intake-formats" ? "page" : null)" href="/config/intake-formats">Lab import formats</a></li> }
     </ul>
 </nav>

@@ -126,6 +126,8 @@ export interface ResultListItemDto {
   resultRowStatus: string;
   isIndeterminate: boolean;
   labName: string | null;
+  isMatched?: boolean;
+  isIdentified?: boolean;
 }
 
 export interface AnalyteOptionDto {

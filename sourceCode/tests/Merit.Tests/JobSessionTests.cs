@@ -2,6 +2,10 @@ using System.Reflection;
 using Merit.Application.Data;
 using Merit.Application.Errors;
 using Merit.Application.Jobs;
+using Merit.Worker;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 
 namespace Merit.Tests;
 
@@ -48,7 +52,29 @@ public sealed class JobSessionTests
         Assert.Single(FakeAccounts.Of(accounts).Revoked);
     }
 
-    /// <summary>IAccountData with only the two calls JobSessions makes.</summary>
+    [Fact]
+    public async Task ClusterSchedulerClearsSessionAndContinuesWhenScopeRevocationFails()
+    {
+        var accounts = FakeAccounts.Create(actingTenantReturned: Region);
+        FakeAccounts.Of(accounts).ThrowOnRevoke = true;
+        FakeAccounts.Of(accounts).UserForSignIn = new SignInUserRow { AppUserId = User, UserName = "clusterbot", RootTenantId = Region, IsActive = true };
+
+        var services = new ServiceCollection()
+            .AddSingleton(accounts)
+            .BuildServiceProvider();
+        var holder = new JobSessionHolder();
+        var opts = Options.Create(new WorkerOptions { ClusterDetection = new WorkerOptions.ClusterOptions { RunAsUserName = "clusterbot" } });
+        var scheduler = new ClusterScheduler(services, holder, opts, NullLogger<ClusterScheduler>.Instance);
+
+        // Even when job execution fails (no JobDispatcher registered) AND RevokeSessionScopeAsync throws,
+        // RunCycleAsync must NOT throw and must clear sessions.Current so the worker host keeps running.
+        await scheduler.RunCycleAsync(CancellationToken.None);
+
+        Assert.Null(holder.Current);
+        Assert.Single(FakeAccounts.Of(accounts).Revoked);
+    }
+
+    /// <summary>IAccountData with only the calls JobSessions and ClusterScheduler make.</summary>
     public class FakeAccounts : DispatchProxy
     {
         public List<(Guid User, Guid? Profile, Guid? ViewAs, Guid? Acting)> Created { get; } = [];
@@ -56,6 +82,10 @@ public sealed class JobSessionTests
         public List<Guid> Revoked { get; } = [];
 
         public Guid ActingTenantReturned { get; set; }
+
+        public bool ThrowOnRevoke { get; set; }
+
+        public SignInUserRow? UserForSignIn { get; set; }
 
         public static IAccountData Create(Guid actingTenantReturned)
         {
@@ -70,12 +100,19 @@ public sealed class JobSessionTests
         {
             switch (method?.Name)
             {
+                case nameof(IAccountData.GetUserForSignInAsync):
+                    return Task.FromResult(UserForSignIn);
                 case nameof(IAccountData.CreateSessionScopeAsync):
                     Created.Add(((Guid)args![1]!, (Guid?)args[3], (Guid?)args[4], (Guid?)args[5]));
                     var summary = new SessionScopeSummaryRow { SessionScopeId = (Guid)args[0]!, AppUserId = (Guid)args[1]!, ActingTenantId = ActingTenantReturned };
                     return Task.FromResult(new SessionScopeResult(summary, [], []));
                 case nameof(IAccountData.RevokeSessionScopeAsync):
                     Revoked.Add((Guid)args![0]!);
+                    if (ThrowOnRevoke)
+                    {
+                        return Task.FromException(new InvalidOperationException("Transient DB error during cleanup."));
+                    }
+
                     return Task.CompletedTask;
                 default:
                     throw new NotSupportedException(method?.Name);

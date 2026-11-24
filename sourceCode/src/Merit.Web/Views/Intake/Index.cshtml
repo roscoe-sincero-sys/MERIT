@@ -36,7 +36,7 @@ else if (Model.Message is not null)
         @Html.AntiForgeryToken()
         <div class="usa-form-group"><label class="usa-label" for="intakeProfileId">Sender and intake profile</label>
             <select class="usa-select merit-select--wide" id="intakeProfileId" name="intakeProfileId">
-                @foreach (var p in Model.Profiles) { <option value="@p.IntakeProfileId">@Options.IntakeProfile(p.SenderName, p.ProfileName, p.FileType)</option> }
+                @foreach (var p in Model.Profiles) { <option value="@p.IntakeProfileId" data-file-type="@p.FileType" data-header-row="@p.HeaderRow">@Options.IntakeProfile(p.SenderName, p.ProfileName, p.FileType)</option> }
             </select></div>
         <div aria-live="polite" id="intake-format-help">
         <h3>Selected format requirements</h3>
@@ -58,7 +58,14 @@ else if (Model.Message is not null)
             </div>
         }
         </div>
-        <div class="usa-form-group"><label class="usa-label" for="file">File</label><input class="usa-file-input" id="file" name="file" type="file" accept=".csv,.txt,.tsv,.hl7" required /></div>
+        <div class="usa-form-group">
+            <label class="usa-label" for="file">File</label>
+            <div class="merit-dropzone" data-intake-dropzone>
+                <p class="merit-dropzone__prompt">Drag and drop a lab file here, or choose a file from your computer (.csv, .tsv, .txt, .hl7 &middot; max 20 MB)</p>
+                <input class="usa-file-input" id="file" name="file" type="file" accept=".csv,.txt,.tsv,.hl7" required />
+            </div>
+            <div id="intake-preflight" class="merit-preflight" role="status" aria-live="polite" hidden></div>
+        </div>
         @if (Model.DuplicateOf is not null)
         {
             <div class="usa-checkbox">

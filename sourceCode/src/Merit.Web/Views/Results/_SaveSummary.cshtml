@@ -5,7 +5,8 @@
 <div id="result-saved" data-screen-visit="@ViewData["ScreenVisitId"]" data-screen-code="@ViewData["ScreenCode"]">
     <div class="usa-alert usa-alert--success" role="status">
         <div class="usa-alert__body">
-            <h2 class="usa-alert__heading" tabindex="-1">Result saved</h2>
+            @if (ViewData["PageHeading"] is true) { <h1 class="usa-alert__heading" tabindex="-1">Result saved</h1> }
+            else { <h2 class="usa-alert__heading" tabindex="-1">Result saved</h2> }
             <p class="usa-alert__text">@s.AnalyteName @s.ValueDisplay &rarr; canonical <strong>@s.CanonicalDisplay</strong> &middot; population @s.Population</p>
         </div>
     </div>

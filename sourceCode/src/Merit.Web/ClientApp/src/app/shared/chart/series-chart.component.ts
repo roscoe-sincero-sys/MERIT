@@ -8,11 +8,11 @@ export interface ChartSeries {
 }
 
 /**
- * Categorical palette, fixed order, validated for colour-vision deficiency (dataviz validator, light surface): blue,
- * orange, aqua, yellow, magenta, green. Three slots are below 3:1 contrast, so every chart ships with a legend, direct
+ * Categorical palette, fixed order, validated for colour-vision deficiency and WCAG 1.4.11 (>= 3:1 contrast on light
+ * surface #fcfcfb): blue, orange, emerald, ochre, berry, forest green. Every chart also ships with a legend, direct
  * labels and a table view on the same screen. Series past six fold into the table only.
  */
-export const SERIES_COLORS = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300'];
+export const SERIES_COLORS = ['#1d63b8', '#c84b18', '#0e8558', '#a86800', '#b8326a', '#007a00'];
 
 interface Hover {
   x: number;

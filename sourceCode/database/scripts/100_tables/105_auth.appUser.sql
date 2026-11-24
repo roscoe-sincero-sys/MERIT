@@ -38,6 +38,7 @@ BEGIN
         mfaPreferredMethod         VARCHAR (10)      NOT NULL CONSTRAINT DF_auth_appUser_mfaPreferredMethod DEFAULT ('totp'),
         passwordChangedUtc         DATETIME2 (3)     NULL,
         passwordChangeRequired     BIT               NOT NULL CONSTRAINT DF_auth_appUser_passwordChangeRequired DEFAULT (0),
+        lastTotpStep               BIGINT            NULL,
 
         -- Standard audit columns. Soft delete only. Convention: DF_<schema>_<tableName>_<fieldName>.
         isDeleted       BIT             NOT NULL CONSTRAINT DF_auth_appUser_isDeleted       DEFAULT (0),
@@ -81,6 +82,8 @@ IF COL_LENGTH (N'auth.appUser', N'passwordChangedUtc') IS NULL
     ALTER TABLE auth.appUser ADD passwordChangedUtc         DATETIME2 (3)     NULL;
 IF COL_LENGTH (N'auth.appUser', N'passwordChangeRequired') IS NULL
     ALTER TABLE auth.appUser ADD passwordChangeRequired     BIT               NOT NULL CONSTRAINT DF_auth_appUser_passwordChangeRequired DEFAULT (0);
+IF COL_LENGTH (N'auth.appUser', N'lastTotpStep') IS NULL
+    ALTER TABLE auth.appUser ADD lastTotpStep               BIGINT            NULL;
 GO
 
 -- -------------------------------------------------------------------------------------------
@@ -227,6 +230,7 @@ EXEC util.uspSetObjectDescription @SchemaName = N'auth', @ObjectType = N'TABLE',
 EXEC util.uspSetObjectDescription @SchemaName = N'auth', @ObjectType = N'TABLE', @ObjectName = N'appUser', @ColumnName = N'mfaPreferredMethod', @Description = N'Second factor the sign-in page offers first: totp (authenticator app) or email. Falls back to totp whenever email codes are not available.';
 EXEC util.uspSetObjectDescription @SchemaName = N'auth', @ObjectType = N'TABLE', @ObjectName = N'appUser', @ColumnName = N'passwordChangedUtc', @Description = N'UTC time the password was last changed: by the person, by a reset link, or by an administrator.';
 EXEC util.uspSetObjectDescription @SchemaName = N'auth', @ObjectType = N'TABLE', @ObjectName = N'appUser', @ColumnName = N'passwordChangeRequired', @Description = N'1 = the person must choose a new password right after their next sign-in (an administrator asked for it, so they never keep a password the administrator knows).';
+EXEC util.uspSetObjectDescription @SchemaName = N'auth', @ObjectType = N'TABLE', @ObjectName = N'appUser', @ColumnName = N'lastTotpStep', @Description = N'Latest accepted TOTP 30-second step to prevent replay (#302).';
 EXEC util.uspSetObjectDescription @SchemaName = N'auth', @ObjectType = N'TABLE', @ObjectName = N'appUser', @ColumnName = N'isDeleted', @Description = N'Soft-delete flag. 1 = deleted, 0 = active. This database performs no hard deletes; all reads must filter isDeleted = 0.';
 EXEC util.uspSetObjectDescription @SchemaName = N'auth', @ObjectType = N'TABLE', @ObjectName = N'appUser', @ColumnName = N'deletedBy', @Description = N'Login or application user that soft-deleted the row. Stamped by trg_au_updt_appUser when isDeleted transitions 0 -> 1. Meaningful only when isDeleted = 1.';
 EXEC util.uspSetObjectDescription @SchemaName = N'auth', @ObjectType = N'TABLE', @ObjectName = N'appUser', @ColumnName = N'deletedDateUtc', @Description = N'UTC timestamp of the soft delete, stamped by trg_au_updt_appUser with the same instant as modifiedDateUtc. Meaningful only when isDeleted = 1.';

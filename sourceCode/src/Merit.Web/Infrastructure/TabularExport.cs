@@ -88,13 +88,28 @@ public static class TabularExport
         _ => v.ToString() ?? string.Empty,
     });
 
-    private static string Safe(string s) => s.Length > 0 && s[0] is '=' or '+' or '-' or '@' or '\t' or '\r' && !IsNumber(s) ? "'" + s : s;
+    private static string Safe(string s)
+    {
+        if (s.Length == 0)
+        {
+            return s;
+        }
+
+        string trimmed = s.TrimStart();
+        bool trigger = s[0] is '=' or '+' or '-' or '@' or '\t' or '\r' or '\n'
+                       || (trimmed.Length > 0 && trimmed[0] is '=' or '+' or '-' or '@');
+        return trigger && !IsNumber(trimmed) ? "'" + s : s;
+    }
 
     private static bool IsNumber(string s) => decimal.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out _);
 
     private static string Quote(string s) => "\"" + s.Replace("\"", "\"\"", StringComparison.Ordinal) + "\"";
 
-    private static string Xml(string s) => SecurityElement.Escape(s) ?? string.Empty;
+    private static string Xml(string s)
+    {
+        var clean = new string(s.Where(ch => ch == '\t' || ch == '\n' || ch == '\r' || ch >= 0x20).ToArray());
+        return SecurityElement.Escape(clean) ?? string.Empty;
+    }
 
     private static string SheetName(string s)
     {

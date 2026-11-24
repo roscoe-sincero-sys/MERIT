@@ -27,6 +27,7 @@ public sealed partial class MeritExceptionFilter(ILogger<MeritExceptionFilter> l
         var (status, title, message) = context.Exception switch
         {
             NotFoundException e => (StatusCodes.Status404NotFound, "Not found", e.Message),
+            SessionEndedException e => (StatusCodes.Status401Unauthorized, "Session ended", e.Message),
             PermissionDeniedException e => (StatusCodes.Status403Forbidden, "Not permitted", e.Message),
             ConcurrencyException e => (StatusCodes.Status409Conflict, "Changed by someone else", e.Message),
             BusinessRuleException e => (StatusCodes.Status422UnprocessableEntity, "Cannot save", e.Message),

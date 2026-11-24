@@ -113,6 +113,10 @@ BEGIN
         -- =========================================================================================
 
         DECLARE @root UNIQUEIDENTIFIER = auth.udfSessionRootTenantId ();
+        IF auth.udfHasRootPermission ('config.edit') = 0
+        BEGIN
+            ;THROW 51403, N'Only a configuration administrator at the data root can change jurisdiction-wide thresholds.', 1;
+        END;
 
         DECLARE @oldState NVARCHAR(MAX),@newState NVARCHAR(MAX),@wasActive BIT;
         SELECT @wasActive=isActive,@oldState=(SELECT thresholdId,analyteSpecimenId,population,ageMinMonths,ageMaxMonths,thresholdType,actionCodeId,dueIntervalDays,lowerValue,upperValue,comparator,effectiveFrom,effectiveTo,isActive FOR JSON PATH,INCLUDE_NULL_VALUES,WITHOUT_ARRAY_WRAPPER)

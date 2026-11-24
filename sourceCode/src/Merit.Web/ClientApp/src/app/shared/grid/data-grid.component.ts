@@ -11,6 +11,7 @@ export interface GridColumn<T> {
   link?: (row: T) => string | null;
   action?: (row: T) => void;
   badge?: (row: T) => string | null;
+  badgeTone?: (row: T) => 'urgent' | 'warn' | 'ok' | 'neutral';
   /** Identifiers and dates stay on one line; text columns take the wrapping (issue #39). */
   nowrap?: boolean;
   /** A second line under the cell, shown two lines deep with "Show more" when longer (issue #154). */
@@ -104,7 +105,9 @@ export interface GridSort {
               } @else {
                 {{ c.cell(row) }}
               }
-              @if (c.badge && c.badge(row); as b) { <span class="grid-badge">{{ b }}</span> }
+              @if (c.badge && c.badge(row); as b) {
+                <span class="grid-badge" [class]="'grid-badge grid-badge--' + (c.badgeTone ? c.badgeTone(row) : 'urgent')">{{ b }}</span>
+              }
               @if (c.subtext && c.subtext(row); as sub) {
                 <span class="grid-subtext-wrap">
                   <span class="grid-subtext" meritClamp #clamp="clamp" [class.grid-subtext--clamped]="!expanded().has(rowKey()(row))">{{ sub }}</span>
@@ -123,7 +126,14 @@ export interface GridSort {
             (focusin)="focusedKey.set(rowKey()(row))"
             [class.grid-row--selected]="selectable() && selected().has(rowKey()(row))" (keydown)="onRowKey($event, row, i)"></tr>
       </table>
-      @if (rows().length === 0 && !loading()) {
+      @if (rows().length === 0 && loading()) {
+        <div class="merit-skeleton-page" role="status" aria-label="Loading rows">
+          <span class="usa-sr-only">Loading&hellip;</span>
+          <div class="merit-skeleton merit-skeleton--row" aria-hidden="true"></div>
+          <div class="merit-skeleton merit-skeleton--row" aria-hidden="true"></div>
+          <div class="merit-skeleton merit-skeleton--row" aria-hidden="true"></div>
+        </div>
+      } @else if (rows().length === 0 && !loading()) {
         <p class="grid-empty">{{ emptyText() }}</p>
       }
     </div>
@@ -148,8 +158,12 @@ export interface GridSort {
     .grid-select .usa-checkbox__label { margin-top: 0; padding-left: 0; min-height: 2rem; width: 2rem; display: flex; align-items: center; }
     .grid-select .usa-checkbox__label::before { margin-left: 0; }
     .nowrap .grid-badge { display: table; margin: .15rem 0 0; }
-    .grid-badge { display: inline-block; margin-left: .25rem; padding: 0 .4rem; border-radius: 1rem; background: #b50909; color: #fff; font-size: .75rem; font-weight: 700; }
-    .grid-empty { color: #565c65; font-style: italic; }
+    .grid-badge { display: inline-block; margin-left: .25rem; padding: .05rem .45rem; border-radius: 1rem; font-size: .75rem; font-weight: 700; }
+    .grid-badge--urgent { background: var(--merit-urgent, #b50909); color: #fff; }
+    .grid-badge--warn { background: #faf3d1; color: #5c4809; }
+    .grid-badge--ok { background: #ecf3ec; color: #154c21; }
+    .grid-badge--neutral { background: var(--merit-bg-soft, #f0f4f9); color: var(--merit-ink, #1b1b1b); }
+    .grid-empty { color: var(--merit-muted, #565c65); font-style: italic; background: #fafbfc; border: 1px dashed var(--merit-line, #dde3ea); border-radius: var(--merit-radius, .5rem); padding: 1.25rem 1.5rem; margin: .75rem 0; }
     .grid-wide { min-width: 18rem; }
     .grid-subtext { display: block; margin-top: .15rem; color: #565c65; font-size: .93em; overflow-wrap: anywhere; }
     .grid-subtext--clamped { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }

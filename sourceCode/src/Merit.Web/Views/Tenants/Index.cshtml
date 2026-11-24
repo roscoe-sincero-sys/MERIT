@@ -52,7 +52,8 @@
         }
         else
         {
-            <form class="usa-form" method="post" action="/admin/tenants">
+            <form id="add-tenant-form" class="usa-form" method="post" action="/admin/tenants" data-unsaved-work
+                  data-confirm="Create this tenant? The tenant code cannot be changed after creation.">
                 @Html.AntiForgeryToken()
                 <div class="usa-form-group"><label class="usa-label" for="ParentTenantId">Goes under</label>
                     <div class="usa-hint" id="parent-hint">Only tenants you administer are listed.</div>

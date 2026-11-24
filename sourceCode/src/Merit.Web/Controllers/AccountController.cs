@@ -103,21 +103,31 @@ public sealed class AccountController(AccountService accounts, EmailCodeService 
     public async Task<IActionResult> Enroll(EnrollModel model, CancellationToken ct)
     {
         var secret = User.FindFirstValue(MeritClaims.EnrollSecret);
+        var userName = User.FindFirstValue(MeritClaims.UserName);
         var userId = Guid.Parse(User.FindFirstValue(MeritClaims.UserId)!, CultureInfo.InvariantCulture);
-        if (secret is null)
+        Guid.TryParse(User.FindFirstValue(MeritClaims.SecurityStamp), CultureInfo.InvariantCulture, out var pendingStamp);
+        if (secret is null || pendingStamp == Guid.Empty || !await IsPendingValidAsync(ct))
         {
+            await HttpContext.SignOutAsync(AuthSchemes.PendingMfa);
             return RedirectToAction(nameof(SignIn));
         }
 
         try
         {
-            var codes = await accounts.CompleteEnrollmentAsync(userId, secret, model.Code ?? string.Empty, ClientAddress(), ct);
+            var enrolled = await accounts.CompleteEnrollmentAsync(userId, secret, model.Code ?? string.Empty, ClientAddress(), ct, userName, pendingStamp);
             var destination = await PendingReturnAsync();
-            await CompleteSignInAsync(userId, ct);
+            try
+            {
+                await CompleteSignInAsync(userId, ct, enrolled.SecurityStamp);
+            }
+            catch (SessionEndedException)
+            {
+                return RedirectToAction(nameof(SignIn));
+            }
             // Until acknowledged, every other page leads back to these codes (issue #156).
-            recoveryPending.Hold(Response, userId, codes, destination);
+            recoveryPending.Hold(Response, userId, enrolled.RecoveryCodes, destination);
             Response.Headers.CacheControl = "no-store";
-            return View("RecoveryCodes", new RecoveryCodesModel(codes, destination));
+            return View("RecoveryCodes", new RecoveryCodesModel(enrolled.RecoveryCodes, destination));
         }
         catch (ValidationException ex)
         {
@@ -142,6 +152,12 @@ public sealed class AccountController(AccountService accounts, EmailCodeService 
     [EnableRateLimiting(SignInRateLimits.Code)]
     public async Task<IActionResult> Mfa(MfaModel model, CancellationToken ct)
     {
+        if (!await IsPendingValidAsync(ct))
+        {
+            await HttpContext.SignOutAsync(AuthSchemes.PendingMfa);
+            return RedirectToAction(nameof(SignIn));
+        }
+
         if (!ModelState.IsValid)
         {
             model.Email = await PendingEmailOptionAsync(ct);
@@ -150,7 +166,14 @@ public sealed class AccountController(AccountService accounts, EmailCodeService 
 
         var userName = User.FindFirstValue(MeritClaims.UserName)!;
         var userId = Guid.Parse(User.FindFirstValue(MeritClaims.UserId)!, CultureInfo.InvariantCulture);
-        if (!await accounts.VerifyMfaAsync(userName, model.Code!, ClientAddress(), ct))
+        Guid.TryParse(User.FindFirstValue(MeritClaims.SecurityStamp), CultureInfo.InvariantCulture, out var pendingStamp);
+        if (pendingStamp == Guid.Empty)
+        {
+            await HttpContext.SignOutAsync(AuthSchemes.PendingMfa);
+            return RedirectToAction(nameof(SignIn));
+        }
+
+        if (!await accounts.VerifyMfaAsync(userName, model.Code!, ClientAddress(), ct, pendingStamp))
         {
             model.Email = await PendingEmailOptionAsync(ct);
             model.Message = model.UseRecoveryCode
@@ -162,7 +185,15 @@ public sealed class AccountController(AccountService accounts, EmailCodeService 
         }
 
         var destination = await PendingReturnAsync();
-        await CompleteSignInAsync(userId, ct);
+        try
+        {
+            await CompleteSignInAsync(userId, ct, pendingStamp);
+        }
+        catch (SessionEndedException)
+        {
+            return RedirectToAction(nameof(SignIn));
+        }
+
         return LocalRedirect(destination);
     }
 
@@ -203,7 +234,20 @@ public sealed class AccountController(AccountService accounts, EmailCodeService 
     [EnableRateLimiting(SignInRateLimits.Code)]
     public async Task<IActionResult> EmailCode(EmailCodeModel model, CancellationToken ct)
     {
+        if (!await IsPendingValidAsync(ct))
+        {
+            await HttpContext.SignOutAsync(AuthSchemes.PendingMfa);
+            return RedirectToAction(nameof(SignIn));
+        }
+
         var userId = PendingUserId();
+        Guid.TryParse(User.FindFirstValue(MeritClaims.SecurityStamp), CultureInfo.InvariantCulture, out var pendingStamp);
+        if (pendingStamp == Guid.Empty)
+        {
+            await HttpContext.SignOutAsync(AuthSchemes.PendingMfa);
+            return RedirectToAction(nameof(SignIn));
+        }
+
         var option = await PendingEmailOptionAsync(ct);
         var page = Recall(new EmailCodeModel { MaskedEmail = option?.MaskedEmail }, afterCheck: true);
         if (!ModelState.IsValid)
@@ -217,7 +261,15 @@ public sealed class AccountController(AccountService accounts, EmailCodeService 
         {
             ForgetSend();
             var destination = await PendingReturnAsync();
-            await CompleteSignInAsync(userId, ct);
+            try
+            {
+                await CompleteSignInAsync(userId, ct, pendingStamp);
+            }
+            catch (SessionEndedException)
+            {
+                return RedirectToAction(nameof(SignIn));
+            }
+
             return LocalRedirect(destination);
         }
 
@@ -297,7 +349,7 @@ public sealed class AccountController(AccountService accounts, EmailCodeService 
             return View(nameof(SignInMethods), await MethodsModelAsync(userId, ct, option));
         }
 
-        stepUp.Grant(Response, userId);
+        stepUp.Grant(Response, userId, Guid.TryParse(User.FindFirstValue(MeritClaims.ScopeKey), CultureInfo.InvariantCulture, out var sk) ? sk : null);
         return await SendEnrollmentCodeAsync(userId, ct);
     }
 
@@ -734,16 +786,50 @@ public sealed class AccountController(AccountService accounts, EmailCodeService 
     [Authorize(Policy = Permissions.SignedIn)]
     public new async Task<IActionResult> SignOut()
     {
-        if (Guid.TryParse(User.FindFirstValue(MeritClaims.ScopeKey), CultureInfo.InvariantCulture, out var scope))
+        try
         {
-            await signInEvents.RecordAsync(new SignInEvent(SignInEventTypes.SignedOut, SignInSteps.Session, SessionScopeId: scope));
-            await accounts.SignOutAsync(scope);
+            if (Guid.TryParse(User.FindFirstValue(MeritClaims.ScopeKey), CultureInfo.InvariantCulture, out var scope))
+            {
+                bool revoked = false;
+                for (int attempt = 0; attempt < 2 && !revoked; attempt++)
+                {
+                    try
+                    {
+                        await accounts.SignOutAsync(scope);
+                        revoked = true;
+                    }
+                    catch (ConcurrencyException) when (attempt == 0)
+                    {
+                        await Task.Delay(50);
+                    }
+                    catch (ConcurrencyException)
+                    {
+                        break;
+                    }
+                }
+
+                await signInEvents.RecordAsync(new SignInEvent(SignInEventTypes.SignedOut, SignInSteps.Session,
+                    Reason: revoked ? null : "serverRevokeFailed", SessionScopeId: scope));
+            }
+        }
+        finally
+        {
+            await HttpContext.SignOutAsync(AuthSchemes.Session);
+            Response.Cookies.Delete("XSRF-TOKEN");
+            RecoveryCodesPending.Release(Response);
+            StepUp.Release(Response);
         }
 
-        await HttpContext.SignOutAsync(AuthSchemes.Session);
-        Response.Cookies.Delete("XSRF-TOKEN");
-        RecoveryCodesPending.Release(Response);
         return RedirectToAction(nameof(SignIn));
+    }
+
+    private async Task<bool> IsPendingValidAsync(CancellationToken ct)
+    {
+        var userName = User.FindFirstValue(MeritClaims.UserName);
+        var stampClaim = User.FindFirstValue(MeritClaims.SecurityStamp);
+        return !string.IsNullOrEmpty(userName)
+               && Guid.TryParse(stampClaim, CultureInfo.InvariantCulture, out var stamp)
+               && await accounts.IsPendingStampValidAsync(userName, stamp, ct);
     }
 
     [HttpGet("denied")]
@@ -754,7 +840,7 @@ public sealed class AccountController(AccountService accounts, EmailCodeService 
         return View("Error", new AlertModel("warning", "Not permitted", "Your profile does not allow this page."));
     }
 
-    private async Task CompleteSignInAsync(Guid userId, CancellationToken ct)
+    private async Task CompleteSignInAsync(Guid userId, CancellationToken ct, Guid? expectedSecurityStamp = null)
     {
         // The attempt id rides in the pending-MFA cookie; keep it for the sessionStarted event once that cookie is gone.
         var pending = await HttpContext.AuthenticateAsync(AuthSchemes.PendingMfa);
@@ -765,7 +851,7 @@ public sealed class AccountController(AccountService accounts, EmailCodeService 
 
         // Every sign-in starts on the master profile; the person switches from the header when they want another.
         await HttpContext.SignOutAsync(AuthSchemes.PendingMfa);
-        await sessions.SignInAsync(HttpContext, userId, ct);
+        await sessions.SignInAsync(HttpContext, userId, ct, expectedSecurityStamp);
     }
 
     private EnrollModel BuildEnroll(string secret)

@@ -477,7 +477,15 @@ public sealed partial class EmailCodeTests(MeritFixture fixture)
 
         public string MaskedEmail => "o***@example.test";
 
-        public string TotpCode() => Totp.Code(Totp.FromBase32(secret), DateTimeOffset.UtcNow.ToUnixTimeSeconds() / 30);
+        private long lastStep = long.MinValue;
+
+        public string TotpCode()
+        {
+            long now = DateTimeOffset.UtcNow.ToUnixTimeSeconds() / 30;
+            long step = Math.Min(now + 1, Math.Max(now - 1, lastStep + 1));
+            lastStep = step;
+            return Totp.Code(Totp.FromBase32(secret), step);
+        }
 
         public static async Task<EmailAccount> CreateAsync(WebApplicationFactory<Program> host, bool turnedOn, bool administrator = false)
         {

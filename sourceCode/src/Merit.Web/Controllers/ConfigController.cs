@@ -122,11 +122,11 @@ public sealed class ConfigController(IClock clock, ConfigService config, IRefere
     {
         var refData = await reference.GetAsync(ct);
         return this.PageOrPartial("Analytes", "_AnalyteTable",
-            new AnalytesModel(refData.Set.Analytes, refData.Set.AnalyteSpecimens, session.Has(Permissions.ConfigEdit)));
+            new AnalytesModel(refData.Set.Analytes, refData.Set.AnalyteSpecimens, session.Has(Permissions.PlatformAdminister)));
     }
 
     [HttpPost("analytes/{id:guid}")]
-    [Authorize(Policy = Permissions.ConfigEdit)]
+    [Authorize(Policy = Permissions.PlatformAdminister)]
     public async Task<IActionResult> SaveAnalyte(Guid id, bool isActive, int sortOrder, CancellationToken ct)
     {
         await config.SaveAnalyteAsync(id, isActive, sortOrder, ct);
