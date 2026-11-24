@@ -302,6 +302,7 @@ SELECT e.pregnancyEpisodeId, e.startDate, e.expectedEndDate, e.actualEndDate, e.
     {
         "schema": "dbo", "name": "uspGetPersonCases", "kind": "read", "grants": BOTH, "ticket": "T076",
         "permission": "person.view",
+        "permission_all": ["person.view", "case.view"],
         "desc": "Cases and investigations section: one row per case with its workflow, assignment and counts of open "
                 "tasks and linked investigations.",
         "params": "@personId UNIQUEIDENTIFIER",
@@ -329,6 +330,7 @@ SELECT c.exposureCaseId, c.caseNumber, a.code AS analyteCode, a.displayName AS a
     {
         "schema": "dbo", "name": "uspGetPersonResults", "kind": "read", "grants": BOTH, "ticket": "T076",
         "permission": "person.view",
+        "permission_all": ["person.view", "result.view"],
         "desc": "Results section and trend chart: every result for the person, optionally for one analyte, with canonical "
                 "values, sample type, method and lab.",
         "params": """@personId  UNIQUEIDENTIFIER
@@ -506,6 +508,7 @@ SET @Comments = N'Contact method saved.';
     {
         "schema": "dbo", "name": "uspSavePersonIdentifier", "kind": "write", "grants": BOTH, "ticket": "T041",
         "permission": "person.view_identifiers",
+        "permission_all": ["person.edit", "person.view_identifiers"],
         "desc": "Adds or removes an external identifier (medical record number with its facility, Medicaid ID).",
         "params": """@personIdentifierId UNIQUEIDENTIFIER
 , @personId            UNIQUEIDENTIFIER

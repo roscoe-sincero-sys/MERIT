@@ -52,7 +52,7 @@ Description:	Initial version.
 -----------------------------------------------------------------------------------------------------------------------
 
 ***********************************************************************************************************************/
-CREATE OR ALTER FUNCTION auth.tvfUserGrantPermissions (@appUserId UNIQUEIDENTIFIER)
+CREATE OR ALTER FUNCTION auth.tvfUserGrantPermissionsAsOf (@appUserId UNIQUEIDENTIFIER, @asOfDate DATE)
 RETURNS TABLE
 AS
 RETURN
@@ -69,10 +69,18 @@ RETURN
       JOIN auth.permission     AS pm ON pm.permissionId = rp.permissionId AND pm.isDeleted = 0
      WHERE ua.appUserId = @appUserId
        AND ua.isDeleted = 0
-       AND ua.startDate <= auth.udfSessionToday ()
-       AND (ua.endDate IS NULL OR ua.endDate >= auth.udfSessionToday ()) AND ua.revokedUtc IS NULL
+       AND ua.startDate <= @asOfDate
+       AND (ua.endDate IS NULL OR ua.endDate >= @asOfDate) AND ua.revokedUtc IS NULL
        AND (ua.accessLevel <> 'read' OR pm.accessLevel = 'read')
      GROUP BY tc.descendantTenantId, pm.permissionCode, pm.accessLevel;
+GO
+
+CREATE OR ALTER FUNCTION auth.tvfUserGrantPermissions (@appUserId UNIQUEIDENTIFIER)
+RETURNS TABLE
+AS
+RETURN
+    SELECT tenantId, permissionCode, permissionLevel, grantRank, hasIdentified
+      FROM auth.tvfUserGrantPermissionsAsOf (@appUserId, auth.udfSessionToday ());
 GO
 
 /***********************************************************************************************************************
@@ -199,6 +207,21 @@ BEGIN
                          AND ss.expiresUtc > SYSUTCDATETIME ()
                          AND ss.isDeleted = 0), 0);
 END;
+GO
+
+CREATE OR ALTER FUNCTION auth.tvfIdentifiedTenants (@permissionCode VARCHAR (60))
+RETURNS TABLE
+AS
+RETURN
+    SELECT st.tenantId
+      FROM auth.sessionScope       AS ss
+      JOIN auth.sessionScopeTenant AS st ON st.sessionScopeId = ss.sessionScopeId AND st.isDeleted = 0
+     WHERE ss.sessionScopeId = TRY_CAST (SESSION_CONTEXT (N'scopeKey') AS UNIQUEIDENTIFIER)
+       AND ss.revokedUtc IS NULL
+       AND ss.expiresUtc > SYSUTCDATETIME ()
+       AND ss.isDeleted = 0
+       AND ((@permissionCode = 'result.view' AND st.canReadIdentifiedResults = 1)
+            OR (@permissionCode = 'case.view' AND st.canReadIdentifiedCases = 1));
 GO
 
 CREATE OR ALTER FUNCTION auth.udfCanReadIdentified (@owningTenantId UNIQUEIDENTIFIER, @permissionCode VARCHAR (60), @personId UNIQUEIDENTIFIER = NULL)

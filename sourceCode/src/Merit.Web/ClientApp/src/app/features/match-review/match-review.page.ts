@@ -396,6 +396,7 @@ export class MatchReviewPage implements OnInit {
   protected readonly canAct = computed(() => this.store.canDecide() && this.pendingCommit() === null);
   private pendingTimer: ReturnType<typeof setInterval> | null = null;
   private inFlightCommit: Promise<boolean> | null = null;
+  private leavePrompt: Promise<boolean> | null = null;
   private confirmingLeave = false;
 
   private clearPendingTimer(): void {
@@ -423,34 +424,45 @@ export class MatchReviewPage implements OnInit {
   }
 
   /**
-   * Route guard: pauses the Undo countdown while confirming so Cancel never commits, and routes every save path
-   * through one shared in-flight promise so a decision submits at most once.
+   * Route guard: pauses the Undo countdown while confirming so Cancel never commits, owns at most one active
+   * leave prompt across overlapping navigations, and routes every save path through one shared in-flight promise.
    */
   async canDeactivate(): Promise<boolean> {
     if (this.inFlightCommit) {
       return await this.inFlightCommit;
+    }
+    if (this.leavePrompt) {
+      return await this.leavePrompt;
     }
     const p = this.pendingCommit();
     if (!p) return true;
 
     this.confirmingLeave = true;
     this.clearPendingTimer();
-    let saveAndLeave = false;
-    try {
-      saveAndLeave = await confirmAction(
-        `You have a pending decision ("${p.summary}"). Choose OK to save it before leaving, or Cancel to stay on this page so you can Undo or wait.`);
-    } finally {
-      this.confirmingLeave = false;
-    }
 
-    if (!saveAndLeave) {
-      if (this.pendingCommit()) {
-        this.startPendingTimer();
+    const prompt = (async () => {
+      let saveAndLeave = false;
+      try {
+        saveAndLeave = await confirmAction(
+          `You have a pending decision ("${p.summary}"). Choose OK to save it before leaving, or Cancel to stay on this page so you can Undo or wait.`);
+      } finally {
+        this.confirmingLeave = false;
       }
-      return false;
-    }
 
-    return await this.submitPendingOnce(true);
+      if (!saveAndLeave) {
+        if (this.pendingCommit()) {
+          this.startPendingTimer();
+        }
+        return false;
+      }
+
+      return await this.submitPendingOnce(true);
+    })();
+
+    this.leavePrompt = prompt.finally(() => {
+      this.leavePrompt = null;
+    });
+    return await this.leavePrompt;
   }
 
   protected undoPending(): void {

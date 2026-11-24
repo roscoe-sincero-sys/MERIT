@@ -351,10 +351,9 @@ UPDATE auth.mfaRecoveryCode
    SET usedUtc = SYSUTCDATETIME ()
  WHERE mfaRecoveryCodeId = @mfaRecoveryCodeId AND usedUtc IS NULL AND isDeleted = 0;
 
-DECLARE @used BIT = CASE WHEN @@ROWCOUNT = 1 THEN 1 ELSE 0 END;
-SELECT @used AS used;
-
-SET @Comments = CONCAT (@used, N' code(s) used.');
+DECLARE @consumed BIT = CAST (CASE WHEN @@ROWCOUNT = 1 THEN 1 ELSE 0 END AS BIT);
+SET @Comments = CONCAT (CAST (@consumed AS INT), N' code(s) used.');
+SELECT @consumed AS consumed;
 """,
     },
     {

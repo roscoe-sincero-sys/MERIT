@@ -250,6 +250,11 @@ public sealed class AccountService(IAccountData data, IPasswordHasher hasher, IS
         byte[] secret = Totp.FromBase32(protector.Unprotect(user.MfaSecretProtected));
         if (Totp.TryVerify(secret, typed, DateTimeOffset.UtcNow, out long matchedStep))
         {
+            if (user.LastTotpStep is long lastStep && matchedStep <= lastStep)
+            {
+                return null;
+            }
+
             return new VerifiedSecondFactor(SignInMethods.Totp, TotpStep: matchedStep);
         }
 

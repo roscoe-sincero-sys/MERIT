@@ -226,12 +226,20 @@ test('match review undo guard pauses countdown on Cancel, submits once on OK, an
   await expect(page).toHaveURL(/\/app\/match-review/);
   await expect(page.getByRole('button', { name: /^Different person/ })).toBeVisible();
 
-  // Case 1: Trigger Different person (5s undo toast), open leave dialog, wait past the original 5s deadline,
-  // choose Cancel -> decision MUST NOT commit, and Undo cancels cleanly with 0 POSTs.
+  // Case 1: Trigger Different person (5s undo toast), open leave dialog, trigger a second overlapping navigation
+  // while the dialog is open, wait past the original 5s deadline, choose Cancel -> decision MUST NOT commit,
+  // and Undo cancels cleanly with 0 POSTs.
   await page.getByRole('button', { name: /^Different person/ }).click();
   await expect(page.getByRole('button', { name: 'Undo' })).toBeVisible();
   await page.goBack();
   const dialog = page.locator('#confirmation-dialog');
+  await expect(dialog).toBeVisible();
+  // Fire a second SPA popstate navigation while the confirmation dialog is already open
+  // so canDeactivate() is invoked concurrently without leaving the Angular app.
+  await page.evaluate(() => {
+    window.history.pushState(null, '', '/app/match-review');
+    window.history.back();
+  });
   await expect(dialog).toBeVisible();
   await page.waitForTimeout(5500);
   expect(decisions).toEqual([]);

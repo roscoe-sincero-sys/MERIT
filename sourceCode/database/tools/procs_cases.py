@@ -293,14 +293,8 @@ DECLARE @idTenants TABLE (tenantId UNIQUEIDENTIFIER PRIMARY KEY);
 IF @isDbo = 0
 BEGIN
     INSERT @idTenants (tenantId)
-    SELECT st.tenantId
-      FROM auth.sessionScope       AS ss
-      JOIN auth.sessionScopeTenant AS st ON st.sessionScopeId = ss.sessionScopeId AND st.isDeleted = 0
-     WHERE ss.sessionScopeId = TRY_CAST (SESSION_CONTEXT (N'scopeKey') AS UNIQUEIDENTIFIER)
-       AND ss.revokedUtc IS NULL
-       AND ss.expiresUtc > SYSUTCDATETIME ()
-       AND ss.isDeleted = 0
-       AND st.canReadIdentifiedCases = 1;
+    SELECT tenantId
+      FROM auth.tvfIdentifiedTenants ('case.view');
 END;
 -- The search text matches literally: LIKE wildcards in it are escaped.
 DECLARE @like NVARCHAR (600) = REPLACE (REPLACE (REPLACE (NULLIF (LTRIM (RTRIM (@search)), N''), N'[', N'[[]'), N'%', N'[%]'), N'_', N'[_]');
@@ -1001,6 +995,7 @@ BEGIN
 END;""",
         "body": """
 DECLARE @me UNIQUEIDENTIFIER = auth.udfSessionUserId ();
+DECLARE @escaped NVARCHAR (600) = REPLACE (REPLACE (REPLACE (NULLIF (LTRIM (RTRIM (@searchText)), N''), N'[', N'[[]'), N'%', N'[%]'), N'_', N'[_]');
 
 SELECT i.investigationId, i.investigationNumber, i.investigationType, i.investigationStatus, i.requestedDate,
        i.scheduledDate, COALESCE (l.addressLine1, o.organizationName, es.sourceDescription) AS targetLabel,
@@ -1013,8 +1008,8 @@ SELECT i.investigationId, i.investigationNumber, i.investigationType, i.investig
  WHERE i.isDeleted = 0
    AND (@openOnly = 0 OR i.investigationStatus NOT IN ('cleared', 'closed'))
    AND (@assignedToMe = 0 OR i.assignedToUserId = @me)
-   AND (NULLIF (@searchText, N'') IS NULL OR i.investigationNumber LIKE N'%' + @searchText + N'%'
-        OR l.addressLine1 LIKE N'%' + @searchText + N'%' OR o.organizationName LIKE N'%' + @searchText + N'%')
+   AND (@escaped IS NULL OR i.investigationNumber LIKE N'%' + @escaped + N'%'
+        OR l.addressLine1 LIKE N'%' + @escaped + N'%' OR o.organizationName LIKE N'%' + @escaped + N'%')
    AND (NULLIF (@statusFilter, '') IS NULL OR i.investigationStatus = @statusFilter)
    AND (NULLIF (@typeFilter, '') IS NULL OR i.investigationType = @typeFilter)
    AND (NULLIF (@assignedFilter, '') IS NULL OR (@assignedFilter = 'me' AND i.assignedToUserId = @me)

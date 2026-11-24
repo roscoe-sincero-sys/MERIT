@@ -30,10 +30,11 @@ OUTPUT INSERTED.roleId INTO @revokedRoles (roleId)
    AND pm.permissionCode NOT IN ('result.view', 'case.view', 'data.export');
 
 -- Revoke open scopes affected by the role change, OR any open scope that still caches a permission
--- no longer granted to its effective user/profile (makes reruns after interruption safe and idempotent).
+-- no longer granted to its effective user/profile on that scope's jurisdiction date (makes reruns safe and idempotent).
 UPDATE ss
    SET revokedUtc = SYSUTCDATETIME ()
   FROM auth.sessionScope AS ss
+  JOIN auth.tenant       AS rt ON rt.tenantId = ss.rootTenantId
  WHERE ss.revokedUtc IS NULL
    AND ss.isDeleted = 0
    AND (
@@ -55,24 +56,25 @@ UPDATE ss
                AND sp.permissionCode IN ('person.view', 'task.view', 'extract.run')
                AND NOT EXISTS (
                    SELECT 1
-                     FROM auth.tvfUserGrantPermissions (COALESCE (ss.viewAsUserId, ss.appUserId)) AS g
+                     FROM auth.tvfUserGrantPermissionsAsOf (COALESCE (ss.viewAsUserId, ss.appUserId), auth.udfLocalDate (rt.timeZone)) AS g
                     WHERE g.permissionCode = sp.permissionCode))
    );
 
 -- Backfill per-tenant identified clinical flags for pre-upgrade open active scopes whose new columns
--- defaulted to 0 so signed-in clinicians do not lose chart access on in-place upgrade.
+-- defaulted to 0, evaluated on each scope's own jurisdiction date (rt.timeZone), so signed-in clinicians
+-- keep chart access without prematurely activating future-dated grants or dropping final-day grants.
 UPDATE st
    SET canReadIdentifiedResults = CASE WHEN EXISTS (
            SELECT 1
-             FROM auth.tvfUserGrantPermissions (ss.appUserId) AS m
+             FROM auth.tvfUserGrantPermissionsAsOf (ss.appUserId, auth.udfLocalDate (rt.timeZone)) AS m
             WHERE m.tenantId = st.tenantId
               AND m.permissionCode = 'result.view'
               AND m.hasIdentified = 1
               AND (
                    (ss.viewAsUserId IS NOT NULL
-                    AND EXISTS (SELECT 1 FROM auth.tvfUserGrantPermissions (ss.viewAsUserId) AS v
+                    AND EXISTS (SELECT 1 FROM auth.tvfUserGrantPermissionsAsOf (ss.viewAsUserId, auth.udfLocalDate (rt.timeZone)) AS v
                                  WHERE v.tenantId = st.tenantId AND v.permissionCode = 'result.view' AND v.hasIdentified = 1)
-                    AND EXISTS (SELECT 1 FROM auth.tvfUserGrantPermissions (ss.appUserId) AS a
+                    AND EXISTS (SELECT 1 FROM auth.tvfUserGrantPermissionsAsOf (ss.appUserId, auth.udfLocalDate (rt.timeZone)) AS a
                                  WHERE a.tenantId = st.tenantId AND a.permissionCode = 'tenant.administer'))
                    OR (ss.viewAsUserId IS NULL AND ss.userProfileId IS NOT NULL
                        AND EXISTS (SELECT 1 FROM auth.tvfProfileGrantPermissions (ss.userProfileId) AS p
@@ -81,15 +83,15 @@ UPDATE st
               )) THEN 1 ELSE 0 END
      , canReadIdentifiedCases = CASE WHEN EXISTS (
            SELECT 1
-             FROM auth.tvfUserGrantPermissions (ss.appUserId) AS m
+             FROM auth.tvfUserGrantPermissionsAsOf (ss.appUserId, auth.udfLocalDate (rt.timeZone)) AS m
             WHERE m.tenantId = st.tenantId
               AND m.permissionCode = 'case.view'
               AND m.hasIdentified = 1
               AND (
                    (ss.viewAsUserId IS NOT NULL
-                    AND EXISTS (SELECT 1 FROM auth.tvfUserGrantPermissions (ss.viewAsUserId) AS v
+                    AND EXISTS (SELECT 1 FROM auth.tvfUserGrantPermissionsAsOf (ss.viewAsUserId, auth.udfLocalDate (rt.timeZone)) AS v
                                  WHERE v.tenantId = st.tenantId AND v.permissionCode = 'case.view' AND v.hasIdentified = 1)
-                    AND EXISTS (SELECT 1 FROM auth.tvfUserGrantPermissions (ss.appUserId) AS a
+                    AND EXISTS (SELECT 1 FROM auth.tvfUserGrantPermissionsAsOf (ss.appUserId, auth.udfLocalDate (rt.timeZone)) AS a
                                  WHERE a.tenantId = st.tenantId AND a.permissionCode = 'tenant.administer'))
                    OR (ss.viewAsUserId IS NULL AND ss.userProfileId IS NOT NULL
                        AND EXISTS (SELECT 1 FROM auth.tvfProfileGrantPermissions (ss.userProfileId) AS p
@@ -98,6 +100,7 @@ UPDATE st
               )) THEN 1 ELSE 0 END
   FROM auth.sessionScopeTenant AS st
   JOIN auth.sessionScope       AS ss ON ss.sessionScopeId = st.sessionScopeId
+  JOIN auth.tenant             AS rt ON rt.tenantId = ss.rootTenantId
  WHERE st.isDeleted = 0
    AND st.canReadIdentifiedResults = 0
    AND st.canReadIdentifiedCases = 0

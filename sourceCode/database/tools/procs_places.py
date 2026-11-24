@@ -601,9 +601,11 @@ SET @Comments = N'Exposure source saved.';
 , @maxRows INT = 10""",
         "key": "CONCAT (N'maxRows=', @maxRows)",
         "body": """
+DECLARE @escaped NVARCHAR (600) = REPLACE (REPLACE (REPLACE (@text, N'[', N'[[]'), N'%', N'[%]'), N'_', N'[_]');
+
 SELECT TOP (@maxRows) productId, brand, productName, countryOfOrigin, productType
   FROM dbo.product
- WHERE isDeleted = 0 AND (productName LIKE N'%' + @text + N'%' OR brand LIKE N'%' + @text + N'%')
+ WHERE isDeleted = 0 AND (productName LIKE N'%' + @escaped + N'%' OR brand LIKE N'%' + @escaped + N'%')
  ORDER BY productName;
 """,
     },
@@ -645,11 +647,13 @@ SET @Comments = N'Product saved.';
 , @maxRows INT = 10""",
         "key": "CONCAT (N'maxRows=', @maxRows)",
         "body": """
+DECLARE @escaped NVARCHAR (600) = REPLACE (REPLACE (REPLACE (@text, N'[', N'[[]'), N'%', N'[%]'), N'_', N'[_]');
+
 SELECT TOP (@maxRows) pv.providerId, pv.npi, pv.lastName, pv.firstName, pv.credential, pv.registryStatus,
        l.city AS practiceCity, l.state AS practiceState
   FROM dbo.provider AS pv
   LEFT JOIN dbo.location AS l ON l.locationId = pv.practiceLocationId
- WHERE pv.isDeleted = 0 AND (pv.npi = @text OR pv.lastName LIKE @text + N'%')
+ WHERE pv.isDeleted = 0 AND (pv.npi = @text OR pv.lastName LIKE @escaped + N'%')
  ORDER BY pv.lastName, pv.firstName;
 """,
     },
@@ -719,6 +723,7 @@ PROCS += [
         "key": "CONCAT (N'kind=', @kind, N', maxRows=', @maxRows)",
         "body": """
 DECLARE @t NVARCHAR (120) = NULLIF (LTRIM (RTRIM (@text)), N'');
+DECLARE @escaped NVARCHAR (600) = REPLACE (REPLACE (REPLACE (@t, N'[', N'[[]'), N'%', N'[%]'), N'_', N'[_]');
 
 SELECT TOP (@maxRows) x.reporterKind, x.reporterId, x.reporterName, x.cliaNumber, x.npi, x.credential, x.phone,
        x.registryStatus, x.modifiedDateUtc
@@ -731,13 +736,13 @@ SELECT TOP (@maxRows) x.reporterKind, x.reporterId, x.reporterName, x.cliaNumber
                o.modifiedDateUtc
           FROM dbo.organization AS o
          WHERE o.isDeleted = 0 AND o.isActive = 1 AND (o.cliaNumber IS NOT NULL OR o.npi IS NOT NULL)
-           AND (@t IS NULL OR o.organizationName LIKE N'%' + @t + N'%' OR o.cliaNumber = @t OR o.npi = @t)
+           AND (@t IS NULL OR o.organizationName LIKE N'%' + @escaped + N'%' OR o.cliaNumber = @t OR o.npi = @t)
         UNION ALL
         SELECT 'provider', pv.providerId, CONCAT (pv.lastName, CASE WHEN pv.firstName IS NULL THEN N'' ELSE N', ' + pv.firstName END),
                NULL, pv.npi, pv.credential, NULL, pv.registryStatus, pv.modifiedDateUtc
           FROM dbo.provider AS pv
          WHERE pv.isDeleted = 0
-           AND (@t IS NULL OR pv.lastName LIKE @t + N'%' OR pv.firstName LIKE @t + N'%' OR pv.npi = @t)) AS x
+           AND (@t IS NULL OR pv.lastName LIKE @escaped + N'%' OR pv.firstName LIKE @escaped + N'%' OR pv.npi = @t)) AS x
  WHERE @kind IS NULL OR x.reporterKind = @kind
  ORDER BY x.reporterKind, x.reporterName;
 """,

@@ -222,12 +222,8 @@ public static class Hl7Reader
                         ["hl7PatientNames"] = rawPidNames, ["hl7PatientAddresses"] = rawPidAddresses, ["hl7SpecimenId"] = group.Specimen?.Raw(2),
                         ["hl7SpecimenType"] = specimen,
                     };
-                    long rowBytes = 2; // JSON object braces
-                    foreach (var kv in fields)
-                    {
-                        rowBytes += kv.Key.Length + 6 + (kv.Value is null ? 4 : Encoding.UTF8.GetByteCount(kv.Value));
-                    }
-                    totalSerialized += rowBytes;
+                    // Measure the actual JSON-encoded UTF-8 staging size (including escaping of nested JSON quotes/backslashes).
+                    totalSerialized += JsonSerializer.SerializeToUtf8Bytes(fields).Length;
                     if (totalSerialized > maxStagingBytes) Fail("The HL7 file expands past MERIT's 50 MB staging limit; split the file.");
                     // Bound values destined for SQL columns and held-record diagnostics before any rows are saved.
                     foreach (var (key, limit) in new[] { ("value", 60), ("unit", 20), ("testMethod", 30), ("accessionNumber", 60),

@@ -786,16 +786,40 @@ public sealed class AccountController(AccountService accounts, EmailCodeService 
     [Authorize(Policy = Permissions.SignedIn)]
     public new async Task<IActionResult> SignOut()
     {
-        if (Guid.TryParse(User.FindFirstValue(MeritClaims.ScopeKey), CultureInfo.InvariantCulture, out var scope))
+        try
         {
-            await signInEvents.RecordAsync(new SignInEvent(SignInEventTypes.SignedOut, SignInSteps.Session, SessionScopeId: scope));
-            await accounts.SignOutAsync(scope);
+            if (Guid.TryParse(User.FindFirstValue(MeritClaims.ScopeKey), CultureInfo.InvariantCulture, out var scope))
+            {
+                bool revoked = false;
+                for (int attempt = 0; attempt < 2 && !revoked; attempt++)
+                {
+                    try
+                    {
+                        await accounts.SignOutAsync(scope);
+                        revoked = true;
+                    }
+                    catch (ConcurrencyException) when (attempt == 0)
+                    {
+                        await Task.Delay(50);
+                    }
+                    catch (ConcurrencyException)
+                    {
+                        break;
+                    }
+                }
+
+                await signInEvents.RecordAsync(new SignInEvent(SignInEventTypes.SignedOut, SignInSteps.Session,
+                    Reason: revoked ? null : "serverRevokeFailed", SessionScopeId: scope));
+            }
+        }
+        finally
+        {
+            await HttpContext.SignOutAsync(AuthSchemes.Session);
+            Response.Cookies.Delete("XSRF-TOKEN");
+            RecoveryCodesPending.Release(Response);
+            StepUp.Release(Response);
         }
 
-        await HttpContext.SignOutAsync(AuthSchemes.Session);
-        Response.Cookies.Delete("XSRF-TOKEN");
-        RecoveryCodesPending.Release(Response);
-        StepUp.Release(Response);
         return RedirectToAction(nameof(SignIn));
     }
 

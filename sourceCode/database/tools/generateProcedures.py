@@ -109,6 +109,17 @@ def execute_as(p: dict) -> str:
 
 
 def permission_check(p: dict, pad: int) -> str:
+    custom = p.get("permission_check")
+    if custom:
+        return indent(custom, pad) + "\n\n"
+    perm_all = p.get("permission_all")
+    if perm_all:
+        cond = " OR ".join(f"auth.udfHasPermission (N'{x}') = 0" for x in perm_all)
+        return indent(f"""IF {cond}
+BEGIN
+    ;THROW 51403, N'You do not have permission to do this ({" and ".join(perm_all)}).', 1;
+END;
+""", pad) + "\n\n"
     perm = p.get("permission")
     if not perm:
         return ""
@@ -339,6 +350,13 @@ EXEC util.uspSetObjectDescription
     , @Description = N'{desc}';
 GO
 """]
+    for role in p.get("revokes", []):
+        out.append(f"""IF DATABASE_PRINCIPAL_ID (N'{role}') IS NOT NULL
+BEGIN
+    REVOKE EXECUTE ON {full} FROM {role};
+END;
+GO
+""")
     for role in p.get("grants", ["meritWebRole"]):
         out.append(f"""IF DATABASE_PRINCIPAL_ID (N'{role}') IS NOT NULL
 BEGIN

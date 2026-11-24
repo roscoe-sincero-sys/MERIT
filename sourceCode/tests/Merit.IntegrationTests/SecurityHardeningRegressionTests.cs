@@ -691,4 +691,142 @@ public sealed class SecurityHardeningRegressionTests(MeritFixture fixture)
         using var client = okFactory.CreateClient();
         Assert.NotNull(client);
     }
+
+    [SqlFact]
+    public async Task ReconcileDeidentifiedRoleBackfillUsesScopeJurisdictionDate()
+    {
+        // Use a non-Eastern root tenant (Pacific Standard Time) and verify 566_reconcileDeidentifiedRole.sql
+        // evaluates grant effective dates against auth.udfLocalDate(rt.timeZone) rather than the default Eastern date.
+        Guid rootId = Guid.NewGuid();
+        Guid futureTenantId = Guid.NewGuid();
+        Guid endingTodayTenantId = Guid.NewGuid();
+        Guid userId = Guid.NewGuid();
+        Guid scopeId = Guid.NewGuid();
+        Guid clinicianRoleId = Guid.NewGuid();
+        Guid futureAssignId = Guid.NewGuid();
+        Guid endingTodayAssignId = Guid.NewGuid();
+        string suffix = Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
+
+        try
+        {
+            await ExecAsync("""
+                DECLARE @platform UNIQUEIDENTIFIER = CAST (HASHBYTES ('MD5', N'tenant:PLATFORM') AS UNIQUEIDENTIFIER);
+                INSERT auth.tenant (tenantId, parentTenantId, rootTenantId, tenantCode, tenantName, tenantType, statePostalCode, timeZone, isActive)
+                VALUES (@rootId, @platform, @rootId, @rootCode, N'Pacific Test Root', 'state', 'WA', 'Pacific Standard Time', 1),
+                       (@futureTenantId, @rootId, @rootId, @futureCode, N'Pacific Future County', 'jurisdiction', 'WA', NULL, 1),
+                       (@endingTodayTenantId, @rootId, @rootId, @endingCode, N'Pacific Today County', 'jurisdiction', 'WA', NULL, 1);
+
+                INSERT auth.tenantClosure (tenantClosureId, ancestorTenantId, descendantTenantId, depth)
+                VALUES (NEWID (), @rootId, @rootId, 0),
+                       (NEWID (), @futureTenantId, @futureTenantId, 0),
+                       (NEWID (), @endingTodayTenantId, @endingTodayTenantId, 0),
+                       (NEWID (), @rootId, @futureTenantId, 1),
+                       (NEWID (), @rootId, @endingTodayTenantId, 1);
+
+                INSERT auth.role (roleId, rootTenantId, roleCode, roleName, isAdministrator, isDeidentified)
+                VALUES (@roleId, @rootId, 'caseManager', N'Case manager', 0, 0);
+
+                INSERT auth.rolePermission (rolePermissionId, roleId, permissionId)
+                SELECT NEWID (), @roleId, permissionId
+                  FROM auth.permission
+                 WHERE permissionCode IN ('result.view', 'case.view', 'person.view') AND isDeleted = 0;
+
+                INSERT auth.appUser (appUserId, rootTenantId, homeTenantId, userName, displayName, passwordHash, securityStamp, mfaEnabled, isActive)
+                VALUES (@userId, @rootId, @rootId, @userName, N'Pacific Clinician', N'hash', NEWID (), 1, 1);
+
+                DECLARE @localToday DATE = auth.udfLocalDate ('Pacific Standard Time');
+                INSERT auth.userAssignment (userAssignmentId, appUserId, roleId, tenantId, includeDescendants, accessLevel, startDate, endDate)
+                VALUES (@futureAssignId, @userId, @roleId, @futureTenantId, 0, 'read', DATEADD (DAY, 1, @localToday), NULL),
+                       (@endingTodayAssignId, @userId, @roleId, @endingTodayTenantId, 0, 'read', DATEADD (DAY, -7, @localToday), @localToday);
+
+                INSERT auth.sessionScope (sessionScopeId, appUserId, rootTenantId, actingTenantId, isPlatformAdmin, isDeidentified, expiresUtc)
+                VALUES (@scopeId, @userId, @rootId, @endingTodayTenantId, 0, 0, DATEADD (HOUR, 2, SYSUTCDATETIME ()));
+
+                INSERT auth.sessionScopeTenant (sessionScopeTenantId, sessionScopeId, tenantId, accessLevel, canReadRelatedContacts, canReadIdentifiedResults, canReadIdentifiedCases)
+                VALUES (NEWID (), @scopeId, @futureTenantId, 'read', 0, 0, 0),
+                       (NEWID (), @scopeId, @endingTodayTenantId, 'read', 0, 0, 0);
+
+                INSERT auth.sessionScopePermission (sessionScopePermissionId, sessionScopeId, permissionCode)
+                VALUES (NEWID (), @scopeId, 'result.view'),
+                       (NEWID (), @scopeId, 'case.view'),
+                       (NEWID (), @scopeId, 'person.view');
+                """,
+                ("@rootId", rootId),
+                ("@rootCode", $"TST-WA-{suffix}"),
+                ("@futureTenantId", futureTenantId),
+                ("@futureCode", $"TST-WAF-{suffix}"),
+                ("@endingTodayTenantId", endingTodayTenantId),
+                ("@endingCode", $"TST-WAT-{suffix}"),
+                ("@roleId", clinicianRoleId),
+                ("@userId", userId),
+                ("@userName", $"pac_{suffix}"),
+                ("@futureAssignId", futureAssignId),
+                ("@endingTodayAssignId", endingTodayAssignId),
+                ("@scopeId", scopeId));
+
+            // Directly confirm tvfUserGrantPermissionsAsOf flips accurately across the date boundary.
+            int activeTodayOnEnding = await ScalarAsync<int>(
+                "SELECT COUNT (*) FROM auth.tvfUserGrantPermissionsAsOf (@u, auth.udfLocalDate ('Pacific Standard Time')) WHERE tenantId = @t AND permissionCode = 'case.view' AND hasIdentified = 1",
+                ("@u", userId), ("@t", endingTodayTenantId));
+            int activeTomorrowOnEnding = await ScalarAsync<int>(
+                "SELECT COUNT (*) FROM auth.tvfUserGrantPermissionsAsOf (@u, DATEADD (DAY, 1, auth.udfLocalDate ('Pacific Standard Time'))) WHERE tenantId = @t AND permissionCode = 'case.view' AND hasIdentified = 1",
+                ("@u", userId), ("@t", endingTodayTenantId));
+            int activeTodayOnFuture = await ScalarAsync<int>(
+                "SELECT COUNT (*) FROM auth.tvfUserGrantPermissionsAsOf (@u, auth.udfLocalDate ('Pacific Standard Time')) WHERE tenantId = @t AND permissionCode = 'case.view' AND hasIdentified = 1",
+                ("@u", userId), ("@t", futureTenantId));
+            int activeTomorrowOnFuture = await ScalarAsync<int>(
+                "SELECT COUNT (*) FROM auth.tvfUserGrantPermissionsAsOf (@u, DATEADD (DAY, 1, auth.udfLocalDate ('Pacific Standard Time'))) WHERE tenantId = @t AND permissionCode = 'case.view' AND hasIdentified = 1",
+                ("@u", userId), ("@t", futureTenantId));
+            Assert.Equal(1, activeTodayOnEnding);
+            Assert.Equal(0, activeTomorrowOnEnding);
+            Assert.Equal(0, activeTodayOnFuture);
+            Assert.Equal(1, activeTomorrowOnFuture);
+
+            // Run the real 566_reconcileDeidentifiedRole.sql migration script.
+            string scriptPath = Path.Combine(TestEnvironment.SourceRoot, "database", "scripts", "500_seed", "566_reconcileDeidentifiedRole.sql");
+            string scriptSql = await File.ReadAllTextAsync(scriptPath);
+            foreach (string batch in System.Text.RegularExpressions.Regex.Split(scriptSql, @"^\s*GO\s*$", System.Text.RegularExpressions.RegexOptions.Multiline | System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+            {
+                if (!string.IsNullOrWhiteSpace(batch))
+                {
+                    await ExecAsync(batch);
+                }
+            }
+
+            // Scope must remain unrevoked, ending-today tenant must backfill to (1,1), future tenant must stay (0,0).
+            bool revoked = await ScalarAsync<int>("SELECT CASE WHEN revokedUtc IS NULL THEN 0 ELSE 1 END FROM auth.sessionScope WHERE sessionScopeId = @s", ("@s", scopeId)) == 1;
+            Assert.False(revoked);
+
+            int endingResults = await ScalarAsync<int>("SELECT CAST (canReadIdentifiedResults AS INT) FROM auth.sessionScopeTenant WHERE sessionScopeId = @s AND tenantId = @t", ("@s", scopeId), ("@t", endingTodayTenantId));
+            int endingCases = await ScalarAsync<int>("SELECT CAST (canReadIdentifiedCases AS INT) FROM auth.sessionScopeTenant WHERE sessionScopeId = @s AND tenantId = @t", ("@s", scopeId), ("@t", endingTodayTenantId));
+            Assert.Equal(1, endingResults);
+            Assert.Equal(1, endingCases);
+
+            int futureResults = await ScalarAsync<int>("SELECT CAST (canReadIdentifiedResults AS INT) FROM auth.sessionScopeTenant WHERE sessionScopeId = @s AND tenantId = @t", ("@s", scopeId), ("@t", futureTenantId));
+            int futureCases = await ScalarAsync<int>("SELECT CAST (canReadIdentifiedCases AS INT) FROM auth.sessionScopeTenant WHERE sessionScopeId = @s AND tenantId = @t", ("@s", scopeId), ("@t", futureTenantId));
+            Assert.Equal(0, futureResults);
+            Assert.Equal(0, futureCases);
+        }
+        finally
+        {
+            await ExecAsync("""
+                DELETE FROM auth.sessionScopePermission WHERE sessionScopeId = @scopeId;
+                DELETE FROM auth.sessionScopeTenant WHERE sessionScopeId = @scopeId;
+                DELETE FROM auth.sessionScope WHERE sessionScopeId = @scopeId;
+                DELETE FROM auth.userAssignment WHERE appUserId = @userId;
+                DELETE FROM auth.appUser WHERE appUserId = @userId;
+                DELETE FROM auth.rolePermission WHERE roleId = @roleId;
+                DELETE FROM auth.role WHERE roleId = @roleId;
+                DELETE FROM auth.tenantClosure WHERE ancestorTenantId IN (@rootId, @futureTenantId, @endingTodayTenantId) OR descendantTenantId IN (@rootId, @futureTenantId, @endingTodayTenantId);
+                DELETE FROM auth.tenant WHERE tenantId IN (@futureTenantId, @endingTodayTenantId);
+                DELETE FROM auth.tenant WHERE tenantId = @rootId;
+                """,
+                ("@scopeId", scopeId),
+                ("@userId", userId),
+                ("@roleId", clinicianRoleId),
+                ("@rootId", rootId),
+                ("@futureTenantId", futureTenantId),
+                ("@endingTodayTenantId", endingTodayTenantId));
+        }
+    }
 }

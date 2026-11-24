@@ -175,11 +175,21 @@ public sealed class SessionExpiryMiddleware(RequestDelegate next)
                 && Guid.TryParse(ticket.Principal.FindFirstValue(MeritClaims.UserId), CultureInfo.InvariantCulture, out var user))
             {
                 var services = http.RequestServices;
-                await services.GetRequiredService<ISignInEvents>().RecordAsync(new SignInEvent(SignInEventTypes.SessionExpired, SignInSteps.Session,
-                    Reason: "idle", AppUserId: user, SessionScopeId: scope), http.RequestAborted).ConfigureAwait(false);
-                // Idle expiry revokes only this expired scope, never a renewed successor sharing the logical session.
-                await services.GetRequiredService<AccountService>().SignOutAsync(scope, http.RequestAborted, revokeLogicalSession: false).ConfigureAwait(false);
-                options.CookieManager.DeleteCookie(http, options.Cookie.Name!, options.Cookie.Build(http));
+                try
+                {
+                    await services.GetRequiredService<ISignInEvents>().RecordAsync(new SignInEvent(SignInEventTypes.SessionExpired, SignInSteps.Session,
+                        Reason: "idle", AppUserId: user, SessionScopeId: scope), http.RequestAborted).ConfigureAwait(false);
+                    // Idle expiry revokes only this expired scope, never a renewed successor sharing the logical session.
+                    await services.GetRequiredService<AccountService>().SignOutAsync(scope, http.RequestAborted, revokeLogicalSession: false).ConfigureAwait(false);
+                }
+                catch (Merit.Application.Errors.ConcurrencyException)
+                {
+                    // Session lock was busy; still drop the expired browser cookie cleanly.
+                }
+                finally
+                {
+                    options.CookieManager.DeleteCookie(http, options.Cookie.Name!, options.Cookie.Build(http));
+                }
             }
         }
 

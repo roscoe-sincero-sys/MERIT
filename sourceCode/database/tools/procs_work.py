@@ -456,7 +456,7 @@ SELECT jobId, jobType, jobStatus, attempts, maxAttempts, availableUtc, claimedUt
 """,
     },
     {
-        "schema": "dbo", "name": "uspGetQueueDepth", "kind": "read", "grants": WORKER, "ticket": "T120",
+        "schema": "dbo", "name": "uspGetQueueDepth", "kind": "read", "grants": WORKER, "revokes": WEB, "ticket": "T120",
         "desc": "Queue depth and the oldest waiting job per tenant and job type, for the worker health endpoint and the "
                 "administration screen.",
         "params": "",

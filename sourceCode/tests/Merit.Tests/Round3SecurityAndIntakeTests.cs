@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Security.Claims;
 using System.Security.Cryptography;
 using Merit.Application.Data;
 using Merit.Application.Email;
@@ -7,9 +8,17 @@ using Merit.Application.Intake;
 using Merit.Application.Reference;
 using Merit.Application.Security;
 using Merit.Application.Services;
+using Merit.Web.Controllers;
 using Merit.Web.Infrastructure;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Controllers;
+using Microsoft.AspNetCore.Mvc.Routing;
+using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -156,6 +165,139 @@ public sealed class Round3SecurityAndIntakeTests
         var ok = await passwords.CompleteResetAsync(resetId, token, recoveryCode, newPassword, newPassword, "127.0.0.1");
         Assert.Equal(PasswordResetOutcome.Reset, ok.Outcome);
         Assert.Equal(1, FakeResetAccountData.Of(fakeData).RecoveryCodeConsumeCount);
+    }
+
+    [Fact]
+    public async Task PasswordResetRejectsAlreadyConsumedTotpStepBeforePasswordReuseCheck()
+    {
+        var hasher = new IdentityPasswordHasher();
+        var protector = new PassThroughSecretProtector();
+        var codeHasher = new HmacOneTimeCodeHasher(RandomNumberGenerator.GetBytes(32));
+
+        Guid userId = Guid.NewGuid();
+        Guid resetId = Guid.NewGuid();
+        string token = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB";
+        string currentPassword = "Current-Password-Long-Enough-99!";
+        byte[] secretBytes = Totp.NewSecret();
+        string totpSecret = Totp.ToBase32(secretBytes);
+        long currentStep = DateTimeOffset.UtcNow.ToUnixTimeSeconds() / 30;
+        string replayedCode = Totp.Code(secretBytes, currentStep);
+
+        var user = new SignInUserRow
+        {
+            AppUserId = userId,
+            UserName = "totpresetuser",
+            DisplayName = "TOTP Reset User",
+            PasswordHash = hasher.Hash(currentPassword),
+            SecurityStamp = Guid.NewGuid(),
+            MfaSecretProtected = protector.Protect(totpSecret),
+            MfaEnabled = true,
+            LastTotpStep = currentStep, // already consumed on this step
+            IsActive = true,
+        };
+
+        var fakeData = FakeResetAccountData.Create(user, Guid.NewGuid(), hasher.Hash("UNUSED1234"));
+        var accounts = new AccountService(fakeData, hasher, protector, new EmptyBreachedList(), new NullSignInEvents());
+        var passwords = new PasswordService(fakeData, accounts, new FakeEmailSender(), codeHasher,
+            Microsoft.Extensions.Options.Options.Create(new PasswordResetOptions()), new NullSignInEvents(), NullLogger<PasswordService>.Instance);
+
+        // Submitting an already-consumed TOTP code with the current password must return WrongCode,
+        // never revealing that NewPassword matches the current password.
+        var outcome = await passwords.CompleteResetAsync(resetId, token, replayedCode, currentPassword, currentPassword, "127.0.0.1");
+        Assert.Equal(PasswordResetOutcome.WrongCode, outcome.Outcome);
+    }
+
+    [Fact]
+    public async Task SignOutClearsBrowserSessionAndLogsReasonWhenRevokeHitsConcurrencyConflict()
+    {
+        var recordedEvents = new List<SignInEvent>();
+        var events = new RecordingSignInEvents(recordedEvents);
+        var fakeData = FakeConcurrencyRevokeData.Create();
+        var accounts = new AccountService(fakeData, new IdentityPasswordHasher(), new PassThroughSecretProtector(),
+            new EmptyBreachedList(), events);
+
+        var authService = new RecordingAuthenticationService();
+        var services = new ServiceCollection()
+            .AddSingleton<IAuthenticationService>(authService)
+            .AddSingleton<IUrlHelperFactory, UrlHelperFactory>()
+            .BuildServiceProvider();
+
+        Guid scopeKey = Guid.NewGuid();
+        var httpContext = new DefaultHttpContext
+        {
+            RequestServices = services,
+            User = new ClaimsPrincipal(new ClaimsIdentity(
+            [
+                new Claim(MeritClaims.UserId, Guid.NewGuid().ToString()),
+                new Claim(MeritClaims.ScopeKey, scopeKey.ToString()),
+            ], AuthSchemes.Session)),
+        };
+
+        var controller = new AccountController(
+            accounts, null!, null!, null!, null!, null!, null!, null!, null!,
+            Microsoft.Extensions.Options.Options.Create(new EmailCodeOptions()),
+            new ConfigurationBuilder().Build(),
+            new StubHostEnvironment("Production"),
+            events)
+        {
+            ControllerContext = new ControllerContext(new ActionContext(httpContext, new RouteData(), new ControllerActionDescriptor())),
+        };
+
+        var result = await controller.SignOut();
+
+        var redirect = Assert.IsType<RedirectToActionResult>(result);
+        Assert.Equal(nameof(AccountController.SignIn), redirect.ActionName);
+        Assert.Equal(2, FakeConcurrencyRevokeData.Of(fakeData).RevokeAttempts);
+        Assert.Contains(AuthSchemes.Session, authService.SignedOutSchemes);
+        string setCookie = httpContext.Response.Headers.SetCookie.ToString();
+        Assert.Contains("XSRF-TOKEN=", setCookie, StringComparison.Ordinal);
+        var evt = Assert.Single(recordedEvents);
+        Assert.Equal(SignInEventTypes.SignedOut, evt.Type);
+        Assert.Equal("serverRevokeFailed", evt.Reason);
+        Assert.Equal(scopeKey, evt.SessionScopeId);
+    }
+
+    private sealed class RecordingSignInEvents(List<SignInEvent> events) : ISignInEvents
+    {
+        public Task RecordAsync(SignInEvent e, CancellationToken ct = default)
+        {
+            events.Add(e);
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class RecordingAuthenticationService : IAuthenticationService
+    {
+        public List<string?> SignedOutSchemes { get; } = [];
+        public Task<AuthenticateResult> AuthenticateAsync(HttpContext context, string? scheme) => Task.FromResult(AuthenticateResult.NoResult());
+        public Task ChallengeAsync(HttpContext context, string? scheme, AuthenticationProperties? properties) => Task.CompletedTask;
+        public Task ForbidAsync(HttpContext context, string? scheme, AuthenticationProperties? properties) => Task.CompletedTask;
+        public Task SignInAsync(HttpContext context, string? scheme, ClaimsPrincipal principal, AuthenticationProperties? properties) => Task.CompletedTask;
+        public Task SignOutAsync(HttpContext context, string? scheme, AuthenticationProperties? properties)
+        {
+            SignedOutSchemes.Add(scheme);
+            return Task.CompletedTask;
+        }
+    }
+
+    private class FakeConcurrencyRevokeData : DispatchProxy
+    {
+        public int RevokeAttempts { get; private set; }
+
+        public static IAccountData Create() => Create<IAccountData, FakeConcurrencyRevokeData>();
+        public static FakeConcurrencyRevokeData Of(IAccountData proxy) => (FakeConcurrencyRevokeData)(object)proxy;
+
+        protected override object? Invoke(MethodInfo? targetMethod, object?[]? args) => targetMethod?.Name switch
+        {
+            nameof(IAccountData.RevokeSessionScopeAsync) => FailRevoke(),
+            _ => throw new NotImplementedException(targetMethod?.Name),
+        };
+
+        private Task FailRevoke()
+        {
+            RevokeAttempts++;
+            return Task.FromException(new ConcurrencyException("The session could not be locked for revocation; please retry."));
+        }
     }
 
     private sealed class PassThroughSecretProtector : ISecretProtector

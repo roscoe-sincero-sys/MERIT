@@ -108,14 +108,8 @@ BEGIN
         IF @isDbo = 0
         BEGIN
             INSERT @idTenants (tenantId)
-            SELECT st.tenantId
-              FROM auth.sessionScope       AS ss
-              JOIN auth.sessionScopeTenant AS st ON st.sessionScopeId = ss.sessionScopeId AND st.isDeleted = 0
-             WHERE ss.sessionScopeId = TRY_CAST (SESSION_CONTEXT (N'scopeKey') AS UNIQUEIDENTIFIER)
-               AND ss.revokedUtc IS NULL
-               AND ss.expiresUtc > SYSUTCDATETIME ()
-               AND ss.isDeleted = 0
-               AND st.canReadIdentifiedResults = 1;
+            SELECT tenantId
+              FROM auth.tvfIdentifiedTenants ('result.view');
         END;
 
         SELECT r.labResultId,

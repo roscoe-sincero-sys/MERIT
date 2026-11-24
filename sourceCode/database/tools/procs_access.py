@@ -37,6 +37,7 @@ SELECT u.appUserId
      , u.securityStamp
      , u.mfaSecretProtected
      , u.mfaEnabled
+     , u.lastTotpStep
      , u.failedSignInCount
      , u.lockoutEndUtc
      , u.isActive
@@ -367,18 +368,19 @@ SELECT u.appUserId, u.userName, u.displayName, u.email, u.isActive, u.mfaEnabled
         "key": "CONCAT (N'appUserId=', @appUserId)",
         "body": f"""
 {ADMIN_TENANTS}
+DECLARE @canManageAccount BIT = (SELECT CASE WHEN EXISTS (SELECT 1 FROM @admin AS a WHERE a.tenantId = u.homeTenantId) THEN 1 ELSE 0 END
+                                   FROM auth.appUser AS u WHERE u.appUserId = @appUserId AND u.isDeleted = 0);
 
 SELECT u.appUserId, u.userName, u.displayName, u.email, u.isActive, u.mfaEnabled, u.lastSignInUtc, u.lockoutEndUtc,
        u.passwordChangeRequired, u.passwordChangedUtc,
        u.homeTenantId, h.tenantName AS homeTenantName, h.tenantType AS homeTenantType,
-       CAST (CASE WHEN EXISTS (SELECT 1 FROM @admin AS a WHERE a.tenantId = u.homeTenantId) THEN 1 ELSE 0 END AS BIT)
-           AS canManageAccount
+       CAST (COALESCE (@canManageAccount, 0) AS BIT) AS canManageAccount
   FROM auth.appUser AS u
   LEFT JOIN auth.tenant AS h ON h.tenantId = u.homeTenantId
  WHERE u.appUserId = @appUserId AND u.isDeleted = 0
-   AND (EXISTS (SELECT 1 FROM @admin AS a WHERE a.tenantId = u.homeTenantId)
+   AND (@canManageAccount = 1
         OR EXISTS (SELECT 1 FROM auth.userAssignment AS ua JOIN @admin AS a ON a.tenantId = ua.tenantId
-                    WHERE ua.appUserId = u.appUserId AND ua.isDeleted = 0));
+                    WHERE ua.appUserId = u.appUserId AND ua.revokedUtc IS NULL AND ua.isDeleted = 0));
 
 SELECT ua.userAssignmentId, ua.roleId, r.roleName, ua.tenantId, t.tenantName, ua.includeDescendants, ua.accessLevel,
        ua.startDate, ua.endDate, ua.revokedUtc,
@@ -387,6 +389,7 @@ SELECT ua.userAssignmentId, ua.roleId, r.roleName, ua.tenantId, t.tenantName, ua
   JOIN auth.role   AS r ON r.roleId = ua.roleId
   JOIN auth.tenant AS t ON t.tenantId = ua.tenantId
  WHERE ua.appUserId = @appUserId AND ua.isDeleted = 0
+   AND (@canManageAccount = 1 OR EXISTS (SELECT 1 FROM @admin AS a WHERE a.tenantId = ua.tenantId))
  ORDER BY ua.startDate DESC;
 """,
     },
@@ -398,11 +401,13 @@ SELECT ua.userAssignmentId, ua.roleId, r.roleName, ua.tenantId, t.tenantName, ua
         "params": "@userName NVARCHAR (100)",
         "key": "N'userName supplied'",
         "body": """
+DECLARE @root UNIQUEIDENTIFIER = auth.udfSessionRootTenantId ();
+
 SELECT u.appUserId, u.userName, u.displayName, h.tenantName AS homeTenantName
   FROM auth.appUser AS u
   JOIN auth.tenant  AS h ON h.tenantId = u.homeTenantId
  WHERE u.userName = @userName AND u.isDeleted = 0 AND u.isActive = 1
-   AND (h.tenantType <> 'platform' OR auth.udfIsPlatformAdmin () = 1);
+   AND (auth.udfIsPlatformAdmin () = 1 OR (h.tenantType <> 'platform' AND u.rootTenantId = @root));
 """,
     },
     {
@@ -490,7 +495,7 @@ BEGIN
         SELECT @me, rootTenantId, homeTenantId, 'mfaEmailDisabled', 'appUser', @appUserId FROM auth.appUser WHERE appUserId = @appUserId;
     END;
 
-    IF @isActive = 0
+    IF @isActive = 0 OR @passwordHash IS NOT NULL
     BEGIN
         UPDATE auth.sessionScope SET revokedUtc = SYSUTCDATETIME () WHERE appUserId = @appUserId AND revokedUtc IS NULL;
     END;
@@ -606,9 +611,10 @@ BEGIN
     END;
 
     DECLARE @roleRoot UNIQUEIDENTIFIER = (SELECT rootTenantId FROM auth.role WHERE roleId = @roleId AND isDeleted = 0);
-    DECLARE @targetIsPlatform BIT = (SELECT CASE WHEN h.tenantType = 'platform' THEN 1 ELSE 0 END
-                                       FROM auth.appUser AS u JOIN auth.tenant AS h ON h.tenantId = u.homeTenantId
-                                      WHERE u.appUserId = @appUserId AND u.isDeleted = 0);
+    DECLARE @targetRoot UNIQUEIDENTIFIER, @targetIsPlatform BIT;
+    SELECT @targetRoot = u.rootTenantId, @targetIsPlatform = CASE WHEN h.tenantType = 'platform' THEN 1 ELSE 0 END
+      FROM auth.appUser AS u JOIN auth.tenant AS h ON h.tenantId = u.homeTenantId
+     WHERE u.appUserId = @appUserId AND u.isDeleted = 0;
 
     IF @roleRoot IS NULL OR @targetIsPlatform IS NULL
     BEGIN
@@ -620,6 +626,11 @@ BEGIN
     IF @roleIsPlatform <> @tenantIsPlatform OR @roleIsPlatform <> @targetIsPlatform
     BEGIN
         ;THROW 51422, N'Platform accounts hold only platform roles, granted at the platform; everyone else holds record roles at a region, state, tribe or jurisdiction.', 1;
+    END;
+
+    IF auth.udfIsPlatformAdmin () = 0 AND @targetRoot <> @roleRoot
+    BEGIN
+        ;THROW 51403, N'You can grant roles only to accounts in the same data root.', 1;
     END;
 
     IF @roleRoot <> @platform
@@ -706,7 +717,7 @@ BEGIN
 END;
 
 UPDATE auth.appUser
-   SET mfaEnabled = 0, mfaSecretProtected = NULL, securityStamp = NEWID (), failedSignInCount = 0, lockoutEndUtc = NULL
+   SET mfaEnabled = 0, mfaSecretProtected = NULL, lastTotpStep = NULL, securityStamp = NEWID (), failedSignInCount = 0, lockoutEndUtc = NULL
      , mfaEmailVerifiedUtc = NULL, mfaPreferredMethod = 'totp'
  WHERE appUserId = @appUserId AND isDeleted = 0;
 

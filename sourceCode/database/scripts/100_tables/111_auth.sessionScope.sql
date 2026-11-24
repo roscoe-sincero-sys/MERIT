@@ -85,7 +85,7 @@ IF NOT EXISTS (SELECT 1
                 WHERE name      = N'IX_auth_sessionScope_appUserId_sessionReference'
                   AND object_id = OBJECT_ID (N'auth.sessionScope'))
 BEGIN
-    CREATE NONCLUSTERED INDEX IX_auth_sessionScope_appUserId_sessionReference
+    CREATE INDEX IX_auth_sessionScope_appUserId_sessionReference
         ON auth.sessionScope (appUserId, sessionReference)
         WHERE isDeleted = 0 AND revokedUtc IS NULL;
 END;
@@ -183,6 +183,7 @@ EXEC util.uspSetObjectDescription @SchemaName = N'auth', @ObjectType = N'TABLE',
 EXEC util.uspSetObjectDescription @SchemaName = N'auth', @ObjectType = N'TABLE', @ObjectName = N'sessionScope', @ColumnName = N'userProfileId', @Description = N'Profile the scope was resolved from; NULL = the master profile.';
 EXEC util.uspSetObjectDescription @SchemaName = N'auth', @ObjectType = N'TABLE', @ObjectName = N'sessionScope', @ColumnName = N'viewAsUserId', @Description = N'Set while an administrator views MERIT as another user; that user''s master profile, clipped to what the administrator may administer and do, is the scope.';
 EXEC util.uspSetObjectDescription @SchemaName = N'auth', @ObjectType = N'TABLE', @ObjectName = N'sessionScope', @ColumnName = N'isPlatformAdmin', @Description = N'1 for a platform administrator: users and roles only, no records.';
+EXEC util.uspSetObjectDescription @SchemaName = N'auth', @ObjectType = N'TABLE', @ObjectName = N'sessionScope', @ColumnName = N'isDeidentified', @Description = N'1 when the scope holds only de-identified clinical roles.';
 EXEC util.uspSetObjectDescription @SchemaName = N'auth', @ObjectType = N'TABLE', @ObjectName = N'sessionScope', @ColumnName = N'expiresUtc', @Description = N'UTC time after which the scope is no longer honored.';
 EXEC util.uspSetObjectDescription @SchemaName = N'auth', @ObjectType = N'TABLE', @ObjectName = N'sessionScope', @ColumnName = N'revokedUtc', @Description = N'Set at sign-out or when an assignment changes.';
 EXEC util.uspSetObjectDescription @SchemaName = N'auth', @ObjectType = N'TABLE', @ObjectName = N'sessionScope', @ColumnName = N'isDeleted', @Description = N'Soft-delete flag. 1 = deleted, 0 = active. This database performs no hard deletes; all reads must filter isDeleted = 0.';
