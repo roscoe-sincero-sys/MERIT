@@ -222,6 +222,11 @@ dotnet run --project src/Merit.Web         # terminal 2: https://localhost:7243
 Program settings such as levels, case definitions and extract options are kept per state in the database. Change them
 on the **Configuration** screens.
 
+**Upgrading an existing deployment.** Stop `Merit.Web` and `Merit.Worker` before running
+`sourceCode/database/Deploy-MeritDatabase.ps1`, then restart them after deployment completes (the security migration
+temporarily updates row-level security predicates, and `566_reconcileDeidentifiedRole.sql` also takes the exclusive
+`MERIT.grants` transaction lock to serialize with `auth.uspCreateSessionScope`).
+
 **Upgrading existing Data Protection key rings and sign-in hash keys.** Non-Development deployments now fail fast at
 startup unless:
 - `DataProtection:CertificatePath` (recommended, required for shared `DataProtection:KeyPath` web farms) or

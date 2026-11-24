@@ -20,6 +20,7 @@ public sealed record Hl7PatientIdentifier(string Type, string Value, string? Aut
 public static class Hl7Reader
 {
     public const long MaxStagingBytes = 50_000_000;
+    public const string StagingLimitMessage = "The HL7 file expands past MERIT's 50 MB staging limit; split the file.";
 
     public static IReadOnlyList<Dictionary<string, string?>> Read(string content, string? senderClia = null, long maxStagingBytes = MaxStagingBytes)
     {
@@ -224,7 +225,7 @@ public static class Hl7Reader
                     };
                     // Measure the actual JSON-encoded UTF-8 staging size (including escaping of nested JSON quotes/backslashes).
                     totalSerialized += JsonSerializer.SerializeToUtf8Bytes(fields).Length;
-                    if (totalSerialized > maxStagingBytes) Fail("The HL7 file expands past MERIT's 50 MB staging limit; split the file.");
+                    if (totalSerialized > maxStagingBytes) Fail(StagingLimitMessage);
                     // Bound values destined for SQL columns and held-record diagnostics before any rows are saved.
                     foreach (var (key, limit) in new[] { ("value", 60), ("unit", 20), ("testMethod", 30), ("accessionNumber", 60),
                                  ("loinc", 200), ("dob", 200), ("collectedDate", 200), ("reportedDate", 200) })

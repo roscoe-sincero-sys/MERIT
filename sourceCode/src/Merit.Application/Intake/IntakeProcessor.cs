@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text;
 using System.Text.Json;
 using Merit.Application.Data;
 using Merit.Application.Reference;
@@ -37,7 +38,10 @@ public sealed partial class IntakeProcessor(
     ClassificationService classification,
     ILogger<IntakeProcessor> logger)
 {
-    public async Task<IntakeRunSummary> ProcessAsync(Guid batchId, bool releasedOnly, CancellationToken ct = default)
+    public Task<IntakeRunSummary> ProcessAsync(Guid batchId, bool releasedOnly, CancellationToken ct = default)
+        => ProcessAsync(batchId, releasedOnly, Hl7Reader.MaxStagingBytes, ct);
+
+    public async Task<IntakeRunSummary> ProcessAsync(Guid batchId, bool releasedOnly, long maxHl7StagingBytes, CancellationToken ct = default)
     {
         var batch = await intake.GetBatchAsync(batchId, true, ct).ConfigureAwait(false)
                     ?? throw new InvalidOperationException($"Batch {batchId} not found.");
@@ -54,8 +58,34 @@ public sealed partial class IntakeProcessor(
         {
             if (profile.FileType == "hl7")
             {
-                IReadOnlyList<Dictionary<string, string?>> observations;
-                try { observations = Hl7Reader.Read(batch.RawContent ?? string.Empty, profile.SenderClia); }
+                StagingRowNew[] nativeRows;
+                try
+                {
+                    var observations = Hl7Reader.Read(batch.RawContent ?? string.Empty, profile.SenderClia, maxHl7StagingBytes);
+                    var nativeConstants = JsonSerializer.Deserialize<Dictionary<string, string>>(profile.ConstantsJson ?? "{}") ?? [];
+                    var nativeTranslations = JsonSerializer.Deserialize<Dictionary<string, Dictionary<string, string>>>(profile.ValueTranslationsJson ?? "{}") ?? [];
+                    long totalStagingBytes = 0;
+                    var stagedRows = new List<StagingRowNew>(observations.Count);
+                    for (int index = 0; index < observations.Count; index++)
+                    {
+                        var fields = observations[index];
+                        foreach (var (key, value) in fields.ToArray())
+                            if (value is not null && nativeTranslations.TryGetValue(key, out var translations) && translations.TryGetValue(value, out var translated)) fields[key] = translated;
+                        foreach (var (key, value) in nativeConstants)
+                            if (!fields.TryGetValue(key, out var existing) || string.IsNullOrEmpty(existing)) fields[key] = value;
+
+                        string serialized = JsonSerializer.Serialize(fields);
+                        totalStagingBytes += Encoding.UTF8.GetByteCount(serialized);
+                        if (totalStagingBytes > maxHl7StagingBytes)
+                        {
+                            throw new Hl7ParseException(Hl7Reader.StagingLimitMessage);
+                        }
+
+                        stagedRows.Add(new StagingRowNew(TimeOrderedId.New(), index + 1, serialized));
+                    }
+
+                    nativeRows = [.. stagedRows];
+                }
                 catch (Hl7ParseException ex)
                 {
                     await intake.SetBatchStatusAsync(batchId, "paused", ex.Message, ct).ConfigureAwait(false);
@@ -64,16 +94,6 @@ public sealed partial class IntakeProcessor(
                     return new IntakeRunSummary(0, 0, 0, 0, true, ex.Message);
                 }
 
-                var nativeConstants = JsonSerializer.Deserialize<Dictionary<string, string>>(profile.ConstantsJson ?? "{}") ?? [];
-                var nativeTranslations = JsonSerializer.Deserialize<Dictionary<string, Dictionary<string, string>>>(profile.ValueTranslationsJson ?? "{}") ?? [];
-                var nativeRows = observations.Select((fields, index) =>
-                {
-                    foreach (var (key, value) in fields.ToArray())
-                        if (value is not null && nativeTranslations.TryGetValue(key, out var translations) && translations.TryGetValue(value, out var translated)) fields[key] = translated;
-                    foreach (var (key, value) in nativeConstants)
-                        if (!fields.TryGetValue(key, out var existing) || string.IsNullOrEmpty(existing)) fields[key] = value;
-                    return new StagingRowNew(TimeOrderedId.New(), index + 1, JsonSerializer.Serialize(fields));
-                }).ToArray();
                 foreach (var chunk in nativeRows.Chunk(200)) await intake.SaveStagingRowsAsync(batchId, chunk, ct).ConfigureAwait(false);
             }
             else

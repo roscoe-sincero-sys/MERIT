@@ -99,6 +99,15 @@ BEGIN
         DECLARE @platform UNIQUEIDENTIFIER = CAST (HASHBYTES ('MD5', N'tenant:PLATFORM') AS UNIQUEIDENTIFIER);
         DECLARE @sessionReference UNIQUEIDENTIFIER = NEWID ();
 
+        -- Serialize grant materialization with authorization cutovers (e.g., 566_reconcileDeidentifiedRole.sql, which
+        -- takes MERIT.grants Exclusive). Acquired before session/user locks to keep lock order deadlock-free.
+        DECLARE @grantLock INT;
+        EXEC @grantLock = sys.sp_getapplock @Resource = N'MERIT.grants', @LockMode = 'Shared', @LockOwner = 'Transaction', @LockTimeout = 5000;
+        IF @grantLock < 0
+        BEGIN
+            ;THROW 51409, N'Authorization rules are being updated; please try again.', 1;
+        END;
+
         -- Issue #298: Atomic renewal locks the logical session (serialized with sign-out via sp_getapplock),
         -- validates the original scope, account, and security stamp, carries forward the original absolute expiry
         -- and logical sessionReference, and revokes the old scope inside the same transaction.

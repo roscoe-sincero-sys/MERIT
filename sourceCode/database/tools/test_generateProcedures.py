@@ -26,10 +26,7 @@ BASE_COMMIT_DRIFT_ALLOWLIST = frozenset({
 })
 
 
-BASE_COMMIT_HANDWRITTEN_PROCS = frozenset({
-    "dbo.uspListCaseTransferTargets",
-    "dbo.uspTransferExposureCase",
-})
+BASE_COMMIT_HANDWRITTEN_PROCS = gp.HANDWRITTEN
 
 
 def _normalize_sql(text: str) -> str:
@@ -112,6 +109,16 @@ class ManifestTests(unittest.TestCase):
                     f"Shipped table script {shipped_path.name} drifted from tableDefinitions.py / generateTables.py",
                 )
         self.assertEqual(tracked_tables, matched)
+
+    def test_cleanup_preserves_handwritten_procedures(self):
+        loaded_names = set()
+        for mod_name in gp.MODULES:
+            for p in importlib.import_module(mod_name).PROCS:
+                loaded_names.add(f"{p['schema']}.{p['name']}")
+        stale = {p.stem for p in gp.stale_procedure_files(gp.OUT, loaded_names)}
+        self.assertEqual(set(), stale & gp.HANDWRITTEN)
+        for name in gp.HANDWRITTEN:
+            self.assertTrue((gp.OUT / f"{name}.sql").exists(), f"Handwritten procedure {name}.sql missing")
 
 
 if __name__ == "__main__":

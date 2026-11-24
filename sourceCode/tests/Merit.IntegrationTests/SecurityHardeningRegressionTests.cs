@@ -695,16 +695,33 @@ public sealed class SecurityHardeningRegressionTests(MeritFixture fixture)
     [SqlFact]
     public async Task ReconcileDeidentifiedRoleBackfillUsesScopeJurisdictionDate()
     {
-        // Use a non-Eastern root tenant (Pacific Standard Time) and verify 566_reconcileDeidentifiedRole.sql
-        // evaluates grant effective dates against auth.udfLocalDate(rt.timeZone) rather than the default Eastern date.
+        // Dynamically choose a Windows timezone whose current local calendar date STRICTLY differs from Eastern
+        // (Line Islands UTC+14 vs Dateline UTC-12 guarantees a date difference 24 hours a day under EST and EDT)
+        // so that evaluating grants on Eastern time would fail BOTH assertions below.
+        DateTime easternToday = await ScalarAsync<DateTime>("SELECT CAST (auth.udfLocalDate ('Eastern Standard Time') AS DATETIME2)");
+        DateTime lineIslandsToday = await ScalarAsync<DateTime>("SELECT CAST (auth.udfLocalDate ('Line Islands Standard Time') AS DATETIME2)");
+        string targetZone = lineIslandsToday.Date != easternToday.Date
+            ? "Line Islands Standard Time"
+            : "Dateline Standard Time";
+        DateTime targetToday = await ScalarAsync<DateTime>("SELECT CAST (auth.udfLocalDate (@tz) AS DATETIME2)", ("@tz", targetZone));
+        Assert.NotEqual(easternToday.Date, targetToday.Date);
+
+        // Two grants whose active status flips specifically between easternToday and targetToday:
+        // - activeInTargetOnly: active on targetToday, INACTIVE on easternToday (must backfill to 1,1).
+        // - activeInEasternOnly: active on easternToday, INACTIVE on targetToday (must remain 0,0).
+        DateTime activeInTargetStart = targetToday.Date > easternToday.Date ? targetToday.Date : targetToday.Date.AddDays(-7);
+        DateTime? activeInTargetEnd = targetToday.Date > easternToday.Date ? null : targetToday.Date;
+        DateTime activeInEasternStart = targetToday.Date > easternToday.Date ? easternToday.Date.AddDays(-7) : easternToday.Date;
+        DateTime? activeInEasternEnd = targetToday.Date > easternToday.Date ? easternToday.Date : null;
+
         Guid rootId = Guid.NewGuid();
-        Guid futureTenantId = Guid.NewGuid();
-        Guid endingTodayTenantId = Guid.NewGuid();
+        Guid easternOnlyTenantId = Guid.NewGuid();
+        Guid targetOnlyTenantId = Guid.NewGuid();
         Guid userId = Guid.NewGuid();
         Guid scopeId = Guid.NewGuid();
         Guid clinicianRoleId = Guid.NewGuid();
-        Guid futureAssignId = Guid.NewGuid();
-        Guid endingTodayAssignId = Guid.NewGuid();
+        Guid easternOnlyAssignId = Guid.NewGuid();
+        Guid targetOnlyAssignId = Guid.NewGuid();
         string suffix = Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
 
         try
@@ -712,16 +729,16 @@ public sealed class SecurityHardeningRegressionTests(MeritFixture fixture)
             await ExecAsync("""
                 DECLARE @platform UNIQUEIDENTIFIER = CAST (HASHBYTES ('MD5', N'tenant:PLATFORM') AS UNIQUEIDENTIFIER);
                 INSERT auth.tenant (tenantId, parentTenantId, rootTenantId, tenantCode, tenantName, tenantType, statePostalCode, timeZone, isActive)
-                VALUES (@rootId, @platform, @rootId, @rootCode, N'Pacific Test Root', 'state', 'WA', 'Pacific Standard Time', 1),
-                       (@futureTenantId, @rootId, @rootId, @futureCode, N'Pacific Future County', 'jurisdiction', 'WA', NULL, 1),
-                       (@endingTodayTenantId, @rootId, @rootId, @endingCode, N'Pacific Today County', 'jurisdiction', 'WA', NULL, 1);
+                VALUES (@rootId, @platform, @rootId, @rootCode, N'Date Boundary Test Root', 'state', 'HI', @tz, 1),
+                       (@easternOnlyTenantId, @rootId, @rootId, @easternCode, N'Eastern-Only Grant County', 'jurisdiction', 'HI', NULL, 1),
+                       (@targetOnlyTenantId, @rootId, @rootId, @targetCode, N'Target-Only Grant County', 'jurisdiction', 'HI', NULL, 1);
 
                 INSERT auth.tenantClosure (tenantClosureId, ancestorTenantId, descendantTenantId, depth)
                 VALUES (NEWID (), @rootId, @rootId, 0),
-                       (NEWID (), @futureTenantId, @futureTenantId, 0),
-                       (NEWID (), @endingTodayTenantId, @endingTodayTenantId, 0),
-                       (NEWID (), @rootId, @futureTenantId, 1),
-                       (NEWID (), @rootId, @endingTodayTenantId, 1);
+                       (NEWID (), @easternOnlyTenantId, @easternOnlyTenantId, 0),
+                       (NEWID (), @targetOnlyTenantId, @targetOnlyTenantId, 0),
+                       (NEWID (), @rootId, @easternOnlyTenantId, 1),
+                       (NEWID (), @rootId, @targetOnlyTenantId, 1);
 
                 INSERT auth.role (roleId, rootTenantId, roleCode, roleName, isAdministrator, isDeidentified)
                 VALUES (@roleId, @rootId, 'caseManager', N'Case manager', 0, 0);
@@ -732,19 +749,18 @@ public sealed class SecurityHardeningRegressionTests(MeritFixture fixture)
                  WHERE permissionCode IN ('result.view', 'case.view', 'person.view') AND isDeleted = 0;
 
                 INSERT auth.appUser (appUserId, rootTenantId, homeTenantId, userName, displayName, passwordHash, securityStamp, mfaEnabled, isActive)
-                VALUES (@userId, @rootId, @rootId, @userName, N'Pacific Clinician', N'hash', NEWID (), 1, 1);
+                VALUES (@userId, @rootId, @rootId, @userName, N'Boundary Clinician', N'hash', NEWID (), 1, 1);
 
-                DECLARE @localToday DATE = auth.udfLocalDate ('Pacific Standard Time');
                 INSERT auth.userAssignment (userAssignmentId, appUserId, roleId, tenantId, includeDescendants, accessLevel, startDate, endDate)
-                VALUES (@futureAssignId, @userId, @roleId, @futureTenantId, 0, 'read', DATEADD (DAY, 1, @localToday), NULL),
-                       (@endingTodayAssignId, @userId, @roleId, @endingTodayTenantId, 0, 'read', DATEADD (DAY, -7, @localToday), @localToday);
+                VALUES (@easternOnlyAssignId, @userId, @roleId, @easternOnlyTenantId, 0, 'read', @easternStart, @easternEnd),
+                       (@targetOnlyAssignId, @userId, @roleId, @targetOnlyTenantId, 0, 'read', @targetStart, @targetEnd);
 
                 INSERT auth.sessionScope (sessionScopeId, appUserId, rootTenantId, actingTenantId, isPlatformAdmin, isDeidentified, expiresUtc)
-                VALUES (@scopeId, @userId, @rootId, @endingTodayTenantId, 0, 0, DATEADD (HOUR, 2, SYSUTCDATETIME ()));
+                VALUES (@scopeId, @userId, @rootId, @targetOnlyTenantId, 0, 0, DATEADD (HOUR, 2, SYSUTCDATETIME ()));
 
                 INSERT auth.sessionScopeTenant (sessionScopeTenantId, sessionScopeId, tenantId, accessLevel, canReadRelatedContacts, canReadIdentifiedResults, canReadIdentifiedCases)
-                VALUES (NEWID (), @scopeId, @futureTenantId, 'read', 0, 0, 0),
-                       (NEWID (), @scopeId, @endingTodayTenantId, 'read', 0, 0, 0);
+                VALUES (NEWID (), @scopeId, @easternOnlyTenantId, 'read', 0, 0, 0),
+                       (NEWID (), @scopeId, @targetOnlyTenantId, 'read', 0, 0, 0);
 
                 INSERT auth.sessionScopePermission (sessionScopePermissionId, sessionScopeId, permissionCode)
                 VALUES (NEWID (), @scopeId, 'result.view'),
@@ -752,37 +768,25 @@ public sealed class SecurityHardeningRegressionTests(MeritFixture fixture)
                        (NEWID (), @scopeId, 'person.view');
                 """,
                 ("@rootId", rootId),
-                ("@rootCode", $"TST-WA-{suffix}"),
-                ("@futureTenantId", futureTenantId),
-                ("@futureCode", $"TST-WAF-{suffix}"),
-                ("@endingTodayTenantId", endingTodayTenantId),
-                ("@endingCode", $"TST-WAT-{suffix}"),
+                ("@rootCode", $"TST-TZ-{suffix}"),
+                ("@tz", targetZone),
+                ("@easternOnlyTenantId", easternOnlyTenantId),
+                ("@easternCode", $"TST-TZE-{suffix}"),
+                ("@targetOnlyTenantId", targetOnlyTenantId),
+                ("@targetCode", $"TST-TZT-{suffix}"),
                 ("@roleId", clinicianRoleId),
                 ("@userId", userId),
-                ("@userName", $"pac_{suffix}"),
-                ("@futureAssignId", futureAssignId),
-                ("@endingTodayAssignId", endingTodayAssignId),
+                ("@userName", $"tz_{suffix}"),
+                ("@easternOnlyAssignId", easternOnlyAssignId),
+                ("@easternStart", activeInEasternStart),
+                ("@easternEnd", (object?)activeInEasternEnd ?? DBNull.Value),
+                ("@targetOnlyAssignId", targetOnlyAssignId),
+                ("@targetStart", activeInTargetStart),
+                ("@targetEnd", (object?)activeInTargetEnd ?? DBNull.Value),
                 ("@scopeId", scopeId));
 
-            // Directly confirm tvfUserGrantPermissionsAsOf flips accurately across the date boundary.
-            int activeTodayOnEnding = await ScalarAsync<int>(
-                "SELECT COUNT (*) FROM auth.tvfUserGrantPermissionsAsOf (@u, auth.udfLocalDate ('Pacific Standard Time')) WHERE tenantId = @t AND permissionCode = 'case.view' AND hasIdentified = 1",
-                ("@u", userId), ("@t", endingTodayTenantId));
-            int activeTomorrowOnEnding = await ScalarAsync<int>(
-                "SELECT COUNT (*) FROM auth.tvfUserGrantPermissionsAsOf (@u, DATEADD (DAY, 1, auth.udfLocalDate ('Pacific Standard Time'))) WHERE tenantId = @t AND permissionCode = 'case.view' AND hasIdentified = 1",
-                ("@u", userId), ("@t", endingTodayTenantId));
-            int activeTodayOnFuture = await ScalarAsync<int>(
-                "SELECT COUNT (*) FROM auth.tvfUserGrantPermissionsAsOf (@u, auth.udfLocalDate ('Pacific Standard Time')) WHERE tenantId = @t AND permissionCode = 'case.view' AND hasIdentified = 1",
-                ("@u", userId), ("@t", futureTenantId));
-            int activeTomorrowOnFuture = await ScalarAsync<int>(
-                "SELECT COUNT (*) FROM auth.tvfUserGrantPermissionsAsOf (@u, DATEADD (DAY, 1, auth.udfLocalDate ('Pacific Standard Time'))) WHERE tenantId = @t AND permissionCode = 'case.view' AND hasIdentified = 1",
-                ("@u", userId), ("@t", futureTenantId));
-            Assert.Equal(1, activeTodayOnEnding);
-            Assert.Equal(0, activeTomorrowOnEnding);
-            Assert.Equal(0, activeTodayOnFuture);
-            Assert.Equal(1, activeTomorrowOnFuture);
-
-            // Run the real 566_reconcileDeidentifiedRole.sql migration script.
+            // Run the real 566_reconcileDeidentifiedRole.sql migration script on a connection with NO timeZone
+            // SESSION_CONTEXT (matching Deploy-MeritDatabase.ps1, where auth.udfSessionToday() defaults to Eastern).
             string scriptPath = Path.Combine(TestEnvironment.SourceRoot, "database", "scripts", "500_seed", "566_reconcileDeidentifiedRole.sql");
             string scriptSql = await File.ReadAllTextAsync(scriptPath);
             foreach (string batch in System.Text.RegularExpressions.Regex.Split(scriptSql, @"^\s*GO\s*$", System.Text.RegularExpressions.RegexOptions.Multiline | System.Text.RegularExpressions.RegexOptions.IgnoreCase))
@@ -793,19 +797,20 @@ public sealed class SecurityHardeningRegressionTests(MeritFixture fixture)
                 }
             }
 
-            // Scope must remain unrevoked, ending-today tenant must backfill to (1,1), future tenant must stay (0,0).
+            // Scope must remain unrevoked (person.view is active in targetZone today even though inactive in Eastern!).
             bool revoked = await ScalarAsync<int>("SELECT CASE WHEN revokedUtc IS NULL THEN 0 ELSE 1 END FROM auth.sessionScope WHERE sessionScopeId = @s", ("@s", scopeId)) == 1;
             Assert.False(revoked);
 
-            int endingResults = await ScalarAsync<int>("SELECT CAST (canReadIdentifiedResults AS INT) FROM auth.sessionScopeTenant WHERE sessionScopeId = @s AND tenantId = @t", ("@s", scopeId), ("@t", endingTodayTenantId));
-            int endingCases = await ScalarAsync<int>("SELECT CAST (canReadIdentifiedCases AS INT) FROM auth.sessionScopeTenant WHERE sessionScopeId = @s AND tenantId = @t", ("@s", scopeId), ("@t", endingTodayTenantId));
-            Assert.Equal(1, endingResults);
-            Assert.Equal(1, endingCases);
+            // Target-timezone-active grant backfills to (1,1); Eastern-only grant stays (0,0).
+            int targetResults = await ScalarAsync<int>("SELECT CAST (canReadIdentifiedResults AS INT) FROM auth.sessionScopeTenant WHERE sessionScopeId = @s AND tenantId = @t", ("@s", scopeId), ("@t", targetOnlyTenantId));
+            int targetCases = await ScalarAsync<int>("SELECT CAST (canReadIdentifiedCases AS INT) FROM auth.sessionScopeTenant WHERE sessionScopeId = @s AND tenantId = @t", ("@s", scopeId), ("@t", targetOnlyTenantId));
+            Assert.Equal(1, targetResults);
+            Assert.Equal(1, targetCases);
 
-            int futureResults = await ScalarAsync<int>("SELECT CAST (canReadIdentifiedResults AS INT) FROM auth.sessionScopeTenant WHERE sessionScopeId = @s AND tenantId = @t", ("@s", scopeId), ("@t", futureTenantId));
-            int futureCases = await ScalarAsync<int>("SELECT CAST (canReadIdentifiedCases AS INT) FROM auth.sessionScopeTenant WHERE sessionScopeId = @s AND tenantId = @t", ("@s", scopeId), ("@t", futureTenantId));
-            Assert.Equal(0, futureResults);
-            Assert.Equal(0, futureCases);
+            int easternResults = await ScalarAsync<int>("SELECT CAST (canReadIdentifiedResults AS INT) FROM auth.sessionScopeTenant WHERE sessionScopeId = @s AND tenantId = @t", ("@s", scopeId), ("@t", easternOnlyTenantId));
+            int easternCases = await ScalarAsync<int>("SELECT CAST (canReadIdentifiedCases AS INT) FROM auth.sessionScopeTenant WHERE sessionScopeId = @s AND tenantId = @t", ("@s", scopeId), ("@t", easternOnlyTenantId));
+            Assert.Equal(0, easternResults);
+            Assert.Equal(0, easternCases);
         }
         finally
         {
@@ -817,16 +822,201 @@ public sealed class SecurityHardeningRegressionTests(MeritFixture fixture)
                 DELETE FROM auth.appUser WHERE appUserId = @userId;
                 DELETE FROM auth.rolePermission WHERE roleId = @roleId;
                 DELETE FROM auth.role WHERE roleId = @roleId;
-                DELETE FROM auth.tenantClosure WHERE ancestorTenantId IN (@rootId, @futureTenantId, @endingTodayTenantId) OR descendantTenantId IN (@rootId, @futureTenantId, @endingTodayTenantId);
-                DELETE FROM auth.tenant WHERE tenantId IN (@futureTenantId, @endingTodayTenantId);
+                DELETE FROM auth.tenantClosure WHERE ancestorTenantId IN (@rootId, @easternOnlyTenantId, @targetOnlyTenantId) OR descendantTenantId IN (@rootId, @easternOnlyTenantId, @targetOnlyTenantId);
+                DELETE FROM auth.tenant WHERE tenantId IN (@easternOnlyTenantId, @targetOnlyTenantId);
                 DELETE FROM auth.tenant WHERE tenantId = @rootId;
                 """,
                 ("@scopeId", scopeId),
                 ("@userId", userId),
                 ("@roleId", clinicianRoleId),
                 ("@rootId", rootId),
-                ("@futureTenantId", futureTenantId),
-                ("@endingTodayTenantId", endingTodayTenantId));
+                ("@easternOnlyTenantId", easternOnlyTenantId),
+                ("@targetOnlyTenantId", targetOnlyTenantId));
+        }
+    }
+
+    [SqlFact]
+    public async Task RoleReconciliationAndConcurrentScopeIssuanceSerializeAcrossConnections()
+    {
+        // Two-connection concurrency regression for 566_reconcileDeidentifiedRole.sql vs auth.uspCreateSessionScope:
+        // Under RCSI, MERIT.grants Exclusive (566) and MERIT.grants Shared (uspCreateSessionScope) must guarantee that
+        // no overlapping sign-in/renewal can ever publish an unrevoked scope carrying removed epidemiologist permissions.
+        Guid rootId = Guid.NewGuid();
+        Guid userId = Guid.NewGuid();
+        Guid epiRoleId = Guid.NewGuid();
+        Guid assignId = Guid.NewGuid();
+        Guid scope1Id = Guid.NewGuid();
+        Guid scope2Id = Guid.NewGuid();
+        string suffix = Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
+        string scriptPath = Path.Combine(TestEnvironment.SourceRoot, "database", "scripts", "500_seed", "566_reconcileDeidentifiedRole.sql");
+        string scriptSql = await File.ReadAllTextAsync(scriptPath);
+        string[] batches = System.Text.RegularExpressions.Regex
+            .Split(scriptSql, @"^\s*GO\s*$", System.Text.RegularExpressions.RegexOptions.Multiline | System.Text.RegularExpressions.RegexOptions.IgnoreCase)
+            .Where(b => !string.IsNullOrWhiteSpace(b))
+            .ToArray();
+
+        try
+        {
+            await ExecAsync("""
+                DECLARE @platform UNIQUEIDENTIFIER = CAST (HASHBYTES ('MD5', N'tenant:PLATFORM') AS UNIQUEIDENTIFIER);
+                INSERT auth.tenant (tenantId, parentTenantId, rootTenantId, tenantCode, tenantName, tenantType, statePostalCode, timeZone, isActive)
+                VALUES (@rootId, @platform, @rootId, @rootCode, N'Cutover Race Test Root', 'state', 'MD', 'Eastern Standard Time', 1);
+
+                INSERT auth.tenantClosure (tenantClosureId, ancestorTenantId, descendantTenantId, depth)
+                VALUES (NEWID (), @rootId, @rootId, 0),
+                       (NEWID (), @platform, @rootId, 1);
+
+                INSERT auth.role (roleId, rootTenantId, roleCode, roleName, isAdministrator, isDeidentified)
+                VALUES (@roleId, @rootId, 'epidemiologist', N'Epidemiologist (de-identified)', 0, 1);
+
+                INSERT auth.rolePermission (rolePermissionId, roleId, permissionId)
+                SELECT NEWID (), @roleId, permissionId
+                  FROM auth.permission
+                 WHERE permissionCode IN ('result.view', 'case.view', 'data.export', 'extract.run') AND isDeleted = 0;
+
+                INSERT auth.appUser (appUserId, rootTenantId, homeTenantId, userName, displayName, passwordHash, securityStamp, mfaEnabled, isActive)
+                VALUES (@userId, @rootId, @rootId, @userName, N'Race Epi', N'hash', NEWID (), 1, 1);
+
+                INSERT auth.userAssignment (userAssignmentId, appUserId, roleId, tenantId, includeDescendants, accessLevel, startDate)
+                VALUES (@assignId, @userId, @roleId, @rootId, 1, 'read', '2020-01-01');
+                """,
+                ("@rootId", rootId),
+                ("@rootCode", $"TST-RC-{suffix}"),
+                ("@roleId", epiRoleId),
+                ("@userId", userId),
+                ("@userName", $"race_{suffix}"),
+                ("@assignId", assignId));
+
+            // Direction A: Connection 1 holds MERIT.grants Exclusive and updates auth.rolePermission (uncommitted).
+            // Connection 2 concurrently invokes auth.uspCreateSessionScope: it must block until Connection 1 commits,
+            // and then read ONLY the post-reconciliation grants (never extract.run).
+            await using (var conn1 = new SqlConnection(TestEnvironment.AdminConnectionString()))
+            {
+                await conn1.OpenAsync();
+                await using var tx1 = (SqlTransaction)await conn1.BeginTransactionAsync();
+                await using (var cmd1 = new SqlCommand("""
+                    DECLARE @lock INT;
+                    EXEC @lock = sys.sp_getapplock @Resource = N'MERIT.grants', @LockMode = 'Exclusive', @LockOwner = 'Transaction', @LockTimeout = 10000;
+                    IF @lock < 0 THROW 51409, N'Failed to lock MERIT.grants', 1;
+
+                    UPDATE rp
+                       SET isDeleted = 1
+                      FROM auth.rolePermission AS rp
+                      JOIN auth.permission     AS pm ON pm.permissionId = rp.permissionId
+                     WHERE rp.roleId = @roleId AND pm.permissionCode = 'extract.run' AND rp.isDeleted = 0;
+                    """, conn1, tx1))
+                {
+                    cmd1.Parameters.AddWithValue("@roleId", epiRoleId);
+                    await cmd1.ExecuteNonQueryAsync();
+                }
+
+                // Start concurrent scope issuance on Connection 2.
+                var issueTask = Task.Run(async () =>
+                {
+                    await using var conn2 = new SqlConnection(TestEnvironment.WebConnectionString);
+                    await conn2.OpenAsync();
+                    await using var cmd2 = new SqlCommand("auth.uspCreateSessionScope", conn2)
+                    {
+                        CommandType = System.Data.CommandType.StoredProcedure,
+                    };
+                    cmd2.Parameters.AddWithValue("@sessionScopeId", scope1Id);
+                    cmd2.Parameters.AddWithValue("@appUserId", userId);
+                    cmd2.Parameters.AddWithValue("@expiresUtc", DateTime.UtcNow.AddHours(2));
+                    await using var reader = await cmd2.ExecuteReaderAsync();
+                    while (await reader.NextResultAsync()) { }
+                });
+
+                // Connection 2 must still be waiting on MERIT.grants Shared while Connection 1 holds Exclusive.
+                await Task.Delay(350);
+                Assert.False(issueTask.IsCompleted, "uspCreateSessionScope should wait while MERIT.grants Exclusive is held.");
+
+                await tx1.CommitAsync();
+                await issueTask;
+            }
+
+            int staleOnScope1 = await ScalarAsync<int>(
+                "SELECT COUNT (*) FROM auth.sessionScopePermission WHERE sessionScopeId = @s AND permissionCode IN ('extract.run', 'person.view', 'task.view') AND isDeleted = 0",
+                ("@s", scope1Id));
+            Assert.Equal(0, staleOnScope1);
+
+            // Direction B: Re-add legacy extract.run, hold MERIT.grants Shared on Connection 1 while publishing a stale
+            // scope, and start the real 566_reconcileDeidentifiedRole.sql on Connection 2 concurrently. Connection 2
+            // must wait until Connection 1 commits and then revoke Connection 1's newly published stale scope.
+            await ExecAsync("""
+                UPDATE rp SET isDeleted = 0
+                  FROM auth.rolePermission AS rp
+                  JOIN auth.permission     AS pm ON pm.permissionId = rp.permissionId
+                 WHERE rp.roleId = @roleId AND pm.permissionCode = 'extract.run';
+                """, ("@roleId", epiRoleId));
+
+            await using (var conn1 = new SqlConnection(TestEnvironment.AdminConnectionString()))
+            {
+                await conn1.OpenAsync();
+                await using var tx1 = (SqlTransaction)await conn1.BeginTransactionAsync();
+                await using (var cmd1 = new SqlCommand("""
+                    DECLARE @lock INT;
+                    EXEC @lock = sys.sp_getapplock @Resource = N'MERIT.grants', @LockMode = 'Shared', @LockOwner = 'Transaction', @LockTimeout = 10000;
+                    IF @lock < 0 THROW 51409, N'Failed to lock MERIT.grants Shared', 1;
+
+                    INSERT auth.sessionScope (sessionScopeId, appUserId, rootTenantId, actingTenantId, isPlatformAdmin, isDeidentified, expiresUtc)
+                    VALUES (@scopeId, @userId, @rootId, @rootId, 0, 1, DATEADD (HOUR, 2, SYSUTCDATETIME ()));
+
+                    INSERT auth.sessionScopePermission (sessionScopePermissionId, sessionScopeId, permissionCode)
+                    VALUES (NEWID (), @scopeId, 'result.view'),
+                           (NEWID (), @scopeId, 'extract.run');
+                    """, conn1, tx1))
+                {
+                    cmd1.Parameters.AddWithValue("@scopeId", scope2Id);
+                    cmd1.Parameters.AddWithValue("@userId", userId);
+                    cmd1.Parameters.AddWithValue("@rootId", rootId);
+                    await cmd1.ExecuteNonQueryAsync();
+                }
+
+                // Start the real 566 migration concurrently on Connection 2.
+                var migrateTask = Task.Run(async () =>
+                {
+                    await using var conn2 = new SqlConnection(TestEnvironment.AdminConnectionString());
+                    await conn2.OpenAsync();
+                    foreach (string batch in batches)
+                    {
+                        await using var cmd2 = new SqlCommand(batch, conn2);
+                        await cmd2.ExecuteNonQueryAsync();
+                    }
+                });
+
+                // 566 must wait on MERIT.grants Exclusive while Connection 1 holds Shared.
+                await Task.Delay(350);
+                Assert.False(migrateTask.IsCompleted, "566_reconcileDeidentifiedRole.sql should wait while MERIT.grants Shared is held.");
+
+                await tx1.CommitAsync();
+                await migrateTask;
+            }
+
+            bool scope2Revoked = await ScalarAsync<int>(
+                "SELECT CASE WHEN revokedUtc IS NOT NULL THEN 1 ELSE 0 END FROM auth.sessionScope WHERE sessionScopeId = @s",
+                ("@s", scope2Id)) == 1;
+            Assert.True(scope2Revoked, "566_reconcileDeidentifiedRole.sql must revoke a stale scope committed right before cutover.");
+        }
+        finally
+        {
+            await ExecAsync("""
+                DELETE FROM auth.sessionScopePermission WHERE sessionScopeId IN (@s1, @s2);
+                DELETE FROM auth.sessionScopeTenant WHERE sessionScopeId IN (@s1, @s2);
+                DELETE FROM auth.sessionScopeRoot WHERE sessionScopeId IN (@s1, @s2);
+                DELETE FROM auth.sessionScopeAdminTenant WHERE sessionScopeId IN (@s1, @s2);
+                DELETE FROM auth.sessionScope WHERE sessionScopeId IN (@s1, @s2);
+                DELETE FROM auth.userAssignment WHERE appUserId = @userId;
+                DELETE FROM auth.appUser WHERE appUserId = @userId;
+                DELETE FROM auth.rolePermission WHERE roleId = @roleId;
+                DELETE FROM auth.role WHERE roleId = @roleId;
+                DELETE FROM auth.tenantClosure WHERE ancestorTenantId = @rootId OR descendantTenantId = @rootId;
+                DELETE FROM auth.tenant WHERE tenantId = @rootId;
+                """,
+                ("@s1", scope1Id),
+                ("@s2", scope2Id),
+                ("@userId", userId),
+                ("@roleId", epiRoleId),
+                ("@rootId", rootId));
         }
     }
 }

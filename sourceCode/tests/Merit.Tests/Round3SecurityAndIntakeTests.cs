@@ -117,6 +117,76 @@ public sealed class Round3SecurityAndIntakeTests
     }
 
     [Fact]
+    public async Task IntakeProcessorPausesHl7BatchWhenProfileEnrichmentPushesStagingOverBudget()
+    {
+        string hl7 = string.Join('\r',
+            "MSH|^~\\&|DEMO|21D0712345|MERIT|MD|20261022120000||ORU^R01^ORU_R01|MSG-1|P|2.5.1",
+            "PID|1||PAT-1^^^LAB^MR||Example^Ada^Marie^^^^L||20200102|F|||10 Test Street^2B^Towson^MD^21204^USA^H^^24005",
+            "OBR|1||ACC-1^LAB||||20261020100000-0400||||||||BLDV|1234567893^Clinician^Test||||||20261022120000",
+            "OBX|1|NM|77307-7^Lead^LN|sub-1|8.4|ug/dL^Micrograms per deciliter^UCUM|||||F|||20261020100000|||ICPMS") + "\r";
+
+        var rawRow = Assert.Single(Hl7Reader.Read(hl7, "21D0712345"));
+        int rawJsonBytes = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(rawRow).Length;
+
+        // Profile enrichment adds a constant and enlarges a translated field so the final staging JSON exceeds budget,
+        // even though the unenriched parser output fits comfortably inside it.
+        long budget = rawJsonBytes + 50;
+        string bigConstant = new string('X', 200);
+
+        Guid batchId = Guid.NewGuid();
+        Guid profileId = Guid.NewGuid();
+        var statuses = new List<(string Status, string? Message)>();
+        var createdTasks = new List<WorkTaskCreate>();
+        int saveStagingCalls = 0;
+
+        var fakeIntake = FakeIntakeData.Create(
+            new IntakeBatchRow
+            {
+                IntakeBatchId = batchId,
+                IntakeProfileId = profileId,
+                FileName = "enriched.hl7",
+                RawContent = hl7,
+                BatchStatus = "received",
+            },
+            new IntakeProfileRow
+            {
+                IntakeProfileId = profileId,
+                FileType = "hl7",
+                SenderClia = "21D0712345",
+                HeaderRow = 1,
+                ColumnMapJson = "{}",
+                ConstantsJson = System.Text.Json.JsonSerializer.Serialize(new Dictionary<string, string> { ["extraNote"] = bigConstant }),
+                ValueTranslationsJson = System.Text.Json.JsonSerializer.Serialize(new Dictionary<string, Dictionary<string, string>>
+                {
+                    ["sampleType"] = new() { ["venous"] = "venous_" + new string('Y', 100) },
+                }),
+                IsActive = true,
+            },
+            (status, msg) => statuses.Add((status, msg)),
+            () => saveStagingCalls++);
+
+        var fakeWork = FakeWorkData.Create(task => createdTasks.Add(task));
+        var processor = new IntakeProcessor(
+            new FixedClock(new DateOnly(2026, 10, 24)),
+            fakeIntake,
+            null!, null!, null!, fakeWork, null!, null!, null!, null!, null!, null!,
+            NullLogger<IntakeProcessor>.Instance);
+
+        var summary = await processor.ProcessAsync(batchId, releasedOnly: false, maxHl7StagingBytes: budget);
+
+        Assert.True(summary.Paused);
+        Assert.Equal(Hl7Reader.StagingLimitMessage, summary.PauseReason);
+        Assert.Equal(0, saveStagingCalls);
+        Assert.Equal(2, statuses.Count);
+        Assert.Equal("parsing", statuses[0].Status);
+        Assert.Equal("paused", statuses[1].Status);
+        Assert.Equal(Hl7Reader.StagingLimitMessage, statuses[1].Message);
+        var task = Assert.Single(createdTasks);
+        Assert.Equal("pausedBatch", task.QueueCode);
+        Assert.Equal(Hl7Reader.StagingLimitMessage, task.Detail);
+    }
+
+    [Fact]
     public async Task PasswordResetPreservesRecoveryCodeWhenNewPasswordMatchesCurrentPassword()
     {
         var hasher = new IdentityPasswordHasher();
@@ -323,19 +393,52 @@ public sealed class Round3SecurityAndIntakeTests
             => Task.FromResult(new EmailSendResult(true, EmailFailureKind.None, false, 1, null, 0));
     }
 
+    private sealed class FixedClock(DateOnly today) : IClock
+    {
+        public DateOnly Today => today;
+        public TimeZoneInfo Zone => TimeZoneInfo.Utc;
+        public DateTime ToLocal(DateTime utc) => utc;
+    }
+
+    private class FakeWorkData : DispatchProxy
+    {
+        private Action<WorkTaskCreate> onCreate = null!;
+
+        public static IWorkData Create(Action<WorkTaskCreate> onCreate)
+        {
+            var proxy = Create<IWorkData, FakeWorkData>();
+            ((FakeWorkData)(object)proxy).onCreate = onCreate;
+            return proxy;
+        }
+
+        protected override object? Invoke(MethodInfo? targetMethod, object?[]? args) => targetMethod?.Name switch
+        {
+            nameof(IWorkData.CreateTaskAsync) => Record((WorkTaskCreate)args![0]!),
+            _ => throw new NotImplementedException(targetMethod?.Name),
+        };
+
+        private Task Record(WorkTaskCreate task)
+        {
+            onCreate(task);
+            return Task.CompletedTask;
+        }
+    }
+
     private class FakeIntakeData : DispatchProxy
     {
         private IntakeBatchRow batch = null!;
         private IntakeProfileRow profile = null!;
         private Action<string, string?> onStatus = null!;
+        private Action? onSaveStaging;
 
-        public static IIntakeData Create(IntakeBatchRow batch, IntakeProfileRow profile, Action<string, string?> onStatus)
+        public static IIntakeData Create(IntakeBatchRow batch, IntakeProfileRow profile, Action<string, string?> onStatus, Action? onSaveStaging = null)
         {
             var proxy = Create<IIntakeData, FakeIntakeData>();
             var impl = (FakeIntakeData)(object)proxy;
             impl.batch = batch;
             impl.profile = profile;
             impl.onStatus = onStatus;
+            impl.onSaveStaging = onSaveStaging;
             return proxy;
         }
 
@@ -344,8 +447,15 @@ public sealed class Round3SecurityAndIntakeTests
             nameof(IIntakeData.GetBatchAsync) => Task.FromResult<IntakeBatchRow?>(batch),
             nameof(IIntakeData.GetProfileAsync) => Task.FromResult<IntakeProfileRow?>(profile),
             nameof(IIntakeData.SetBatchStatusAsync) => RecordStatus((string)args![1]!, (string?)args[2]),
+            nameof(IIntakeData.SaveStagingRowsAsync) => RecordSaveStaging(),
             _ => throw new NotImplementedException(targetMethod?.Name),
         };
+
+        private Task RecordSaveStaging()
+        {
+            onSaveStaging?.Invoke();
+            return Task.CompletedTask;
+        }
 
         private Task RecordStatus(string status, string? message)
         {

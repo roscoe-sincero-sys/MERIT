@@ -36,6 +36,11 @@ AUTHOR = "MERIT build"
 CREATE_DATE = "2026-10-24"
 MODULES = ["procs_corrections", "procs_auth", "procs_config", "procs_person", "procs_places", "procs_results", "procs_cases",
            "procs_work", "procs_intake", "procs_extracts", "procs_setup", "procs_review", "procs_mfa", "procs_password", "procs_signin", "procs_usage", "procs_care", "procs_receipt", "procs_testing", "procs_workflow"]
+# Hand-written procedures that are checked in under 400_procedures/ and must be preserved when regenerating.
+HANDWRITTEN = frozenset({
+    "dbo.uspListCaseTransferTargets",
+    "dbo.uspTransferExposureCase",
+})
 
 PROLOGUE = """-- SET XACT_ABORT ON sits ABOVE the header block deliberately: sys.sql_modules stores only the batch containing
 -- CREATE, so the header must be the last thing before CREATE with no GO between them.
@@ -394,6 +399,10 @@ def manifest_entry(p: dict) -> dict:
             "permission": p.get("permission"), "params": params}
 
 
+def stale_procedure_files(out_dir: Path, generated_names: set[str]) -> list[Path]:
+    return [f for f in out_dir.glob("*.sql") if f.stem not in generated_names and f.stem not in HANDWRITTEN]
+
+
 def main() -> int:
     OUT.mkdir(parents=True, exist_ok=True)
     names = set()
@@ -410,10 +419,9 @@ def main() -> int:
             (OUT / f"{key}.sql").write_text(text, encoding="utf-8")
             manifest.append(manifest_entry(p))
             total += 1
-    # remove stale generated files
-    for f in OUT.glob("*.sql"):
-        if f.stem not in names:
-            f.unlink()
+    # remove stale generated files (preserving explicitly hand-written procedures)
+    for f in stale_procedure_files(OUT, names):
+        f.unlink()
     (OUT.parent.parent / "procedureManifest.json").write_text(
         json.dumps(sorted(manifest, key=lambda m: m["name"]), indent=1), encoding="utf-8")
     print(f"Generated {total} procedures under {OUT}")

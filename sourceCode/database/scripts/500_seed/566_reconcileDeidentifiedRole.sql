@@ -14,6 +14,19 @@ GO
 */
 BEGIN TRANSACTION;
 
+-- Serialize authorization cutover with concurrent auth.uspCreateSessionScope calls (which hold MERIT.grants Shared
+-- until commit) so under RCSI no in-flight sign-in or renewal can read pre-reconcile grants and publish after revoke.
+DECLARE @grantLock INT;
+EXEC @grantLock = sys.sp_getapplock
+      @Resource    = N'MERIT.grants'
+    , @LockMode    = 'Exclusive'
+    , @LockOwner   = 'Transaction'
+    , @LockTimeout = 30000;
+IF @grantLock < 0
+BEGIN
+    ;THROW 51409, N'Could not acquire exclusive authorization cutover lock (MERIT.grants); stop runtime traffic and retry deployment.', 1;
+END;
+
 DECLARE @revokedRoles TABLE (roleId UNIQUEIDENTIFIER);
 
 UPDATE rp

@@ -75,6 +75,13 @@ SELECT u.appUserId
 DECLARE @platform UNIQUEIDENTIFIER = {PLATFORM};
 DECLARE @sessionReference UNIQUEIDENTIFIER = NEWID ();
 
+DECLARE @grantLock INT;
+EXEC @grantLock = sys.sp_getapplock @Resource = N'MERIT.grants', @LockMode = 'Shared', @LockOwner = 'Transaction', @LockTimeout = 5000;
+IF @grantLock < 0
+BEGIN
+    ;THROW 51409, N'Authorization rules are being updated; please try again.', 1;
+END;
+
 IF @replacesSessionScopeId IS NOT NULL
 BEGIN
     DECLARE @lockRef UNIQUEIDENTIFIER = (SELECT sessionReference FROM auth.sessionScope
