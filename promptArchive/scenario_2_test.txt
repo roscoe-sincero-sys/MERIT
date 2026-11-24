@@ -1,0 +1,129 @@
+
+Create a new issue for a new test scenario that covers the following:
+
+1.  Creates a MERIT demo with nothing configured. No MD specific.  No VA specific.  No Montana specific.  Nothing specific.  
+2.  Creates a platform user with appropriate rights.
+3.  Using platform user, this account creates a region 3 user with appropriate rights.
+4.  Using the region 3 user, creates admin users for all states in EPA region 3.
+5.  Using MD admin account, creates admin users for all counties in MD. 
+6.  Using Baltimore City admin account, creates various accounts ranging from supervisor, case manager type, intake type accounts.
+7.  Using Baltimore County admin account, creates various accounts ranging from supervisor, case manager type, intake type accounts.
+8.  Using Harford County admin account, creates various accounts ranging from supervisor, case manager type, intake type accounts.
+9.  Using MD admin account, creates various accounts ranging from supervisor, case manager type, intake type accounts for Baltimore County and Harford County.
+10.  Using VA admin account, creates admin users for all counties in VA. 
+11.  Using VA admin account, creates various accounts ranging from supervisor, case manager type, intake type accounts for all counties.
+12.  Using MD admin account, configures MD-specific reference data like due dates, etc using the following (update issue if anything is missing):
+
+> Reviewer: me, roscoe-sincero-sys. This addresses decisions for [#202](https://github.com/roscoe-sincero-sys/MERIT/issues/202).
+> 
+> ### 1. Mandatory Universal Screening (Ages 1 and 2)
+> Under Maryland law (COMAR 10.11.04), blood lead testing is mandatory for **all** children at **12 months and 24 months of age**, regardless of ZIP code or Medicaid enrollment.
+> 
+> * **Catch-Up / Missed Tests:** If a child misses the 12-month test, it must be performed as soon as possible, with a repeat at 24 months. If the 24-month test was missed, the child must be screened as soon as possible before reaching 72 months (6 years of age).
+> * **Certification:** Proof of testing (MDH Form 4620 Blood Lead Testing Certificate) is legally required for entry into child care, pre-K, kindergarten, and 1st grade.
+> 
+> ## Reviewer note: Certification is sent to child care centers and others. It does not go to MDE so it does not need to be tracked.
+> ### 2. Confirmatory Venous Retesting (After Capillary Finger-Prick)
+> In Maryland, the threshold for an elevated blood lead level (BLL) is aligned with CDC guidance at ** ≥ 3.5   μ g/dL **. Because initial screening is frequently performed via capillary blood (finger-prick), which is susceptible to environmental skin contamination, all capillary results ≥ 3.5   μ g/dL require a follow-up **venous confirmation sample**:
+> 
+> Initial Capillary Result	Confirmatory Venous Sample Deadline
+> ** 3.5 − 9.9   μ g/dL **	Within **1 to 3 months**
+> ** 10 − 19   μ g/dL **	Within **1 to 2 weeks** (or up to 1 month depending on provider assessment)
+> ** 20 − 44   μ g/dL **	Within **2 weeks**
+> ** ≥ 45   μ g/dL **	Within **24 to 48 hours** (urgent medical evaluation / chelation)
+> Reviewer note: date of specimen collection (the draw date) of the initial capillary sample. The "initial" is the first unconfirmed, elevated capillary screening draw within a new exposure episode.
+> 
+> Scenario: test A is below reference level, test B is below reference level, test C is below level, test D is just above reference level, test E is below level, test F is above reference level. Assume tests are in chronological order. test D is the initial.
+> 
+> Test G is a following up 1 month after test D.
+> 
+> ### 3. Ongoing Follow-Up Retesting Schedule
+> Once a child has a confirmed venous BLL ≥ 3.5   μ g/dL , Maryland’s _Guidelines for Assessment and Management of Childhood Lead Exposure_ mandate a recurring follow-up schedule until lead levels decline and stabilize:
+> 
+> Confirmed Venous BLL	Early Follow-Up Interval _(First 2–4 tests)_	Later Follow-Up Interval _(After levels decline)_
+> ** 3.5 − 9.9   μ g/dL **	Repeat in **3 months**	Retest every **6 to 9 months**
+> ** 10 − 19   μ g/dL **	Repeat in **1 to 3 months**	Retest every **3 to 6 months**
+> ** 20 − 44   μ g/dL **	Repeat in **2 weeks to 1 month**	Retest every **1 to 3 months**
+> ** ≥ 45   μ g/dL **	**Immediately / As soon as possible**	Dictated by clinical chelation treatment plan
+> Reviewer note: the clock for retesting begins when the date of the follow-up test date. In the above scenario, test G was the following up. Depending on the level of the test, patient should get a follow up in 3 months.
+> 
+> ### 4. Public Health Case Management & Discharge
+> * **Discharge Criteria:** A child is typically eligible for case management discharge only after achieving **two consecutive blood lead tests below the actionable threshold** spaced at least 3 months apart.
+
+
+> Reviewer: me, roscoe-sincero-sys. This addresses decisions for [#202](https://github.com/roscoe-sincero-sys/MERIT/issues/202). The Montana example contains error so don't use or remove as an example.
+> 
+> Known Deadlines:
+> 
+> A. Statute: Md. Code, Environment § 6-304 (child-specific)
+> 
+> Deadline and recipients: Within 10 business days after test results show an elevated level for a child under 6, the Department or a local health department must notify the child’s parent or guardian. If the child doesn’t live in a property the parent or guardian owns, the property owner must also be notified.
+> 
+> Threshold that triggers it: July 1, 2022 through October 27, 2022: 5 µg/dL; October 28, 2022 through December 31, 2023: 3.5 µg/dL; from January 1, 2024: the “reference level” defined in § 6-801(q).
+> 
+> Where the deadline came from: The 10-business-day language was added by the Maryland Healthy Children Act (HB 1233, Ch. 341 of 2019). It changed “On receipt” to “Within 10 business days after receipt” of the results of a blood test showing a child under age 6 at or above the reference level.
+> 
+> B. Regulation: COMAR 26.16.08.05, “Scheduling an Environmental Investigation”
+> 
+> This regulation implements § 6-304. It adds pregnant women, says whose receipt starts the clock, and adds a second required step.
+> 
+> Under §6-304, after the Department receives a blood lead test result that diagnoses a child or pregnant woman with EBL, the Department or local health department shall: (1) not more than 10 business days after receipt of the result, notify (a) the caregiver of the child or the pregnant woman, and (b) if the child or pregnant woman lives at a property the caregiver or pregnant woman doesn’t own, the owner of that property; and (2) except as provided in §D, contact the caregiver or pregnant woman to schedule the on-site assessment portion of the environmental investigation.
+> 
+> If the family can’t be reached, the agency may try to make contact by coordinating with the medical provider or through other means, or, at its discretion, close the case without an environmental investigation. It may reopen the case and do the investigation if the caregiver or pregnant woman later asks
+> 
+> C. Statute: § 6-846, notice for children and pregnant women in older rental housing (“affected property”) Recipients: The Department or a local health department notifies the person at risk, or the parent or legal guardian if the person is a minor, of the test results. The owner of the affected property is notified only if the person at risk lives there or regularly spends at least 24 hours per week there.
+> 
+> Timing: Notification is triggered on receiving test results under § 6-303 that show an EBL. This section sets no specific deadline. In practice, the 10-business-day clock comes from § 6-304 and COMAR 26.16.08.05.
+> 
+> Form: Notices must be on forms the Department prepares and include any information the Department requires.
+> 
+> D. Definitions that control the criteria (§ 6-801 and COMAR 26.16.08.03) What counts as an elevated level (EBL): A quantity of lead in blood, in µg/dL, greater than or equal to the reference level, determined by either a venous blood test or two capillary blood tests taken under paragraph (2). For the two-capillary route, the second capillary sample must be drawn and tested within 84 days after the first. If one capillary result would require action and the other wouldn’t, the elevated level must be confirmed by a venous blood test.
+> 
+> Reference level: 5 μg/dL from July 1, 2020 through December 31, 2023, and 3.5 μg/dL on and after January 1, 2024. If CDC revises its reference value after December 31, 2023, the revised value applies starting 1 year after CDC’s revision.
+> 
+> Child: An individual under the age of 6 years.
+> 
+> Caregiver (used in the regulation): A parent, guardian, or other person legally responsible for the wellbeing of a child, or of a pregnant woman under 18.
+> 
+> Person at risk: A child or pregnant woman who lives in, or regularly spends at least 24 hours per week in, an affected property.
+> 
+> Affected property: Includes a property built before 1950 that contains at least one rental dwelling unit. Other categories are listed in § 6-801(b).
+> 
+> Lab reporting to MDE: COMAR 26.02.01.04
+> 
+> Who reports: Laboratory directors report results for Maryland residents 18 or younger to MDE. Results for Baltimore City residents also go to the Baltimore City Health Department. Elevated results: Results at or above the reference level are due by the close of business on the next business day after a final result.
+> 
+> Results below the reference level: Due within 2 weeks of a final result.
+> 
+> When the clock starts: At the “final blood lead level test result,” not at specimen receipt or draw.
+> 
+> How: By fax or another manner MDE requires. Labs with electronic tracking systems must report electronically to MDE’s technical specifications.
+> 
+> No deadline to complete the test: The text sets no deadline for completing the analysis itself.
+> 
+> Reviewer note: When a lab results is received passed the deadline, this should be recorded as a completed activity task/work task with the completed date being the date that a user or the system had determined that it was late.
+> 
+> Missing patient information: COMAR 26.02.01.03
+> 
+> Lab’s deadline: Within 3 business days of receiving the specimen, the lab must send the drawing facility a request for the missing information.
+> 
+> Drawing facility’s deadline: 1 business day from receiving the request for results at or above the reference level, and 5 business days for results below it.
+> 
+> If the facility doesn’t respond: The lab must report the name and address of the drawing facility that failed to respond.
+> 
+> Reviewer note: These deadlines are not MDE deadlines but it affects MDE nevertheless. If the lab result contains missing information, this should be recorded as a completed activity task/work task with the completed date being the date that a user or the system had determined that it was missing data. A second task is then added indicating "Missing Information Received" to be entered when that task is actually completed; otherwise, it is left pending.
+  
+ 
+ 
+13. log in using the various MD, Baltimore City, Baltimore County, and Harford county accounts to create multiple profiles for each account.  
+14. using an appropriate account that manages both Baltimore and Harford Counties simultaneously test the end to end intake workflow.  Include CSV and HL7 importing. Include manual data entry.  Include testing other profiles to test CRUD abilities and intake.
+15. using an appropriate account that manages Baltimore County test the end to end case management and investigation workflow.  Include testing other profiles to test CRUD abilities.
+16. using an appropriate account that manages Harford County test the end to end case management and investigation workflow.  Include testing other profiles to test CRUD abilities. 
+17. using an appropriate account that manages Baltimore City test the end to end case management and investigation workflow.  Include testing other profiles to test CRUD abilities. 
+18. Log in using the various VA and their counties accounts, and try to access any of the MD specific records.
+19. log in using the region 3 account.  Create multiple profiles.  Test the accounts' CRUD abilities using the various profiles.
+20. log in using region 3 admin account, run all security-related reports.  Include exporting of report results.
+21. log in using platform account, run all security-related reports.  Include exporting of report results.
+22. log in using plagtform account, grant security-related priviledges to an account that only access Harford County data -- a Harford County security officer.
+23. log in to the Harford county security officer account, run all security-related reports.  Include exporting of report results.  Results should only show Harford county users and any OTHER user that had accessed Harford county data.
+
