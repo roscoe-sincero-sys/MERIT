@@ -298,11 +298,13 @@ public interface IWorkData
 
     Task EnqueueJobAsync(Guid jobId, string jobType, string payloadJson, CancellationToken ct = default);
 
-    Task<ClaimedJobRow?> ClaimNextJobAsync(string workerName, CancellationToken ct = default);
+    Task<ClaimedJobRow?> ClaimNextJobAsync(string workerName, int leaseSeconds = 300, CancellationToken ct = default);
 
-    Task CompleteJobAsync(Guid jobId, string? resultJson, CancellationToken ct = default);
+    Task<bool> RenewJobClaimAsync(Guid jobId, Guid claimToken, CancellationToken ct = default);
 
-    Task FailJobAsync(Guid jobId, string errorText, CancellationToken ct = default);
+    Task<int> CompleteJobAsync(Guid jobId, string? resultJson, Guid? claimToken = null, CancellationToken ct = default);
+
+    Task<int> FailJobAsync(Guid jobId, string errorText, Guid? claimToken = null, CancellationToken ct = default);
 
     Task<JobRow?> GetJobAsync(Guid jobId, CancellationToken ct = default);
 

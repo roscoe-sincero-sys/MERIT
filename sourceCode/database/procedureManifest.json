@@ -559,10 +559,7 @@
   "grants": [
    "meritWebRole"
   ],
-  "permission": [
-   "tenant.administer",
-   "security.review"
-  ],
+  "permission": "tenant.administer or security.review",
   "params": []
  },
  {
@@ -2131,6 +2128,12 @@
     "type": "INT",
     "hasDefault": true,
     "isOutput": false
+   },
+   {
+    "name": "leaseSeconds",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
    }
   ]
  },
@@ -2203,6 +2206,12 @@
    {
     "name": "resultJson",
     "type": "NVARCHAR (MAX)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "claimToken",
+    "type": "UNIQUEIDENTIFIER",
     "hasDefault": true,
     "isOutput": false
    }
@@ -2788,6 +2797,12 @@
     "name": "errorText",
     "type": "NVARCHAR (2000)",
     "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "claimToken",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": true,
     "isOutput": false
    }
   ]
@@ -4968,6 +4983,28 @@
    {
     "name": "stagingRowIdsJson",
     "type": "NVARCHAR (MAX)",
+    "hasDefault": false,
+    "isOutput": false
+   }
+  ]
+ },
+ {
+  "name": "dbo.uspRenewJobClaim",
+  "kind": "write",
+  "grants": [
+   "meritWorkerRole"
+  ],
+  "permission": null,
+  "params": [
+   {
+    "name": "jobId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "claimToken",
+    "type": "UNIQUEIDENTIFIER",
     "hasDefault": false,
     "isOutput": false
    }
@@ -7947,10 +7984,7 @@
   "grants": [
    "meritWebRole"
   ],
-  "permission": [
-   "tenant.administer",
-   "security.review"
-  ],
+  "permission": "tenant.administer or security.review",
   "params": [
    {
     "name": "hours",
@@ -7993,10 +8027,7 @@
   "grants": [
    "meritWebRole"
   ],
-  "permission": [
-   "tenant.administer",
-   "security.review"
-  ],
+  "permission": "tenant.administer or security.review",
   "params": [
    {
     "name": "appUserId",

@@ -13,7 +13,7 @@ CreateDate:   2026-10-24
 ========================================================================================================================
 Description:
 
-Marks a job succeeded with a result summary the polling screen shows.
+Marks a job succeeded with a result summary the polling screen shows, fenced by @claimToken.
 
 ========================================================================================================================
 Requirements and Key Dependencies:
@@ -47,6 +47,7 @@ Description:	Initial version.
 CREATE OR ALTER PROCEDURE dbo.uspCompleteJob
       @jobId      UNIQUEIDENTIFIER
       , @resultJson NVARCHAR (MAX) = NULL
+      , @claimToken UNIQUEIDENTIFIER = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -89,10 +90,15 @@ BEGIN
         -- =========================================================================================
 
         UPDATE dbo.jobQueue
-           SET jobStatus = 'succeeded', completedUtc = SYSUTCDATETIME (), resultJson = @resultJson, lastError = NULL
-         WHERE jobId = @jobId AND isDeleted = 0;
+           SET jobStatus = 'succeeded', completedUtc = SYSUTCDATETIME (), resultJson = @resultJson, lastError = NULL,
+               claimToken = NULL
+         WHERE jobId = @jobId AND isDeleted = 0
+           AND ((@claimToken IS NOT NULL AND jobStatus = 'running' AND claimToken = @claimToken)
+                OR (@claimToken IS NULL AND jobStatus = 'queued' AND claimToken IS NULL));
 
-        SET @Comments = CONCAT (@@ROWCOUNT, N' job(s) completed.');
+        DECLARE @updated INT = @@ROWCOUNT;
+        SET @Comments = CONCAT (@updated, N' job(s) completed.');
+        SELECT @updated AS updatedCount;
 
         -- =========================================================================================
         -- ===== End of the procedure's own work. ===================================================
@@ -175,7 +181,7 @@ EXEC util.uspSetObjectDescription
       @SchemaName  = N'dbo'
     , @ObjectType  = N'PROCEDURE'
     , @ObjectName  = N'uspCompleteJob'
-    , @Description = N'Marks a job succeeded with a result summary the polling screen shows.';
+    , @Description = N'Marks a job succeeded with a result summary the polling screen shows, fenced by @claimToken.';
 GO
 
 IF DATABASE_PRINCIPAL_ID (N'meritWorkerRole') IS NOT NULL

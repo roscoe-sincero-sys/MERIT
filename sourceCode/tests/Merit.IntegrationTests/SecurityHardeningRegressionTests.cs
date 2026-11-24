@@ -1367,7 +1367,6 @@ public sealed class SecurityHardeningRegressionTests(MeritFixture fixture)
         finally
         {
             await ExecAsync("""
-                DELETE FROM logs.auditEvent WHERE entityType = 'userAssignment' AND entityId IN (@a1, @a2);
                 DELETE FROM auth.sessionScopePermission WHERE sessionScopeId IN (@s1, @s2, @sv);
                 DELETE FROM auth.sessionScopeTenant WHERE sessionScopeId IN (@s1, @s2, @sv);
                 DELETE FROM auth.sessionScopeRoot WHERE sessionScopeId IN (@s1, @s2, @sv);
@@ -1380,7 +1379,6 @@ public sealed class SecurityHardeningRegressionTests(MeritFixture fixture)
                 DELETE FROM auth.tenantClosure WHERE ancestorTenantId = @rootId OR descendantTenantId = @rootId;
                 DELETE FROM auth.tenant WHERE tenantId = @rootId;
                 """,
-                ("@a1", extraAssignId), ("@a2", extraAssign2Id),
                 ("@s1", scope1Id), ("@s2", scope2Id), ("@sv", viewAsScopeId),
                 ("@u1", targetUserId), ("@u2", adminUserId),
                 ("@r1", baseRoleId), ("@r2", extraRoleId),

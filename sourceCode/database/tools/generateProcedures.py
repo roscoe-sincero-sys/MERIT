@@ -393,8 +393,9 @@ def manifest_entry(p: dict) -> dict:
         declared, eq, _default = rest.partition("=")
         params.append({"name": name[1:], "type": " ".join(declared.split()).replace(" OUTPUT", ""),
                        "hasDefault": bool(eq), "isOutput": "OUTPUT" in declared})
+    perm = p.get("permission")
     return {"name": f"{p['schema']}.{p['name']}", "kind": p["kind"], "grants": p.get("grants", []),
-            "permission": p.get("permission"), "params": params}
+            "permission": " or ".join(perm) if isinstance(perm, list) else perm, "params": params}
 
 
 def stale_procedure_files(out_dir: Path, generated_names: set[str]) -> list[Path]:

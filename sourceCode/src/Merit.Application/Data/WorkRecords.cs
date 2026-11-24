@@ -179,6 +179,9 @@ public sealed class ClaimedJobRow
 
     /// <summary>The tenant the user was working in when the job was queued.</summary>
     public Guid? RequestedActingTenantId { get; init; }
+
+    /// <summary>Fencing token issued when claimed; required to renew, complete or fail (issue #311).</summary>
+    public Guid ClaimToken { get; init; }
 }
 
 public sealed class JobRow

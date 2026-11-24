@@ -36,14 +36,17 @@ public sealed class WorkData(Db db) : IWorkData
     public Task EnqueueJobAsync(Guid jobId, string jobType, string payloadJson, CancellationToken ct = default)
         => db.ExecuteAsync("dbo.uspEnqueueJob", new { jobId, jobType, payloadJson }, ct);
 
-    public Task<ClaimedJobRow?> ClaimNextJobAsync(string workerName, CancellationToken ct = default)
-        => db.QuerySingleAsync<ClaimedJobRow>("dbo.uspClaimNextJob", new { workerName }, ct);
+    public Task<ClaimedJobRow?> ClaimNextJobAsync(string workerName, int leaseSeconds = 300, CancellationToken ct = default)
+        => db.QuerySingleAsync<ClaimedJobRow>("dbo.uspClaimNextJob", new { workerName, leaseSeconds }, ct);
 
-    public Task CompleteJobAsync(Guid jobId, string? resultJson, CancellationToken ct = default)
-        => db.ExecuteAsync("dbo.uspCompleteJob", new { jobId, resultJson }, ct);
+    public async Task<bool> RenewJobClaimAsync(Guid jobId, Guid claimToken, CancellationToken ct = default)
+        => await db.QuerySingleAsync<int>("dbo.uspRenewJobClaim", new { jobId, claimToken }, ct).ConfigureAwait(false) > 0;
 
-    public Task FailJobAsync(Guid jobId, string errorText, CancellationToken ct = default)
-        => db.ExecuteAsync("dbo.uspFailJob", new { jobId, errorText }, ct);
+    public Task<int> CompleteJobAsync(Guid jobId, string? resultJson, Guid? claimToken = null, CancellationToken ct = default)
+        => db.QuerySingleAsync<int>("dbo.uspCompleteJob", new { jobId, resultJson, claimToken }, ct)!;
+
+    public Task<int> FailJobAsync(Guid jobId, string errorText, Guid? claimToken = null, CancellationToken ct = default)
+        => db.QuerySingleAsync<int>("dbo.uspFailJob", new { jobId, errorText, claimToken }, ct)!;
 
     public Task<JobRow?> GetJobAsync(Guid jobId, CancellationToken ct = default)
         => db.QuerySingleAsync<JobRow>("dbo.uspGetJob", new { jobId }, ct);

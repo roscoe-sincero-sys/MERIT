@@ -369,14 +369,18 @@ SET @Comments = N'Job queued.';
         "desc": "Claims the next job for a worker copy. Row locks with READPAST mean two copies never take the same job; "
                 "tenants with the fewest running jobs go first, so one state's large file cannot starve the others.",
         "params": """@workerName VARCHAR (120)
-, @maxRunningPerTenant INT = 2""",
+, @maxRunningPerTenant INT = 2
+, @leaseSeconds INT = 300""",
         "key": "CONCAT (N'workerName=', @workerName)",
-        "notes": "Returns zero rows when nothing is waiting. A job left running past 30 minutes by a worker that died is "
-                 "returned to the queue first.",
+        "notes": "Returns zero rows when nothing is waiting. A job whose lease has expired without a heartbeat renewal is "
+                 "returned to the queue first. Issues a fresh claimToken fencing token on every claim (issue #311).",
         "body": """
+DECLARE @lease INT = CASE WHEN @leaseSeconds >= 1 THEN @leaseSeconds ELSE 300 END;
+
 UPDATE dbo.jobQueue
-   SET jobStatus = 'queued', claimedBy = NULL, claimedUtc = NULL, lastError = N'Returned to queue: worker stopped responding.'
- WHERE jobStatus = 'running' AND claimedUtc < DATEADD (MINUTE, -30, SYSUTCDATETIME ()) AND isDeleted = 0;
+   SET jobStatus = 'queued', claimedBy = NULL, claimedUtc = NULL, claimToken = NULL,
+       lastError = N'Returned to queue: worker stopped responding.'
+ WHERE jobStatus = 'running' AND claimedUtc < DATEADD (SECOND, -@lease, SYSUTCDATETIME ()) AND isDeleted = 0;
 
 DECLARE @claimed TABLE (jobId UNIQUEIDENTIFIER);
 
@@ -395,38 +399,63 @@ candidate AS
      ORDER BY COALESCE (r.n, 0), j.availableUtc
 )
 UPDATE j
-   SET jobStatus = 'running', claimedBy = @workerName, claimedUtc = SYSUTCDATETIME (), attempts = j.attempts + 1
+   SET jobStatus = 'running', claimedBy = @workerName, claimedUtc = SYSUTCDATETIME (),
+       claimToken = NEWID (), attempts = j.attempts + 1
 OUTPUT inserted.jobId INTO @claimed
   FROM dbo.jobQueue AS j
   JOIN candidate AS n ON n.jobId = j.jobId;
 
 SELECT j.jobId, j.rootTenantId, j.owningTenantId, j.jobType, j.payloadJson, j.payloadVersion, j.attempts, j.maxAttempts,
-       j.requestedByUserId, j.requestedProfileId, j.requestedViewAsUserId, j.requestedActingTenantId
+       j.requestedByUserId, j.requestedProfileId, j.requestedViewAsUserId, j.requestedActingTenantId, j.claimToken
   FROM dbo.jobQueue AS j JOIN @claimed AS c ON c.jobId = j.jobId;
 
 SET @Comments = CONCAT ((SELECT COUNT (*) FROM @claimed), N' job(s) claimed.');
 """,
     },
     {
-        "schema": "dbo", "name": "uspCompleteJob", "kind": "write", "grants": WORKER, "ticket": "T049",
-        "desc": "Marks a job succeeded with a result summary the polling screen shows.",
+        "schema": "dbo", "name": "uspRenewJobClaim", "kind": "write", "grants": WORKER, "ticket": "#311",
+        "desc": "Renews the lease on a running job while the claiming worker is still alive. Returns 1 when renewed, "
+                "or 0 if the claim was lost or the job is no longer running.",
         "params": """@jobId      UNIQUEIDENTIFIER
-, @resultJson NVARCHAR (MAX) = NULL""",
+, @claimToken UNIQUEIDENTIFIER""",
         "key": "CONCAT (N'jobId=', @jobId)",
         "body": """
 UPDATE dbo.jobQueue
-   SET jobStatus = 'succeeded', completedUtc = SYSUTCDATETIME (), resultJson = @resultJson, lastError = NULL
- WHERE jobId = @jobId AND isDeleted = 0;
+   SET claimedUtc = SYSUTCDATETIME ()
+ WHERE jobId = @jobId AND claimToken = @claimToken AND jobStatus = 'running' AND isDeleted = 0;
 
-SET @Comments = CONCAT (@@ROWCOUNT, N' job(s) completed.');
+DECLARE @renewed INT = @@ROWCOUNT;
+SET @Comments = CASE WHEN @renewed = 1 THEN N'Claim renewed.' ELSE N'Claim lost.' END;
+SELECT @renewed AS renewed;
+""",
+    },
+    {
+        "schema": "dbo", "name": "uspCompleteJob", "kind": "write", "grants": WORKER, "ticket": "T049",
+        "desc": "Marks a job succeeded with a result summary the polling screen shows, fenced by @claimToken.",
+        "params": """@jobId      UNIQUEIDENTIFIER
+, @resultJson NVARCHAR (MAX) = NULL
+, @claimToken UNIQUEIDENTIFIER = NULL""",
+        "key": "CONCAT (N'jobId=', @jobId)",
+        "body": """
+UPDATE dbo.jobQueue
+   SET jobStatus = 'succeeded', completedUtc = SYSUTCDATETIME (), resultJson = @resultJson, lastError = NULL,
+       claimToken = NULL
+ WHERE jobId = @jobId AND isDeleted = 0
+   AND ((@claimToken IS NOT NULL AND jobStatus = 'running' AND claimToken = @claimToken)
+        OR (@claimToken IS NULL AND jobStatus = 'queued' AND claimToken IS NULL));
+
+DECLARE @updated INT = @@ROWCOUNT;
+SET @Comments = CONCAT (@updated, N' job(s) completed.');
+SELECT @updated AS updatedCount;
 """,
     },
     {
         "schema": "dbo", "name": "uspFailJob", "kind": "write", "grants": WORKER, "ticket": "T049",
-        "desc": "Records a job failure. The job is retried with exponential back-off until its attempts run out, then "
-                "marked failed for the administration screen. It is never dropped.",
+        "desc": "Records a job failure, fenced by @claimToken. The job is retried with exponential back-off until its "
+                "attempts run out, then marked failed for the administration screen. It is never dropped.",
         "params": """@jobId      UNIQUEIDENTIFIER
-, @errorText  NVARCHAR (2000)""",
+, @errorText  NVARCHAR (2000)
+, @claimToken UNIQUEIDENTIFIER = NULL""",
         "key": "CONCAT (N'jobId=', @jobId)",
         "notes": "@errorText must carry record IDs only, never patient data; the worker passes exception type and ids.",
         "body": """
@@ -435,10 +464,16 @@ UPDATE dbo.jobQueue
      , completedUtc = CASE WHEN attempts >= maxAttempts THEN SYSUTCDATETIME () ELSE NULL END
      , availableUtc = DATEADD (SECOND, 30 * POWER (2, LEAST (attempts, 8)), SYSUTCDATETIME ())
      , claimedBy    = NULL
+     , claimedUtc   = NULL
+     , claimToken   = NULL
      , lastError    = LEFT (@errorText, 2000)
- WHERE jobId = @jobId AND isDeleted = 0;
+ WHERE jobId = @jobId AND isDeleted = 0
+   AND ((@claimToken IS NOT NULL AND jobStatus = 'running' AND claimToken = @claimToken)
+        OR (@claimToken IS NULL AND jobStatus = 'queued' AND claimToken IS NULL));
 
-SET @Comments = N'Job failure recorded.';
+DECLARE @updated INT = @@ROWCOUNT;
+SET @Comments = CASE WHEN @updated = 1 THEN N'Job failure recorded.' ELSE N'Claim lost; failure discarded.' END;
+SELECT @updated AS updatedCount;
 """,
     },
     {

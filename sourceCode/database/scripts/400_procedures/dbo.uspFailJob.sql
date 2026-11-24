@@ -13,7 +13,7 @@ CreateDate:   2026-10-24
 ========================================================================================================================
 Description:
 
-Records a job failure. The job is retried with exponential back-off until its attempts run out, then marked failed for the administration screen. It is never dropped.
+Records a job failure, fenced by @claimToken. The job is retried with exponential back-off until its attempts run out, then marked failed for the administration screen. It is never dropped.
 
 ========================================================================================================================
 Requirements and Key Dependencies:
@@ -49,6 +49,7 @@ Description:	Initial version.
 CREATE OR ALTER PROCEDURE dbo.uspFailJob
       @jobId      UNIQUEIDENTIFIER
       , @errorText  NVARCHAR (2000)
+      , @claimToken UNIQUEIDENTIFIER = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -95,10 +96,16 @@ BEGIN
              , completedUtc = CASE WHEN attempts >= maxAttempts THEN SYSUTCDATETIME () ELSE NULL END
              , availableUtc = DATEADD (SECOND, 30 * POWER (2, LEAST (attempts, 8)), SYSUTCDATETIME ())
              , claimedBy    = NULL
+             , claimedUtc   = NULL
+             , claimToken   = NULL
              , lastError    = LEFT (@errorText, 2000)
-         WHERE jobId = @jobId AND isDeleted = 0;
+         WHERE jobId = @jobId AND isDeleted = 0
+           AND ((@claimToken IS NOT NULL AND jobStatus = 'running' AND claimToken = @claimToken)
+                OR (@claimToken IS NULL AND jobStatus = 'queued' AND claimToken IS NULL));
 
-        SET @Comments = N'Job failure recorded.';
+        DECLARE @updated INT = @@ROWCOUNT;
+        SET @Comments = CASE WHEN @updated = 1 THEN N'Job failure recorded.' ELSE N'Claim lost; failure discarded.' END;
+        SELECT @updated AS updatedCount;
 
         -- =========================================================================================
         -- ===== End of the procedure's own work. ===================================================
@@ -181,7 +188,7 @@ EXEC util.uspSetObjectDescription
       @SchemaName  = N'dbo'
     , @ObjectType  = N'PROCEDURE'
     , @ObjectName  = N'uspFailJob'
-    , @Description = N'Records a job failure. The job is retried with exponential back-off until its attempts run out, then marked failed for the administration screen. It is never dropped.';
+    , @Description = N'Records a job failure, fenced by @claimToken. The job is retried with exponential back-off until its attempts run out, then marked failed for the administration screen. It is never dropped.';
 GO
 
 IF DATABASE_PRINCIPAL_ID (N'meritWorkerRole') IS NOT NULL
