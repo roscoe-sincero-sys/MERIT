@@ -1095,7 +1095,8 @@ TABLES = [
             c("reasonCode", "VARCHAR (30)", "System-defined hold reason.", null=False,
               check="reasonCode IN ('unknownSender', 'unknownTestCode', 'unknownUnit', 'inactiveAnalyte', "
                     "'missingResultValue', 'missingDob', 'unusableAddress', 'possibleDuplicate', 'uncertainMatch', "
-                    "'outOfJurisdiction', 'impossibleDates')"),
+                    "'outOfJurisdiction', 'impossibleDates', 'permissionDenied')",
+              check_addition="permissionDenied"),
             c("fieldName", "VARCHAR (60)", "Field the problem is in."),
             c("reasonMessage", "NVARCHAR (500)", "Plain-language message.", null=False),
             c("reportedValue", "NVARCHAR (200)", "The value that caused the hold, as reported; grouping key for fixes."),
@@ -1370,7 +1371,8 @@ TABLES = [
             c("availableUtc", "DATETIME2 (3)", "Earliest UTC time the job may be claimed; pushed back on retry.",
               null=False),
             c("claimedBy", "NVARCHAR (120)", "Worker instance that claimed the job."),
-            c("claimedUtc", "DATETIME2 (3)", "UTC time claimed."),
+            c("claimedUtc", "DATETIME2 (3)", "UTC time claimed or last renewed by heartbeat."),
+            c("claimToken", UUID, "Fencing token issued when claimed; required to renew, complete or fail."),
             c("completedUtc", "DATETIME2 (3)", "UTC time it succeeded or finally failed."),
             c("lastError", "NVARCHAR (2000)", "Last error message; record IDs only, never patient data."),
             c("requestedByUserId", UUID, "User who started the job; the worker acts as this user.", null=False),

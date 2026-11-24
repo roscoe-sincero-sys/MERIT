@@ -25,7 +25,7 @@ logs.uspStartExecutionLogging and logs.uspRecordExecutionError (scripts/000_infr
 ========================================================================================================================
 Notes:
 
-Returns zero rows when nothing is waiting. A job left running past 30 minutes by a worker that died is returned to the queue first.
+Returns zero rows when nothing is waiting. A job whose lease has expired without a heartbeat renewal is returned to the queue first. Issues a fresh claimToken fencing token on every claim (issue #311).
 
 Rule 8 full instrumentation, generated from templates/procedure.sql by tools/generateProcedures.py. Row-level security applies to every table read
 or written here: SESSION_CONTEXT (N'scopeKey') decides what the caller can see.
@@ -49,6 +49,7 @@ Description:	Initial version.
 CREATE OR ALTER PROCEDURE dbo.uspClaimNextJob
       @workerName VARCHAR (120)
       , @maxRunningPerTenant INT = 2
+      , @leaseSeconds INT = 300
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -90,9 +91,12 @@ BEGIN
         -- ===== The procedure's own work starts here. Everything above and below is boilerplate. ==
         -- =========================================================================================
 
+        DECLARE @lease INT = CASE WHEN @leaseSeconds >= 1 THEN @leaseSeconds ELSE 300 END;
+
         UPDATE dbo.jobQueue
-           SET jobStatus = 'queued', claimedBy = NULL, claimedUtc = NULL, lastError = N'Returned to queue: worker stopped responding.'
-         WHERE jobStatus = 'running' AND claimedUtc < DATEADD (MINUTE, -30, SYSUTCDATETIME ()) AND isDeleted = 0;
+           SET jobStatus = 'queued', claimedBy = NULL, claimedUtc = NULL, claimToken = NULL,
+               lastError = N'Returned to queue: worker stopped responding.'
+         WHERE jobStatus = 'running' AND claimedUtc < DATEADD (SECOND, -@lease, SYSUTCDATETIME ()) AND isDeleted = 0;
 
         DECLARE @claimed TABLE (jobId UNIQUEIDENTIFIER);
 
@@ -111,13 +115,14 @@ BEGIN
              ORDER BY COALESCE (r.n, 0), j.availableUtc
         )
         UPDATE j
-           SET jobStatus = 'running', claimedBy = @workerName, claimedUtc = SYSUTCDATETIME (), attempts = j.attempts + 1
+           SET jobStatus = 'running', claimedBy = @workerName, claimedUtc = SYSUTCDATETIME (),
+               claimToken = NEWID (), attempts = j.attempts + 1
         OUTPUT inserted.jobId INTO @claimed
           FROM dbo.jobQueue AS j
           JOIN candidate AS n ON n.jobId = j.jobId;
 
         SELECT j.jobId, j.rootTenantId, j.owningTenantId, j.jobType, j.payloadJson, j.payloadVersion, j.attempts, j.maxAttempts,
-               j.requestedByUserId, j.requestedProfileId, j.requestedViewAsUserId, j.requestedActingTenantId
+               j.requestedByUserId, j.requestedProfileId, j.requestedViewAsUserId, j.requestedActingTenantId, j.claimToken
           FROM dbo.jobQueue AS j JOIN @claimed AS c ON c.jobId = j.jobId;
 
         SET @Comments = CONCAT ((SELECT COUNT (*) FROM @claimed), N' job(s) claimed.');

@@ -84,22 +84,6 @@
   ]
  },
  {
-  "name": "auth.uspContinueUsageSession",
-  "kind": "write",
-  "grants": [
-   "meritWebRole"
-  ],
-  "permission": null,
-  "params": [
-   {
-    "name": "newSessionScopeId",
-    "type": "UNIQUEIDENTIFIER",
-    "hasDefault": false,
-    "isOutput": false
-   }
-  ]
- },
- {
   "name": "auth.uspCreateEmailChallenge",
   "kind": "write",
   "grants": [
@@ -575,7 +559,7 @@
   "grants": [
    "meritWebRole"
   ],
-  "permission": "tenant.administer",
+  "permission": "tenant.administer or security.review",
   "params": []
  },
  {
@@ -2144,6 +2128,12 @@
     "type": "INT",
     "hasDefault": true,
     "isOutput": false
+   },
+   {
+    "name": "leaseSeconds",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
    }
   ]
  },
@@ -2216,6 +2206,12 @@
    {
     "name": "resultJson",
     "type": "NVARCHAR (MAX)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "claimToken",
+    "type": "UNIQUEIDENTIFIER",
     "hasDefault": true,
     "isOutput": false
    }
@@ -2801,6 +2797,12 @@
     "name": "errorText",
     "type": "NVARCHAR (2000)",
     "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "claimToken",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": true,
     "isOutput": false
    }
   ]
@@ -3719,6 +3721,22 @@
   ],
   "permission": "case.view",
   "params": []
+ },
+ {
+  "name": "dbo.uspListCaseTransferTargets",
+  "kind": "read",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": "case.edit",
+  "params": [
+   {
+    "name": "exposureCaseId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   }
+  ]
  },
  {
   "name": "dbo.uspListClusters",
@@ -4965,6 +4983,28 @@
    {
     "name": "stagingRowIdsJson",
     "type": "NVARCHAR (MAX)",
+    "hasDefault": false,
+    "isOutput": false
+   }
+  ]
+ },
+ {
+  "name": "dbo.uspRenewJobClaim",
+  "kind": "write",
+  "grants": [
+   "meritWorkerRole"
+  ],
+  "permission": null,
+  "params": [
+   {
+    "name": "jobId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "claimToken",
+    "type": "UNIQUEIDENTIFIER",
     "hasDefault": false,
     "isOutput": false
    }
@@ -7552,6 +7592,40 @@
   ]
  },
  {
+  "name": "dbo.uspTransferExposureCase",
+  "kind": "write",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": "case.edit",
+  "params": [
+   {
+    "name": "exposureCaseId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "toTenantId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "reason",
+    "type": "NVARCHAR (500)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "rowVersion",
+    "type": "BINARY (8)",
+    "hasDefault": false,
+    "isOutput": false
+   }
+  ]
+ },
+ {
   "name": "dbo.uspUpdateCluster",
   "kind": "write",
   "grants": [
@@ -7910,7 +7984,7 @@
   "grants": [
    "meritWebRole"
   ],
-  "permission": "tenant.administer",
+  "permission": "tenant.administer or security.review",
   "params": [
    {
     "name": "hours",
@@ -7953,7 +8027,7 @@
   "grants": [
    "meritWebRole"
   ],
-  "permission": "tenant.administer",
+  "permission": "tenant.administer or security.review",
   "params": [
    {
     "name": "appUserId",

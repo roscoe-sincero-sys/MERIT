@@ -174,11 +174,11 @@ BEGIN
          WHERE NOT EXISTS (SELECT 1 FROM auth.rolePermission AS x WHERE x.roleId = ro.roleId
                                                                    AND x.permissionId = pm.permissionId AND x.isDeleted = 0);
 
-        -- Issue #300: Reconcile shipped de-identified epidemiologist role permissions on upgrade and revoke open sessions.
         DECLARE @reconciledDeidRole TABLE (roleId UNIQUEIDENTIFIER);
+
         UPDATE rp
-           SET isDeleted = 1
-             , modifiedBy = ORIGINAL_LOGIN ()
+           SET isDeleted       = 1
+             , modifiedBy      = ORIGINAL_LOGIN ()
              , modifiedDateUtc = SYSUTCDATETIME ()
         OUTPUT INSERTED.roleId INTO @reconciledDeidRole (roleId)
           FROM auth.rolePermission AS rp

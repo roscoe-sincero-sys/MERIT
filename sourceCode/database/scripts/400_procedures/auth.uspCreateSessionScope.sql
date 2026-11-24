@@ -99,8 +99,6 @@ BEGIN
         DECLARE @platform UNIQUEIDENTIFIER = CAST (HASHBYTES ('MD5', N'tenant:PLATFORM') AS UNIQUEIDENTIFIER);
         DECLARE @sessionReference UNIQUEIDENTIFIER = NEWID ();
 
-        -- Serialize grant materialization with authorization cutovers (e.g., 566_reconcileDeidentifiedRole.sql, which
-        -- takes MERIT.grants Exclusive). Acquired before session/user locks to keep lock order deadlock-free.
         DECLARE @grantLock INT;
         EXEC @grantLock = sys.sp_getapplock @Resource = N'MERIT.grants', @LockMode = 'Shared', @LockOwner = 'Transaction', @LockTimeout = 5000;
         IF @grantLock < 0
@@ -108,10 +106,6 @@ BEGIN
             ;THROW 51409, N'Authorization rules are being updated; please try again.', 1;
         END;
 
-        -- Issue #298: Atomic renewal locks the logical session (serialized with sign-out via sp_getapplock),
-        -- validates the original scope, account, and security stamp, carries forward the original absolute expiry
-        -- and logical sessionReference, and revokes the old scope inside the same transaction.
-        -- Uses distinct error 51401 (SessionEnded) so ordinary 51403 denials (e.g., unauthorized view-as) keep the session.
         IF @replacesSessionScopeId IS NOT NULL
         BEGIN
             DECLARE @lockRef UNIQUEIDENTIFIER = (SELECT sessionReference FROM auth.sessionScope
@@ -227,7 +221,6 @@ BEGIN
             END;
 
             -- What they can see and do, only where the caller administers, and never more than the caller may do there.
-            -- Identified clinical read access requires both the caller and the viewed user to hold a non-de-identified grant.
             INSERT @x
             SELECT v.tenantId, v.permissionCode, v.permissionLevel, IIF (v.grantRank < m.grantRank, v.grantRank, m.grantRank),
                    CASE WHEN v.hasIdentified = 1 AND m.hasIdentified = 1 THEN 1 ELSE 0 END
@@ -275,8 +268,6 @@ BEGIN
                                              AND EXISTS (SELECT 1 FROM @x WHERE permissionCode = 'platform.administer')
                                             THEN 1 ELSE 0 END;
 
-        -- Issue #300: Derive de-identification flags directly from @x.hasIdentified so master, profile, and view-as
-        -- always share the exact same grant expansion rules and per-(tenant, permission) boundaries.
         DECLARE @isDeidentified BIT = CASE WHEN @isPlatformAdmin = 0
                                             AND EXISTS (SELECT 1 FROM @tenants)
                                             AND NOT EXISTS (SELECT 1 FROM @x WHERE permissionCode IN ('result.view', 'case.view') AND hasIdentified = 1)
@@ -288,8 +279,6 @@ BEGIN
                    OR EXISTS (SELECT 1 FROM @adminScope WHERE tenantId = @actingTenantId) THEN @actingTenantId END;
         IF @acting IS NULL
         BEGIN
-            -- Issue 280: the same tenant every time. Equal depths (a worker in two counties) used to fall to a GUID
-            -- comparison, so new records went to a different county from one deployment or run to the next.
             SET @acting = (SELECT TOP (1) s.tenantId
                              FROM (SELECT tenantId FROM @tenants UNION SELECT tenantId FROM @adminScope) AS s
                              JOIN auth.tenantClosure AS c ON c.descendantTenantId = s.tenantId AND c.ancestorTenantId = @platform

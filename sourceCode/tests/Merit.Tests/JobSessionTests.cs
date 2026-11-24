@@ -74,6 +74,88 @@ public sealed class JobSessionTests
         Assert.Single(FakeAccounts.Of(accounts).Revoked);
     }
 
+    [Fact]
+    public async Task JobWorkerCancelsExecutionAndDiscardsResultWhenLeaseRenewalReportsClaimLost()
+    {
+        Guid jobId = Guid.NewGuid();
+        Guid token = Guid.NewGuid();
+        var accounts = FakeAccounts.Create(actingTenantReturned: Region);
+        var work = FakeWork.Create(new ClaimedJobRow
+        {
+            JobId = jobId,
+            JobType = JobTypes.ClusterDetection,
+            RequestedByUserId = User,
+            RootTenantId = Region,
+            PayloadJson = "{}",
+            Attempts = 1,
+            ClaimToken = token,
+        }, renewResult: false);
+
+        var services = new ServiceCollection()
+            .AddSingleton(accounts)
+            .AddSingleton(work)
+            .BuildServiceProvider();
+        var holder = new JobSessionHolder();
+        var opts = Options.Create(new WorkerOptions { LeaseSeconds = 5, HeartbeatMilliseconds = 25, SessionMinutes = 60 });
+        var worker = new JobWorker(services, holder, opts, NullLogger<JobWorker>.Instance);
+
+        bool observedCancel = false;
+        bool ran = await worker.RunOneAsync(CancellationToken.None, async (_, jobCt) =>
+        {
+            try
+            {
+                await Task.Delay(TimeSpan.FromSeconds(5), jobCt);
+            }
+            catch (OperationCanceledException)
+            {
+                observedCancel = true;
+                throw;
+            }
+
+            return "{}";
+        });
+
+        Assert.True(ran);
+        Assert.True(observedCancel, "Job execution should be cancelled when lease renewal returns false.");
+        Assert.True(FakeWork.Of(work).RenewCalls >= 1);
+        Assert.Equal(0, FakeWork.Of(work).CompleteCalls);
+        Assert.Equal(0, FakeWork.Of(work).FailCalls);
+        Assert.Null(holder.Current);
+        Assert.Single(FakeAccounts.Of(accounts).Revoked);
+    }
+
+    public class FakeWork : DispatchProxy
+    {
+        private ClaimedJobRow? job;
+        private bool renewResult;
+        public int RenewCalls { get; private set; }
+        public int CompleteCalls { get; private set; }
+        public int FailCalls { get; private set; }
+
+        public static IWorkData Create(ClaimedJobRow job, bool renewResult)
+        {
+            var proxy = Create<IWorkData, FakeWork>();
+            Of(proxy).job = job;
+            Of(proxy).renewResult = renewResult;
+            return proxy;
+        }
+
+        public static FakeWork Of(IWorkData proxy) => (FakeWork)(object)proxy;
+
+        protected override object? Invoke(MethodInfo? method, object?[]? args) => method?.Name switch
+        {
+            nameof(IWorkData.ClaimNextJobAsync) => Task.FromResult(job),
+            nameof(IWorkData.RenewJobClaimAsync) => Renew(),
+            nameof(IWorkData.CompleteJobAsync) => Complete(),
+            nameof(IWorkData.FailJobAsync) => Fail(),
+            _ => throw new NotSupportedException(method?.Name),
+        };
+
+        private Task<bool> Renew() { RenewCalls++; return Task.FromResult(renewResult); }
+        private Task<int> Complete() { CompleteCalls++; return Task.FromResult(1); }
+        private Task<int> Fail() { FailCalls++; return Task.FromResult(1); }
+    }
+
     /// <summary>IAccountData with only the calls JobSessions and ClusterScheduler make.</summary>
     public class FakeAccounts : DispatchProxy
     {

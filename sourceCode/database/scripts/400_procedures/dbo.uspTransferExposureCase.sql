@@ -9,15 +9,11 @@ GO
 /***********************************************************************************************************************
 ObjectName:   dbo.uspTransferExposureCase
 Author:       MERIT build
-CreateDate:   2026-11-11
+CreateDate:   2026-10-24
 ========================================================================================================================
 Description:
 
-Transfers an open or monitoring case to another jurisdiction (or program, or the data root) of the same data root,
-with everything that belongs to it: its history, result links, tasks, notification obligations, exposure sources,
-patient activities and documents recorded on the case, cluster links, investigation links, and each investigation
-that serves only this case. Records the transfer in the case history and completes any "Case opened outside the
-residence jurisdiction" task.
+Transfers an open case, with its history, tasks, obligations, sources, documents and its own investigations, to another jurisdiction of the same data root. Needs case.edit with write access at both ends (#274).
 
 ========================================================================================================================
 Requirements and Key Dependencies:
@@ -29,26 +25,20 @@ logs.uspStartExecutionLogging and logs.uspRecordExecutionError (scripts/000_infr
 ========================================================================================================================
 Notes:
 
-Requires permission case.edit (auth.udfHasPermission); refuses with 51403 otherwise. The caller must hold case.edit
-with write access at BOTH the current owner and the receiving tenant (a state user, or someone working in both
-jurisdictions); every table's row-level-security block predicate would refuse the move otherwise.
+Requires permission case.edit (auth.udfHasPermission); refuses with 51403 otherwise.
 
-Rows the caller cannot see (row-level security) are not moved; the count moved is in the history note. Assignees
-who cannot work the case, task or investigation in the receiving tenant are cleared, so nothing stays assigned to
-someone who can no longer open it. An investigation linked to other cases stays where it is; only this case's link
-moves. Lab results stay owned by the data root, as every result is.
-
-Rule 8 full instrumentation. Row-level security applies to every table read or written here.
+Rule 8 full instrumentation, generated from templates/procedure.sql by tools/generateProcedures.py. Row-level security applies to every table read
+or written here: SESSION_CONTEXT (N'scopeKey') decides what the caller can see.
 
 ========================================================================================================================
 Example Usage and Performance:
 
-EXEC dbo.uspTransferExposureCase @exposureCaseId = @id, @toTenantId = @tenant, @reason = N'Family lives in Harford County', @rowVersion = @rv;
+exec dbo.uspTransferExposureCase ...
 
 ========================================================================================================================
 Modification History:
 
-Date:		2026-11-11
+Date:		2026-10-24
 Author:		MERIT build
 Ticket:		#274
 Description:	Initial version.

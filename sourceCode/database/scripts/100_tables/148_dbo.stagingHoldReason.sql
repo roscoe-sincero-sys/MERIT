@@ -59,7 +59,6 @@ GO
 -- -------------------------------------------------------------------------------------------
 -- 3. Check constraints. System-defined values and cross-column rules.
 -- -------------------------------------------------------------------------------------------
--- Issue 269: 'permissionDenied' (a row the initiating profile may not complete) is held for review, not a batch failure.
 IF EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_dbo_stagingHoldReason_reasonCode'
                AND definition NOT LIKE N'%''permissionDenied''%')
 BEGIN

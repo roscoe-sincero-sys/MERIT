@@ -7,13 +7,13 @@ SET QUOTED_IDENTIFIER ON;
 GO
 
 /***********************************************************************************************************************
-ObjectName:   auth.uspContinueUsageSession
+ObjectName:   dbo.uspRenewJobClaim
 Author:       MERIT build
 CreateDate:   2026-10-24
 ========================================================================================================================
 Description:
 
-Keeps the non-secret logical sign-in reference across a scope/profile/view change. Both scopes must belong to the authenticated actor and be current. No scope key is written to instrumentation.
+Renews the lease on a running job while the claiming worker is still alive. Returns 1 when renewed, or 0 if the claim was lost or the job is no longer running.
 
 ========================================================================================================================
 Requirements and Key Dependencies:
@@ -31,21 +31,22 @@ or written here: SESSION_CONTEXT (N'scopeKey') decides what the caller can see.
 ========================================================================================================================
 Example Usage and Performance:
 
-exec auth.uspContinueUsageSession ...
+exec dbo.uspRenewJobClaim ...
 
 ========================================================================================================================
 Modification History:
 
 Date:		2026-10-24
 Author:		MERIT build
-Ticket:		227
+Ticket:		#311
 Description:	Initial version.
 
 -----------------------------------------------------------------------------------------------------------------------
 
 ***********************************************************************************************************************/
-CREATE OR ALTER PROCEDURE auth.uspContinueUsageSession
-      @newSessionScopeId UNIQUEIDENTIFIER
+CREATE OR ALTER PROCEDURE dbo.uspRenewJobClaim
+      @jobId      UNIQUEIDENTIFIER
+      , @claimToken UNIQUEIDENTIFIER
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -56,7 +57,7 @@ BEGIN
     -- =============================================================================================
     DECLARE @ProcName       NVARCHAR (300) = COALESCE (QUOTENAME (OBJECT_SCHEMA_NAME (@@PROCID))
                                                      + N'.' + QUOTENAME (OBJECT_NAME (@@PROCID))
-                                                    , N'[auth].[uspContinueUsageSession]')
+                                                    , N'[dbo].[uspRenewJobClaim]')
           , @StartTimeUtc   DATETIME2 (3)  = SYSUTCDATETIME ()
           , @EndTimeUtc     DATETIME2 (3)  = NULL
           , @ExecutionId    BIGINT         = NULL
@@ -70,7 +71,7 @@ BEGIN
           , @ErrorLine      INT            = NULL;
 
     -- Identifiers and counts ONLY. Never a credential, a payload, or patient data.
-    SET @KeyParameters = N'logical usage session continuity';
+    SET @KeyParameters = CONCAT (N'jobId=', @jobId);
 
     BEGIN TRY
 
@@ -87,25 +88,13 @@ BEGIN
         -- ===== The procedure's own work starts here. Everything above and below is boilerplate. ==
         -- =========================================================================================
 
-        DECLARE @scope UNIQUEIDENTIFIER = TRY_CAST (SESSION_CONTEXT (N'scopeKey') AS UNIQUEIDENTIFIER);
-        DECLARE @me UNIQUEIDENTIFIER = auth.udfSessionUserId (), @reference UNIQUEIDENTIFIER, @root UNIQUEIDENTIFIER,
-                @acting UNIQUEIDENTIFIER, @profile UNIQUEIDENTIFIER, @viewAs UNIQUEIDENTIFIER;
-        SELECT @reference = s.sessionReference, @root = s.rootTenantId, @acting = s.actingTenantId,
-               @profile = s.userProfileId, @viewAs = s.viewAsUserId
-          FROM auth.sessionScope AS s JOIN auth.appUser AS u ON u.appUserId = s.appUserId
-         WHERE s.sessionScopeId = @scope AND s.appUserId = @me AND s.revokedUtc IS NULL
-           AND s.expiresUtc > SYSUTCDATETIME () AND u.isActive = 1 AND u.isDeleted = 0;
-        IF @reference IS NULL
-        BEGIN
-            ;THROW 51403, N'A current signed-in session is required.', 1;
-        END;
-        UPDATE auth.sessionScope SET sessionReference = @reference
-         WHERE sessionScopeId = @newSessionScopeId AND appUserId = @me AND revokedUtc IS NULL
-           AND expiresUtc > SYSUTCDATETIME () AND sessionScopeId <> @scope;
-        IF @@ROWCOUNT <> 1
-        BEGIN
-            ;THROW 51403, N'The replacement session is not available.', 1;
-        END;
+        UPDATE dbo.jobQueue
+           SET claimedUtc = SYSUTCDATETIME ()
+         WHERE jobId = @jobId AND claimToken = @claimToken AND jobStatus = 'running' AND isDeleted = 0;
+
+        DECLARE @renewed INT = @@ROWCOUNT;
+        SET @Comments = CASE WHEN @renewed = 1 THEN N'Claim renewed.' ELSE N'Claim lost.' END;
+        SELECT @renewed AS renewed;
 
         -- =========================================================================================
         -- ===== End of the procedure's own work. ===================================================
@@ -185,14 +174,14 @@ END;
 GO
 
 EXEC util.uspSetObjectDescription
-      @SchemaName  = N'auth'
+      @SchemaName  = N'dbo'
     , @ObjectType  = N'PROCEDURE'
-    , @ObjectName  = N'uspContinueUsageSession'
-    , @Description = N'Keeps the non-secret logical sign-in reference across a scope/profile/view change. Both scopes must belong to the authenticated actor and be current. No scope key is written to instrumentation.';
+    , @ObjectName  = N'uspRenewJobClaim'
+    , @Description = N'Renews the lease on a running job while the claiming worker is still alive. Returns 1 when renewed, or 0 if the claim was lost or the job is no longer running.';
 GO
 
-IF DATABASE_PRINCIPAL_ID (N'meritWebRole') IS NOT NULL
+IF DATABASE_PRINCIPAL_ID (N'meritWorkerRole') IS NOT NULL
 BEGIN
-    GRANT EXECUTE ON auth.uspContinueUsageSession TO meritWebRole;
+    GRANT EXECUTE ON dbo.uspRenewJobClaim TO meritWorkerRole;
 END;
 GO

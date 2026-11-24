@@ -37,6 +37,29 @@ public sealed class SecurityHardeningRegressionTests(MeritFixture fixture)
         await cmd.ExecuteNonQueryAsync();
     }
 
+    private static async Task WaitForAppLockWaiterAsync(int blockedSpid, TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        while (DateTime.UtcNow < deadline)
+        {
+            int waiting = await ScalarAsync<int>("""
+                SELECT COUNT (*)
+                  FROM sys.dm_tran_locks
+                 WHERE resource_type = N'APPLICATION'
+                   AND request_status = N'WAIT'
+                   AND request_session_id = @spid
+                """, ("@spid", blockedSpid));
+            if (waiting > 0)
+            {
+                return;
+            }
+
+            await Task.Delay(50);
+        }
+
+        Assert.Fail($"Session {blockedSpid} did not enter APPLICATION lock WAIT state within {timeout.TotalSeconds:0.0}s.");
+    }
+
     [SqlFact]
     public async Task DeidentifiedEpidemiologistSeesOnlyDeidentifiedProjectionsAndUpgradeReconcilesLegacyGrants()
     {
@@ -1036,11 +1059,17 @@ public sealed class SecurityHardeningRegressionTests(MeritFixture fixture)
                     await cmd1.ExecuteNonQueryAsync();
                 }
 
-                // Start concurrent scope issuance on Connection 2.
+                // Start concurrent scope issuance on Connection 2 and observe its APPLICATION lock WAIT in sys.dm_tran_locks.
+                var spid2Ready = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
                 var issueTask = Task.Run(async () =>
                 {
                     await using var conn2 = new SqlConnection(TestEnvironment.WebConnectionString);
                     await conn2.OpenAsync();
+                    await using (var spidCmd = new SqlCommand("SELECT CAST (@@SPID AS INT)", conn2))
+                    {
+                        spid2Ready.TrySetResult((int)(await spidCmd.ExecuteScalarAsync())!);
+                    }
+
                     await using var cmd2 = new SqlCommand("auth.uspCreateSessionScope", conn2)
                     {
                         CommandType = System.Data.CommandType.StoredProcedure,
@@ -1052,8 +1081,8 @@ public sealed class SecurityHardeningRegressionTests(MeritFixture fixture)
                     while (await reader.NextResultAsync()) { }
                 });
 
-                // Connection 2 must still be waiting on MERIT.grants Shared while Connection 1 holds Exclusive.
-                await Task.Delay(350);
+                int spid2 = await spid2Ready.Task;
+                await WaitForAppLockWaiterAsync(spid2, TimeSpan.FromSeconds(5));
                 Assert.False(issueTask.IsCompleted, "uspCreateSessionScope should wait while MERIT.grants Exclusive is held.");
 
                 await tx1.CommitAsync();
@@ -1098,11 +1127,17 @@ public sealed class SecurityHardeningRegressionTests(MeritFixture fixture)
                     await cmd1.ExecuteNonQueryAsync();
                 }
 
-                // Start the real 566 migration concurrently on Connection 2.
+                // Start the real 566 migration concurrently on Connection 2 and observe its APPLICATION lock WAIT.
+                var spid2Ready = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
                 var migrateTask = Task.Run(async () =>
                 {
                     await using var conn2 = new SqlConnection(TestEnvironment.AdminConnectionString());
                     await conn2.OpenAsync();
+                    await using (var spidCmd = new SqlCommand("SELECT CAST (@@SPID AS INT)", conn2))
+                    {
+                        spid2Ready.TrySetResult((int)(await spidCmd.ExecuteScalarAsync())!);
+                    }
+
                     foreach (string batch in batches)
                     {
                         await using var cmd2 = new SqlCommand(batch, conn2);
@@ -1110,8 +1145,8 @@ public sealed class SecurityHardeningRegressionTests(MeritFixture fixture)
                     }
                 });
 
-                // 566 must wait on MERIT.grants Exclusive while Connection 1 holds Shared.
-                await Task.Delay(350);
+                int spid2 = await spid2Ready.Task;
+                await WaitForAppLockWaiterAsync(spid2, TimeSpan.FromSeconds(5));
                 Assert.False(migrateTask.IsCompleted, "566_reconcileDeidentifiedRole.sql should wait while MERIT.grants Shared is held.");
 
                 await tx1.CommitAsync();
@@ -1142,6 +1177,211 @@ public sealed class SecurityHardeningRegressionTests(MeritFixture fixture)
                 ("@s2", scope2Id),
                 ("@userId", userId),
                 ("@roleId", epiRoleId),
+                ("@rootId", rootId));
+        }
+    }
+
+    [SqlFact]
+    public async Task AssignmentChangeSerializesWithScopeIssuanceAndRevokesViewAsScopes()
+    {
+        // Issue #310:
+        // 1. Overlapping assignment revocation and auth.uspCreateSessionScope serialize via MERIT.grants in both orders
+        //    (verified via sys.dm_tran_locks APPLICATION WAIT) so a new scope never keeps a removed role.
+        // 2. Revoking/changing user X's assignment also revokes any open View As scope where viewAsUserId = X.
+        Guid rootId = Guid.NewGuid();
+        Guid targetUserId = Guid.NewGuid();
+        Guid adminUserId = Guid.NewGuid();
+        Guid baseRoleId = Guid.NewGuid();
+        Guid extraRoleId = Guid.NewGuid();
+        Guid baseAssignId = Guid.NewGuid();
+        Guid extraAssignId = Guid.NewGuid();
+        Guid extraAssign2Id = Guid.NewGuid();
+        Guid scope1Id = Guid.NewGuid();
+        Guid scope2Id = Guid.NewGuid();
+        Guid viewAsScopeId = Guid.NewGuid();
+        string suffix = Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
+
+        try
+        {
+            await ExecAsync("""
+                DECLARE @platform UNIQUEIDENTIFIER = CAST (HASHBYTES ('MD5', N'tenant:PLATFORM') AS UNIQUEIDENTIFIER);
+                INSERT auth.tenant (tenantId, parentTenantId, rootTenantId, tenantCode, tenantName, tenantType, statePostalCode, timeZone, isActive)
+                VALUES (@rootId, @platform, @rootId, @rootCode, N'Grant Race Test Root', 'state', 'MD', 'Eastern Standard Time', 1);
+
+                INSERT auth.tenantClosure (tenantClosureId, ancestorTenantId, descendantTenantId, depth)
+                VALUES (NEWID (), @rootId, @rootId, 0),
+                       (NEWID (), @platform, @rootId, 1);
+
+                INSERT auth.role (roleId, rootTenantId, roleCode, roleName, isAdministrator, isDeidentified)
+                VALUES (@baseRoleId, @rootId, 'viewer', N'Viewer', 0, 0),
+                       (@extraRoleId, @rootId, 'exporter', N'Exporter', 0, 0);
+
+                INSERT auth.rolePermission (rolePermissionId, roleId, permissionId)
+                SELECT NEWID (), @baseRoleId, permissionId FROM auth.permission WHERE permissionCode = 'case.view' AND isDeleted = 0
+                UNION ALL
+                SELECT NEWID (), @extraRoleId, permissionId FROM auth.permission WHERE permissionCode = 'extract.run' AND isDeleted = 0;
+
+                INSERT auth.appUser (appUserId, rootTenantId, homeTenantId, userName, displayName, passwordHash, securityStamp, mfaEnabled, isActive)
+                VALUES (@targetUserId, @rootId, @rootId, @targetName, N'Target User', N'hash', NEWID (), 1, 1),
+                       (@adminUserId, @rootId, @rootId, @adminName, N'Admin User', N'hash', NEWID (), 1, 1);
+
+                INSERT auth.userAssignment (userAssignmentId, appUserId, roleId, tenantId, includeDescendants, accessLevel, startDate)
+                VALUES (@baseAssignId, @targetUserId, @baseRoleId, @rootId, 1, 'read', '2020-01-01'),
+                       (@extraAssignId, @targetUserId, @extraRoleId, @rootId, 1, 'full', '2020-01-01');
+                """,
+                ("@rootId", rootId), ("@rootCode", $"TST-GR-{suffix}"),
+                ("@baseRoleId", baseRoleId), ("@extraRoleId", extraRoleId),
+                ("@targetUserId", targetUserId), ("@targetName", $"gr_tgt_{suffix}"),
+                ("@adminUserId", adminUserId), ("@adminName", $"gr_adm_{suffix}"),
+                ("@baseAssignId", baseAssignId), ("@extraAssignId", extraAssignId));
+
+            // Direction A: Connection 1 holds MERIT.grants Exclusive and revokes extraAssignId (uncommitted).
+            // Connection 2 concurrently runs auth.uspCreateSessionScope: it must WAIT on APPLICATION lock until commit,
+            // then issue a scope WITHOUT extract.run.
+            await using (var conn1 = new SqlConnection(TestEnvironment.AdminConnectionString()))
+            {
+                await conn1.OpenAsync();
+                await using var tx1 = (SqlTransaction)await conn1.BeginTransactionAsync();
+                await using (var cmd1 = new SqlCommand("""
+                    DECLARE @lock INT;
+                    EXEC @lock = sys.sp_getapplock @Resource = N'MERIT.grants', @LockMode = 'Exclusive', @LockOwner = 'Transaction', @LockTimeout = 10000;
+                    IF @lock < 0 THROW 51409, N'Failed to lock MERIT.grants', 1;
+
+                    UPDATE auth.userAssignment SET revokedUtc = SYSUTCDATETIME () WHERE userAssignmentId = @aid;
+                    """, conn1, tx1))
+                {
+                    cmd1.Parameters.AddWithValue("@aid", extraAssignId);
+                    await cmd1.ExecuteNonQueryAsync();
+                }
+
+                var spid2Ready = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
+                var issueTask = Task.Run(async () =>
+                {
+                    await using var conn2 = new SqlConnection(TestEnvironment.WebConnectionString);
+                    await conn2.OpenAsync();
+                    await using (var spidCmd = new SqlCommand("SELECT CAST (@@SPID AS INT)", conn2))
+                    {
+                        spid2Ready.TrySetResult((int)(await spidCmd.ExecuteScalarAsync())!);
+                    }
+
+                    await using var cmd2 = new SqlCommand("auth.uspCreateSessionScope", conn2)
+                    {
+                        CommandType = System.Data.CommandType.StoredProcedure,
+                    };
+                    cmd2.Parameters.AddWithValue("@sessionScopeId", scope1Id);
+                    cmd2.Parameters.AddWithValue("@appUserId", targetUserId);
+                    cmd2.Parameters.AddWithValue("@expiresUtc", DateTime.UtcNow.AddHours(2));
+                    await using var reader = await cmd2.ExecuteReaderAsync();
+                    while (await reader.NextResultAsync()) { }
+                });
+
+                int spid2 = await spid2Ready.Task;
+                await WaitForAppLockWaiterAsync(spid2, TimeSpan.FromSeconds(5));
+                Assert.False(issueTask.IsCompleted);
+
+                await tx1.CommitAsync();
+                await issueTask;
+            }
+
+            Assert.Equal(0, await ScalarAsync<int>(
+                "SELECT COUNT (*) FROM auth.sessionScopePermission WHERE sessionScopeId = @s AND permissionCode = 'extract.run' AND isDeleted = 0",
+                ("@s", scope1Id)));
+
+            // Direction B + View As: grant extraAssign2Id, open a View As scope (admin viewing targetUser),
+            // hold MERIT.grants Shared on Connection 1 while publishing scope2Id with extract.run, and concurrently call
+            // auth.uspSaveUserAssignment (@revokeNow = 1) on Connection 2. Connection 2 must WAIT on APPLICATION lock,
+            // then revoke BOTH scope2Id and viewAsScopeId once Connection 1 commits.
+            await ExecAsync("""
+                INSERT auth.userAssignment (userAssignmentId, appUserId, roleId, tenantId, includeDescendants, accessLevel, startDate)
+                VALUES (@aid, @targetUserId, @extraRoleId, @rootId, 1, 'full', '2020-01-01');
+
+                INSERT auth.sessionScope (sessionScopeId, appUserId, viewAsUserId, rootTenantId, actingTenantId, isPlatformAdmin, isDeidentified, expiresUtc)
+                VALUES (@viewAsScopeId, @adminUserId, @targetUserId, @rootId, @rootId, 0, 0, DATEADD (HOUR, 2, SYSUTCDATETIME ()));
+                """,
+                ("@aid", extraAssign2Id), ("@targetUserId", targetUserId), ("@extraRoleId", extraRoleId),
+                ("@rootId", rootId), ("@viewAsScopeId", viewAsScopeId), ("@adminUserId", adminUserId));
+
+            await using (var conn1 = new SqlConnection(TestEnvironment.AdminConnectionString()))
+            {
+                await conn1.OpenAsync();
+                await using var tx1 = (SqlTransaction)await conn1.BeginTransactionAsync();
+                await using (var cmd1 = new SqlCommand("""
+                    DECLARE @lock INT;
+                    EXEC @lock = sys.sp_getapplock @Resource = N'MERIT.grants', @LockMode = 'Shared', @LockOwner = 'Transaction', @LockTimeout = 10000;
+                    IF @lock < 0 THROW 51409, N'Failed to lock MERIT.grants Shared', 1;
+
+                    INSERT auth.sessionScope (sessionScopeId, appUserId, rootTenantId, actingTenantId, isPlatformAdmin, isDeidentified, expiresUtc)
+                    VALUES (@scopeId, @targetUserId, @rootId, @rootId, 0, 0, DATEADD (HOUR, 2, SYSUTCDATETIME ()));
+
+                    INSERT auth.sessionScopePermission (sessionScopePermissionId, sessionScopeId, permissionCode)
+                    VALUES (NEWID (), @scopeId, 'extract.run');
+                    """, conn1, tx1))
+                {
+                    cmd1.Parameters.AddWithValue("@scopeId", scope2Id);
+                    cmd1.Parameters.AddWithValue("@targetUserId", targetUserId);
+                    cmd1.Parameters.AddWithValue("@rootId", rootId);
+                    await cmd1.ExecuteNonQueryAsync();
+                }
+
+                var spid2Ready = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
+                var revokeTask = Task.Run(async () =>
+                {
+                    await using var conn2 = new SqlConnection(TestEnvironment.AdminConnectionString());
+                    await conn2.OpenAsync();
+                    await using (var spidCmd = new SqlCommand("SELECT CAST (@@SPID AS INT)", conn2))
+                    {
+                        spid2Ready.TrySetResult((int)(await spidCmd.ExecuteScalarAsync())!);
+                    }
+
+                    await using var cmd2 = new SqlCommand("auth.uspSaveUserAssignment", conn2)
+                    {
+                        CommandType = System.Data.CommandType.StoredProcedure,
+                    };
+                    cmd2.Parameters.AddWithValue("@userAssignmentId", extraAssign2Id);
+                    cmd2.Parameters.AddWithValue("@appUserId", targetUserId);
+                    cmd2.Parameters.AddWithValue("@roleId", extraRoleId);
+                    cmd2.Parameters.AddWithValue("@tenantId", rootId);
+                    cmd2.Parameters.AddWithValue("@includeDescendants", true);
+                    cmd2.Parameters.AddWithValue("@accessLevel", "full");
+                    cmd2.Parameters.AddWithValue("@startDate", new DateTime(2020, 1, 1));
+                    cmd2.Parameters.AddWithValue("@endDate", DBNull.Value);
+                    cmd2.Parameters.AddWithValue("@revokeNow", true);
+                    await cmd2.ExecuteNonQueryAsync();
+                });
+
+                int spid2 = await spid2Ready.Task;
+                await WaitForAppLockWaiterAsync(spid2, TimeSpan.FromSeconds(5));
+                Assert.False(revokeTask.IsCompleted);
+
+                await tx1.CommitAsync();
+                await revokeTask;
+            }
+
+            Assert.Equal(1, await ScalarAsync<int>(
+                "SELECT COUNT (*) FROM auth.sessionScope WHERE sessionScopeId = @s AND revokedUtc IS NOT NULL",
+                ("@s", scope2Id)));
+            Assert.Equal(1, await ScalarAsync<int>(
+                "SELECT COUNT (*) FROM auth.sessionScope WHERE sessionScopeId = @s AND revokedUtc IS NOT NULL",
+                ("@s", viewAsScopeId)));
+        }
+        finally
+        {
+            await ExecAsync("""
+                DELETE FROM auth.sessionScopePermission WHERE sessionScopeId IN (@s1, @s2, @sv);
+                DELETE FROM auth.sessionScopeTenant WHERE sessionScopeId IN (@s1, @s2, @sv);
+                DELETE FROM auth.sessionScopeRoot WHERE sessionScopeId IN (@s1, @s2, @sv);
+                DELETE FROM auth.sessionScopeAdminTenant WHERE sessionScopeId IN (@s1, @s2, @sv);
+                DELETE FROM auth.sessionScope WHERE sessionScopeId IN (@s1, @s2, @sv);
+                DELETE FROM auth.userAssignment WHERE appUserId IN (@u1, @u2);
+                DELETE FROM auth.appUser WHERE appUserId IN (@u1, @u2);
+                DELETE FROM auth.rolePermission WHERE roleId IN (@r1, @r2);
+                DELETE FROM auth.role WHERE roleId IN (@r1, @r2);
+                DELETE FROM auth.tenantClosure WHERE ancestorTenantId = @rootId OR descendantTenantId = @rootId;
+                DELETE FROM auth.tenant WHERE tenantId = @rootId;
+                """,
+                ("@s1", scope1Id), ("@s2", scope2Id), ("@sv", viewAsScopeId),
+                ("@u1", targetUserId), ("@u2", adminUserId),
+                ("@r1", baseRoleId), ("@r2", extraRoleId),
                 ("@rootId", rootId));
         }
     }

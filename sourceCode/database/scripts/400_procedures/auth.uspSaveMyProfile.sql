@@ -100,6 +100,15 @@ BEGIN
         -- ===== The procedure's own work starts here. Everything above and below is boilerplate. ==
         -- =========================================================================================
 
+        -- Issue #310: serialize profile grant changes with auth.uspCreateSessionScope (which holds MERIT.grants Shared until commit).
+        DECLARE @grantLock INT;
+        EXEC @grantLock = sys.sp_getapplock @Resource = N'MERIT.grants', @LockMode = 'Exclusive',
+             @LockOwner = 'Transaction', @LockTimeout = 10000;
+        IF @grantLock < 0
+        BEGIN
+            ;THROW 51409, N'Authorization changes are busy; please retry.', 1;
+        END;
+
         DECLARE @me UNIQUEIDENTIFIER = auth.udfSessionUserId ();
         DECLARE @msg NVARCHAR (2048);
 

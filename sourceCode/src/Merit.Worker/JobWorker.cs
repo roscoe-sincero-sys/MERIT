@@ -10,6 +10,15 @@ public sealed class WorkerOptions
 {
     public int PollSeconds { get; set; } = 2;
 
+    /// <summary>Seconds before a running job without a heartbeat renewal is reclaimed (issue #311).</summary>
+    public int LeaseSeconds { get; set; } = 300;
+
+    /// <summary>Milliseconds between lease-renewal heartbeats while a job runs (default 60s).</summary>
+    public int HeartbeatMilliseconds { get; set; } = 60_000;
+
+    /// <summary>Job session lifetime in minutes; should exceed the longest expected job duration.</summary>
+    public int SessionMinutes { get; set; } = 120;
+
     public ClusterOptions ClusterDetection { get; set; } = new();
 
     public sealed class ClusterOptions
@@ -98,13 +107,14 @@ public sealed partial class JobWorker(IServiceProvider services, JobSessionHolde
         }
     }
 
-    private async Task<bool> RunOneAsync(CancellationToken ct)
+    public async Task<bool> RunOneAsync(CancellationToken ct, Func<ClaimedJobRow, CancellationToken, Task<string>>? execute = null)
     {
         ClaimedJobRow? job;
         sessions.Current = null;
+        int leaseSeconds = Math.Max(1, options.Value.LeaseSeconds);
         using (var claimScope = services.CreateScope())
         {
-            job = await claimScope.ServiceProvider.GetRequiredService<IWorkData>().ClaimNextJobAsync(workerName, ct);
+            job = await claimScope.ServiceProvider.GetRequiredService<IWorkData>().ClaimNextJobAsync(workerName, leaseSeconds, ct);
         }
 
         if (job is null)
@@ -115,23 +125,73 @@ public sealed partial class JobWorker(IServiceProvider services, JobSessionHolde
         LogClaimed(logger, job.JobId, job.JobType, job.Attempts);
         using var scope = services.CreateScope();
         var sp = scope.ServiceProvider;
+        using var jobCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        using var heartbeatStopCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        int claimLost = 0;
+
+        Task heartbeatTask = RunHeartbeatAsync(job.JobId, job.ClaimToken, heartbeatStopCts.Token, () =>
+        {
+            if (Interlocked.Exchange(ref claimLost, 1) == 0)
+            {
+                LogClaimLost(logger, job.JobId);
+                try { jobCts.Cancel(); }
+                catch (ObjectDisposedException) { }
+            }
+        });
+
         try
         {
-            sessions.Current = await JobSessions.OpenAsync(sp.GetRequiredService<IAccountData>(), job, DateTime.UtcNow.AddHours(2), ct);
-            string result = await sp.GetRequiredService<JobDispatcher>().RunAsync(job, ct);
-            await sp.GetRequiredService<IWorkData>().CompleteJobAsync(job.JobId, result, ct);
-            LogCompleted(logger, job.JobId);
+            var sessionExpiry = DateTime.UtcNow.AddMinutes(Math.Max(5, options.Value.SessionMinutes));
+            sessions.Current = await JobSessions.OpenAsync(sp.GetRequiredService<IAccountData>(), job, sessionExpiry, jobCts.Token);
+            string result = execute is not null
+                ? await execute(job, jobCts.Token)
+                : await sp.GetRequiredService<JobDispatcher>().RunAsync(job, jobCts.Token);
+
+            await StopHeartbeatAsync(heartbeatStopCts, heartbeatTask);
+
+            if (Volatile.Read(ref claimLost) != 0)
+            {
+                LogClaimLost(logger, job.JobId);
+                return true;
+            }
+
+            int updated = await sp.GetRequiredService<IWorkData>().CompleteJobAsync(job.JobId, result, job.ClaimToken, ct);
+            if (updated == 0)
+            {
+                LogClaimLost(logger, job.JobId);
+            }
+            else
+            {
+                LogCompleted(logger, job.JobId);
+            }
+        }
+        catch (OperationCanceledException) when (Volatile.Read(ref claimLost) != 0 && !ct.IsCancellationRequested)
+        {
+            await StopHeartbeatAsync(heartbeatStopCts, heartbeatTask);
+            LogClaimLost(logger, job.JobId);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
+            await StopHeartbeatAsync(heartbeatStopCts, heartbeatTask);
+            if (Volatile.Read(ref claimLost) != 0)
+            {
+                LogClaimLost(logger, job.JobId);
+                return true;
+            }
+
             // Record ids and the exception type only: messages can quote data values.
             LogFailed(logger, job.JobId, ex.GetType().Name);
             string text = $"{ex.GetType().Name} on attempt {job.Attempts}; job {job.JobId}." +
                           (ex is Application.Errors.MeritException ? " " + ex.Message : string.Empty);
-            await sp.GetRequiredService<IWorkData>().FailJobAsync(job.JobId, text, CancellationToken.None);
+            int updated = await sp.GetRequiredService<IWorkData>().FailJobAsync(job.JobId, text, job.ClaimToken, CancellationToken.None);
+            if (updated == 0)
+            {
+                LogClaimLost(logger, job.JobId);
+            }
         }
         finally
         {
+            await StopHeartbeatAsync(heartbeatStopCts, heartbeatTask);
             var current = sessions.Current;
             sessions.Current = null;
             if (current is not null)
@@ -148,6 +208,56 @@ public sealed partial class JobWorker(IServiceProvider services, JobSessionHolde
         }
 
         return true;
+    }
+
+    private async Task RunHeartbeatAsync(Guid jobId, Guid claimToken, CancellationToken stopToken, Action onClaimLost)
+    {
+        if (claimToken == Guid.Empty)
+        {
+            return;
+        }
+
+        var interval = TimeSpan.FromMilliseconds(Math.Max(20, options.Value.HeartbeatMilliseconds));
+        try
+        {
+            while (!stopToken.IsCancellationRequested)
+            {
+                await Task.Delay(interval, stopToken).ConfigureAwait(false);
+                bool renewed;
+                try
+                {
+                    using var renewScope = services.CreateScope();
+                    renewed = await renewScope.ServiceProvider.GetRequiredService<IWorkData>()
+                        .RenewJobClaimAsync(jobId, claimToken, stopToken).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (stopToken.IsCancellationRequested)
+                {
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    LogHeartbeatError(logger, jobId, ex.GetType().Name);
+                    continue;
+                }
+
+                if (!renewed)
+                {
+                    onClaimLost();
+                    return;
+                }
+            }
+        }
+        catch (OperationCanceledException) when (stopToken.IsCancellationRequested)
+        {
+        }
+    }
+
+    private static async Task StopHeartbeatAsync(CancellationTokenSource stopCts, Task heartbeatTask)
+    {
+        try { stopCts.Cancel(); }
+        catch (ObjectDisposedException) { }
+        try { await heartbeatTask.ConfigureAwait(false); }
+        catch (OperationCanceledException) { }
     }
 
     [LoggerMessage(Level = LogLevel.Information, Message = "MERIT worker {WorkerName} started")]
@@ -167,6 +277,12 @@ public sealed partial class JobWorker(IServiceProvider services, JobSessionHolde
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Job session scope cleanup failed: {ExceptionType}")]
     private static partial void LogCleanupError(ILogger logger, string exceptionType);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Claim lost for job {JobId}; discarding result")]
+    private static partial void LogClaimLost(ILogger logger, Guid jobId);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Lease renewal failed for job {JobId}: {ExceptionType}")]
+    private static partial void LogHeartbeatError(ILogger logger, Guid jobId, string exceptionType);
 }
 
 /// <summary>

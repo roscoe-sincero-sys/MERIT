@@ -78,7 +78,11 @@ BEGIN
        AND s.effectiveFrom <= @today AND (s.effectiveTo IS NULL OR s.effectiveTo >= @today);
 END;
 
-SET @owner = COALESCE (@owner, @root);
+-- Issue 268: a routed jurisdiction (or the root) the caller cannot write would abort the insert under row-level
+-- security and, with it, the whole intake row. The case opens in the caller's acting tenant instead; when that
+-- differs from the residence jurisdiction, a follow-up task below says so, because there is no case transfer.
+DECLARE @routed UNIQUEIDENTIFIER = COALESCE (@owner, @root);
+SET @owner = dbo.udfWritableWorkOwner (@root, @routed);
 
 DECLARE @code VARCHAR (8) = (SELECT code FROM config.analyte WHERE analyteId = @analyteId);
 DECLARE @number VARCHAR (20) = CONCAT (@code, '-', YEAR (@openedDate), '-',
@@ -97,6 +101,16 @@ VALUES ({NEWID}, @root, @owner, @exposureCaseId, 'statusChange', @openedDate, au
 INSERT dbo.caseResultLink(caseResultLinkId,rootTenantId,owningTenantId,personId,exposureCaseId,labResultId,openingActivityId)
 SELECT NEWID(),@root,@owner,@personId,@exposureCaseId,@qualifyingLabResultId,caseActivityId
  FROM dbo.caseActivity WHERE exposureCaseId=@exposureCaseId AND lifecycleKind='opened';
+
+IF @owner <> @routed AND @routed <> @root
+BEGIN
+    INSERT dbo.workTask (workTaskId, rootTenantId, owningTenantId, queueCode, title, detail, personId, exposureCaseId, labResultId)
+    VALUES ({NEWID},
+            @root, @owner, 'caseFollowUp', N'Case opened outside the residence jurisdiction',
+            CONCAT (N'The patient''s current residence is served by ', (SELECT tenantName FROM auth.tenant WHERE tenantId = @routed),
+                    N', which the person entering this result cannot work in, so the case opened here. Agree the handover with that jurisdiction, then use Transfer case on the case page (a state user or someone working in both can transfer it). Transferring completes this task.'),
+            @personId, @exposureCaseId, @qualifyingLabResultId);
+END;
 
 EXEC dbo.uspRefreshPersonAccess @personId = @personId;
 
@@ -1081,6 +1095,150 @@ SELECT i.investigationId, i.investigationNumber, i.investigationType, i.investig
           CASE WHEN @sortBy = 'requested' AND @sortDescending = 1 THEN i.requestedDate END DESC, i.investigationId
 OFFSET (@pageNumber - 1) * @pageSize ROWS
  FETCH NEXT @pageSize ROWS ONLY;
+""",
+    },
+    {
+        "schema": "dbo", "name": "uspListCaseTransferTargets", "kind": "read", "grants": WEB, "ticket": "#274",
+        "permission": "case.edit",
+        "deps": "auth.tvfSessionWritePermission, dbo.udfPatientWorkOwner.",
+        "desc": "Jurisdictions, programs and the data root the caller may transfer a case to (case.edit with write access at both ends), residence jurisdiction first (#274).",
+        "params": "@exposureCaseId UNIQUEIDENTIFIER",
+        "key": "CONCAT (N'exposureCaseId=', @exposureCaseId)",
+        "body": """
+DECLARE @root UNIQUEIDENTIFIER, @from UNIQUEIDENTIFIER, @person UNIQUEIDENTIFIER;
+SELECT @root = rootTenantId, @from = owningTenantId, @person = personId
+  FROM dbo.exposureCase WHERE exposureCaseId = @exposureCaseId AND isDeleted = 0 AND caseStatus <> 'closed';
+DECLARE @residence UNIQUEIDENTIFIER = dbo.udfPatientWorkOwner (@person);
+
+SELECT t.tenantId, t.tenantName, t.tenantType,
+       CAST (CASE WHEN t.tenantId = @residence THEN 1 ELSE 0 END AS BIT) AS isResidence
+  FROM auth.tenant AS t
+ WHERE @from IS NOT NULL
+   AND t.rootTenantId = @root AND t.isActive = 1 AND t.isDeleted = 0 AND t.tenantId <> @from
+   AND (t.tenantType IN ('jurisdiction', 'program') OR t.tenantId = t.rootTenantId)
+   AND EXISTS (SELECT 1 FROM auth.tvfSessionWritePermission ('case.edit') AS w WHERE w.tenantId = t.tenantId)
+   AND EXISTS (SELECT 1 FROM auth.tvfSessionWritePermission ('case.edit') AS w WHERE w.tenantId = @from)
+ ORDER BY CASE WHEN t.tenantId = @residence THEN 0 ELSE 1 END, t.tenantName;
+""",
+    },
+    {
+        "schema": "dbo", "name": "uspTransferExposureCase", "kind": "write", "grants": WEB, "ticket": "#274",
+        "permission": "case.edit",
+        "deps": "auth.tvfSessionWritePermission, auth.tvfAssignableUserTenants, dbo.uspRefreshPersonAccess.",
+        "desc": "Transfers an open case, with its history, tasks, obligations, sources, documents and its own investigations, to another jurisdiction of the same data root. Needs case.edit with write access at both ends (#274).",
+        "params": """@exposureCaseId UNIQUEIDENTIFIER
+, @toTenantId     UNIQUEIDENTIFIER
+, @reason         NVARCHAR (500)
+, @rowVersion     BINARY (8)""",
+        "key": "CONCAT (N'exposureCaseId=', @exposureCaseId, N', toTenantId=', @toTenantId)",
+        "validate": """IF NOT EXISTS (SELECT 1 FROM dbo.exposureCase WHERE exposureCaseId = @exposureCaseId AND isDeleted = 0)
+BEGIN
+    ;THROW 51404, N'The case was not found, or you do not have access to it.', 1;
+END;
+
+IF NULLIF (TRIM (@reason), N'') IS NULL
+BEGIN
+    ;THROW 51422, N'Give the reason for the transfer.', 1;
+END;""",
+        "body": f"""
+DECLARE @root UNIQUEIDENTIFIER, @from UNIQUEIDENTIFIER, @person UNIQUEIDENTIFIER, @status VARCHAR (12);
+SELECT @root = rootTenantId, @from = owningTenantId, @person = personId, @status = caseStatus
+  FROM dbo.exposureCase WITH (UPDLOCK, HOLDLOCK)
+ WHERE exposureCaseId = @exposureCaseId AND isDeleted = 0;
+
+IF @status = 'closed'
+BEGIN
+    ;THROW 51422, N'Reopen the case before transferring it; a closed case keeps the jurisdiction that closed it.', 1;
+END;
+IF @toTenantId = @from
+BEGIN
+    ;THROW 51422, N'The case is already owned there. Choose another jurisdiction.', 1;
+END;
+IF NOT EXISTS (SELECT 1 FROM auth.tenant WHERE tenantId = @toTenantId AND rootTenantId = @root AND isActive = 1 AND isDeleted = 0
+                  AND (tenantType IN ('jurisdiction', 'program') OR tenantId = rootTenantId))
+BEGIN
+    ;THROW 51422, N'Choose an active jurisdiction or program of this case''s state or tribe.', 1;
+END;
+IF NOT EXISTS (SELECT 1 FROM auth.tvfSessionWritePermission ('case.edit') WHERE tenantId = @from)
+   OR NOT EXISTS (SELECT 1 FROM auth.tvfSessionWritePermission ('case.edit') WHERE tenantId = @toTenantId)
+BEGIN
+    ;THROW 51403, N'Transferring a case needs case editing with write access in both the current and the receiving jurisdiction. Ask a state user or someone who works in both.', 1;
+END;
+
+UPDATE dbo.exposureCase
+   SET owningTenantId   = @toTenantId
+     , assignedToUserId = CASE WHEN EXISTS (SELECT 1 FROM auth.tvfAssignableUserTenants ('case.edit') AS e
+                                             WHERE e.appUserId = assignedToUserId AND e.tenantId = @toTenantId)
+                               THEN assignedToUserId END
+ WHERE exposureCaseId = @exposureCaseId AND isDeleted = 0 AND caseStatus <> 'closed' AND rowVersion = @rowVersion;
+IF @@ROWCOUNT = 0
+BEGIN
+    ;THROW 51409, N'This record was changed by someone else, or is no longer available. Reload it and try again.', 1;
+END;
+
+DECLARE @moved INT = 0;
+UPDATE dbo.caseActivity SET owningTenantId = @toTenantId WHERE exposureCaseId = @exposureCaseId AND owningTenantId <> @toTenantId;
+SET @moved += @@ROWCOUNT;
+UPDATE dbo.caseResultLink SET owningTenantId = @toTenantId WHERE exposureCaseId = @exposureCaseId AND owningTenantId <> @toTenantId;
+SET @moved += @@ROWCOUNT;
+UPDATE dbo.workTask
+   SET owningTenantId   = @toTenantId
+     , assignedToUserId = CASE WHEN EXISTS (SELECT 1 FROM auth.tvfAssignableUserTenants ('task.edit') AS e
+                                             WHERE e.appUserId = assignedToUserId AND e.tenantId = @toTenantId)
+                               THEN assignedToUserId END
+ WHERE exposureCaseId = @exposureCaseId AND owningTenantId <> @toTenantId;
+SET @moved += @@ROWCOUNT;
+UPDATE dbo.notificationObligation SET owningTenantId = @toTenantId WHERE exposureCaseId = @exposureCaseId AND owningTenantId <> @toTenantId;
+SET @moved += @@ROWCOUNT;
+UPDATE dbo.exposureSource SET owningTenantId = @toTenantId WHERE exposureCaseId = @exposureCaseId AND owningTenantId <> @toTenantId;
+SET @moved += @@ROWCOUNT;
+UPDATE dbo.personActivity SET owningTenantId = @toTenantId WHERE exposureCaseId = @exposureCaseId AND owningTenantId <> @toTenantId;
+SET @moved += @@ROWCOUNT;
+UPDATE dbo.personDocument SET owningTenantId = @toTenantId WHERE exposureCaseId = @exposureCaseId AND owningTenantId <> @toTenantId;
+SET @moved += @@ROWCOUNT;
+UPDATE dbo.caseCluster SET owningTenantId = @toTenantId WHERE exposureCaseId = @exposureCaseId AND owningTenantId <> @toTenantId;
+SET @moved += @@ROWCOUNT;
+
+-- Investigations: the link always moves; the investigation itself only when no other case uses it.
+DECLARE @own TABLE (investigationId UNIQUEIDENTIFIER PRIMARY KEY);
+INSERT @own SELECT DISTINCT ic.investigationId FROM dbo.investigationCase AS ic
+ WHERE ic.exposureCaseId = @exposureCaseId AND ic.isDeleted = 0
+   AND NOT EXISTS (SELECT 1 FROM dbo.investigationCase AS o
+                    WHERE o.investigationId = ic.investigationId AND o.isDeleted = 0 AND o.exposureCaseId <> @exposureCaseId);
+UPDATE dbo.investigationCase SET owningTenantId = @toTenantId WHERE exposureCaseId = @exposureCaseId AND owningTenantId <> @toTenantId;
+SET @moved += @@ROWCOUNT;
+UPDATE i
+   SET owningTenantId   = @toTenantId
+     , assignedToUserId = CASE WHEN EXISTS (SELECT 1 FROM auth.tvfAssignableUserTenants ('investigation.edit') AS e
+                                             WHERE e.appUserId = i.assignedToUserId AND e.tenantId = @toTenantId)
+                               THEN i.assignedToUserId END
+  FROM dbo.investigation AS i JOIN @own AS o ON o.investigationId = i.investigationId
+ WHERE i.owningTenantId <> @toTenantId;
+DECLARE @investigations INT = @@ROWCOUNT;
+DECLARE @shared INT = (SELECT COUNT (DISTINCT ic.investigationId) FROM dbo.investigationCase AS ic
+                        WHERE ic.exposureCaseId = @exposureCaseId AND ic.isDeleted = 0
+                          AND NOT EXISTS (SELECT 1 FROM @own AS o WHERE o.investigationId = ic.investigationId));
+
+DECLARE @fromName NVARCHAR (120) = (SELECT tenantName FROM auth.tenant WHERE tenantId = @from),
+        @toName   NVARCHAR (120) = (SELECT tenantName FROM auth.tenant WHERE tenantId = @toTenantId);
+
+-- The routing task from issue 268 is answered by this transfer.
+UPDATE dbo.workTask
+   SET taskStatus = 'done', completedUtc = SYSUTCDATETIME (), completedByUserId = auth.udfSessionUserId (),
+       resolutionKind = 'completed', resolutionNote = LEFT (CONCAT (N'Case transferred from ', @fromName, N' to ', @toName, N': ', TRIM (@reason)), 1000)
+ WHERE exposureCaseId = @exposureCaseId AND taskStatus = 'open' AND isDeleted = 0
+   AND title = N'Case opened outside the residence jurisdiction';
+
+INSERT dbo.caseActivity (caseActivityId, rootTenantId, owningTenantId, exposureCaseId, activityType, activityDate, workerUserId, note)
+VALUES ({NEWID},
+        @root, @toTenantId, @exposureCaseId, 'statusChange', auth.udfSessionToday (), auth.udfSessionUserId (),
+        LEFT (CONCAT (N'Case transferred from ', @fromName, N' to ', @toName, N'. Reason: ', TRIM (@reason),
+                      N' Moved ', @moved, N' related records and ', @investigations, N' investigations',
+                      CASE WHEN @shared > 0 THEN CONCAT (N'; ', @shared, N' investigations shared with other cases stay with their owner') ELSE N'' END, N'.'), 2000));
+
+EXEC dbo.uspRefreshPersonAccess @personId = @person;
+
+SET @Comments = CONCAT (N'Case transferred; related rows moved=', @moved, N', investigations moved=', @investigations, N', shared kept=', @shared, N'.');
 """,
     },
 ]

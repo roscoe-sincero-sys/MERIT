@@ -32,6 +32,7 @@ BEGIN
         availableUtc               DATETIME2 (3)     NOT NULL,
         claimedBy                  NVARCHAR (120)    NULL,
         claimedUtc                 DATETIME2 (3)     NULL,
+        claimToken                 UNIQUEIDENTIFIER  NULL,
         completedUtc               DATETIME2 (3)     NULL,
         lastError                  NVARCHAR (2000)   NULL,
         requestedByUserId          UNIQUEIDENTIFIER  NOT NULL,
@@ -70,6 +71,8 @@ IF COL_LENGTH (N'dbo.jobQueue', N'claimedBy') IS NULL
     ALTER TABLE dbo.jobQueue ADD claimedBy                  NVARCHAR (120)    NULL;
 IF COL_LENGTH (N'dbo.jobQueue', N'claimedUtc') IS NULL
     ALTER TABLE dbo.jobQueue ADD claimedUtc                 DATETIME2 (3)     NULL;
+IF COL_LENGTH (N'dbo.jobQueue', N'claimToken') IS NULL
+    ALTER TABLE dbo.jobQueue ADD claimToken                 UNIQUEIDENTIFIER  NULL;
 IF COL_LENGTH (N'dbo.jobQueue', N'completedUtc') IS NULL
     ALTER TABLE dbo.jobQueue ADD completedUtc               DATETIME2 (3)     NULL;
 IF COL_LENGTH (N'dbo.jobQueue', N'lastError') IS NULL
@@ -222,7 +225,8 @@ EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', 
 EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'jobQueue', @ColumnName = N'maxAttempts', @Description = N'Attempts before the job is marked failed.';
 EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'jobQueue', @ColumnName = N'availableUtc', @Description = N'Earliest UTC time the job may be claimed; pushed back on retry.';
 EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'jobQueue', @ColumnName = N'claimedBy', @Description = N'Worker instance that claimed the job.';
-EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'jobQueue', @ColumnName = N'claimedUtc', @Description = N'UTC time claimed.';
+EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'jobQueue', @ColumnName = N'claimedUtc', @Description = N'UTC time claimed or last renewed by heartbeat.';
+EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'jobQueue', @ColumnName = N'claimToken', @Description = N'Fencing token issued when claimed; required to renew, complete or fail.';
 EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'jobQueue', @ColumnName = N'completedUtc', @Description = N'UTC time it succeeded or finally failed.';
 EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'jobQueue', @ColumnName = N'lastError', @Description = N'Last error message; record IDs only, never patient data.';
 EXEC util.uspSetObjectDescription @SchemaName = N'dbo', @ObjectType = N'TABLE', @ObjectName = N'jobQueue', @ColumnName = N'requestedByUserId', @Description = N'User who started the job; the worker acts as this user.';
