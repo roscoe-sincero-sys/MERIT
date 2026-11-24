@@ -819,12 +819,43 @@ SET @Comments = CONCAT (@@ROWCOUNT, N' link(s) added.');
         "key": "CONCAT (N'investigationId=', @investigationId)",
         "validate": INV_VISIBLE,
         "body": """
-SELECT i.investigationId, i.investigationNumber, i.investigationType, i.locationId, i.organizationId,
-       i.worksiteLocationId, i.exposureSourceId, i.investigationStatus, i.assignedToUserId, u.displayName AS assignedToName,
-       i.requestedDate, i.scheduledDate, i.completedDate, i.findings, i.regulatoryAction, i.referralDate,
+DECLARE @isDbo BIT = CASE WHEN USER_NAME () = N'dbo' THEN 1 ELSE 0 END;
+DECLARE @idTenants TABLE (tenantId UNIQUEIDENTIFIER PRIMARY KEY);
+IF @isDbo = 0
+BEGIN
+    INSERT @idTenants (tenantId)
+    SELECT tenantId
+      FROM auth.tvfIdentifiedTenants ('case.view');
+END;
+
+DECLARE @invIdentified BIT = CASE WHEN @isDbo = 1
+                                    OR EXISTS (SELECT 1 FROM dbo.investigation AS iv
+                                                 JOIN @idTenants AS idt ON idt.tenantId = iv.owningTenantId
+                                                WHERE iv.investigationId = @investigationId)
+                                  THEN 1 ELSE 0 END;
+
+SELECT i.investigationId, i.investigationNumber, i.investigationType,
+       CASE WHEN @invIdentified = 1 THEN i.locationId ELSE NULL END AS locationId,
+       CASE WHEN @invIdentified = 1 THEN i.organizationId ELSE NULL END AS organizationId,
+       CASE WHEN @invIdentified = 1 THEN i.worksiteLocationId ELSE NULL END AS worksiteLocationId,
+       CASE WHEN @invIdentified = 1 THEN i.exposureSourceId ELSE NULL END AS exposureSourceId,
+       i.investigationStatus, i.assignedToUserId, u.displayName AS assignedToName,
+       i.requestedDate, i.scheduledDate, i.completedDate,
+       CASE WHEN @invIdentified = 1 THEN i.findings ELSE NULL END AS findings,
+       i.regulatoryAction, i.referralDate,
        i.referralOutcome, i.rowVersion, i.owningTenantId, t.tenantName AS owningTenantName,
-       l.addressLine1, l.unit, l.city, l.state, l.zip5, l.yearBuilt, o.organizationName,
-       w.addressLine1 AS worksiteAddress, w.city AS worksiteCity, es.sourceType, es.sourceDescription
+       CASE WHEN @invIdentified = 1 THEN l.addressLine1 ELSE NULL END AS addressLine1,
+       CASE WHEN @invIdentified = 1 THEN l.unit ELSE NULL END AS unit,
+       CASE WHEN @invIdentified = 1 THEN l.city ELSE NULL END AS city,
+       CASE WHEN @invIdentified = 1 THEN l.state ELSE NULL END AS state,
+       CASE WHEN @invIdentified = 1 THEN l.zip5 ELSE NULL END AS zip5,
+       l.yearBuilt,
+       CASE WHEN @invIdentified = 1 THEN o.organizationName ELSE NULL END AS organizationName,
+       CASE WHEN @invIdentified = 1 THEN w.addressLine1 ELSE NULL END AS worksiteAddress,
+       CASE WHEN @invIdentified = 1 THEN w.city ELSE NULL END AS worksiteCity,
+       es.sourceType,
+       CASE WHEN @invIdentified = 1 THEN es.sourceDescription ELSE NULL END AS sourceDescription,
+       CAST (@invIdentified AS BIT) AS isIdentified
   FROM dbo.investigation AS i
   LEFT JOIN auth.appUser AS u ON u.appUserId = i.assignedToUserId
   LEFT JOIN auth.tenant AS t ON t.tenantId = i.owningTenantId
@@ -834,17 +865,29 @@ SELECT i.investigationId, i.investigationNumber, i.investigationType, i.location
   LEFT JOIN dbo.exposureSource AS es ON es.exposureSourceId = i.exposureSourceId
  WHERE i.investigationId = @investigationId;
 
-SELECT c.exposureCaseId, c.caseNumber, c.personId, p.lastName, p.firstName, a.code AS analyteCode, c.classification,
-       c.caseStatus, e.jobTitle
+SELECT c.exposureCaseId, c.caseNumber,
+       CASE WHEN c.exposureCaseId IS NULL THEN NULL
+            WHEN @isDbo = 1 OR idt.tenantId IS NOT NULL THEN c.personId
+            ELSE CAST (0x0 AS UNIQUEIDENTIFIER) END AS personId,
+       CASE WHEN c.exposureCaseId IS NULL THEN NULL
+            WHEN @isDbo = 1 OR idt.tenantId IS NOT NULL THEN p.lastName
+            ELSE N'De-identified' END AS lastName,
+       CASE WHEN @isDbo = 1 OR idt.tenantId IS NOT NULL THEN p.firstName ELSE NULL END AS firstName,
+       a.code AS analyteCode, c.classification,
+       c.caseStatus,
+       CASE WHEN @isDbo = 1 OR idt.tenantId IS NOT NULL THEN e.jobTitle ELSE NULL END AS jobTitle
   FROM dbo.investigationCase AS ic
   LEFT JOIN dbo.exposureCase AS c ON c.exposureCaseId = ic.exposureCaseId
+  LEFT JOIN @idTenants AS idt ON idt.tenantId = c.owningTenantId
   LEFT JOIN dbo.person AS p ON p.personId = c.personId
   LEFT JOIN config.analyte AS a ON a.analyteId = c.analyteId
   LEFT JOIN dbo.employment AS e ON e.employmentId = ic.employmentId
  WHERE ic.investigationId = @investigationId AND ic.isDeleted = 0;
 
 SELECT es.environmentalSampleId, es.sampleType, es.roomOrComponent, es.surface, es.sampleValue, es.unit, es.sampleDate,
-       es.exceedsStandard, st.standardValue, st.unit AS standardUnit, st.authority, es.notes, es.modifiedDateUtc
+       es.exceedsStandard, st.standardValue, st.unit AS standardUnit, st.authority,
+       CASE WHEN @invIdentified = 1 THEN es.notes ELSE NULL END AS notes,
+       es.modifiedDateUtc
   FROM dbo.environmentalSample AS es
   LEFT JOIN config.environmentalStandard AS st ON st.environmentalStandardId = es.environmentalStandardId
  WHERE es.investigationId = @investigationId AND es.isDeleted = 0
@@ -995,12 +1038,26 @@ BEGIN
 END;""",
         "body": """
 DECLARE @me UNIQUEIDENTIFIER = auth.udfSessionUserId ();
+DECLARE @isDbo BIT = CASE WHEN USER_NAME () = N'dbo' THEN 1 ELSE 0 END;
+DECLARE @idTenants TABLE (tenantId UNIQUEIDENTIFIER PRIMARY KEY);
+IF @isDbo = 0
+BEGIN
+    INSERT @idTenants (tenantId)
+    SELECT tenantId
+      FROM auth.tvfIdentifiedTenants ('case.view');
+END;
 DECLARE @escaped NVARCHAR (600) = REPLACE (REPLACE (REPLACE (NULLIF (LTRIM (RTRIM (@searchText)), N''), N'[', N'[[]'), N'%', N'[%]'), N'_', N'[_]');
 
 SELECT i.investigationId, i.investigationNumber, i.investigationType, i.investigationStatus, i.requestedDate,
-       i.scheduledDate, COALESCE (l.addressLine1, o.organizationName, es.sourceDescription) AS targetLabel,
-       u.displayName AS assignedToName, COUNT (*) OVER () AS totalCount
+       i.scheduledDate,
+       CASE WHEN @isDbo = 1 OR idt.tenantId IS NOT NULL
+            THEN COALESCE (l.addressLine1, o.organizationName, es.sourceDescription)
+            ELSE CONCAT (N'De-identified', CASE WHEN t.tenantName IS NOT NULL THEN N' · ' + t.tenantName ELSE N'' END) END AS targetLabel,
+       u.displayName AS assignedToName, COUNT (*) OVER () AS totalCount,
+       CAST (CASE WHEN @isDbo = 1 OR idt.tenantId IS NOT NULL THEN 1 ELSE 0 END AS BIT) AS isIdentified
   FROM dbo.investigation AS i
+  LEFT JOIN @idTenants AS idt ON idt.tenantId = i.owningTenantId
+  LEFT JOIN auth.tenant AS t ON t.tenantId = i.owningTenantId
   LEFT JOIN dbo.location AS l ON l.locationId = i.locationId
   LEFT JOIN dbo.organization AS o ON o.organizationId = i.organizationId
   LEFT JOIN dbo.exposureSource AS es ON es.exposureSourceId = i.exposureSourceId
@@ -1009,7 +1066,8 @@ SELECT i.investigationId, i.investigationNumber, i.investigationType, i.investig
    AND (@openOnly = 0 OR i.investigationStatus NOT IN ('cleared', 'closed'))
    AND (@assignedToMe = 0 OR i.assignedToUserId = @me)
    AND (@escaped IS NULL OR i.investigationNumber LIKE N'%' + @escaped + N'%'
-        OR l.addressLine1 LIKE N'%' + @escaped + N'%' OR o.organizationName LIKE N'%' + @escaped + N'%')
+        OR ((@isDbo = 1 OR idt.tenantId IS NOT NULL)
+            AND (l.addressLine1 LIKE N'%' + @escaped + N'%' OR o.organizationName LIKE N'%' + @escaped + N'%')))
    AND (NULLIF (@statusFilter, '') IS NULL OR i.investigationStatus = @statusFilter)
    AND (NULLIF (@typeFilter, '') IS NULL OR i.investigationType = @typeFilter)
    AND (NULLIF (@assignedFilter, '') IS NULL OR (@assignedFilter = 'me' AND i.assignedToUserId = @me)
