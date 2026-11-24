@@ -123,6 +123,95 @@ public sealed class SecurityHardeningRegressionTests(MeritFixture fixture)
             }
         }
 
+        // Issue #309: De-identified role must not see dwelling addresses, employer/worksite, free-text findings/notes,
+        // linked patient names, or case/person links on investigation list or detail pages; clinicians remain unchanged.
+        Guid invLocId = Guid.NewGuid();
+        Guid invId = Guid.NewGuid();
+        Guid invCaseId = Guid.NewGuid();
+        Guid invSampleId = Guid.NewGuid();
+        const string invNumber = "INV-309-TEST";
+        const string invSecretAddress = "1947 Lombard Secret Ln";
+        const string invSecretFindings = "Confidential home inspection note for Rivera";
+        const string invSecretSampleNote = "Confidential sample note";
+        await ExecAsync("""
+            INSERT dbo.location (locationId, rootTenantId, owningTenantId, addressLine1, unit, city, state, zip5, addressKey, yearBuilt)
+            SELECT @loc, rootTenantId, owningTenantId, @addr, N'Apt 3B', N'Baltimore', 'MD', '21201', N'1947 LOMBARD SECRET LN|3B|BALTIMORE|MD|21201', 1955
+              FROM dbo.exposureCase WHERE exposureCaseId = @cid;
+
+            INSERT dbo.investigation (investigationId, rootTenantId, owningTenantId, investigationNumber, investigationType,
+                                      locationId, investigationStatus, requestedDate, findings)
+            SELECT @inv, rootTenantId, owningTenantId, @num, 'residential',
+                   @loc, 'requested', '2026-06-01', @findings
+              FROM dbo.exposureCase WHERE exposureCaseId = @cid;
+
+            INSERT dbo.investigationCase (investigationCaseId, rootTenantId, owningTenantId, investigationId, exposureCaseId)
+            SELECT @ic, rootTenantId, owningTenantId, @inv, exposureCaseId
+              FROM dbo.exposureCase WHERE exposureCaseId = @cid;
+
+            INSERT dbo.environmentalSample (environmentalSampleId, rootTenantId, owningTenantId, investigationId,
+                                            sampleType, roomOrComponent, surface, sampleValue, unit, sampleDate, notes)
+            SELECT @samp, rootTenantId, owningTenantId, @inv,
+                   'dustWipe', N'Living room', 'windowSill', 42.5, 'ug/ft2', '2026-06-02', @sampleNote
+              FROM dbo.exposureCase WHERE exposureCaseId = @cid;
+            """,
+            ("@loc", invLocId), ("@inv", invId), ("@ic", invCaseId), ("@samp", invSampleId),
+            ("@cid", fixture.Ids.MiaCaseId), ("@addr", invSecretAddress), ("@num", invNumber),
+            ("@findings", invSecretFindings), ("@sampleNote", invSecretSampleNote));
+        try
+        {
+            // De-identified epidemiologist: list masks address; address search returns nothing; number search still works.
+            string epiInvList = await epi.Http.GetStringAsync("/investigations?openOnly=false");
+            Assert.Contains(invNumber, epiInvList, StringComparison.Ordinal);
+            Assert.Contains("De-identified", epiInvList, StringComparison.Ordinal);
+            Assert.DoesNotContain(invSecretAddress, epiInvList, StringComparison.OrdinalIgnoreCase);
+
+            string epiAddrSearch = await epi.Http.GetStringAsync("/investigations?openOnly=false&q=Lombard+Secret");
+            Assert.DoesNotContain(invNumber, epiAddrSearch, StringComparison.Ordinal);
+            Assert.DoesNotContain(invSecretAddress, epiAddrSearch, StringComparison.OrdinalIgnoreCase);
+
+            string epiNumSearch = await epi.Http.GetStringAsync($"/investigations?openOnly=false&q={invNumber}");
+            Assert.Contains(invNumber, epiNumSearch, StringComparison.Ordinal);
+
+            // De-identified epidemiologist: detail hides address, unit, patient name, findings, sample notes, and case/person links.
+            using (var epiInvResp = await epi.Http.GetAsync($"/investigations/{invId}"))
+            {
+                Assert.Equal(HttpStatusCode.OK, epiInvResp.StatusCode);
+                string epiInvHtml = await epiInvResp.Content.ReadAsStringAsync();
+                Assert.Contains(invNumber, epiInvHtml, StringComparison.Ordinal);
+                Assert.Contains("De-identified", epiInvHtml, StringComparison.Ordinal);
+                Assert.Contains("Dust wipe", epiInvHtml, StringComparison.OrdinalIgnoreCase);
+                Assert.Contains("42.5 ug/ft2", epiInvHtml, StringComparison.Ordinal);
+                Assert.DoesNotContain(invSecretAddress, epiInvHtml, StringComparison.OrdinalIgnoreCase);
+                Assert.DoesNotContain("Apt 3B", epiInvHtml, StringComparison.OrdinalIgnoreCase);
+                Assert.DoesNotContain("Rivera", epiInvHtml, StringComparison.OrdinalIgnoreCase);
+                Assert.DoesNotContain(invSecretFindings, epiInvHtml, StringComparison.OrdinalIgnoreCase);
+                Assert.DoesNotContain(invSecretSampleNote, epiInvHtml, StringComparison.OrdinalIgnoreCase);
+                Assert.DoesNotContain($"/cases/{fixture.Ids.MiaCaseId}", epiInvHtml, StringComparison.OrdinalIgnoreCase);
+                Assert.DoesNotContain("/people/", epiInvHtml, StringComparison.OrdinalIgnoreCase);
+            }
+
+            // Identified clinician: both pages remain unchanged with full address, findings, patient name, and case link.
+            var clin = await fixture.SignedInAsync("cmbalt");
+            string clinAddrSearch = await clin.Http.GetStringAsync("/investigations?openOnly=false&q=Lombard+Secret");
+            Assert.Contains(invNumber, clinAddrSearch, StringComparison.Ordinal);
+            Assert.Contains(invSecretAddress, clinAddrSearch, StringComparison.Ordinal);
+
+            string clinInvHtml = await clin.Http.GetStringAsync($"/investigations/{invId}");
+            Assert.Contains(invSecretAddress, clinInvHtml, StringComparison.Ordinal);
+            Assert.Contains("Rivera", clinInvHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains($"/cases/{fixture.Ids.MiaCaseId}", clinInvHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(invSecretFindings, clinInvHtml, StringComparison.Ordinal);
+        }
+        finally
+        {
+            await ExecAsync("""
+                DELETE FROM dbo.environmentalSample WHERE environmentalSampleId = @samp;
+                DELETE FROM dbo.investigationCase WHERE investigationCaseId = @ic;
+                DELETE FROM dbo.investigation WHERE investigationId = @inv;
+                DELETE FROM dbo.location WHERE locationId = @loc;
+                """, ("@samp", invSampleId), ("@ic", invCaseId), ("@inv", invId), ("@loc", invLocId));
+        }
+
         // Identifiable regulatory extracts (CBLS/ABLES containing full DOBs) are withheld from de-identified roles.
         using (var extractsResp = await epi.Http.GetAsync("/extracts"))
             Assert.Equal(HttpStatusCode.Forbidden, extractsResp.StatusCode);
@@ -359,6 +448,23 @@ public sealed class SecurityHardeningRegressionTests(MeritFixture fixture)
         using (var startDeidViewAs = await cityAdmin.Http.PostAsync($"/account/view-as/{cityEpi.Id}", MeritClient.Form(profiles2)))
             Assert.Equal(HttpStatusCode.OK, startDeidViewAs.StatusCode);
 
+        Guid vaLocId = Guid.NewGuid();
+        Guid vaInvId = Guid.NewGuid();
+        Guid vaInvCaseId = Guid.NewGuid();
+        const string vaInvNumber = "INV-309-VIEWAS";
+        const string vaSecretAddress = "8811 ViewAs Secret Ave";
+        await ExecAsync("""
+            INSERT dbo.location (locationId, rootTenantId, owningTenantId, addressLine1, city, state, zip5, addressKey)
+            SELECT @loc, rootTenantId, owningTenantId, @addr, N'Baltimore', 'MD', '21201', N'8811 VIEWAS SECRET AVE||BALTIMORE|MD|21201'
+              FROM dbo.exposureCase WHERE exposureCaseId = @cid;
+            INSERT dbo.investigation (investigationId, rootTenantId, owningTenantId, investigationNumber, investigationType, locationId, investigationStatus, requestedDate, findings)
+            SELECT @inv, rootTenantId, owningTenantId, @num, 'residential', @loc, 'requested', '2026-06-01', N'ViewAs secret findings'
+              FROM dbo.exposureCase WHERE exposureCaseId = @cid;
+            INSERT dbo.investigationCase (investigationCaseId, rootTenantId, owningTenantId, investigationId, exposureCaseId)
+            SELECT @ic, rootTenantId, owningTenantId, @inv, exposureCaseId
+              FROM dbo.exposureCase WHERE exposureCaseId = @cid;
+            """, ("@loc", vaLocId), ("@inv", vaInvId), ("@ic", vaInvCaseId), ("@cid", fixture.Ids.MiaCaseId), ("@addr", vaSecretAddress), ("@num", vaInvNumber));
+
         try
         {
             using var deniedCase = await cityAdmin.Http.GetAsync($"/cases/{fixture.Ids.MiaCaseId}");
@@ -368,9 +474,29 @@ public sealed class SecurityHardeningRegressionTests(MeritFixture fixture)
             using var resDoc = JsonDocument.Parse(await resList.Content.ReadAsStringAsync());
             Assert.All(resDoc.RootElement.GetProperty("items").EnumerateArray(),
                 r => Assert.False(r.GetProperty("isIdentified").GetBoolean()));
+
+            // Issue #309: View As de-identified target also masks investigation list, address search, and detail.
+            string vaListHtml = await cityAdmin.Http.GetStringAsync("/investigations?openOnly=false");
+            Assert.Contains(vaInvNumber, vaListHtml, StringComparison.Ordinal);
+            Assert.DoesNotContain(vaSecretAddress, vaListHtml, StringComparison.OrdinalIgnoreCase);
+
+            string vaAddrSearch = await cityAdmin.Http.GetStringAsync("/investigations?openOnly=false&q=ViewAs+Secret");
+            Assert.DoesNotContain(vaInvNumber, vaAddrSearch, StringComparison.Ordinal);
+
+            string vaDetailHtml = await cityAdmin.Http.GetStringAsync($"/investigations/{vaInvId}");
+            Assert.Contains("De-identified", vaDetailHtml, StringComparison.Ordinal);
+            Assert.DoesNotContain(vaSecretAddress, vaDetailHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("Rivera", vaDetailHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("ViewAs secret findings", vaDetailHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain($"/cases/{fixture.Ids.MiaCaseId}", vaDetailHtml, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
+            await ExecAsync("""
+                DELETE FROM dbo.investigationCase WHERE investigationCaseId = @ic;
+                DELETE FROM dbo.investigation WHERE investigationId = @inv;
+                DELETE FROM dbo.location WHERE locationId = @loc;
+                """, ("@ic", vaInvCaseId), ("@inv", vaInvId), ("@loc", vaLocId));
             string page = await cityAdmin.Http.GetStringAsync("/");
             await cityAdmin.Http.PostAsync("/account/view-as/end", MeritClient.Form(page));
             _ = cityAdminId;

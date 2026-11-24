@@ -98,12 +98,26 @@ BEGIN
         -- =========================================================================================
 
         DECLARE @me UNIQUEIDENTIFIER = auth.udfSessionUserId ();
+        DECLARE @isDbo BIT = CASE WHEN USER_NAME () = N'dbo' THEN 1 ELSE 0 END;
+        DECLARE @idTenants TABLE (tenantId UNIQUEIDENTIFIER PRIMARY KEY);
+        IF @isDbo = 0
+        BEGIN
+            INSERT @idTenants (tenantId)
+            SELECT tenantId
+              FROM auth.tvfIdentifiedTenants ('case.view');
+        END;
         DECLARE @escaped NVARCHAR (600) = REPLACE (REPLACE (REPLACE (NULLIF (LTRIM (RTRIM (@searchText)), N''), N'[', N'[[]'), N'%', N'[%]'), N'_', N'[_]');
 
         SELECT i.investigationId, i.investigationNumber, i.investigationType, i.investigationStatus, i.requestedDate,
-               i.scheduledDate, COALESCE (l.addressLine1, o.organizationName, es.sourceDescription) AS targetLabel,
-               u.displayName AS assignedToName, COUNT (*) OVER () AS totalCount
+               i.scheduledDate,
+               CASE WHEN @isDbo = 1 OR idt.tenantId IS NOT NULL
+                    THEN COALESCE (l.addressLine1, o.organizationName, es.sourceDescription)
+                    ELSE CONCAT (N'De-identified', CASE WHEN t.tenantName IS NOT NULL THEN N' · ' + t.tenantName ELSE N'' END) END AS targetLabel,
+               u.displayName AS assignedToName, COUNT (*) OVER () AS totalCount,
+               CAST (CASE WHEN @isDbo = 1 OR idt.tenantId IS NOT NULL THEN 1 ELSE 0 END AS BIT) AS isIdentified
           FROM dbo.investigation AS i
+          LEFT JOIN @idTenants AS idt ON idt.tenantId = i.owningTenantId
+          LEFT JOIN auth.tenant AS t ON t.tenantId = i.owningTenantId
           LEFT JOIN dbo.location AS l ON l.locationId = i.locationId
           LEFT JOIN dbo.organization AS o ON o.organizationId = i.organizationId
           LEFT JOIN dbo.exposureSource AS es ON es.exposureSourceId = i.exposureSourceId
@@ -112,7 +126,8 @@ BEGIN
            AND (@openOnly = 0 OR i.investigationStatus NOT IN ('cleared', 'closed'))
            AND (@assignedToMe = 0 OR i.assignedToUserId = @me)
            AND (@escaped IS NULL OR i.investigationNumber LIKE N'%' + @escaped + N'%'
-                OR l.addressLine1 LIKE N'%' + @escaped + N'%' OR o.organizationName LIKE N'%' + @escaped + N'%')
+                OR ((@isDbo = 1 OR idt.tenantId IS NOT NULL)
+                    AND (l.addressLine1 LIKE N'%' + @escaped + N'%' OR o.organizationName LIKE N'%' + @escaped + N'%')))
            AND (NULLIF (@statusFilter, '') IS NULL OR i.investigationStatus = @statusFilter)
            AND (NULLIF (@typeFilter, '') IS NULL OR i.investigationType = @typeFilter)
            AND (NULLIF (@assignedFilter, '') IS NULL OR (@assignedFilter = 'me' AND i.assignedToUserId = @me)

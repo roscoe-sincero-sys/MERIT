@@ -662,6 +662,8 @@ public sealed class InvestigationRow
     public string? SourceType { get; init; }
 
     public string? SourceDescription { get; init; }
+
+    public bool IsIdentified { get; init; } = true;
 }
 
 public sealed class InvestigationCaseRow
@@ -738,6 +740,8 @@ public sealed class InvestigationListRow
     public string? AssignedToName { get; init; }
 
     public int TotalCount { get; init; }
+
+    public bool IsIdentified { get; init; } = true;
 }
 
 public sealed record InvestigationCreate(Guid InvestigationId, string InvestigationType, Guid? LocationId,
