@@ -15,6 +15,19 @@ public static class CsvReader
         var field = new StringBuilder();
         bool quoted = false;
 
+        void AppendRow()
+        {
+            if (row.Count > 1 || row[0].Length > 0)
+            {
+                if (rows.Count >= maxRows)
+                {
+                    throw new ValidationException("file", $"The file exceeds the {maxRows:N0}-row intake limit; split the file.");
+                }
+
+                rows.Add(row);
+            }
+        }
+
         for (int i = 0; i < content.Length; i++)
         {
             char c = content[i];
@@ -58,15 +71,7 @@ public static class CsvReader
 
                 row.Add(field.ToString());
                 field.Clear();
-                if (row.Count > 1 || row[0].Length > 0)
-                {
-                    if (rows.Count >= maxRows)
-                    {
-                        throw new ValidationException("file", $"The file exceeds the {maxRows:N0}-row intake limit; split the file.");
-                    }
-
-                    rows.Add(row);
-                }
+                AppendRow();
 
                 row = [];
             }
@@ -79,10 +84,7 @@ public static class CsvReader
         if (field.Length > 0 || row.Count > 0)
         {
             row.Add(field.ToString());
-            if (row.Count > 1 || row[0].Length > 0)
-            {
-                rows.Add(row);
-            }
+            AppendRow();
         }
 
         return rows;

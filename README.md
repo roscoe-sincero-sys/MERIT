@@ -210,7 +210,7 @@ dotnet run --project src/Merit.Web         # terminal 2: https://localhost:7243
 | `EmailCodes:LifetimeSeconds`, `MaxAttempts`, `ResendCooldownSeconds`, `MaxCodesPerAccount`, `MaxCodesPerAddress`, `LimitWindowMinutes` | `300`, `5`, `30`, `5`, `20`, `15` | Web | Email-code expiry, wrong-entry limit, resend wait and send limits. |
 | `Merit:PublicBaseUrl` | none | Web | The https address people use, for example `https://merit.health.example.gov`. Password-reset links are built from it, never from the request's host. Required outside Development for **Forgot your password?**. See [docs/password-self-service.md](docs/password-self-service.md). |
 | `PasswordReset:LinkLifetimeMinutes`, `MaxCodeAttempts`, `CooldownSeconds`, `MaxLinksPerAccount`, `MaxLinksPerAddress`, `LimitWindowMinutes` | `20`, `5`, `60`, `3`, `10`, `60` | Web | Reset-link expiry, wrong second-factor codes per link, and send limits. |
-| `SignInLog:NameHashKey` | `EmailCodes:VerifierKey`, else random per process | Web | Base64 key (32+ bytes) for hashing user names that matched no account in the sign-in event log. Use the same key on every web server so attempts group and the lookup works; without one a warning is logged. See [docs/sign-in-event-log.md](docs/sign-in-event-log.md). |
+| `SignInLog:NameHashKey` | `EmailCodes:VerifierKey` (random per process in Development only) | Web | Base64 key (32+ bytes) for hashing user names that matched no account in the sign-in event log. **Required outside Development** (either `SignInLog:NameHashKey` or `EmailCodes:VerifierKey`) and validated at startup before the web app serves traffic or reports healthy. Use the same key on every web server. See [docs/sign-in-event-log.md](docs/sign-in-event-log.md). |
 | `SignInLog:RetentionDays` | `365` (at least 30) | Worker | Age after which a sign-in event loses its address, user agent and attempted name. |
 | `Merit:EmailCodeSendsPerMinute` | `10` | Web | Email-code send requests allowed per client address in any minute. |
 | `Merit:ForwardedHeaders:KnownProxies` | empty | Web | Addresses of reverse proxies whose `X-Forwarded-For` is trusted. Set it behind a proxy or load balancer, or every client shares the proxy's address and its limit. |
@@ -222,10 +222,14 @@ dotnet run --project src/Merit.Web         # terminal 2: https://localhost:7243
 Program settings such as levels, case definitions and extract options are kept per state in the database. Change them
 on the **Configuration** screens.
 
-**Upgrading existing Data Protection key rings.** Non-Development deployments now fail fast at startup unless
-`DataProtection:CertificatePath` (recommended, required for shared `DataProtection:KeyPath` web farms) or
-`DataProtection:AllowLocalMachineDpapi=true` (single-server Windows opt-in) is configured. When adding a certificate to
-an existing deployment:
+**Upgrading existing Data Protection key rings and sign-in hash keys.** Non-Development deployments now fail fast at
+startup unless:
+- `DataProtection:CertificatePath` (recommended, required for shared `DataProtection:KeyPath` web farms) or
+  `DataProtection:AllowLocalMachineDpapi=true` (single-server Windows opt-in) is configured, **and**
+- `SignInLog:NameHashKey` (or `EmailCodes:VerifierKey`) is configured as a base64 key of at least 32 bytes (even when
+  outgoing email is disabled).
+
+When adding a certificate to an existing deployment:
 
 1. Store `DataProtection:KeyPath` and its backups on an encrypted volume (for example BitLocker, EFS, or KMS-encrypted
    storage) with ACLs restricted to the web service identity.

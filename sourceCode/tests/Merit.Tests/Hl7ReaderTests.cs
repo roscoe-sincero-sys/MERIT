@@ -177,4 +177,21 @@ public sealed class Hl7ReaderTests
         };
         Assert.Contains("Mapped " + field, Assert.Throws<Hl7ParseException>(() => Hl7Reader.Read(message)).Message);
     }
+
+    [Fact]
+    public void EnforcesCumulativeStagingBudgetAcrossMultipleOrderGroupsAndMessages()
+    {
+        var single = Message();
+        var singleRows = Hl7Reader.Read(single);
+        Assert.Single(singleRows);
+
+        // Build a multi-group, multi-message upload where each group individually stays below the budget
+        // but the cumulative staging expansion across groups exceeds it.
+        var multi = string.Concat(Enumerable.Range(1, 5).Select(i =>
+            Message().Replace("MSG-1", $"MSG-{i}").Replace("ACC-1", $"ACC-{i}")));
+        Assert.Equal(5, Hl7Reader.Read(multi).Count);
+
+        var ex = Assert.Throws<Hl7ParseException>(() => Hl7Reader.Read(multi, maxStagingBytes: 2500));
+        Assert.Contains("50 MB staging limit", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
 }

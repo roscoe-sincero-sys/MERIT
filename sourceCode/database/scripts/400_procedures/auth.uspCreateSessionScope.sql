@@ -159,11 +159,13 @@ BEGIN
             END;
         END;
 
-        DECLARE @isPlatformUser BIT = (SELECT CASE WHEN h.tenantType = 'platform' THEN 1 ELSE 0 END
-                                          FROM auth.appUser AS u
-                                          LEFT JOIN auth.tenant AS h ON h.tenantId = u.homeTenantId
-                                         WHERE u.appUserId = @appUserId AND u.isActive = 1 AND u.isDeleted = 0
-                                           AND (@expectedSecurityStamp IS NULL OR u.securityStamp = @expectedSecurityStamp));
+        DECLARE @isPlatformUser BIT, @validatedStamp UNIQUEIDENTIFIER;
+        SELECT @isPlatformUser = CASE WHEN h.tenantType = 'platform' THEN 1 ELSE 0 END,
+               @validatedStamp = u.securityStamp
+          FROM auth.appUser AS u WITH (UPDLOCK, HOLDLOCK)
+          LEFT JOIN auth.tenant AS h ON h.tenantId = u.homeTenantId
+         WHERE u.appUserId = @appUserId AND u.isActive = 1 AND u.isDeleted = 0
+           AND (@expectedSecurityStamp IS NULL OR u.securityStamp = @expectedSecurityStamp);
 
         IF @isPlatformUser IS NULL
         BEGIN
@@ -194,11 +196,11 @@ BEGIN
             ;THROW 51403, N'A platform administrator has one profile and cannot switch profiles or view as another user.', 1;
         END;
 
-        DECLARE @master TABLE (tenantId UNIQUEIDENTIFIER, permissionCode VARCHAR (60), permissionLevel VARCHAR (10), grantRank INT,
+        DECLARE @master TABLE (tenantId UNIQUEIDENTIFIER, permissionCode VARCHAR (60), permissionLevel VARCHAR (10), grantRank INT, hasIdentified BIT,
                                PRIMARY KEY (tenantId, permissionCode));
-        INSERT @master SELECT tenantId, permissionCode, permissionLevel, grantRank FROM auth.tvfUserGrantPermissions (@appUserId);
+        INSERT @master SELECT tenantId, permissionCode, permissionLevel, grantRank, hasIdentified FROM auth.tvfUserGrantPermissions (@appUserId);
 
-        DECLARE @x TABLE (tenantId UNIQUEIDENTIFIER, permissionCode VARCHAR (60), permissionLevel VARCHAR (10), grantRank INT,
+        DECLARE @x TABLE (tenantId UNIQUEIDENTIFIER, permissionCode VARCHAR (60), permissionLevel VARCHAR (10), grantRank INT, hasIdentified BIT,
                           PRIMARY KEY (tenantId, permissionCode));
         DECLARE @profileName NVARCHAR (120) = N'Master profile';
 
@@ -216,8 +218,10 @@ BEGIN
             END;
 
             -- What they can see and do, only where the caller administers, and never more than the caller may do there.
+            -- Identified clinical read access requires both the caller and the viewed user to hold a non-de-identified grant.
             INSERT @x
-            SELECT v.tenantId, v.permissionCode, v.permissionLevel, IIF (v.grantRank < m.grantRank, v.grantRank, m.grantRank)
+            SELECT v.tenantId, v.permissionCode, v.permissionLevel, IIF (v.grantRank < m.grantRank, v.grantRank, m.grantRank),
+                   CASE WHEN v.hasIdentified = 1 AND m.hasIdentified = 1 THEN 1 ELSE 0 END
               FROM auth.tvfUserGrantPermissions (@viewAsUserId) AS v
               JOIN @master AS m ON m.tenantId = v.tenantId AND m.permissionCode = v.permissionCode
              WHERE EXISTS (SELECT 1 FROM @master AS a WHERE a.tenantId = v.tenantId AND a.permissionCode = 'tenant.administer');
@@ -239,7 +243,8 @@ BEGIN
 
             -- A profile is clipped to the master as it is today, so it never outlives a narrowed master.
             INSERT @x
-            SELECT p.tenantId, p.permissionCode, p.permissionLevel, IIF (p.grantRank < m.grantRank, p.grantRank, m.grantRank)
+            SELECT p.tenantId, p.permissionCode, p.permissionLevel, IIF (p.grantRank < m.grantRank, p.grantRank, m.grantRank),
+                   CASE WHEN p.hasIdentified = 1 AND m.hasIdentified = 1 THEN 1 ELSE 0 END
               FROM auth.tvfProfileGrantPermissions (@userProfileId) AS p
               JOIN @master AS m ON m.tenantId = p.tenantId AND m.permissionCode = p.permissionCode;
 
@@ -247,7 +252,7 @@ BEGIN
         END
         ELSE
         BEGIN
-            INSERT @x SELECT tenantId, permissionCode, permissionLevel, grantRank FROM @master;
+            INSERT @x SELECT tenantId, permissionCode, permissionLevel, grantRank, hasIdentified FROM @master;
         END;
 
         -- Records: tenants where the scope holds a read or write permission, at the highest level held there.
@@ -261,76 +266,11 @@ BEGIN
                                              AND EXISTS (SELECT 1 FROM @x WHERE permissionCode = 'platform.administer')
                                             THEN 1 ELSE 0 END;
 
-        -- Issue #300: Derive identified clinical read access per (tenant, permission) from the effective active grant
-        -- so a non-clinical role (e.g., userAdministrator) or a clinical role in another tenant never unmasks a
-        -- de-identified epidemiologist's rows.
-        DECLARE @masterIdentified TABLE (tenantId UNIQUEIDENTIFIER, permissionCode VARCHAR (60), PRIMARY KEY (tenantId, permissionCode));
-        INSERT @masterIdentified (tenantId, permissionCode)
-        SELECT DISTINCT tc.descendantTenantId, pm.permissionCode
-          FROM auth.userAssignment AS ua
-          JOIN auth.role           AS r  ON r.roleId = ua.roleId AND r.isDeleted = 0 AND r.isDeidentified = 0
-          JOIN auth.tenantClosure  AS tc ON tc.ancestorTenantId = ua.tenantId
-                                        AND (ua.includeDescendants = 1 OR tc.depth = 0)
-                                        AND tc.isDeleted = 0
-          JOIN auth.tenant         AS t  ON t.tenantId = tc.descendantTenantId AND t.isActive = 1 AND t.isDeleted = 0
-          JOIN auth.rolePermission AS rp ON rp.roleId = ua.roleId AND rp.isDeleted = 0
-          JOIN auth.permission     AS pm ON pm.permissionId = rp.permissionId AND pm.isDeleted = 0
-         WHERE ua.appUserId = @appUserId
-           AND ua.isDeleted = 0
-           AND ua.startDate <= auth.udfSessionToday ()
-           AND (ua.endDate IS NULL OR ua.endDate >= auth.udfSessionToday ())
-           AND ua.revokedUtc IS NULL
-           AND pm.permissionCode IN ('result.view', 'case.view');
-
-        DECLARE @identified TABLE (tenantId UNIQUEIDENTIFIER, permissionCode VARCHAR (60), PRIMARY KEY (tenantId, permissionCode));
-        IF @viewAsUserId IS NOT NULL
-        BEGIN
-            INSERT @identified (tenantId, permissionCode)
-            SELECT DISTINCT tc.descendantTenantId, pm.permissionCode
-              FROM auth.userAssignment AS ua
-              JOIN auth.role           AS r  ON r.roleId = ua.roleId AND r.isDeleted = 0 AND r.isDeidentified = 0
-              JOIN auth.tenantClosure  AS tc ON tc.ancestorTenantId = ua.tenantId
-                                            AND (ua.includeDescendants = 1 OR tc.depth = 0)
-                                            AND tc.isDeleted = 0
-              JOIN auth.tenant         AS t  ON t.tenantId = tc.descendantTenantId AND t.isActive = 1 AND t.isDeleted = 0
-              JOIN auth.rolePermission AS rp ON rp.roleId = ua.roleId AND rp.isDeleted = 0
-              JOIN auth.permission     AS pm ON pm.permissionId = rp.permissionId AND pm.isDeleted = 0
-              JOIN @masterIdentified   AS mi ON mi.tenantId = tc.descendantTenantId AND mi.permissionCode = pm.permissionCode
-              JOIN @adminScope         AS a  ON a.tenantId = tc.descendantTenantId
-             WHERE ua.appUserId = @viewAsUserId
-               AND ua.isDeleted = 0
-               AND ua.startDate <= auth.udfSessionToday ()
-               AND (ua.endDate IS NULL OR ua.endDate >= auth.udfSessionToday ())
-               AND ua.revokedUtc IS NULL
-               AND pm.permissionCode IN ('result.view', 'case.view');
-        END
-        ELSE IF @userProfileId IS NOT NULL
-        BEGIN
-            INSERT @identified (tenantId, permissionCode)
-            SELECT DISTINCT tc.descendantTenantId, pm.permissionCode
-              FROM auth.userProfile      AS up
-              JOIN auth.userProfileGrant AS g  ON g.userProfileId = up.userProfileId AND g.isDeleted = 0
-              JOIN auth.role             AS r  ON r.roleId = g.roleId AND r.isDeleted = 0 AND r.isDeidentified = 0
-              JOIN auth.tenantClosure    AS tc ON tc.ancestorTenantId = g.tenantId
-                                              AND (g.includeDescendants = 1 OR tc.depth = 0)
-                                              AND tc.isDeleted = 0
-              JOIN auth.tenant           AS t  ON t.tenantId = tc.descendantTenantId AND t.isActive = 1 AND t.isDeleted = 0
-              JOIN auth.rolePermission   AS rp ON rp.roleId = g.roleId AND rp.isDeleted = 0
-              JOIN auth.permission       AS pm ON pm.permissionId = rp.permissionId AND pm.isDeleted = 0
-              JOIN @masterIdentified     AS mi ON mi.tenantId = tc.descendantTenantId AND mi.permissionCode = pm.permissionCode
-             WHERE up.userProfileId = @userProfileId
-               AND up.isDeleted = 0
-               AND pm.permissionCode IN ('result.view', 'case.view');
-        END
-        ELSE
-        BEGIN
-            INSERT @identified (tenantId, permissionCode)
-            SELECT tenantId, permissionCode FROM @masterIdentified;
-        END;
-
+        -- Issue #300: Derive de-identification flags directly from @x.hasIdentified so master, profile, and view-as
+        -- always share the exact same grant expansion rules and per-(tenant, permission) boundaries.
         DECLARE @isDeidentified BIT = CASE WHEN @isPlatformAdmin = 0
                                             AND EXISTS (SELECT 1 FROM @tenants)
-                                            AND NOT EXISTS (SELECT 1 FROM @identified)
+                                            AND NOT EXISTS (SELECT 1 FROM @x WHERE permissionCode IN ('result.view', 'case.view') AND hasIdentified = 1)
                                            THEN 1 ELSE 0 END;
 
         -- Acting tenant: the one asked for when the scope covers it, else the highest tenant in the scope.
@@ -362,8 +302,8 @@ BEGIN
         INSERT auth.sessionScopeTenant (sessionScopeTenantId, sessionScopeId, tenantId, accessLevel, canReadRelatedContacts, canReadIdentifiedResults, canReadIdentifiedCases)
         SELECT CAST (CAST (NEWID () AS BINARY (10)) + CAST (DATEDIFF_BIG (MILLISECOND, '19700101', SYSUTCDATETIME ()) AS BINARY (6)) AS UNIQUEIDENTIFIER), @sessionScopeId, t.tenantId, CASE t.accessRank WHEN 3 THEN 'full' WHEN 2 THEN 'write' ELSE 'read' END,
          CASE WHEN EXISTS(SELECT 1 FROM @x x WHERE x.tenantId=t.tenantId AND x.permissionCode='person.edit' AND x.grantRank>=2) THEN 1 ELSE 0 END,
-         CASE WHEN EXISTS(SELECT 1 FROM @identified i WHERE i.tenantId=t.tenantId AND i.permissionCode='result.view') THEN 1 ELSE 0 END,
-         CASE WHEN EXISTS(SELECT 1 FROM @identified i WHERE i.tenantId=t.tenantId AND i.permissionCode='case.view') THEN 1 ELSE 0 END
+         CASE WHEN EXISTS(SELECT 1 FROM @x x WHERE x.tenantId=t.tenantId AND x.permissionCode='result.view' AND x.hasIdentified=1) THEN 1 ELSE 0 END,
+         CASE WHEN EXISTS(SELECT 1 FROM @x x WHERE x.tenantId=t.tenantId AND x.permissionCode='case.view' AND x.hasIdentified=1) THEN 1 ELSE 0 END
         FROM @tenants t;
 
         INSERT auth.sessionScopeRoot (sessionScopeRootId, sessionScopeId, rootTenantId, accessLevel)
@@ -393,7 +333,7 @@ BEGIN
              , t.tenantName                   AS actingTenantName
              , r.statePostalCode
              , COALESCE (r.timeZone, 'Eastern Standard Time') AS timeZone
-             , u.securityStamp
+             , @validatedStamp                AS securityStamp
              , @expiresUtc                    AS expiresUtc
              , @userProfileId                 AS userProfileId
              , @profileName                   AS profileName

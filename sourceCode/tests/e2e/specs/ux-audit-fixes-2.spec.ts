@@ -26,11 +26,28 @@ test('the header links the user guides, intake reads in plain words, and the pro
   // At tablet width the user block folds behind Menu; read it where it shows.
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/');
-  const guide = page.getByRole('link', { name: 'User guide (opens in a new tab)' });
-  await expect(guide).toHaveAttribute('target', '_blank');
   const switcher = page.locator('.merit-profile-switch');
   await expect(switcher).toHaveAccessibleName(/Profile.*Master profile.*switch profile or jurisdiction/);
   expect(await switcher.evaluate(e => getComputedStyle(e).borderTopStyle)).toBe('solid');
+  // Operate the account disclosure by keyboard and verify the user guide link inside it.
+  await switcher.focus();
+  await page.keyboard.press('Enter');
+  const guide = page.getByRole('link', { name: 'User guide (opens in a new tab)' });
+  await expect(guide).toBeVisible();
+  await expect(guide).toHaveAttribute('target', '_blank');
+  await page.keyboard.press('Escape');
+  await expect(guide).toBeHidden();
+  await expect(switcher).toBeFocused();
+  // Quick Jump (Ctrl+K): filtering hides non-matching options visually and keyboard Enter opens the visible match.
+  await page.keyboard.press('Control+k');
+  const paletteInput = page.locator('#palette-input');
+  await expect(paletteInput).toBeFocused();
+  await paletteInput.fill('audit');
+  const visibleOptions = page.locator('#palette-list [role="option"]:visible');
+  await expect(visibleOptions).toHaveCount(1);
+  await expect(visibleOptions.first()).toContainText('Audit log');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#command-palette')).toBeHidden();
   const help = await page.context().newPage();
   await help.goto('/help');
   await expect(help.getByRole('heading', { level: 2 })).toHaveCount(3);
@@ -164,4 +181,92 @@ test('the session alert spaces its actions inside the alert, and the users filte
   const box = await admin.locator('#user-filter').boundingBox();
   const count = await admin.locator('[data-user-count]').boundingBox();
   expect(count!.y).toBeGreaterThanOrEqual(box!.y + box!.height + 8);
+});
+
+test('match review undo guard pauses countdown on Cancel, submits once on OK, and shares in-flight writes (#307)', async ({ asUser }) => {
+  test.setTimeout(60000);
+  const page = await asUser('supervisor');
+  const row = id(209);
+  const candidateId = id(309);
+  const decisions: unknown[] = [];
+  let delayMs = 0;
+
+  await page.route('**/api/v1/held**', route => {
+    const url = new URL(route.request().url());
+    if (url.pathname.endsWith('/rows')) {
+      return route.fulfill({ json: { items: [{ stagingRowId: row, intakeBatchId: id(1), fileName: 'review.csv', senderName: 'Demo Lab', rowNumber: 1,
+        reported: { lastName: 'Rivera', firstName: 'Mia' }, corrected: {}, isUrgent: false, heldSinceUtc: '2026-10-01T12:00:00Z',
+        assignedToName: null, reasons: '1 possible match needs review.', reasonCodes: ['uncertainMatch'] }], totalCount: 1, pageNumber: 1, pageSize: 50 } });
+    }
+    return route.fulfill({
+      json: { totalCount: 1, batchFileName: null, groups: [{ reasonCode: 'uncertainMatch', reportedValue: null, senderOrganizationId: null, senderName: 'Demo Lab', rowCount: 1, urgentCount: 0, oldestHeldUtc: null, batchCount: 1, sampleMessage: '1 possible match needs review.' }] },
+    });
+  });
+  await page.route('**/api/v1/match-review**', async route => {
+    if (route.request().method() === 'POST') {
+      if (delayMs > 0) await new Promise(r => setTimeout(r, delayMs));
+      decisions.push(route.request().postDataJSON());
+      return route.fulfill({ json: { released: true, remainingCandidates: 0, message: 'Recorded.' } });
+    }
+    if (new URL(route.request().url()).pathname === '/api/v1/match-review') {
+      return route.fulfill({ json: { items: [{ stagingRowId: row, patientName: 'Rivera, Mia', fileName: 'review.csv', rowNumber: 1, isEscalated: false }], totalCount: 1, pageNumber: 1, pageSize: 200 } });
+    }
+    return route.fulfill({ json: { stagingRowId: row, fileName: 'review.csv', rowNumber: 1, isUrgent: false, isEscalated: false,
+      reasonMessage: '1 possible match needs review.',
+      incoming: [{ key: 'lastName', label: 'Last name', value: 'Rivera' }, { key: 'firstName', label: 'First name', value: 'Mia' }],
+      candidates: [{ personId: candidateId, rank: 1, personName: 'Mia Rivera', explanation: 'Close name match', warnings: [],
+        fields: [{ field: 'lastName', label: 'Last name', incoming: 'Rivera', candidate: 'Rivera', agreement: 'agree', note: null }],
+        aliases: null, resultCount: 1, lastCollectedDate: '2026-10-01', openCaseNumbers: null, places: [], results: [] }] } });
+  });
+
+  // Navigate via Angular router from /app/held -> /app/match-review so page.goBack() invokes canDeactivate.
+  await page.goto('/app/held'); await angularReady(page);
+  await page.locator('tbody .usa-checkbox__label').first().click();
+  await page.getByRole('link', { name: 'Open Match review' }).click();
+  await expect(page).toHaveURL(/\/app\/match-review/);
+  await expect(page.getByRole('button', { name: /^Different person/ })).toBeVisible();
+
+  // Case 1: Trigger Different person (5s undo toast), open leave dialog, wait past the original 5s deadline,
+  // choose Cancel -> decision MUST NOT commit, and Undo cancels cleanly with 0 POSTs.
+  await page.getByRole('button', { name: /^Different person/ }).click();
+  await expect(page.getByRole('button', { name: 'Undo' })).toBeVisible();
+  await page.goBack();
+  const dialog = page.locator('#confirmation-dialog');
+  await expect(dialog).toBeVisible();
+  await page.waitForTimeout(5500);
+  expect(decisions).toEqual([]);
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
+  await expect(dialog).toBeHidden();
+  await expect(page).toHaveURL(/\/app\/match-review/);
+  expect(decisions).toEqual([]);
+  await page.getByRole('button', { name: 'Undo' }).click();
+  expect(decisions).toEqual([]);
+
+  // Case 2: Trigger Different person, open leave dialog, wait past original deadline, choose Continue ->
+  // submits EXACTLY ONCE and navigates back to /app/held.
+  await page.goto('/app/held'); await angularReady(page);
+  await page.locator('tbody .usa-checkbox__label').first().click();
+  await page.getByRole('link', { name: 'Open Match review' }).click();
+  await expect(page).toHaveURL(/\/app\/match-review/);
+  await page.getByRole('button', { name: /^Different person/ }).click();
+  await expect(page.getByRole('button', { name: 'Undo' })).toBeVisible();
+  await page.goBack();
+  await expect(dialog).toBeVisible();
+  await page.waitForTimeout(5500);
+  expect(decisions).toEqual([]);
+  await dialog.getByRole('button', { name: 'Continue' }).click();
+  await expect(page.locator('app-root h1')).toHaveText('Held records');
+  expect(decisions).toHaveLength(1);
+
+  // Case 3: Navigate during an in-flight Save now -> shares the single in-flight write (never submits twice).
+  decisions.length = 0;
+  delayMs = 500;
+  await page.locator('tbody .usa-checkbox__label').first().click();
+  await page.getByRole('link', { name: 'Open Match review' }).click();
+  await expect(page.getByRole('button', { name: /^Different person/ })).toBeVisible();
+  await page.getByRole('button', { name: /^Different person/ }).click();
+  await page.getByRole('button', { name: 'Save now' }).click();
+  await page.goBack();
+  await expect(page.locator('app-root h1')).toHaveText('Held records');
+  expect(decisions).toHaveLength(1);
 });

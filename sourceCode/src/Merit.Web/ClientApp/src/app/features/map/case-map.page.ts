@@ -52,7 +52,7 @@ export class CaseMapStore {
     @if (selectedCase(); as c) {
       <div class="usa-summary-box" role="status">
         <div class="usa-summary-box__body">
-          <h2 class="usa-summary-box__heading"><a class="usa-link" [href]="view.detail('/cases/' + c.exposureCaseId)">{{ c.caseNumber }}</a>: {{ c.personName }}</h2>
+          <h2 class="usa-summary-box__heading">@if (isIdentified(c.personId)) { <a class="usa-link" [href]="view.detail('/cases/' + c.exposureCaseId)">{{ c.caseNumber }}</a> } @else { {{ c.caseNumber }} }: {{ c.personName }}</h2>
           <p>{{ display.of(c.analyteCode) }}, {{ display.of(c.population).toLowerCase() }}, {{ display.of(c.classification).toLowerCase() }}, opened {{ display.date(c.openedDate) }}@if (c.highestValue !== null) {, highest {{ c.highestValue }} {{ c.highestUnit }}}.
             {{ c.addressLabel }}@if (c.inOpenCluster) { &middot; in an open cluster}</p>
         </div>
@@ -67,12 +67,12 @@ export class CaseMapStore {
         <tbody>
           @for (c of store.cases(); track c.exposureCaseId) {
             <tr>
-              <td><a class="usa-link" [href]="view.detail('/cases/' + c.exposureCaseId)">{{ c.caseNumber }}</a></td>
-              <td><a class="usa-link" [href]="view.detail('/people/' + c.personId)">{{ c.personName }}</a></td>
+              <td>@if (isIdentified(c.personId)) { <a class="usa-link" [href]="view.detail('/cases/' + c.exposureCaseId)">{{ c.caseNumber }}</a> } @else { {{ c.caseNumber }} }</td>
+              <td>@if (isIdentified(c.personId)) { <a class="usa-link" [href]="view.detail('/people/' + c.personId)">{{ c.personName }}</a> } @else { {{ c.personName }} }</td>
               <td>{{ display.of(c.classification) }}@if (c.inOpenCluster) { (cluster)}</td>
               <td class="nowrap">{{ display.date(c.openedDate) }}</td>
-              <td>{{ c.addressLabel ?? 'No primary residence' }}</td>
-              <td>{{ c.latitude === null ? 'No coordinates' : (c.geocodeQuality ?? 'yes') }}</td>
+              <td>{{ c.addressLabel ?? (isIdentified(c.personId) ? 'No primary residence' : 'De-identified') }}</td>
+              <td>{{ c.latitude === null ? (isIdentified(c.personId) ? 'No coordinates' : 'De-identified') : (c.geocodeQuality ?? 'yes') }}</td>
             </tr>
           }
         </tbody>
@@ -92,6 +92,10 @@ export class CaseMapPage implements OnInit {
   private readonly mapLoad = new LatestRequest();
   protected readonly view = inject(ViewQuery);
   protected readonly categories = CLASSIFICATIONS;
+
+  protected isIdentified(personId: string | null | undefined): boolean {
+    return !!personId && personId !== '00000000-0000-0000-0000-000000000000';
+  }
 
   protected readonly points = computed<MapPoint[]>(() => this.store.located().map(c => ({
     id: c.exposureCaseId, latitude: c.latitude!, longitude: c.longitude!, category: c.classification, ringed: c.inOpenCluster,

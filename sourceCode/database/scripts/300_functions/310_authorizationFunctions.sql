@@ -57,8 +57,10 @@ RETURNS TABLE
 AS
 RETURN
     SELECT tc.descendantTenantId AS tenantId, pm.permissionCode, pm.accessLevel AS permissionLevel,
-           MAX (CASE ua.accessLevel WHEN 'full' THEN 3 WHEN 'write' THEN 2 ELSE 1 END) AS grantRank
+           MAX (CASE ua.accessLevel WHEN 'full' THEN 3 WHEN 'write' THEN 2 ELSE 1 END) AS grantRank,
+           CAST (MAX (CASE WHEN r.isDeidentified = 0 THEN 1 ELSE 0 END) AS BIT) AS hasIdentified
       FROM auth.userAssignment AS ua
+      JOIN auth.role           AS r  ON r.roleId = ua.roleId AND r.isDeleted = 0
       JOIN auth.tenantClosure  AS tc ON tc.ancestorTenantId = ua.tenantId
                                     AND (ua.includeDescendants = 1 OR tc.depth = 0)
                                     AND tc.isDeleted = 0
@@ -115,9 +117,11 @@ RETURNS TABLE
 AS
 RETURN
     SELECT tc.descendantTenantId AS tenantId, pm.permissionCode, pm.accessLevel AS permissionLevel,
-           MAX (CASE g.accessLevel WHEN 'full' THEN 3 WHEN 'write' THEN 2 ELSE 1 END) AS grantRank
+           MAX (CASE g.accessLevel WHEN 'full' THEN 3 WHEN 'write' THEN 2 ELSE 1 END) AS grantRank,
+           CAST (MAX (CASE WHEN r.isDeidentified = 0 THEN 1 ELSE 0 END) AS BIT) AS hasIdentified
       FROM auth.userProfile      AS up
       JOIN auth.userProfileGrant AS g  ON g.userProfileId = up.userProfileId AND g.isDeleted = 0
+      JOIN auth.role             AS r  ON r.roleId = g.roleId AND r.isDeleted = 0
       JOIN auth.tenantClosure    AS tc ON tc.ancestorTenantId = g.tenantId
                                       AND (g.includeDescendants = 1 OR tc.depth = 0)
                                       AND tc.isDeleted = 0
@@ -216,7 +220,8 @@ BEGIN
            AND ((@permissionCode = 'result.view' AND st.canReadIdentifiedResults = 1)
                 OR (@permissionCode = 'case.view' AND st.canReadIdentifiedCases = 1))
            AND (st.tenantId = @owningTenantId
-                OR (@personId IS NOT NULL
+                OR (@permissionCode = 'result.view'
+                    AND @personId IS NOT NULL
                     AND EXISTS (SELECT 1 FROM dbo.personAccess AS pa
                                  WHERE pa.personId = @personId
                                    AND pa.tenantId = st.tenantId

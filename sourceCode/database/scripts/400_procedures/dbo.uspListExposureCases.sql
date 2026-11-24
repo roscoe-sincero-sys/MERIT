@@ -105,20 +105,35 @@ BEGIN
         -- =========================================================================================
 
         DECLARE @me UNIQUEIDENTIFIER = auth.udfSessionUserId ();
+        DECLARE @isDbo BIT = CASE WHEN USER_NAME () = N'dbo' THEN 1 ELSE 0 END;
+        DECLARE @idTenants TABLE (tenantId UNIQUEIDENTIFIER PRIMARY KEY);
+        IF @isDbo = 0
+        BEGIN
+            INSERT @idTenants (tenantId)
+            SELECT st.tenantId
+              FROM auth.sessionScope       AS ss
+              JOIN auth.sessionScopeTenant AS st ON st.sessionScopeId = ss.sessionScopeId AND st.isDeleted = 0
+             WHERE ss.sessionScopeId = TRY_CAST (SESSION_CONTEXT (N'scopeKey') AS UNIQUEIDENTIFIER)
+               AND ss.revokedUtc IS NULL
+               AND ss.expiresUtc > SYSUTCDATETIME ()
+               AND ss.isDeleted = 0
+               AND st.canReadIdentifiedCases = 1;
+        END;
         -- The search text matches literally: LIKE wildcards in it are escaped.
         DECLARE @like NVARCHAR (600) = REPLACE (REPLACE (REPLACE (NULLIF (LTRIM (RTRIM (@search)), N''), N'[', N'[[]'), N'%', N'[%]'), N'_', N'[_]');
 
         SELECT c.exposureCaseId, c.caseNumber,
-               CASE WHEN auth.udfCanReadIdentified (c.owningTenantId, 'case.view', c.personId) = 1 THEN c.personId ELSE CAST (0x0 AS UNIQUEIDENTIFIER) END AS personId,
-               CASE WHEN auth.udfCanReadIdentified (c.owningTenantId, 'case.view', c.personId) = 1 THEN p.lastName ELSE N'De-identified' END AS lastName,
-               CASE WHEN auth.udfCanReadIdentified (c.owningTenantId, 'case.view', c.personId) = 1 THEN p.firstName ELSE NULL END AS firstName,
-               CASE WHEN auth.udfCanReadIdentified (c.owningTenantId, 'case.view', c.personId) = 1 THEN p.dob ELSE NULL END AS dob,
+               CASE WHEN @isDbo = 1 OR idt.tenantId IS NOT NULL THEN c.personId ELSE CAST (0x0 AS UNIQUEIDENTIFIER) END AS personId,
+               CASE WHEN @isDbo = 1 OR idt.tenantId IS NOT NULL THEN p.lastName ELSE N'De-identified' END AS lastName,
+               CASE WHEN @isDbo = 1 OR idt.tenantId IS NOT NULL THEN p.firstName ELSE NULL END AS firstName,
+               CASE WHEN @isDbo = 1 OR idt.tenantId IS NOT NULL THEN p.dob ELSE NULL END AS dob,
                a.code AS analyteCode,
                c.population, c.classification, c.caseStatus, c.openedDate, u.displayName AS assignedToName,
                t.tenantName AS owningTenantName, COUNT (*) OVER () AS totalCount
           FROM dbo.exposureCase AS c
           JOIN dbo.person AS p ON p.personId = c.personId
           JOIN config.analyte AS a ON a.analyteId = c.analyteId
+          LEFT JOIN @idTenants AS idt ON idt.tenantId = c.owningTenantId
           LEFT JOIN auth.appUser AS u ON u.appUserId = c.assignedToUserId
           LEFT JOIN auth.tenant AS t ON t.tenantId = c.owningTenantId
          WHERE c.isDeleted = 0
@@ -130,7 +145,7 @@ BEGIN
            AND (@classification IS NULL OR c.classification = @classification)
            AND (@population IS NULL OR c.population = @population)
            AND (@owningTenantId IS NULL OR c.owningTenantId = @owningTenantId)
-           AND (@like IS NULL OR c.caseNumber LIKE N'%' + @like + N'%' OR (auth.udfCanReadIdentified (c.owningTenantId, 'case.view', c.personId) = 1 AND p.lastName LIKE @like + N'%'))
+           AND (@like IS NULL OR c.caseNumber LIKE N'%' + @like + N'%' OR ((@isDbo = 1 OR idt.tenantId IS NOT NULL) AND p.lastName LIKE @like + N'%'))
          ORDER BY CASE WHEN @sort = 'opened' AND @descending = 0 THEN c.openedDate END ASC,
                   CASE WHEN @sort = 'opened' AND @descending = 1 THEN c.openedDate END DESC,
                   CASE WHEN @sort = 'case' AND @descending = 0 THEN c.caseNumber END ASC,
@@ -140,10 +155,10 @@ BEGIN
                        THEN CASE c.classification WHEN 'confirmed' THEN 1 WHEN 'suspect' THEN 2 ELSE 3 END END ASC,
                   CASE WHEN @sort = 'classification' AND @descending = 1
                        THEN CASE c.classification WHEN 'confirmed' THEN 1 WHEN 'suspect' THEN 2 ELSE 3 END END DESC,
-                  CASE WHEN @sort = 'person' AND @descending = 0 AND auth.udfCanReadIdentified (c.owningTenantId, 'case.view', c.personId) = 1 THEN p.lastName END ASC,
-                  CASE WHEN @sort = 'person' AND @descending = 0 AND auth.udfCanReadIdentified (c.owningTenantId, 'case.view', c.personId) = 1 THEN p.firstName END ASC,
-                  CASE WHEN @sort = 'person' AND @descending = 1 AND auth.udfCanReadIdentified (c.owningTenantId, 'case.view', c.personId) = 1 THEN p.lastName END DESC,
-                  CASE WHEN @sort = 'person' AND @descending = 1 AND auth.udfCanReadIdentified (c.owningTenantId, 'case.view', c.personId) = 1 THEN p.firstName END DESC,
+                  CASE WHEN @sort = 'person' AND @descending = 0 AND (@isDbo = 1 OR idt.tenantId IS NOT NULL) THEN p.lastName END ASC,
+                  CASE WHEN @sort = 'person' AND @descending = 0 AND (@isDbo = 1 OR idt.tenantId IS NOT NULL) THEN p.firstName END ASC,
+                  CASE WHEN @sort = 'person' AND @descending = 1 AND (@isDbo = 1 OR idt.tenantId IS NOT NULL) THEN p.lastName END DESC,
+                  CASE WHEN @sort = 'person' AND @descending = 1 AND (@isDbo = 1 OR idt.tenantId IS NOT NULL) THEN p.firstName END DESC,
                   c.openedDate DESC, c.exposureCaseId
         OFFSET (@pageNumber - 1) * @pageSize ROWS
          FETCH NEXT @pageSize ROWS ONLY

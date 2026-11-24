@@ -193,8 +193,8 @@ public sealed partial class PasswordService(IAccountData data, AccountService ac
 
         ValidateNew(user, newPassword, confirmPassword, link.PasswordMinLength, checkNotCurrent: false);
         byte[] verifier = Verifier(passwordResetId, token!);
-        string? method = await accounts.CheckSecondFactorAsync(user, code, ct).ConfigureAwait(false);
-        if (method is null)
+        var verified = await accounts.VerifySecondFactorWithoutConsumingAsync(user, code, ct).ConfigureAwait(false);
+        if (verified is null)
         {
             await data.RecordSignInResultAsync(user.AppUserId, false, AccountService.MaxFailedAttempts, AccountService.LockoutMinutes, clientAddress, ct)
                 .ConfigureAwait(false);
@@ -205,7 +205,21 @@ public sealed partial class PasswordService(IAccountData data, AccountService ac
             return new PasswordResetResult(left > 0 ? PasswordResetOutcome.WrongCode : PasswordResetOutcome.LinkClosed, left);
         }
 
+        // Check current-password reuse AFTER factor verification (never leaking the current password to an unverified
+        // caller) and BEFORE consuming the factor (so a one-time recovery code or TOTP step is not burned on form correction).
         EnsureNotCurrent(user, newPassword);
+
+        if (!await accounts.ConsumeVerifiedSecondFactorAsync(user.AppUserId, user.SecurityStamp, verified, ct).ConfigureAwait(false))
+        {
+            await data.RecordSignInResultAsync(user.AppUserId, false, AccountService.MaxFailedAttempts, AccountService.LockoutMinutes, clientAddress, ct)
+                .ConfigureAwait(false);
+            await accounts.RecordFailureAsync(user, SignInEventTypes.MfaFailed, SignInSteps.PasswordReset, verified.Method, "wrongCode", ct).ConfigureAwait(false);
+            int left = await data.RecordPasswordResetFailureAsync(passwordResetId, verifier, ct).ConfigureAwait(false);
+            LogWrongCode(logger, user.AppUserId, left);
+            return new PasswordResetResult(left > 0 ? PasswordResetOutcome.WrongCode : PasswordResetOutcome.LinkClosed, left);
+        }
+
+        string method = verified.Method;
 
         var reset = await data.CompletePasswordResetAsync(passwordResetId, verifier, accounts.HashPassword(newPassword!), clientAddress, ct)
             .ConfigureAwait(false);

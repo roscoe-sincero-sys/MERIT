@@ -99,12 +99,18 @@ BEGIN
         DECLARE @enrollLock INT;
         DECLARE @enrollLockName NVARCHAR (255) = CONCAT (N'MERIT.totp.', @appUserId);
         EXEC @enrollLock = sys.sp_getapplock @Resource = @enrollLockName, @LockMode = 'Exclusive', @LockOwner = 'Transaction', @LockTimeout = 5000;
+        IF @enrollLock < 0
+        BEGIN
+            ;THROW 51409, N'Your sign-in session is busy. Please try again.', 1;
+        END;
+
+        DECLARE @newSecurityStamp UNIQUEIDENTIFIER = NEWID ();
 
         UPDATE auth.appUser
            SET mfaSecretProtected = @mfaSecretProtected
              , mfaEnabled         = 1
              , lastTotpStep       = @initialTotpStep
-             , securityStamp      = NEWID ()
+             , securityStamp      = @newSecurityStamp
          WHERE appUserId = @appUserId
            AND isDeleted = 0
            AND isActive = 1
@@ -124,6 +130,8 @@ BEGIN
 
         INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId)
         SELECT @appUserId, rootTenantId, 'mfaEnrolled', 'appUser', @appUserId FROM auth.appUser WHERE appUserId = @appUserId;
+
+        SELECT @newSecurityStamp AS securityStamp;
 
         SET @Comments = N'MFA enrolled.';
 

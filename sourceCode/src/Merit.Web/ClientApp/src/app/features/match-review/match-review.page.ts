@@ -395,6 +395,8 @@ export class MatchReviewPage implements OnInit {
   protected readonly pendingCommit = signal<{ rowId: string; decision: MatchDecision; personId: string | null; note: string | null; position: number; summary: string; secondsLeft: number } | null>(null);
   protected readonly canAct = computed(() => this.store.canDecide() && this.pendingCommit() === null);
   private pendingTimer: ReturnType<typeof setInterval> | null = null;
+  private inFlightCommit: Promise<boolean> | null = null;
+  private confirmingLeave = false;
 
   private clearPendingTimer(): void {
     if (this.pendingTimer) {
@@ -403,38 +405,56 @@ export class MatchReviewPage implements OnInit {
     }
   }
 
+  private startPendingTimer(): void {
+    this.clearPendingTimer();
+    this.pendingTimer = setInterval(() => {
+      if (this.confirmingLeave) return;
+      const cur = this.pendingCommit();
+      if (!cur) { this.clearPendingTimer(); return; }
+      if (cur.secondsLeft <= 1) { this.flushPending(); }
+      else { this.pendingCommit.set({ ...cur, secondsLeft: cur.secondsLeft - 1 }); }
+    }, 1000);
+  }
+
   protected onBeforeUnload(event: BeforeUnloadEvent): void {
-    if (this.pendingCommit()) {
+    if (this.pendingCommit() || this.inFlightCommit) {
       event.preventDefault();
     }
   }
 
   /**
-   * Route guard: preserves the Undo window on in-app navigation and ensures a failed save is shown rather than dropped.
+   * Route guard: pauses the Undo countdown while confirming so Cancel never commits, and routes every save path
+   * through one shared in-flight promise so a decision submits at most once.
    */
   async canDeactivate(): Promise<boolean> {
+    if (this.inFlightCommit) {
+      return await this.inFlightCommit;
+    }
     const p = this.pendingCommit();
     if (!p) return true;
-    const saveAndLeave = await confirmAction(
-      `You have a pending decision ("${p.summary}"). Choose OK to save it before leaving, or Cancel to stay on this page so you can Undo or wait.`);
-    if (!saveAndLeave) return false;
 
+    this.confirmingLeave = true;
     this.clearPendingTimer();
-    this.pendingCommit.set(null);
-    this.store.busy.set(true);
-    this.store.error.set(null);
+    let saveAndLeave = false;
     try {
-      await firstValueFrom(this.api.matchDecision(p.rowId, { decision: p.decision, personId: p.personId, note: p.note }));
-      this.store.busy.set(false);
-      return true;
-    } catch (e) {
-      this.store.busy.set(false);
-      this.store.error.set(problemMessage(e));
+      saveAndLeave = await confirmAction(
+        `You have a pending decision ("${p.summary}"). Choose OK to save it before leaving, or Cancel to stay on this page so you can Undo or wait.`);
+    } finally {
+      this.confirmingLeave = false;
+    }
+
+    if (!saveAndLeave) {
+      if (this.pendingCommit()) {
+        this.startPendingTimer();
+      }
       return false;
     }
+
+    return await this.submitPendingOnce(true);
   }
 
   protected undoPending(): void {
+    if (this.inFlightCommit) return;
     this.clearPendingTimer();
     this.pendingCommit.set(null);
     this.store.message.set('Decision cancelled. No changes were saved.');
@@ -442,11 +462,21 @@ export class MatchReviewPage implements OnInit {
   }
 
   protected flushPending(afterCommit?: () => void): void {
+    void this.submitPendingOnce(false, afterCommit);
+  }
+
+  private submitPendingOnce(forNavigation: boolean, afterCommit?: () => void): Promise<boolean> {
+    if (this.inFlightCommit) {
+      return this.inFlightCommit;
+    }
     const p = this.pendingCommit();
-    if (!p) { afterCommit?.(); return; }
+    if (!p) {
+      afterCommit?.();
+      return Promise.resolve(true);
+    }
     this.clearPendingTimer();
     this.pendingCommit.set(null);
-    this.commitDecision(p.rowId, p.decision, p.personId, p.note, p.position, afterCommit);
+    return this.commitDecision(p.rowId, p.decision, p.personId, p.note, p.position, afterCommit, forNavigation);
   }
 
   protected async decide(decision: MatchDecision, note: string): Promise<void> {
@@ -464,50 +494,58 @@ export class MatchReviewPage implements OnInit {
 
     // Only the non-match ('different') action uses the 5-second undo toast; all other decisions save immediately.
     if (decision !== 'different') {
-      this.commitDecision(rowId, decision, personId, cleanNote, position);
+      void this.commitDecision(rowId, decision, personId, cleanNote, position);
       return;
     }
 
     const label = `Different person from ${candidate?.personName}`;
     this.pendingCommit.set({ rowId, decision, personId, note: cleanNote, position, summary: label, secondsLeft: 5 });
     this.store.announcement.set(`${label} will save in 5 seconds. Press Undo to cancel.`);
-    this.pendingTimer = setInterval(() => {
-      const cur = this.pendingCommit();
-      if (!cur) { this.clearPendingTimer(); return; }
-      if (cur.secondsLeft <= 1) { this.flushPending(); }
-      else { this.pendingCommit.set({ ...cur, secondsLeft: cur.secondsLeft - 1 }); }
-    }, 1000);
+    this.startPendingTimer();
   }
 
-  private commitDecision(rowId: string, decision: MatchDecision, personId: string | null, note: string | null, position: number, afterCommit?: () => void): void {
+  private commitDecision(rowId: string, decision: MatchDecision, personId: string | null, note: string | null, position: number, afterCommit?: () => void, forNavigation = false): Promise<boolean> {
+    if (this.inFlightCommit) {
+      return this.inFlightCommit;
+    }
     this.queueLoad.cancel();
     this.reviewLoad.cancel();
     this.store.queueLoading.set(false);
     this.store.reviewLoading.set(false);
     this.store.busy.set(true);
     this.store.error.set(null);
-    this.api.matchDecision(rowId, { decision, personId, note }).subscribe({
-      next: res => {
+
+    const run = (async () => {
+      try {
+        const res = await firstValueFrom(this.api.matchDecision(rowId, { decision, personId, note }));
         this.store.busy.set(false);
-        this.heading()?.nativeElement.focus();
-        this.store.review.set(null);
-        this.store.message.set(res.message);
-        if (afterCommit) {
-          afterCommit();
-        } else if (res.released) {
-          this.loadQueue(false, position);
-        } else if (decision === 'notSure') {
-          // The record stays held (now with a supervisor), so move past it.
-          this.loadQueue(false, position + 1);
-        } else {
-          this.openRow(rowId);
+        if (!forNavigation) {
+          this.heading()?.nativeElement.focus();
+          this.store.review.set(null);
+          this.store.message.set(res.message);
+          if (afterCommit) {
+            afterCommit();
+          } else if (res.released) {
+            this.loadQueue(false, position);
+          } else if (decision === 'notSure') {
+            // The record stays held (now with a supervisor), so move past it.
+            this.loadQueue(false, position + 1);
+          } else {
+            this.openRow(rowId);
+          }
         }
-      },
-      error: e => {
+        return true;
+      } catch (e) {
         this.store.busy.set(false);
         this.store.error.set(problemMessage(e));
-      },
+        return false;
+      }
+    })();
+
+    this.inFlightCommit = run.finally(() => {
+      this.inFlightCommit = null;
     });
+    return this.inFlightCommit;
   }
 
   protected onKey(event: KeyboardEvent): void {

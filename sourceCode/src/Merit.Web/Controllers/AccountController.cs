@@ -114,13 +114,20 @@ public sealed class AccountController(AccountService accounts, EmailCodeService 
 
         try
         {
-            var codes = await accounts.CompleteEnrollmentAsync(userId, secret, model.Code ?? string.Empty, ClientAddress(), ct, userName, pendingStamp);
+            var enrolled = await accounts.CompleteEnrollmentAsync(userId, secret, model.Code ?? string.Empty, ClientAddress(), ct, userName, pendingStamp);
             var destination = await PendingReturnAsync();
-            await CompleteSignInAsync(userId, ct);
+            try
+            {
+                await CompleteSignInAsync(userId, ct, enrolled.SecurityStamp);
+            }
+            catch (SessionEndedException)
+            {
+                return RedirectToAction(nameof(SignIn));
+            }
             // Until acknowledged, every other page leads back to these codes (issue #156).
-            recoveryPending.Hold(Response, userId, codes, destination);
+            recoveryPending.Hold(Response, userId, enrolled.RecoveryCodes, destination);
             Response.Headers.CacheControl = "no-store";
-            return View("RecoveryCodes", new RecoveryCodesModel(codes, destination));
+            return View("RecoveryCodes", new RecoveryCodesModel(enrolled.RecoveryCodes, destination));
         }
         catch (ValidationException ex)
         {
@@ -234,6 +241,13 @@ public sealed class AccountController(AccountService accounts, EmailCodeService 
         }
 
         var userId = PendingUserId();
+        Guid.TryParse(User.FindFirstValue(MeritClaims.SecurityStamp), CultureInfo.InvariantCulture, out var pendingStamp);
+        if (pendingStamp == Guid.Empty)
+        {
+            await HttpContext.SignOutAsync(AuthSchemes.PendingMfa);
+            return RedirectToAction(nameof(SignIn));
+        }
+
         var option = await PendingEmailOptionAsync(ct);
         var page = Recall(new EmailCodeModel { MaskedEmail = option?.MaskedEmail }, afterCheck: true);
         if (!ModelState.IsValid)
@@ -247,7 +261,15 @@ public sealed class AccountController(AccountService accounts, EmailCodeService 
         {
             ForgetSend();
             var destination = await PendingReturnAsync();
-            await CompleteSignInAsync(userId, ct);
+            try
+            {
+                await CompleteSignInAsync(userId, ct, pendingStamp);
+            }
+            catch (SessionEndedException)
+            {
+                return RedirectToAction(nameof(SignIn));
+            }
+
             return LocalRedirect(destination);
         }
 

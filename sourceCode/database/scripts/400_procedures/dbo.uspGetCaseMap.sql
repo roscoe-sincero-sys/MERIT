@@ -86,26 +86,42 @@ BEGIN
         -- ===== The procedure's own work starts here. Everything above and below is boilerplate. ==
         -- =========================================================================================
 
+        DECLARE @isDbo BIT = CASE WHEN USER_NAME () = N'dbo' THEN 1 ELSE 0 END;
+        DECLARE @idTenants TABLE (tenantId UNIQUEIDENTIFIER PRIMARY KEY);
+        IF @isDbo = 0
+        BEGIN
+            INSERT @idTenants (tenantId)
+            SELECT st.tenantId
+              FROM auth.sessionScope       AS ss
+              JOIN auth.sessionScopeTenant AS st ON st.sessionScopeId = ss.sessionScopeId AND st.isDeleted = 0
+             WHERE ss.sessionScopeId = TRY_CAST (SESSION_CONTEXT (N'scopeKey') AS UNIQUEIDENTIFIER)
+               AND ss.revokedUtc IS NULL
+               AND ss.expiresUtc > SYSUTCDATETIME ()
+               AND ss.isDeleted = 0
+               AND st.canReadIdentifiedCases = 1;
+        END;
+
         SELECT TOP (5000) c.exposureCaseId, c.caseNumber,
-               CASE WHEN auth.udfCanReadIdentified (c.owningTenantId, 'case.view', c.personId) = 1 THEN c.personId ELSE CAST (0x0 AS UNIQUEIDENTIFIER) END AS personId,
-               CASE WHEN auth.udfCanReadIdentified (c.owningTenantId, 'case.view', c.personId) = 1 THEN p.lastName ELSE N'De-identified' END AS lastName,
-               CASE WHEN auth.udfCanReadIdentified (c.owningTenantId, 'case.view', c.personId) = 1 THEN p.firstName ELSE NULL END AS firstName,
+               CASE WHEN @isDbo = 1 OR idt.tenantId IS NOT NULL THEN c.personId ELSE CAST (0x0 AS UNIQUEIDENTIFIER) END AS personId,
+               CASE WHEN @isDbo = 1 OR idt.tenantId IS NOT NULL THEN p.lastName ELSE N'De-identified' END AS lastName,
+               CASE WHEN @isDbo = 1 OR idt.tenantId IS NOT NULL THEN p.firstName ELSE NULL END AS firstName,
                a.code AS analyteCode,
                c.population, c.classification, c.caseStatus, c.openedDate, h.valueCanonical AS highestValue,
                h.unitCanonical AS highestUnit,
-               CASE WHEN auth.udfCanReadIdentified (c.owningTenantId, 'case.view', c.personId) = 1 THEN l.locationId ELSE NULL END AS locationId,
-               CASE WHEN auth.udfCanReadIdentified (c.owningTenantId, 'case.view', c.personId) = 1 THEN l.addressLine1 ELSE NULL END AS addressLine1,
-               CASE WHEN auth.udfCanReadIdentified (c.owningTenantId, 'case.view', c.personId) = 1 THEN l.city ELSE NULL END AS city,
+               CASE WHEN @isDbo = 1 OR idt.tenantId IS NOT NULL THEN l.locationId ELSE NULL END AS locationId,
+               CASE WHEN @isDbo = 1 OR idt.tenantId IS NOT NULL THEN l.addressLine1 ELSE NULL END AS addressLine1,
+               CASE WHEN @isDbo = 1 OR idt.tenantId IS NOT NULL THEN l.city ELSE NULL END AS city,
                l.countyFips,
-               CASE WHEN auth.udfCanReadIdentified (c.owningTenantId, 'case.view', c.personId) = 1 THEN l.latitude ELSE NULL END AS latitude,
-               CASE WHEN auth.udfCanReadIdentified (c.owningTenantId, 'case.view', c.personId) = 1 THEN l.longitude ELSE NULL END AS longitude,
-               CASE WHEN auth.udfCanReadIdentified (c.owningTenantId, 'case.view', c.personId) = 1 THEN l.geocodeQuality ELSE NULL END AS geocodeQuality,
+               CASE WHEN @isDbo = 1 OR idt.tenantId IS NOT NULL THEN l.latitude ELSE NULL END AS latitude,
+               CASE WHEN @isDbo = 1 OR idt.tenantId IS NOT NULL THEN l.longitude ELSE NULL END AS longitude,
+               CASE WHEN @isDbo = 1 OR idt.tenantId IS NOT NULL THEN l.geocodeQuality ELSE NULL END AS geocodeQuality,
                (SELECT COUNT (*) FROM dbo.caseCluster AS cc
                   JOIN dbo.cluster AS cl ON cl.clusterId = cc.clusterId AND cl.clusterStatus <> 'closed' AND cl.isDeleted = 0
                  WHERE cc.exposureCaseId = c.exposureCaseId AND cc.leftDate IS NULL AND cc.isDeleted = 0) AS openClusterCount
           FROM dbo.exposureCase AS c
           JOIN dbo.person AS p ON p.personId = c.personId
           JOIN config.analyte AS a ON a.analyteId = c.analyteId
+          LEFT JOIN @idTenants AS idt ON idt.tenantId = c.owningTenantId
           LEFT JOIN dbo.labResult AS h ON h.labResultId = c.highestLabResultId
          OUTER APPLY (SELECT TOP (1) x.locationId, x.addressLine1, x.city, x.countyFips, x.latitude, x.longitude,
                              x.geocodeQuality

@@ -80,6 +80,17 @@ BEGIN
 END;
 GO
 
+IF NOT EXISTS (SELECT 1
+                 FROM sys.indexes
+                WHERE name      = N'IX_auth_sessionScope_appUserId_sessionReference'
+                  AND object_id = OBJECT_ID (N'auth.sessionScope'))
+BEGIN
+    CREATE NONCLUSTERED INDEX IX_auth_sessionScope_appUserId_sessionReference
+        ON auth.sessionScope (appUserId, sessionReference)
+        WHERE isDeleted = 0 AND revokedUtc IS NULL;
+END;
+GO
+
 -- -------------------------------------------------------------------------------------------
 -- 5. The audit trigger. Not optional: a DEFAULT fires on INSERT only, so without it every UPDATE
 --    would leave modifiedBy / modifiedDateUtc stale and a soft delete would record neither who nor when.

@@ -45,7 +45,8 @@ Description:	Initial version.
 
 ***********************************************************************************************************************/
 CREATE OR ALTER PROCEDURE auth.uspRevokeSessionScope
-      @sessionScopeId UNIQUEIDENTIFIER
+      @sessionScopeId        UNIQUEIDENTIFIER
+      , @revokeLogicalSession BIT = 0
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -96,18 +97,34 @@ BEGIN
 
         IF @user IS NOT NULL AND @ref IS NOT NULL
         BEGIN
-            -- Serialize sign-out with concurrent scope renewal on the same logical session (#298) and revoke
-            -- any active scope sharing (appUserId, sessionReference) without affecting other sign-ins.
+            -- Serialize sign-out with concurrent scope renewal on the same logical session (#298).
+            -- Explicit sign-out (@revokeLogicalSession = 1) revokes any active scope sharing (appUserId, sessionReference);
+            -- idle-expiry and worker cleanup (@revokeLogicalSession = 0) revoke only the exact @sessionScopeId.
             DECLARE @sessionLock INT;
             DECLARE @sessionLockName NVARCHAR (255) = CONCAT (N'MERIT.session.', @user, N'.', @ref);
             EXEC @sessionLock = sys.sp_getapplock @Resource = @sessionLockName, @LockMode = 'Exclusive', @LockOwner = 'Transaction', @LockTimeout = 5000;
+            IF @sessionLock < 0
+            BEGIN
+                ;THROW 51409, N'The session could not be locked for revocation; please retry.', 1;
+            END;
 
-            UPDATE auth.sessionScope
-               SET revokedUtc = SYSUTCDATETIME ()
-             WHERE appUserId = @user
-               AND sessionReference = @ref
-               AND revokedUtc IS NULL
-               AND isDeleted = 0;
+            IF @revokeLogicalSession = 1
+            BEGIN
+                UPDATE auth.sessionScope
+                   SET revokedUtc = SYSUTCDATETIME ()
+                 WHERE appUserId = @user
+                   AND sessionReference = @ref
+                   AND revokedUtc IS NULL
+                   AND isDeleted = 0;
+            END
+            ELSE
+            BEGIN
+                UPDATE auth.sessionScope
+                   SET revokedUtc = SYSUTCDATETIME ()
+                 WHERE sessionScopeId = @sessionScopeId
+                   AND revokedUtc IS NULL
+                   AND isDeleted = 0;
+            END;
 
             IF @@ROWCOUNT > 0
             BEGIN

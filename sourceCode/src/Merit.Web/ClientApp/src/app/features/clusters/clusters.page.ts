@@ -158,8 +158,8 @@ export class ClusterStore {
         <tbody>
           @for (m of c.members; track m.exposureCaseId) {
             <tr [class.left]="m.leftDate">
-              <th scope="row"><a class="usa-link" [href]="'/cases/' + m.exposureCaseId">{{ m.caseNumber }}</a></th>
-              <td><a class="usa-link" [href]="'/people/' + m.personId">{{ m.personName }}</a></td>
+              <th scope="row">@if (isIdentified(m.personId)) { <a class="usa-link" [href]="'/cases/' + m.exposureCaseId">{{ m.caseNumber }}</a> } @else { {{ m.caseNumber }} }</th>
+              <td>@if (isIdentified(m.personId)) { <a class="usa-link" [href]="'/people/' + m.personId">{{ m.personName }}</a> } @else { {{ m.personName }} }</td>
               <td>{{ display.of(m.analyteCode) }} &middot; {{ display.of(m.classification) }} ({{ display.of(m.population).toLowerCase() }})</td>
               <td>{{ m.highestValue ?? '—' }} {{ m.highestUnit }}</td>
               <td>{{ m.addressLabel ?? '—' }}</td>
@@ -286,7 +286,15 @@ export class ClusterPage implements OnInit {
     return STATUS_LABELS[s];
   }
 
-  protected openCase(id: string): void { window.location.assign('/cases/' + encodeURIComponent(id)); }
+  protected isIdentified(personId: string | null | undefined): boolean {
+    return !!personId && personId !== '00000000-0000-0000-0000-000000000000';
+  }
+
+  protected openCase(id: string): void {
+    const member = this.store.cluster()?.members.find(m => m.exposureCaseId === id);
+    if (member && !this.isIdentified(member.personId)) return;
+    window.location.assign('/cases/' + encodeURIComponent(id));
+  }
 
   protected save(event: Event): void {
     event.preventDefault();

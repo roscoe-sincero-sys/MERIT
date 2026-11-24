@@ -201,7 +201,7 @@ public sealed class ResultsApiController(ResultService results, PersonService pe
         return new PagedResult<ResultListItemDto>(rows.Select(r => new ResultListItemDto(r.LabResultId, r.PersonId,
                 r.LastName is null ? null : $"{r.LastName}, {r.FirstName}", r.Dob, r.AnalyteCode, r.Specimen, r.CollectedDate, r.ReceivedUtc,
                 r.Operator, r.ValueCanonical, r.UnitCanonical, r.SampleType, r.TestMethod, r.Population, r.ResultStatus, r.ResultRowStatus,
-                r.IsIndeterminate, r.LabName)).ToList(),
+                r.IsIndeterminate, r.LabName, r.IsMatched, r.IsIdentified)).ToList(),
             rows.FirstOrDefault()?.TotalCount ?? 0, page, pageSize);
     }
 

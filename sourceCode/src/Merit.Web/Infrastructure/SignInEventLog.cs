@@ -15,9 +15,10 @@ namespace Merit.Web.Infrastructure;
 
 /// <summary>
 /// The keyed hash and encryption for user names that matched no account (#191). The hash key is SignInLog:NameHashKey
-/// (base64, 32+ bytes, the same on every web server), or EmailCodes:VerifierKey when that is set. Without either, a random
-/// key is used for this process and a warning logged: hashes then don't match across restarts or servers. Encryption is
-/// ASP.NET Core data protection under its own purpose, on the key ring that already protects authenticator secrets.
+/// (base64, 32+ bytes, the same on every web server), or EmailCodes:VerifierKey when that is set. Outside Development
+/// and Testing, startup fails fast if neither key is configured; in Development a random key is used for this process
+/// and a warning is logged. Encryption is ASP.NET Core data protection under its own purpose, on the key ring that
+/// already protects authenticator secrets.
 /// </summary>
 public sealed class AttemptedNameProtection : IAttemptedNameProtection
 {
@@ -176,7 +177,8 @@ public sealed class SessionExpiryMiddleware(RequestDelegate next)
                 var services = http.RequestServices;
                 await services.GetRequiredService<ISignInEvents>().RecordAsync(new SignInEvent(SignInEventTypes.SessionExpired, SignInSteps.Session,
                     Reason: "idle", AppUserId: user, SessionScopeId: scope), http.RequestAborted).ConfigureAwait(false);
-                await services.GetRequiredService<AccountService>().SignOutAsync(scope, http.RequestAborted).ConfigureAwait(false);
+                // Idle expiry revokes only this expired scope, never a renewed successor sharing the logical session.
+                await services.GetRequiredService<AccountService>().SignOutAsync(scope, http.RequestAborted, revokeLogicalSession: false).ConfigureAwait(false);
                 options.CookieManager.DeleteCookie(http, options.Cookie.Name!, options.Cookie.Build(http));
             }
         }

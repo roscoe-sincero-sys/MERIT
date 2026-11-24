@@ -90,15 +90,31 @@ BEGIN
         -- ===== The procedure's own work starts here. Everything above and below is boilerplate. ==
         -- =========================================================================================
 
+        DECLARE @isDbo BIT = CASE WHEN USER_NAME () = N'dbo' THEN 1 ELSE 0 END;
+        DECLARE @idTenants TABLE (tenantId UNIQUEIDENTIFIER PRIMARY KEY);
+        IF @isDbo = 0
+        BEGIN
+            INSERT @idTenants (tenantId)
+            SELECT st.tenantId
+              FROM auth.sessionScope       AS ss
+              JOIN auth.sessionScopeTenant AS st ON st.sessionScopeId = ss.sessionScopeId AND st.isDeleted = 0
+             WHERE ss.sessionScopeId = TRY_CAST (SESSION_CONTEXT (N'scopeKey') AS UNIQUEIDENTIFIER)
+               AND ss.revokedUtc IS NULL
+               AND ss.expiresUtc > SYSUTCDATETIME ()
+               AND ss.isDeleted = 0
+               AND st.canReadIdentifiedCases = 1;
+        END;
+
         SELECT cl.clusterId, cl.clusterType,
-               CASE WHEN auth.udfCanReadIdentified (cl.owningTenantId, 'case.view', NULL) = 1 THEN cl.title ELSE N'De-identified cluster' END AS title,
+               CASE WHEN @isDbo = 1 OR idt.tenantId IS NOT NULL THEN cl.title ELSE N'De-identified cluster' END AS title,
                cl.clusterStatus, cl.windowStart, cl.windowEnd,
-               CASE WHEN auth.udfCanReadIdentified (cl.owningTenantId, 'case.view', NULL) = 1 THEN cl.notes ELSE NULL END AS notes,
+               CASE WHEN @isDbo = 1 OR idt.tenantId IS NOT NULL THEN cl.notes ELSE NULL END AS notes,
                cl.createdDateUtc, t.tenantName AS owningTenantName,
                (SELECT COUNT (*) FROM dbo.caseCluster AS cc WHERE cc.clusterId = cl.clusterId AND cc.leftDate IS NULL
                    AND cc.isDeleted = 0) AS memberCount,
                COUNT (*) OVER () AS totalCount
           FROM dbo.cluster AS cl
+          LEFT JOIN @idTenants AS idt ON idt.tenantId = cl.owningTenantId
           LEFT JOIN auth.tenant AS t ON t.tenantId = cl.owningTenantId
          WHERE cl.isDeleted = 0 AND (@clusterStatus IS NULL OR cl.clusterStatus = @clusterStatus)
          ORDER BY CASE cl.clusterStatus WHEN 'open' THEN 0 WHEN 'underReview' THEN 1 ELSE 2 END, cl.createdDateUtc DESC,

@@ -58,8 +58,8 @@ export class ResultsPage implements OnInit {
   protected readonly key = (r: ResultListItemDto): string => r.labResultId;
 
   protected readonly columns: GridColumn<ResultListItemDto>[] = [
-    { key: 'collectedDate', label: 'Sample collection date', sortable: true, nowrap: true, cell: r => this.display.date(r.collectedDate), link: r => this.view.detail(`/results/${r.labResultId}`) },
-    { key: 'lastName', label: 'Person', sortable: true, cell: r => r.personName ?? '(unmatched)', link: r => (r.personId ? this.view.detail(`/people/${r.personId}`) : null) },
+    { key: 'collectedDate', label: 'Sample collection date', sortable: true, nowrap: true, cell: r => this.display.date(r.collectedDate), link: r => (r.isIdentified !== false ? this.view.detail(`/results/${r.labResultId}`) : null) },
+    { key: 'lastName', label: 'Person', sortable: true, cell: r => r.personName ?? (r.isIdentified === false ? 'De-identified' : '(unmatched)'), link: r => (r.personId && r.isIdentified !== false ? this.view.detail(`/people/${r.personId}`) : null) },
     { key: 'analyteCode', label: 'Substance tested', sortable: true, cell: r => `${this.display.of(r.analyteCode)}, ${this.display.of(r.specimen).toLowerCase()}` },
     { key: 'valueCanonical', label: 'Value', sortable: true, cell: r => `${r.operator === '=' ? '' : r.operator}${r.valueCanonical ?? ''} ${r.unitCanonical}`, badge: r => (r.isIndeterminate ? 'Indeterminate' : null), badgeTone: () => 'warn' },
     { key: 'sampleType', label: 'Sample', cell: r => this.display.of(r.sampleType) },

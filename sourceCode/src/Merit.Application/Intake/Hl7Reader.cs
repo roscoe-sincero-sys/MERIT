@@ -19,11 +19,14 @@ public sealed record Hl7PatientIdentifier(string Type, string Value, string? Aut
 /// </summary>
 public static class Hl7Reader
 {
-    public static IReadOnlyList<Dictionary<string, string?>> Read(string content, string? senderClia = null)
+    public const long MaxStagingBytes = 50_000_000;
+
+    public static IReadOnlyList<Dictionary<string, string?>> Read(string content, string? senderClia = null, long maxStagingBytes = MaxStagingBytes)
     {
         var rows = new List<Dictionary<string, string?>>();
         var message = new List<string>();
         int number = 0;
+        long totalSerialized = 0;
         foreach (var source in content.TrimStart('\uFEFF').Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries))
         {
             var line = source.Trim('\u000b', '\u001c'); // File exports may retain MLLP frame boundaries.
@@ -33,19 +36,20 @@ public static class Hl7Reader
             if (tag is "FHS" or "BHS" or "BTS" or "FTS") continue;
             if (tag == "MSH")
             {
-                if (message.Count > 0) ParseMessage(message, number, senderClia, rows);
+                if (message.Count > 0) ParseMessage(message, number, senderClia, rows, ref totalSerialized, maxStagingBytes);
                 message = [];
                 number++;
             }
             if (number == 0) throw new Hl7ParseException("HL7 file must begin with an MSH message header (optional batch envelopes are allowed).");
             message.Add(line);
         }
-        if (message.Count > 0) ParseMessage(message, number, senderClia, rows);
+        if (message.Count > 0) ParseMessage(message, number, senderClia, rows, ref totalSerialized, maxStagingBytes);
         if (rows.Count == 0) throw new Hl7ParseException("HL7 file contains no OBX observations.");
         return rows;
     }
 
-    private static void ParseMessage(List<string> lines, int number, string? senderClia, List<Dictionary<string, string?>> output)
+    private static void ParseMessage(List<string> lines, int number, string? senderClia, List<Dictionary<string, string?>> output,
+                                     ref long totalSerialized, long maxStagingBytes)
     {
         void Fail(string reason) => throw new Hl7ParseException($"HL7 message {number}: {reason}");
         var header = lines[0];
@@ -147,7 +151,6 @@ public static class Hl7Reader
             }).Where(g => !string.IsNullOrWhiteSpace(g["guardianName"]?.Replace(",", "", StringComparison.Ordinal))).ToArray();
             var contactsJson = JsonSerializer.Serialize(contacts);
             var identifiersJson = JsonSerializer.Serialize(identifiers);
-            long totalSerialized = 0;
             int observationIndex = 0;
             foreach (var observation in group.Observations)
             {
@@ -219,8 +222,13 @@ public static class Hl7Reader
                         ["hl7PatientNames"] = rawPidNames, ["hl7PatientAddresses"] = rawPidAddresses, ["hl7SpecimenId"] = group.Specimen?.Raw(2),
                         ["hl7SpecimenType"] = specimen,
                     };
-                    totalSerialized += contactsJson.Length + identifiersJson.Length + rawPidNames.Length + rawPidAddresses.Length + value.Length;
-                    if (totalSerialized > 50_000_000) Fail("The HL7 file expands past MERIT's 50 MB staging limit; split the file.");
+                    long rowBytes = 2; // JSON object braces
+                    foreach (var kv in fields)
+                    {
+                        rowBytes += kv.Key.Length + 6 + (kv.Value is null ? 4 : Encoding.UTF8.GetByteCount(kv.Value));
+                    }
+                    totalSerialized += rowBytes;
+                    if (totalSerialized > maxStagingBytes) Fail("The HL7 file expands past MERIT's 50 MB staging limit; split the file.");
                     // Bound values destined for SQL columns and held-record diagnostics before any rows are saved.
                     foreach (var (key, limit) in new[] { ("value", 60), ("unit", 20), ("testMethod", 30), ("accessionNumber", 60),
                                  ("loinc", 200), ("dob", 200), ("collectedDate", 200), ("reportedDate", 200) })

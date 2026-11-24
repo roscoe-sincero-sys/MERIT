@@ -24,10 +24,10 @@ public interface IAccountData
 
     Task<SessionScopeCheckRow?> GetSessionScopeAsync(Guid sessionScopeId, CancellationToken ct = default);
 
-    Task RevokeSessionScopeAsync(Guid sessionScopeId, CancellationToken ct = default);
+    Task RevokeSessionScopeAsync(Guid sessionScopeId, CancellationToken ct = default, bool revokeLogicalSession = false);
 
-    Task SaveMfaEnrollmentAsync(Guid appUserId, string mfaSecretProtected, IReadOnlyList<string> recoveryCodeHashes,
-                                long? initialTotpStep = null, Guid? expectedSecurityStamp = null, CancellationToken ct = default);
+    Task<Guid> SaveMfaEnrollmentAsync(Guid appUserId, string mfaSecretProtected, IReadOnlyList<string> recoveryCodeHashes,
+                                      long? initialTotpStep = null, Guid? expectedSecurityStamp = null, CancellationToken ct = default);
 
     /// <summary>Atomically records the latest accepted TOTP time step for an account bound to its current security stamp.</summary>
     Task<bool> ConsumeTotpStepAsync(Guid appUserId, long totpStep, Guid? expectedSecurityStamp = null, CancellationToken ct = default);

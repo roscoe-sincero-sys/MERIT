@@ -44,6 +44,13 @@ SELECT u.appUserId
 , @clientAddress     VARCHAR (45) = NULL""",
         "key": "CONCAT (N'appUserId=', @appUserId, N', succeeded=', @succeeded)",
         "body": f"""
+IF @appUserId IS NOT NULL
+BEGIN
+    DECLARE @userLock INT;
+    DECLARE @userLockName NVARCHAR (255) = CONCAT (N'MERIT.totp.', @appUserId);
+    EXEC @userLock = sys.sp_getapplock @Resource = @userLockName, @LockMode = 'Exclusive', @LockOwner = 'Transaction', @LockTimeout = 5000;
+END;
+
 DECLARE @root UNIQUEIDENTIFIER = (SELECT rootTenantId FROM auth.appUser WHERE appUserId = @appUserId);
 
 IF @appUserId IS NOT NULL AND @succeeded = 1
@@ -184,22 +191,50 @@ SELECT ss.sessionScopeId
     {
         "schema": "auth", "name": "uspRevokeSessionScope", "kind": "write", "grants": BOTH, "ticket": "T040",
         "desc": "Revokes a session scope at sign-out, so the row-level security predicates stop honoring it at once.",
-        "params": "@sessionScopeId UNIQUEIDENTIFIER",
+        "params": """@sessionScopeId        UNIQUEIDENTIFIER
+, @revokeLogicalSession BIT = 0""",
         "key": "CONCAT (N'sessionScopeId=', @sessionScopeId)",
         "body": """
-DECLARE @user UNIQUEIDENTIFIER, @root UNIQUEIDENTIFIER;
+DECLARE @user UNIQUEIDENTIFIER, @root UNIQUEIDENTIFIER, @ref UNIQUEIDENTIFIER;
 
-UPDATE auth.sessionScope
-   SET revokedUtc = SYSUTCDATETIME ()
-     , @user      = appUserId
-     , @root      = rootTenantId
+SELECT @user = appUserId, @root = rootTenantId, @ref = sessionReference
+  FROM auth.sessionScope
  WHERE sessionScopeId = @sessionScopeId
-   AND revokedUtc IS NULL;
+   AND isDeleted = 0;
 
-IF @user IS NOT NULL
+IF @user IS NOT NULL AND @ref IS NOT NULL
 BEGIN
-    INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId)
-    VALUES (@user, @root, 'signOut', 'appUser', @user);
+    DECLARE @sessionLock INT;
+    DECLARE @sessionLockName NVARCHAR (255) = CONCAT (N'MERIT.session.', @user, N'.', @ref);
+    EXEC @sessionLock = sys.sp_getapplock @Resource = @sessionLockName, @LockMode = 'Exclusive', @LockOwner = 'Transaction', @LockTimeout = 5000;
+    IF @sessionLock < 0
+    BEGIN
+        ;THROW 51409, N'The session could not be locked for revocation; please retry.', 1;
+    END;
+
+    IF @revokeLogicalSession = 1
+    BEGIN
+        UPDATE auth.sessionScope
+           SET revokedUtc = SYSUTCDATETIME ()
+         WHERE appUserId = @user
+           AND sessionReference = @ref
+           AND revokedUtc IS NULL
+           AND isDeleted = 0;
+    END
+    ELSE
+    BEGIN
+        UPDATE auth.sessionScope
+           SET revokedUtc = SYSUTCDATETIME ()
+         WHERE sessionScopeId = @sessionScopeId
+           AND revokedUtc IS NULL
+           AND isDeleted = 0;
+    END;
+
+    IF @@ROWCOUNT > 0
+    BEGIN
+        INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId)
+        VALUES (@user, @root, 'signOut', 'appUser', @user);
+    END;
 END;
 
 SET @Comments = N'Session scope revoked.';
@@ -211,18 +246,40 @@ SET @Comments = N'Session scope revoked.';
                 "a new set and changes the security stamp so other sessions must sign in again.",
         "params": """@appUserId              UNIQUEIDENTIFIER
 , @mfaSecretProtected     NVARCHAR (500)
-, @recoveryCodeHashesJson NVARCHAR (MAX)""",
+, @recoveryCodeHashesJson NVARCHAR (MAX)
+, @initialTotpStep        BIGINT = NULL
+, @expectedSecurityStamp  UNIQUEIDENTIFIER = NULL""",
         "key": "CONCAT (N'appUserId=', @appUserId)",
         "validate": """IF ISJSON (@recoveryCodeHashesJson) = 0
 BEGIN
     ;THROW 50000, N'@recoveryCodeHashesJson must be a JSON array of strings.', 1;
 END;""",
         "body": f"""
+DECLARE @enrollLock INT;
+DECLARE @enrollLockName NVARCHAR (255) = CONCAT (N'MERIT.totp.', @appUserId);
+EXEC @enrollLock = sys.sp_getapplock @Resource = @enrollLockName, @LockMode = 'Exclusive', @LockOwner = 'Transaction', @LockTimeout = 5000;
+IF @enrollLock < 0
+BEGIN
+    ;THROW 51409, N'Your sign-in session is busy. Please try again.', 1;
+END;
+
+DECLARE @newSecurityStamp UNIQUEIDENTIFIER = NEWID ();
+
 UPDATE auth.appUser
    SET mfaSecretProtected = @mfaSecretProtected
      , mfaEnabled         = 1
-     , securityStamp      = NEWID ()
- WHERE appUserId = @appUserId AND isDeleted = 0;
+     , lastTotpStep       = @initialTotpStep
+     , securityStamp      = @newSecurityStamp
+ WHERE appUserId = @appUserId
+   AND isDeleted = 0
+   AND isActive = 1
+   AND mfaEnabled = 0
+   AND (@expectedSecurityStamp IS NULL OR securityStamp = @expectedSecurityStamp);
+
+IF @@ROWCOUNT <> 1
+BEGIN
+    ;THROW 51409, N'Your sign-in session is no longer valid or MFA was already enrolled. Please sign in again.', 1;
+END;
 
 UPDATE auth.mfaRecoveryCode SET isDeleted = 1 WHERE appUserId = @appUserId AND isDeleted = 0;
 
@@ -233,7 +290,44 @@ SELECT {NEWID}, @appUserId, j.[value]
 INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId)
 SELECT @appUserId, rootTenantId, 'mfaEnrolled', 'appUser', @appUserId FROM auth.appUser WHERE appUserId = @appUserId;
 
+SELECT @newSecurityStamp AS securityStamp;
+
 SET @Comments = N'MFA enrolled.';
+""",
+    },
+    {
+        "schema": "auth", "name": "uspConsumeTotpStep", "kind": "write", "grants": WEB, "ticket": "#302",
+        "desc": "Atomically records the latest accepted TOTP 30-second step for an account so codes cannot be replayed "
+                "across instances or verification paths.",
+        "params": """@appUserId               UNIQUEIDENTIFIER
+, @totpStep              BIGINT
+, @expectedSecurityStamp UNIQUEIDENTIFIER = NULL""",
+        "key": "CONCAT (N'appUserId=', @appUserId)",
+        "body": """
+DECLARE @lock INT;
+DECLARE @lockResource NVARCHAR (255) = CONCAT (N'MERIT.totp.', @appUserId);
+EXEC @lock = sys.sp_getapplock @Resource = @lockResource, @LockMode = 'Exclusive', @LockOwner = 'Transaction', @LockTimeout = 5000;
+IF @lock < 0
+BEGIN
+    SELECT CAST (0 AS BIT) AS accepted;
+    SET @Comments = N'TOTP step lock timeout.';
+END
+ELSE
+BEGIN
+    UPDATE auth.appUser
+       SET lastTotpStep = @totpStep
+     WHERE appUserId = @appUserId
+       AND isDeleted = 0
+       AND isActive = 1
+       AND mfaEnabled = 1
+       AND mfaSecretProtected IS NOT NULL
+       AND (@expectedSecurityStamp IS NULL OR securityStamp = @expectedSecurityStamp)
+       AND (lastTotpStep IS NULL OR lastTotpStep < @totpStep);
+
+    DECLARE @accepted BIT = CASE WHEN @@ROWCOUNT = 1 THEN 1 ELSE 0 END;
+    SELECT @accepted AS accepted;
+    SET @Comments = CASE WHEN @accepted = 1 THEN N'TOTP step accepted.' ELSE N'TOTP step already consumed or account unavailable.' END;
+END;
 """,
     },
     {
@@ -257,7 +351,10 @@ UPDATE auth.mfaRecoveryCode
    SET usedUtc = SYSUTCDATETIME ()
  WHERE mfaRecoveryCodeId = @mfaRecoveryCodeId AND usedUtc IS NULL AND isDeleted = 0;
 
-SET @Comments = CONCAT (@@ROWCOUNT, N' code(s) used.');
+DECLARE @used BIT = CASE WHEN @@ROWCOUNT = 1 THEN 1 ELSE 0 END;
+SELECT @used AS used;
+
+SET @Comments = CONCAT (@used, N' code(s) used.');
 """,
     },
     {

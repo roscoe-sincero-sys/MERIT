@@ -126,8 +126,10 @@
             if (restoreFocus && group.contains(document.activeElement)) group.querySelector("summary").focus();
             group.open = false;
         };
+        const accountMenu = header.querySelector(".merit-account-menu");
         const setOpen = open => {
             if (!open) groups.forEach(group => closeGroup(group));
+            if (accountMenu) accountMenu.open = open && window.matchMedia("(max-width: 64em)").matches;
             header.classList.toggle("merit-header--open", open);
             menuButton.setAttribute("aria-expanded", String(open));
         };
@@ -135,9 +137,14 @@
         header.addEventListener("keydown", evt => {
             if (evt.key !== "Escape") return;
             const group = evt.target.closest(".merit-nav-group[open]");
+            const account = evt.target.closest(".merit-account-menu[open]");
             if (group) {
                 evt.preventDefault();
                 closeGroup(group, true);
+            } else if (account && !header.classList.contains("merit-header--open")) {
+                evt.preventDefault();
+                account.open = false;
+                account.querySelector("summary")?.focus();
             } else if (header.classList.contains("merit-header--open")) {
                 evt.preventDefault();
                 setOpen(false);
@@ -854,13 +861,20 @@ document.addEventListener('change', event => {
 
 // Close header account/nav disclosure menus on outside click or Escape, and allow "/" to jump to global search.
 document.addEventListener('click', event => {
+    if (event.target.closest('.merit-menu-button')) return;
     document.querySelectorAll('.merit-account-menu[open], .merit-nav-group[open]').forEach(menu => {
+        if (menu.classList.contains('merit-account-menu') && document.querySelector('.merit-header--open')) return;
         if (!menu.contains(event.target)) menu.open = false;
     });
 });
 document.addEventListener('keydown', event => {
     if (event.key === 'Escape') {
-        document.querySelectorAll('.merit-account-menu[open], .merit-nav-group[open]').forEach(menu => { menu.open = false; });
+        document.querySelectorAll('.merit-account-menu[open], .merit-nav-group[open]').forEach(menu => {
+            if (menu.classList.contains('merit-account-menu') && document.querySelector('.merit-header--open')) return;
+            const hadFocus = menu.contains(document.activeElement);
+            menu.open = false;
+            if (hadFocus) menu.querySelector('summary')?.focus();
+        });
     } else if (event.key === '/' && !event.ctrlKey && !event.metaKey && !event.altKey) {
         const tag = document.activeElement?.tagName;
         if (tag && ['INPUT', 'TEXTAREA', 'SELECT'].includes(tag)) return;
@@ -980,6 +994,7 @@ document.addEventListener('click', function (event) {
         const vis = visibleItems();
         if (e.key === 'ArrowDown') { e.preventDefault(); highlight(activeIndex + 1); }
         else if (e.key === 'ArrowUp') { e.preventDefault(); highlight(activeIndex - 1); }
+        else if (e.key === 'Escape') { e.preventDefault(); closePalette(); }
         else if (e.key === 'Enter') {
             e.preventDefault();
             if (activeIndex >= 0 && vis[activeIndex]?.dataset.url) {

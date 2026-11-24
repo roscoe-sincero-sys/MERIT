@@ -1,10 +1,14 @@
 using System.Net;
+using System.Security.Cryptography;
 using System.Text.Json;
 using Merit.Application.Data;
 using Merit.Application.Errors;
 using Merit.Application.Security;
 using Merit.Application.Services;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Data.SqlClient;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Merit.IntegrationTests;
@@ -46,7 +50,8 @@ public sealed class SecurityHardeningRegressionTests(MeritFixture fixture)
         using (var caseResp = await epi.Http.GetAsync($"/cases/{fixture.Ids.MiaCaseId}"))
             Assert.Equal(HttpStatusCode.Forbidden, caseResp.StatusCode);
 
-        // Results line list returns de-identified projection (zero patient IDs, names, or DOBs).
+        // Results line list returns de-identified projection (zero patient IDs, names, or DOBs)
+        // with explicit isIdentified=false so UI labels matched masked rows "De-identified" instead of "(unmatched)".
         using var resultsResp = await epi.Http.GetAsync("/api/v1/results?pageSize=50");
         Assert.Equal(HttpStatusCode.OK, resultsResp.StatusCode);
         using var resultsDoc = JsonDocument.Parse(await resultsResp.Content.ReadAsStringAsync());
@@ -57,7 +62,9 @@ public sealed class SecurityHardeningRegressionTests(MeritFixture fixture)
             Assert.Equal(JsonValueKind.Null, item.GetProperty("personId").ValueKind);
             Assert.Equal(JsonValueKind.Null, item.GetProperty("personName").ValueKind);
             Assert.Equal(JsonValueKind.Null, item.GetProperty("dob").ValueKind);
+            Assert.False(item.GetProperty("isIdentified").GetBoolean());
         }
+        Assert.Contains(items, i => i.GetProperty("isMatched").GetBoolean());
 
         // Cases list returns de-identified projection without patient names or DOBs.
         string casesHtml = await epi.Http.GetStringAsync("/cases");
@@ -80,21 +87,39 @@ public sealed class SecurityHardeningRegressionTests(MeritFixture fixture)
             }
         }
 
-        // Cluster list & detail (if demo cluster exists) mask titles, sharedKey, member names, addresses, and coordinates.
+        // Cluster list & detail (if demo cluster exists) mask titles, sharedKey, member names, addresses, coordinates,
+        // AND generated building-cluster open task titles/details (B1).
         if (fixture.Ids.ClusterId is Guid clusterId)
         {
-            using var clusterResp = await epi.Http.GetAsync($"/api/v1/clusters/{clusterId}");
-            Assert.Equal(HttpStatusCode.OK, clusterResp.StatusCode);
-            string clusterJson = await clusterResp.Content.ReadAsStringAsync();
-            Assert.DoesNotContain("Rivera", clusterJson, StringComparison.OrdinalIgnoreCase);
-            using var clusterDoc = JsonDocument.Parse(clusterJson);
-            Assert.Equal("De-identified cluster", clusterDoc.RootElement.GetProperty("title").GetString());
-            foreach (var member in clusterDoc.RootElement.GetProperty("members").EnumerateArray())
+            Guid tempTaskId = Guid.NewGuid();
+            string secretAddress = "742 Evergreen Terrace Apt 4B";
+            await ExecAsync("""
+                INSERT dbo.workTask (workTaskId, rootTenantId, owningTenantId, queueCode, title, detail, clusterId, isUrgent, dueDate)
+                SELECT @tid, rootTenantId, owningTenantId, 'clusterReview', CONCAT (N'Building cluster: ', @addr),
+                       CONCAT (N'Multiple cases at ', @addr), clusterId, 1, '2026-12-31'
+                  FROM dbo.cluster WHERE clusterId = @cid;
+                """, ("@tid", tempTaskId), ("@addr", secretAddress), ("@cid", clusterId));
+            try
             {
-                Assert.Equal(Guid.Empty, member.GetProperty("personId").GetGuid());
-                Assert.Equal(JsonValueKind.Null, member.GetProperty("addressLabel").ValueKind);
-                Assert.Equal(JsonValueKind.Null, member.GetProperty("latitude").ValueKind);
-                Assert.Equal(JsonValueKind.Null, member.GetProperty("longitude").ValueKind);
+                using var clusterResp = await epi.Http.GetAsync($"/api/v1/clusters/{clusterId}");
+                Assert.Equal(HttpStatusCode.OK, clusterResp.StatusCode);
+                string clusterJson = await clusterResp.Content.ReadAsStringAsync();
+                Assert.DoesNotContain("Rivera", clusterJson, StringComparison.OrdinalIgnoreCase);
+                Assert.DoesNotContain(secretAddress, clusterJson, StringComparison.OrdinalIgnoreCase);
+                using var clusterDoc = JsonDocument.Parse(clusterJson);
+                Assert.Equal("De-identified cluster", clusterDoc.RootElement.GetProperty("title").GetString());
+                Assert.Empty(clusterDoc.RootElement.GetProperty("tasks").EnumerateArray().ToList());
+                foreach (var member in clusterDoc.RootElement.GetProperty("members").EnumerateArray())
+                {
+                    Assert.Equal(Guid.Empty, member.GetProperty("personId").GetGuid());
+                    Assert.Equal(JsonValueKind.Null, member.GetProperty("addressLabel").ValueKind);
+                    Assert.Equal(JsonValueKind.Null, member.GetProperty("latitude").ValueKind);
+                    Assert.Equal(JsonValueKind.Null, member.GetProperty("longitude").ValueKind);
+                }
+            }
+            finally
+            {
+                await ExecAsync("DELETE FROM dbo.workTask WHERE workTaskId = @tid", ("@tid", tempTaskId));
             }
         }
 
@@ -127,6 +152,12 @@ public sealed class SecurityHardeningRegressionTests(MeritFixture fixture)
             Guid openScope = await upgraded.ScalarAsync<Guid>(
                 "SELECT TOP (1) sessionScopeId FROM auth.sessionScope WHERE appUserId = @id AND revokedUtc IS NULL ORDER BY createdDateUtc DESC");
 
+            // Also simulate a pre-upgrade open clinician session whose new canReadIdentified* columns defaulted to 0 (I4).
+            var clinician = await fixture.SignedInAsync("cmbalt");
+            Guid clinicianScope = await ScalarAsync<Guid>(
+                "SELECT TOP (1) sessionScopeId FROM auth.sessionScope AS ss JOIN auth.appUser AS u ON u.appUserId = ss.appUserId WHERE u.userName = N'cmbalt' AND ss.revokedUtc IS NULL ORDER BY ss.createdDateUtc DESC");
+            await ExecAsync("UPDATE auth.sessionScopeTenant SET canReadIdentifiedResults = 0, canReadIdentifiedCases = 0 WHERE sessionScopeId = @s", ("@s", clinicianScope));
+
             // Run the idempotent upgrade reconciliation script against the upgraded database.
             string reconcileSql = await File.ReadAllTextAsync(
                 Path.Combine(TestEnvironment.SourceRoot, "database", "scripts", "500_seed", "566_reconcileDeidentifiedRole.sql"));
@@ -139,7 +170,7 @@ public sealed class SecurityHardeningRegressionTests(MeritFixture fixture)
                 }
             }
 
-            // Legacy person.view/task.view/extract.run must be removed and open sessions revoked.
+            // Legacy person.view/task.view/extract.run must be removed and open epidemiologist sessions revoked.
             int remainingDisallowed = await ScalarAsync<int>("""
                 SELECT COUNT (*)
                   FROM auth.rolePermission AS rp
@@ -151,6 +182,14 @@ public sealed class SecurityHardeningRegressionTests(MeritFixture fixture)
             int revoked = await ScalarAsync<int>(
                 "SELECT COUNT (*) FROM auth.sessionScope WHERE sessionScopeId = @s AND revokedUtc IS NOT NULL", ("@s", openScope));
             Assert.Equal(1, revoked);
+
+            // Pre-upgrade open clinician session must have its identified clinical flags backfilled and keep chart access.
+            int clinicianBackfilled = await ScalarAsync<int>(
+                "SELECT COUNT (*) FROM auth.sessionScopeTenant WHERE sessionScopeId = @s AND canReadIdentifiedResults = 1 AND canReadIdentifiedCases = 1 AND isDeleted = 0",
+                ("@s", clinicianScope));
+            Assert.True(clinicianBackfilled >= 1, "Pre-upgrade clinician session should have identified flags backfilled.");
+            using (var clinCase = await clinician.Http.GetAsync($"/cases/{fixture.Ids.MiaCaseId}"))
+                Assert.Equal(HttpStatusCode.OK, clinCase.StatusCode);
         }
         finally
         {
@@ -226,6 +265,115 @@ public sealed class SecurityHardeningRegressionTests(MeritFixture fixture)
                 using var countyResp = await client.Http.GetAsync($"/cases/{countyCase}");
                 Assert.Equal(HttpStatusCode.OK, countyResp.StatusCode);
             }
+
+            // I3: Transferred patient test — add a Baltimore County personAccess row for Mia Rivera (whose historical
+            // case is owned by Baltimore City). Case visibility is owner-based, so Mia's historical Baltimore City case
+            // MUST remain masked/403, while lab results follow Result RLS (personAccess).
+            int hadCountyAccess = await ScalarAsync<int>(
+                "SELECT COUNT (*) FROM dbo.personAccess WHERE personId = @p AND tenantId = @t AND isDeleted = 0",
+                ("@p", fixture.Ids.MiaPersonId), ("@t", fixture.Ids.BaltimoreCountyTenantId));
+            Guid? addedAccessId = null;
+            if (hadCountyAccess == 0)
+            {
+                addedAccessId = Guid.NewGuid();
+                await ExecAsync("""
+                    INSERT dbo.personAccess (personAccessId, rootTenantId, personId, tenantId, accessReason)
+                    SELECT @aid, rootTenantId, personId, @t, 'residence'
+                      FROM dbo.person WHERE personId = @p;
+                    """, ("@aid", addedAccessId.Value), ("@t", fixture.Ids.BaltimoreCountyTenantId), ("@p", fixture.Ids.MiaPersonId));
+            }
+            try
+            {
+                // Historical case owned by Baltimore City stays 403 and masked on /cases and /api/v1/cases/map.
+                using var historicalCase = await client.Http.GetAsync($"/cases/{fixture.Ids.MiaCaseId}");
+                Assert.Equal(HttpStatusCode.Forbidden, historicalCase.StatusCode);
+                Assert.DoesNotContain("Rivera", await client.Http.GetStringAsync("/cases"), StringComparison.OrdinalIgnoreCase);
+
+                using var mapResp = await client.Http.GetAsync("/api/v1/cases/map");
+                Assert.Equal(HttpStatusCode.OK, mapResp.StatusCode);
+                using var mapDoc = JsonDocument.Parse(await mapResp.Content.ReadAsStringAsync());
+                var miaMap = mapDoc.RootElement.EnumerateArray().FirstOrDefault(e => e.GetProperty("exposureCaseId").GetGuid() == fixture.Ids.MiaCaseId);
+                Assert.Equal(JsonValueKind.Object, miaMap.ValueKind);
+                Assert.Equal(Guid.Empty, miaMap.GetProperty("personId").GetGuid());
+                Assert.Equal(JsonValueKind.Null, miaMap.GetProperty("addressLabel").ValueKind);
+
+                // Lab result follows Result RLS (residence personAccess grants identified result access in Baltimore County).
+                using var miaRes = await client.Http.GetAsync($"/results/{fixture.Ids.MiaLabResultId}");
+                Assert.Equal(HttpStatusCode.OK, miaRes.StatusCode);
+            }
+            finally
+            {
+                if (addedAccessId is Guid aid)
+                {
+                    await ExecAsync("DELETE FROM dbo.personAccess WHERE personAccessId = @aid", ("@aid", aid));
+                }
+            }
+        }
+    }
+
+    [SqlFact]
+    public async Task ViewAsPreservesClinicalIdentifiedAccessAndKeepsDeidentifiedTargetMasked()
+    {
+        // B2: cityadmin (administers Baltimore City + holds clinical access) views as cmbalt (clinician WITHOUT tenant.administer).
+        // Identified clinical access MUST be preserved in View As.
+        Guid cityAdminId = await ScalarAsync<Guid>("SELECT appUserId FROM auth.appUser WHERE userName = N'cityadmin'");
+        Guid cmBaltId = await ScalarAsync<Guid>("SELECT appUserId FROM auth.appUser WHERE userName = N'cmbalt'");
+
+        var cityAdmin = await fixture.SignedInAsync("cityadmin");
+        string profilesHtml = await cityAdmin.Http.GetStringAsync("/account/profiles");
+        using (var startViewAs = await cityAdmin.Http.PostAsync($"/account/view-as/{cmBaltId}", MeritClient.Form(profilesHtml)))
+            Assert.Equal(HttpStatusCode.OK, startViewAs.StatusCode);
+
+        try
+        {
+            using var miaCase = await cityAdmin.Http.GetAsync($"/cases/{fixture.Ids.MiaCaseId}");
+            Assert.Equal(HttpStatusCode.OK, miaCase.StatusCode);
+            using var miaResult = await cityAdmin.Http.GetAsync($"/results/{fixture.Ids.MiaLabResultId}");
+            Assert.Equal(HttpStatusCode.OK, miaResult.StatusCode);
+
+            using var resList = await cityAdmin.Http.GetAsync("/api/v1/results?pageSize=25");
+            Assert.Equal(HttpStatusCode.OK, resList.StatusCode);
+            using var resDoc = JsonDocument.Parse(await resList.Content.ReadAsStringAsync());
+            var rows = resDoc.RootElement.GetProperty("items").EnumerateArray().ToList();
+            Assert.NotEmpty(rows);
+            Assert.Contains(rows, r => r.GetProperty("isIdentified").GetBoolean() && r.GetProperty("personName").ValueKind == JsonValueKind.String);
+        }
+        finally
+        {
+            string page = await cityAdmin.Http.GetStringAsync("/");
+            await cityAdmin.Http.PostAsync("/account/view-as/end", MeritClient.Form(page));
+        }
+
+        // Negative B2: cityadmin views as a Baltimore City de-identified epidemiologist -> MUST stay masked & 403 on details.
+        await using var cityEpi = await SyntheticAccount.CreateAsync(fixture.Factory, "cityepi");
+        await cityEpi.ScalarAsync<int>("""
+            UPDATE auth.appUser SET homeTenantId = @city WHERE appUserId = @id;
+            INSERT auth.userAssignment (userAssignmentId, appUserId, roleId, tenantId, includeDescendants, accessLevel, startDate)
+            SELECT NEWID (), @id, r.roleId, @city, 1, 'read', '2020-01-01'
+              FROM auth.role AS r JOIN auth.appUser AS u ON u.rootTenantId = r.rootTenantId AND u.appUserId = @id
+             WHERE r.roleCode = 'epidemiologist' AND r.isDeleted = 0;
+            SELECT 0;
+            """, ("@city", fixture.Ids.BaltimoreCityTenantId));
+
+        string profiles2 = await cityAdmin.Http.GetStringAsync("/account/profiles");
+        using (var startDeidViewAs = await cityAdmin.Http.PostAsync($"/account/view-as/{cityEpi.Id}", MeritClient.Form(profiles2)))
+            Assert.Equal(HttpStatusCode.OK, startDeidViewAs.StatusCode);
+
+        try
+        {
+            using var deniedCase = await cityAdmin.Http.GetAsync($"/cases/{fixture.Ids.MiaCaseId}");
+            Assert.Equal(HttpStatusCode.Forbidden, deniedCase.StatusCode);
+            using var resList = await cityAdmin.Http.GetAsync("/api/v1/results?pageSize=25");
+            Assert.Equal(HttpStatusCode.OK, resList.StatusCode);
+            using var resDoc = JsonDocument.Parse(await resList.Content.ReadAsStringAsync());
+            Assert.All(resDoc.RootElement.GetProperty("items").EnumerateArray(),
+                r => Assert.False(r.GetProperty("isIdentified").GetBoolean()));
+        }
+        finally
+        {
+            string page = await cityAdmin.Http.GetStringAsync("/");
+            await cityAdmin.Http.PostAsync("/account/view-as/end", MeritClient.Form(page));
+            _ = cityAdminId;
         }
     }
 
@@ -242,21 +390,32 @@ public sealed class SecurityHardeningRegressionTests(MeritFixture fixture)
         string code2 = Totp.Code(Totp.FromBase32(secret2), step);
 
         var enrollAttempts = new (string Secret, string Code)[] { (secret1, code1), (secret2, code2) };
-        bool[] enrollResults = await Task.WhenAll(enrollAttempts.Select(async a =>
+        var enrollResults = await Task.WhenAll(enrollAttempts.Select(async a =>
         {
             using var s = fixture.Factory.Services.CreateScope();
             var svc = s.ServiceProvider.GetRequiredService<AccountService>();
             try
             {
-                await svc.CompleteEnrollmentAsync(unenrolled.Id, a.Secret, a.Code, "127.0.0.1", default, unenrolled.Name, initialStamp);
-                return true;
+                return await svc.CompleteEnrollmentAsync(unenrolled.Id, a.Secret, a.Code, "127.0.0.1", default, unenrolled.Name, initialStamp);
             }
             catch (ValidationException)
             {
-                return false;
+                return null;
             }
         }));
-        Assert.Equal(1, enrollResults.Count(ok => ok));
+        var winner = Assert.Single(enrollResults, r => r is not null)!;
+        Assert.NotEqual(initialStamp, winner.SecurityStamp);
+        Assert.Equal(winner.SecurityStamp, await unenrolled.ScalarAsync<Guid>("SELECT securityStamp FROM auth.appUser WHERE appUserId = @id"));
+
+        // Fresh scope creation bound to expectedSecurityStamp rejects the pre-enrollment stamp and accepts the new stamp (I5).
+        using (var s = fixture.Factory.Services.CreateScope())
+        {
+            var svc = s.ServiceProvider.GetRequiredService<AccountService>();
+            await Assert.ThrowsAsync<SessionEndedException>(() =>
+                svc.CreateSessionAsync(unenrolled.Id, TimeSpan.FromHours(1), expectedSecurityStamp: initialStamp));
+            var created = await svc.CreateSessionAsync(unenrolled.Id, TimeSpan.FromHours(1), expectedSecurityStamp: winner.SecurityStamp);
+            Assert.Equal(winner.SecurityStamp, created.Scope.Summary.SecurityStamp);
+        }
 
         // Mid-flight MFA reset: consuming a TOTP step with a stale securityStamp fails.
         await using var resetAccount = await SyntheticAccount.CreateAsync(fixture.Factory, "totpreset");
@@ -296,15 +455,40 @@ public sealed class SecurityHardeningRegressionTests(MeritFixture fixture)
             accounts.RenewSessionAsync(account.Id, firstScopeId, stamp, TimeSpan.FromHours(12)));
 
         // Commit order 2: renewal commits first (producing successor with same sessionReference) ->
-        // sign-out using the stale old scope ID revokes the successor too, while leaving otherSignIn active.
+        // exact-scope expiry (revokeLogicalSession=false) on stale old scope MUST NOT revoke the valid successor;
+        // explicit logical sign-out (revokeLogicalSession=true) MUST revoke the successor while leaving otherSignIn active.
         var second = await accounts.CreateSessionAsync(account.Id, TimeSpan.FromHours(2));
         Guid secondOldId = second.Scope.Summary.SessionScopeId;
         var renewed = await accounts.RenewSessionAsync(account.Id, secondOldId, stamp, TimeSpan.FromHours(12));
         Guid successorId = renewed.Scope.Summary.SessionScopeId;
-        await accounts.SignOutAsync(secondOldId);
 
+        await accounts.SignOutAsync(secondOldId, revokeLogicalSession: false);
+        Assert.Equal(1, await ScalarAsync<int>("SELECT COUNT (*) FROM auth.sessionScope WHERE sessionScopeId = @s AND revokedUtc IS NULL", ("@s", successorId)));
+
+        await accounts.SignOutAsync(secondOldId, revokeLogicalSession: true);
         Assert.Equal(1, await ScalarAsync<int>("SELECT COUNT (*) FROM auth.sessionScope WHERE sessionScopeId = @s AND revokedUtc IS NOT NULL", ("@s", successorId)));
         Assert.Equal(1, await ScalarAsync<int>("SELECT COUNT (*) FROM auth.sessionScope WHERE sessionScopeId = @s AND revokedUtc IS NULL", ("@s", otherScopeId)));
+
+        // Overlapping concurrent renewal and explicit logical sign-out serialize cleanly with zero surviving scopes.
+        var third = await accounts.CreateSessionAsync(account.Id, TimeSpan.FromHours(2));
+        Guid thirdScopeId = third.Scope.Summary.SessionScopeId;
+        Guid thirdRef = await ScalarAsync<Guid>("SELECT sessionReference FROM auth.sessionScope WHERE sessionScopeId = @s", ("@s", thirdScopeId));
+        await Task.WhenAll(
+            Task.Run(async () =>
+            {
+                using var s = fixture.Factory.Services.CreateScope();
+                try { await s.ServiceProvider.GetRequiredService<AccountService>().RenewSessionAsync(account.Id, thirdScopeId, stamp, TimeSpan.FromHours(12)); }
+                catch (SessionEndedException) { }
+            }),
+            Task.Run(async () =>
+            {
+                using var s = fixture.Factory.Services.CreateScope();
+                await s.ServiceProvider.GetRequiredService<AccountService>().SignOutAsync(thirdScopeId, revokeLogicalSession: true);
+            }));
+        int activeAfterRace = await ScalarAsync<int>(
+            "SELECT COUNT (*) FROM auth.sessionScope WHERE appUserId = @u AND sessionReference = @r AND revokedUtc IS NULL AND isDeleted = 0",
+            ("@u", account.Id), ("@r", thirdRef));
+        Assert.Equal(0, activeAfterRace);
 
         // Denied view-as (unauthorized target) returns to /account/profiles with the denial message
         // and preserves the caller's existing valid session cookie.
@@ -475,5 +659,36 @@ public sealed class SecurityHardeningRegressionTests(MeritFixture fixture)
             await using var cmd = new SqlCommand("SELECT HAS_PERMS_BY_NAME (N'dbo.uspGetQueueDepth', N'OBJECT', N'EXECUTE')", workerConn);
             Assert.Equal(1, Convert.ToInt32(await cmd.ExecuteScalarAsync()));
         }
+    }
+
+    [Fact]
+    public void ProductionStartupFailsFastWhenSignInLogNameHashKeyMissingAndMailDisabled()
+    {
+        using var failFactory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+        {
+            builder.UseEnvironment("Production");
+            builder.UseSetting("ConnectionStrings:Merit", TestEnvironment.WebConnectionString);
+            builder.UseSetting("DataProtection:AllowUnencryptedKeys", "true");
+            builder.UseSetting("Email:Provider", "Disabled");
+            builder.UseSetting("EmailCodes:VerifierKey", "");
+            builder.UseSetting("SignInLog:NameHashKey", "");
+        });
+
+        var ex = Assert.ThrowsAny<Exception>(() => _ = failFactory.CreateClient());
+        Assert.Contains("SignInLog:NameHashKey", ex.ToString(), StringComparison.Ordinal);
+
+        string validKey = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
+        using var okFactory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+        {
+            builder.UseEnvironment("Production");
+            builder.UseSetting("ConnectionStrings:Merit", TestEnvironment.WebConnectionString);
+            builder.UseSetting("DataProtection:AllowUnencryptedKeys", "true");
+            builder.UseSetting("Email:Provider", "Disabled");
+            builder.UseSetting("EmailCodes:VerifierKey", "");
+            builder.UseSetting("SignInLog:NameHashKey", validKey);
+        });
+
+        using var client = okFactory.CreateClient();
+        Assert.NotNull(client);
     }
 }

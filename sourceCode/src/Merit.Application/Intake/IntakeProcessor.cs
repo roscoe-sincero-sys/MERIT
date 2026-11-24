@@ -78,7 +78,18 @@ public sealed partial class IntakeProcessor(
             }
             else
             {
-                var parsed = CsvReader.Read(batch.RawContent ?? string.Empty, CsvReader.DelimiterFor(profile.FileType));
+                IReadOnlyList<IReadOnlyList<string>> parsed;
+                try
+                {
+                    parsed = CsvReader.Read(batch.RawContent ?? string.Empty, CsvReader.DelimiterFor(profile.FileType));
+                }
+                catch (Errors.ValidationException ex)
+                {
+                    string reason = ex.Errors.Values.SelectMany(v => v).FirstOrDefault() ?? ex.Message;
+                    await intake.SetBatchStatusAsync(batchId, "failed", reason, ct).ConfigureAwait(false);
+                    return new IntakeRunSummary(0, 0, 0, 0, false, reason);
+                }
+
                 int headerIndex = Math.Max(profile.HeaderRow - 1, 0);
                 if (parsed.Count <= headerIndex)
                 {

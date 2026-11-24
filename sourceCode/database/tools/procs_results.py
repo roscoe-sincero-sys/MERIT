@@ -248,7 +248,18 @@ SET @Comments = N'Result status changed; associated cases require review.';
         "desc": "One result with its analyte, lab, provider and the as-reported snapshot.",
         "params": "@labResultId UNIQUEIDENTIFIER",
         "key": "CONCAT (N'labResultId=', @labResultId)",
-        "validate": not_found("@labResultId", "dbo.labResult", "labResultId", "The result"),
+        "validate": """DECLARE @resultOwner UNIQUEIDENTIFIER, @resultPerson UNIQUEIDENTIFIER;
+SELECT @resultOwner = owningTenantId, @resultPerson = personId
+  FROM dbo.labResult WHERE labResultId = @labResultId AND isDeleted = 0;
+IF @resultOwner IS NULL
+BEGIN
+    ;THROW 51404, N'The result was not found, or you do not have access to it.', 1;
+END;
+
+IF auth.udfCanReadIdentified (@resultOwner, 'result.view', @resultPerson) = 0
+BEGIN
+    ;THROW 51403, N'De-identified roles cannot open individual identifiable lab results.', 1;
+END;""",
         "body": """
 SELECT r.*, (SELECT TOP(1) nr.labResultId FROM dbo.labResult nr WHERE nr.supersedesLabResultId=r.labResultId AND nr.isDeleted=0 ORDER BY nr.createdDateUtc DESC) AS replacementLabResultId,
        (SELECT displayName FROM auth.appUser WHERE appUserId=r.correctionByUserId) AS correctionByName, a.analyteId, a.code AS analyteCode, a.displayName AS analyteName, s.specimen,
@@ -290,14 +301,45 @@ BEGIN
     ;THROW 50000, N'@sortBy must be one of collectedDate, valueCanonical, lastName, analyteCode, receivedUtc.', 1;
 END;""",
         "body": """
-SELECT r.labResultId, r.personId, p.lastName, p.firstName, p.dob, a.code AS analyteCode, s.specimen, r.collectedDate,
+DECLARE @isDbo BIT = CASE WHEN USER_NAME () = N'dbo' THEN 1 ELSE 0 END;
+DECLARE @idTenants TABLE (tenantId UNIQUEIDENTIFIER PRIMARY KEY);
+IF @isDbo = 0
+BEGIN
+    INSERT @idTenants (tenantId)
+    SELECT st.tenantId
+      FROM auth.sessionScope       AS ss
+      JOIN auth.sessionScopeTenant AS st ON st.sessionScopeId = ss.sessionScopeId AND st.isDeleted = 0
+     WHERE ss.sessionScopeId = TRY_CAST (SESSION_CONTEXT (N'scopeKey') AS UNIQUEIDENTIFIER)
+       AND ss.revokedUtc IS NULL
+       AND ss.expiresUtc > SYSUTCDATETIME ()
+       AND ss.isDeleted = 0
+       AND st.canReadIdentifiedResults = 1;
+END;
+
+SELECT r.labResultId,
+       CASE WHEN id.isIdentified = 1 THEN r.personId ELSE NULL END AS personId,
+       CASE WHEN id.isIdentified = 1 THEN p.lastName ELSE NULL END AS lastName,
+       CASE WHEN id.isIdentified = 1 THEN p.firstName ELSE NULL END AS firstName,
+       CASE WHEN id.isIdentified = 1 THEN p.dob ELSE NULL END AS dob,
+       CAST (CASE WHEN r.personId IS NOT NULL THEN 1 ELSE 0 END AS BIT) AS isMatched,
+       id.isIdentified,
+       a.code AS analyteCode, s.specimen, r.collectedDate,
        r.receivedUtc, r.operator, r.valueCanonical, r.unitCanonical, r.sampleType, r.testMethod, r.population,
        r.resultStatus, r.resultRowStatus, r.isIndeterminate, lab.organizationName AS labName,
        COUNT (*) OVER () AS totalCount
   FROM dbo.labResult AS r
   JOIN config.analyteSpecimen AS s ON s.analyteSpecimenId = r.analyteSpecimenId
   JOIN config.analyte AS a ON a.analyteId = s.analyteId
-  LEFT JOIN dbo.person AS p ON p.personId = r.personId
+ CROSS APPLY (SELECT CAST (CASE WHEN @isDbo = 1
+                                  OR EXISTS (SELECT 1 FROM @idTenants AS idt WHERE idt.tenantId = r.owningTenantId)
+                                  OR (r.personId IS NOT NULL
+                                      AND EXISTS (SELECT 1
+                                                    FROM dbo.personAccess AS pa
+                                                    JOIN @idTenants       AS idt ON idt.tenantId = pa.tenantId
+                                                   WHERE pa.personId = r.personId
+                                                     AND pa.isDeleted = 0))
+                                THEN 1 ELSE 0 END AS BIT) AS isIdentified) AS id
+  LEFT JOIN dbo.person AS p ON p.personId = r.personId AND id.isIdentified = 1
   LEFT JOIN dbo.organization AS lab ON lab.organizationId = r.labOrganizationId
  WHERE r.isDeleted = 0
    AND (@analyteId IS NULL OR a.analyteId = @analyteId)
@@ -311,8 +353,8 @@ SELECT r.labResultId, r.personId, p.lastName, p.firstName, p.dob, a.code AS anal
           CASE WHEN @sortBy = 'collectedDate'  AND @sortDescending = 1 THEN r.collectedDate END DESC,
           CASE WHEN @sortBy = 'valueCanonical' AND @sortDescending = 0 THEN r.valueCanonical END ASC,
           CASE WHEN @sortBy = 'valueCanonical' AND @sortDescending = 1 THEN r.valueCanonical END DESC,
-          CASE WHEN @sortBy = 'lastName'       AND @sortDescending = 0 THEN p.lastName END ASC,
-          CASE WHEN @sortBy = 'lastName'       AND @sortDescending = 1 THEN p.lastName END DESC,
+          CASE WHEN @sortBy = 'lastName' AND @sortDescending = 0 AND id.isIdentified = 1 THEN p.lastName END ASC,
+          CASE WHEN @sortBy = 'lastName' AND @sortDescending = 1 AND id.isIdentified = 1 THEN p.lastName END DESC,
           CASE WHEN @sortBy = 'analyteCode'    AND @sortDescending = 0 THEN a.code END ASC,
           CASE WHEN @sortBy = 'analyteCode'    AND @sortDescending = 1 THEN a.code END DESC,
           CASE WHEN @sortBy = 'receivedUtc'    AND @sortDescending = 0 THEN r.receivedUtc END ASC,

@@ -20,6 +20,10 @@ public sealed record SignInStep(SignInStatus Status, Guid? AppUserId = null, str
 
 public sealed record MfaEnrollmentStart(string SecretBase32, string ProvisioningUri);
 
+public sealed record MfaEnrollmentResult(IReadOnlyList<string> RecoveryCodes, Guid SecurityStamp);
+
+public sealed record VerifiedSecondFactor(string Method, long? TotpStep = null, Guid? RecoveryCodeId = null);
+
 public sealed record SignedInSession(SessionScopeResult Scope);
 
 /// <summary>
@@ -105,8 +109,8 @@ public sealed class AccountService(IAccountData data, IPasswordHasher hasher, IS
                && (user.LockoutEndUtc is null || user.LockoutEndUtc <= DateTime.UtcNow);
     }
 
-    public async Task<IReadOnlyList<string>> CompleteEnrollmentAsync(Guid appUserId, string secretBase32, string code, string? clientAddress = null,
-                                                                     CancellationToken ct = default, string? userName = null, Guid? expectedSecurityStamp = null)
+    public async Task<MfaEnrollmentResult> CompleteEnrollmentAsync(Guid appUserId, string secretBase32, string code, string? clientAddress = null,
+                                                                   CancellationToken ct = default, string? userName = null, Guid? expectedSecurityStamp = null)
     {
         if (!string.IsNullOrEmpty(userName))
         {
@@ -130,9 +134,10 @@ public sealed class AccountService(IAccountData data, IPasswordHasher hasher, IS
         }
 
         var codes = Enumerable.Range(0, 10).Select(_ => NewRecoveryCode()).ToList();
+        Guid newSecurityStamp;
         try
         {
-            await data.SaveMfaEnrollmentAsync(appUserId, protector.Protect(secretBase32), codes.Select(hasher.Hash).ToList(), enrolledStep, expectedSecurityStamp, ct)
+            newSecurityStamp = await data.SaveMfaEnrollmentAsync(appUserId, protector.Protect(secretBase32), codes.Select(hasher.Hash).ToList(), enrolledStep, expectedSecurityStamp, ct)
                 .ConfigureAwait(false);
         }
         catch (ConcurrencyException)
@@ -142,7 +147,7 @@ public sealed class AccountService(IAccountData data, IPasswordHasher hasher, IS
         await events.RecordAsync(new SignInEvent(SignInEventTypes.MfaEnrolled, SignInSteps.Enrollment, SignInMethods.Totp, AppUserId: appUserId), ct)
             .ConfigureAwait(false);
         await data.RecordSignInResultAsync(appUserId, true, MaxFailedAttempts, LockoutMinutes, clientAddress, ct).ConfigureAwait(false);
-        return codes;
+        return new MfaEnrollmentResult(codes, newSecurityStamp);
     }
 
     public async Task<bool> VerifyMfaAsync(string userName, string code, string? clientAddress, CancellationToken ct = default,
@@ -230,11 +235,10 @@ public sealed class AccountService(IAccountData data, IPasswordHasher hasher, IS
     }
 
     /// <summary>
-    /// The second factor on its own, for a password reset (#190): a current authenticator code, or an unused recovery code,
-    /// which is then used up. Nothing is recorded here; the caller counts a failure against the link and the lockout.
+    /// Verifies a second factor without consuming it so a caller (such as password reset) can validate password reuse
+    /// after factor verification without burning a one-time recovery code or TOTP step on a rejected form submission.
     /// </summary>
-    /// <returns>The method that matched (totp or recoveryCode), or null.</returns>
-    public async Task<string?> CheckSecondFactorAsync(SignInUserRow user, string? code, CancellationToken ct = default)
+    public async Task<VerifiedSecondFactor?> VerifySecondFactorWithoutConsumingAsync(SignInUserRow user, string? code, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(user);
         string typed = (code ?? string.Empty).Trim();
@@ -244,12 +248,59 @@ public sealed class AccountService(IAccountData data, IPasswordHasher hasher, IS
         }
 
         byte[] secret = Totp.FromBase32(protector.Unprotect(user.MfaSecretProtected));
-        if (await VerifyTotpNoReplayAsync(user.AppUserId, secret, typed, user.SecurityStamp, ct).ConfigureAwait(false))
+        if (Totp.TryVerify(secret, typed, DateTimeOffset.UtcNow, out long matchedStep))
         {
-            return SignInMethods.Totp;
+            return new VerifiedSecondFactor(SignInMethods.Totp, TotpStep: matchedStep);
         }
 
-        return typed.Length > 6 && await TryRecoveryCodeAsync(user.AppUserId, typed, ct).ConfigureAwait(false) ? SignInMethods.RecoveryCode : null;
+        if (typed.Length > 6)
+        {
+            string normalized = typed.Replace("-", string.Empty, StringComparison.Ordinal).ToUpperInvariant();
+            foreach (var row in await data.GetRecoveryCodesAsync(user.AppUserId, ct).ConfigureAwait(false))
+            {
+                if (hasher.Verify(row.CodeHash, normalized) != PasswordCheck.Failed)
+                {
+                    return new VerifiedSecondFactor(SignInMethods.RecoveryCode, RecoveryCodeId: row.MfaRecoveryCodeId);
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>Atomically consumes a previously verified second factor right before committing the sensitive change.</summary>
+    public Task<bool> ConsumeVerifiedSecondFactorAsync(Guid appUserId, Guid expectedSecurityStamp, VerifiedSecondFactor factor, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(factor);
+        if (factor.TotpStep is long step)
+        {
+            return data.ConsumeTotpStepAsync(appUserId, step, expectedSecurityStamp, ct);
+        }
+
+        if (factor.RecoveryCodeId is Guid recoveryId)
+        {
+            return data.UseRecoveryCodeAsync(recoveryId, ct);
+        }
+
+        return Task.FromResult(false);
+    }
+
+    /// <summary>
+    /// The second factor on its own, for a password reset (#190): a current authenticator code, or an unused recovery code,
+    /// which is then used up. Nothing is recorded here; the caller counts a failure against the link and the lockout.
+    /// </summary>
+    /// <returns>The method that matched (totp or recoveryCode), or null.</returns>
+    public async Task<string?> CheckSecondFactorAsync(SignInUserRow user, string? code, CancellationToken ct = default)
+    {
+        var verified = await VerifySecondFactorWithoutConsumingAsync(user, code, ct).ConfigureAwait(false);
+        if (verified is null)
+        {
+            return null;
+        }
+
+        return await ConsumeVerifiedSecondFactorAsync(user.AppUserId, user.SecurityStamp, verified, ct).ConfigureAwait(false)
+            ? verified.Method
+            : null;
     }
 
     /// <summary>Whether a password is the account's current one.</summary>
@@ -292,7 +343,8 @@ public sealed class AccountService(IAccountData data, IPasswordHasher hasher, IS
         return row is not null && row.SecurityStamp == securityStamp;
     }
 
-    public Task SignOutAsync(Guid scopeKey, CancellationToken ct = default) => data.RevokeSessionScopeAsync(scopeKey, ct);
+    public Task SignOutAsync(Guid scopeKey, CancellationToken ct = default, bool revokeLogicalSession = true)
+        => data.RevokeSessionScopeAsync(scopeKey, ct, revokeLogicalSession);
 
     /// <summary>Why a session check failed: expired, revoked or a changed security stamp (#191).</summary>
     public Task<SessionScopeStateRow?> SessionStateAsync(Guid scopeKey, CancellationToken ct = default) => data.GetSessionScopeStateAsync(scopeKey, ct);

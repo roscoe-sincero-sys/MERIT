@@ -36,12 +36,12 @@ public sealed class AccountData(Db db) : IAccountData
     public Task<SessionScopeCheckRow?> GetSessionScopeAsync(Guid sessionScopeId, CancellationToken ct = default)
         => db.QuerySingleAsync<SessionScopeCheckRow>("auth.uspGetSessionScope", new { sessionScopeId }, ct);
 
-    public Task RevokeSessionScopeAsync(Guid sessionScopeId, CancellationToken ct = default)
-        => db.ExecuteAsync("auth.uspRevokeSessionScope", new { sessionScopeId }, ct);
+    public Task RevokeSessionScopeAsync(Guid sessionScopeId, CancellationToken ct = default, bool revokeLogicalSession = false)
+        => db.ExecuteAsync("auth.uspRevokeSessionScope", new { sessionScopeId, revokeLogicalSession }, ct);
 
-    public Task SaveMfaEnrollmentAsync(Guid appUserId, string mfaSecretProtected, IReadOnlyList<string> recoveryCodeHashes,
-                                       long? initialTotpStep = null, Guid? expectedSecurityStamp = null, CancellationToken ct = default)
-        => db.ExecuteAsync("auth.uspSaveMfaEnrollment",
+    public Task<Guid> SaveMfaEnrollmentAsync(Guid appUserId, string mfaSecretProtected, IReadOnlyList<string> recoveryCodeHashes,
+                                             long? initialTotpStep = null, Guid? expectedSecurityStamp = null, CancellationToken ct = default)
+        => db.QuerySingleAsync<Guid>("auth.uspSaveMfaEnrollment",
             new { appUserId, mfaSecretProtected, recoveryCodeHashesJson = JsonSerializer.Serialize(recoveryCodeHashes), initialTotpStep, expectedSecurityStamp }, ct);
 
     public async Task<bool> ConsumeTotpStepAsync(Guid appUserId, long totpStep, Guid? expectedSecurityStamp = null, CancellationToken ct = default)

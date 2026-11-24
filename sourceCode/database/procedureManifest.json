@@ -56,6 +56,34 @@
   ]
  },
  {
+  "name": "auth.uspConsumeTotpStep",
+  "kind": "write",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": null,
+  "params": [
+   {
+    "name": "appUserId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "totpStep",
+    "type": "BIGINT",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "expectedSecurityStamp",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
   "name": "auth.uspContinueUsageSession",
   "kind": "write",
   "grants": [
@@ -290,34 +318,6 @@
     "name": "replacesSessionScopeId",
     "type": "UNIQUEIDENTIFIER",
     "hasDefault": true,
-    "isOutput": false
-   },
-   {
-    "name": "expectedSecurityStamp",
-    "type": "UNIQUEIDENTIFIER",
-    "hasDefault": true,
-    "isOutput": false
-   }
-  ]
- },
- {
-  "name": "auth.uspConsumeTotpStep",
-  "kind": "write",
-  "grants": [
-   "meritWebRole"
-  ],
-  "permission": null,
-  "params": [
-   {
-    "name": "appUserId",
-    "type": "UNIQUEIDENTIFIER",
-    "hasDefault": false,
-    "isOutput": false
-   },
-   {
-    "name": "totpStep",
-    "type": "BIGINT",
-    "hasDefault": false,
     "isOutput": false
    },
    {
@@ -758,6 +758,12 @@
     "name": "sessionScopeId",
     "type": "UNIQUEIDENTIFIER",
     "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "revokeLogicalSession",
+    "type": "BIT",
+    "hasDefault": true,
     "isOutput": false
    }
   ]

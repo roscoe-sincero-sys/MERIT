@@ -57,12 +57,14 @@ SELECT u.appUserId
                 "caller administers and to the caller's own rights. Stores the tenants with an access level each, the "
                 "data roots, the administration scope and the permissions; the key goes into the session cookie and "
                 "into SESSION_CONTEXT on every connection.",
-        "params": """@sessionScopeId UNIQUEIDENTIFIER
-, @appUserId      UNIQUEIDENTIFIER
-, @expiresUtc     DATETIME2 (3)
-, @userProfileId  UNIQUEIDENTIFIER = NULL
-, @viewAsUserId   UNIQUEIDENTIFIER = NULL
-, @actingTenantId UNIQUEIDENTIFIER = NULL""",
+        "params": """@sessionScopeId          UNIQUEIDENTIFIER
+, @appUserId             UNIQUEIDENTIFIER
+, @expiresUtc            DATETIME2 (3)
+, @userProfileId         UNIQUEIDENTIFIER = NULL
+, @viewAsUserId          UNIQUEIDENTIFIER = NULL
+, @actingTenantId        UNIQUEIDENTIFIER = NULL
+, @replacesSessionScopeId UNIQUEIDENTIFIER = NULL
+, @expectedSecurityStamp UNIQUEIDENTIFIER = NULL""",
         "key": "CONCAT (N'sessionScopeId=', @sessionScopeId, N', appUserId=', @appUserId, N', userProfileId=', @userProfileId, N', viewAsUserId=', @viewAsUserId)",
         "notes": "Returns three result sets: the scope summary, the permission codes, and the tenants covered with their "
                  "access level. A platform administrator has one profile: switching and viewing as are refused. The "
@@ -70,13 +72,78 @@ SELECT u.appUserId
                  "the request that started it.",
         "body": f"""
 DECLARE @platform UNIQUEIDENTIFIER = {PLATFORM};
-DECLARE @isPlatformUser BIT = (SELECT CASE WHEN h.tenantType = 'platform' THEN 1 ELSE 0 END
-                                  FROM auth.appUser AS u
-                                  LEFT JOIN auth.tenant AS h ON h.tenantId = u.homeTenantId
-                                 WHERE u.appUserId = @appUserId AND u.isActive = 1 AND u.isDeleted = 0);
+DECLARE @sessionReference UNIQUEIDENTIFIER = NEWID ();
+
+IF @replacesSessionScopeId IS NOT NULL
+BEGIN
+    DECLARE @lockRef UNIQUEIDENTIFIER = (SELECT sessionReference FROM auth.sessionScope
+                                          WHERE sessionScopeId = @replacesSessionScopeId
+                                            AND appUserId = @appUserId
+                                            AND isDeleted = 0);
+    IF @lockRef IS NULL
+    BEGIN
+        ;THROW 51401, N'Your session has ended or expired. Please sign in again.', 1;
+    END;
+
+    DECLARE @sessionLock INT;
+    DECLARE @sessionLockName NVARCHAR (255) = CONCAT (N'MERIT.session.', @appUserId, N'.', @lockRef);
+    EXEC @sessionLock = sys.sp_getapplock @Resource = @sessionLockName, @LockMode = 'Exclusive', @LockOwner = 'Transaction', @LockTimeout = 5000;
+    IF @sessionLock < 0
+    BEGIN
+        ;THROW 51401, N'Your session is busy or has ended. Please sign in again.', 1;
+    END;
+
+    DECLARE @prevExpiresUtc DATETIME2 (3), @prevReference UNIQUEIDENTIFIER;
+    SELECT @prevExpiresUtc = s.expiresUtc, @prevReference = s.sessionReference
+      FROM auth.sessionScope AS s WITH (UPDLOCK, HOLDLOCK)
+      JOIN auth.appUser      AS u WITH (UPDLOCK, HOLDLOCK) ON u.appUserId = s.appUserId
+     WHERE s.sessionScopeId = @replacesSessionScopeId
+       AND s.appUserId = @appUserId
+       AND s.isDeleted = 0
+       AND s.revokedUtc IS NULL
+       AND s.expiresUtc > SYSUTCDATETIME ()
+       AND u.isActive = 1
+       AND u.isDeleted = 0
+       AND @expectedSecurityStamp IS NOT NULL
+       AND u.securityStamp = @expectedSecurityStamp;
+
+    IF @prevExpiresUtc IS NULL
+    BEGIN
+        ;THROW 51401, N'Your session has ended or expired. Please sign in again.', 1;
+    END;
+
+    IF @prevExpiresUtc < @expiresUtc
+    BEGIN
+        SET @expiresUtc = @prevExpiresUtc;
+    END;
+
+    SET @sessionReference = @prevReference;
+
+    UPDATE auth.sessionScope
+       SET revokedUtc = SYSUTCDATETIME ()
+     WHERE sessionScopeId = @replacesSessionScopeId
+       AND revokedUtc IS NULL;
+
+    IF @@ROWCOUNT <> 1
+    BEGIN
+        ;THROW 51401, N'Your session has already been replaced or revoked. Please sign in again.', 1;
+    END;
+END;
+
+DECLARE @isPlatformUser BIT, @validatedStamp UNIQUEIDENTIFIER;
+SELECT @isPlatformUser = CASE WHEN h.tenantType = 'platform' THEN 1 ELSE 0 END,
+       @validatedStamp = u.securityStamp
+  FROM auth.appUser AS u WITH (UPDLOCK, HOLDLOCK)
+  LEFT JOIN auth.tenant AS h ON h.tenantId = u.homeTenantId
+ WHERE u.appUserId = @appUserId AND u.isActive = 1 AND u.isDeleted = 0
+   AND (@expectedSecurityStamp IS NULL OR u.securityStamp = @expectedSecurityStamp);
 
 IF @isPlatformUser IS NULL
 BEGIN
+    IF @expectedSecurityStamp IS NOT NULL
+    BEGIN
+        ;THROW 51401, N'Your sign-in session is no longer valid. Please sign in again.', 1;
+    END;
     ;THROW 51404, N'The account is not active.', 1;
 END;
 
@@ -100,11 +167,11 @@ BEGIN
     ;THROW 51403, N'A platform administrator has one profile and cannot switch profiles or view as another user.', 1;
 END;
 
-DECLARE @master TABLE (tenantId UNIQUEIDENTIFIER, permissionCode VARCHAR (60), permissionLevel VARCHAR (10), grantRank INT,
+DECLARE @master TABLE (tenantId UNIQUEIDENTIFIER, permissionCode VARCHAR (60), permissionLevel VARCHAR (10), grantRank INT, hasIdentified BIT,
                        PRIMARY KEY (tenantId, permissionCode));
-INSERT @master SELECT tenantId, permissionCode, permissionLevel, grantRank FROM auth.tvfUserGrantPermissions (@appUserId);
+INSERT @master SELECT tenantId, permissionCode, permissionLevel, grantRank, hasIdentified FROM auth.tvfUserGrantPermissions (@appUserId);
 
-DECLARE @x TABLE (tenantId UNIQUEIDENTIFIER, permissionCode VARCHAR (60), permissionLevel VARCHAR (10), grantRank INT,
+DECLARE @x TABLE (tenantId UNIQUEIDENTIFIER, permissionCode VARCHAR (60), permissionLevel VARCHAR (10), grantRank INT, hasIdentified BIT,
                   PRIMARY KEY (tenantId, permissionCode));
 DECLARE @profileName NVARCHAR (120) = N'Master profile';
 
@@ -123,7 +190,8 @@ BEGIN
 
     -- What they can see and do, only where the caller administers, and never more than the caller may do there.
     INSERT @x
-    SELECT v.tenantId, v.permissionCode, v.permissionLevel, IIF (v.grantRank < m.grantRank, v.grantRank, m.grantRank)
+    SELECT v.tenantId, v.permissionCode, v.permissionLevel, IIF (v.grantRank < m.grantRank, v.grantRank, m.grantRank),
+           CASE WHEN v.hasIdentified = 1 AND m.hasIdentified = 1 THEN 1 ELSE 0 END
       FROM auth.tvfUserGrantPermissions (@viewAsUserId) AS v
       JOIN @master AS m ON m.tenantId = v.tenantId AND m.permissionCode = v.permissionCode
      WHERE EXISTS (SELECT 1 FROM @master AS a WHERE a.tenantId = v.tenantId AND a.permissionCode = 'tenant.administer');
@@ -145,7 +213,8 @@ BEGIN
 
     -- A profile is clipped to the master as it is today, so it never outlives a narrowed master.
     INSERT @x
-    SELECT p.tenantId, p.permissionCode, p.permissionLevel, IIF (p.grantRank < m.grantRank, p.grantRank, m.grantRank)
+    SELECT p.tenantId, p.permissionCode, p.permissionLevel, IIF (p.grantRank < m.grantRank, p.grantRank, m.grantRank),
+           CASE WHEN p.hasIdentified = 1 AND m.hasIdentified = 1 THEN 1 ELSE 0 END
       FROM auth.tvfProfileGrantPermissions (@userProfileId) AS p
       JOIN @master AS m ON m.tenantId = p.tenantId AND m.permissionCode = p.permissionCode;
 
@@ -153,7 +222,7 @@ BEGIN
 END
 ELSE
 BEGIN
-    INSERT @x SELECT tenantId, permissionCode, permissionLevel, grantRank FROM @master;
+    INSERT @x SELECT tenantId, permissionCode, permissionLevel, grantRank, hasIdentified FROM @master;
 END;
 
 -- Records: tenants where the scope holds a read or write permission, at the highest level held there.
@@ -167,6 +236,11 @@ DECLARE @isPlatformAdmin BIT = CASE WHEN @isPlatformUser = 1
                                      AND EXISTS (SELECT 1 FROM @x WHERE permissionCode = 'platform.administer')
                                     THEN 1 ELSE 0 END;
 
+DECLARE @isDeidentified BIT = CASE WHEN @isPlatformAdmin = 0
+                                    AND EXISTS (SELECT 1 FROM @tenants)
+                                    AND NOT EXISTS (SELECT 1 FROM @x WHERE permissionCode IN ('result.view', 'case.view') AND hasIdentified = 1)
+                                   THEN 1 ELSE 0 END;
+
 -- Acting tenant: the one asked for when the scope covers it, else the highest tenant in the scope.
 DECLARE @acting UNIQUEIDENTIFIER =
     CASE WHEN EXISTS (SELECT 1 FROM @tenants WHERE tenantId = @actingTenantId)
@@ -177,7 +251,8 @@ BEGIN
                      FROM (SELECT tenantId FROM @tenants UNION SELECT tenantId FROM @adminScope) AS s
                      JOIN auth.tenantClosure AS c ON c.descendantTenantId = s.tenantId AND c.ancestorTenantId = @platform
                                                  AND c.isDeleted = 0
-                    ORDER BY c.depth, s.tenantId);
+                     JOIN auth.tenant AS t ON t.tenantId = s.tenantId
+                    ORDER BY c.depth, t.tenantName, t.tenantCode, s.tenantId);
 END;
 IF @acting IS NULL
 BEGIN
@@ -186,13 +261,15 @@ END;
 
 DECLARE @root UNIQUEIDENTIFIER = COALESCE ((SELECT rootTenantId FROM auth.tenant WHERE tenantId = @acting), @platform);
 
-INSERT auth.sessionScope (sessionScopeId, appUserId, rootTenantId, actingTenantId, userProfileId, viewAsUserId,
-                          isPlatformAdmin, expiresUtc)
-VALUES (@sessionScopeId, @appUserId, @root, @acting, @userProfileId, @viewAsUserId, @isPlatformAdmin, @expiresUtc);
+INSERT auth.sessionScope (sessionScopeId, appUserId, sessionReference, rootTenantId, actingTenantId, userProfileId, viewAsUserId,
+                          isPlatformAdmin, isDeidentified, expiresUtc)
+VALUES (@sessionScopeId, @appUserId, @sessionReference, @root, @acting, @userProfileId, @viewAsUserId, @isPlatformAdmin, @isDeidentified, @expiresUtc);
 
-INSERT auth.sessionScopeTenant (sessionScopeTenantId, sessionScopeId, tenantId, accessLevel, canReadRelatedContacts)
-SELECT {NEWID}, @sessionScopeId, tenantId, {LEVEL.format('accessRank')},
- CASE WHEN EXISTS(SELECT 1 FROM @x x WHERE x.tenantId=t.tenantId AND x.permissionCode='person.edit' AND x.grantRank>=2) THEN 1 ELSE 0 END
+INSERT auth.sessionScopeTenant (sessionScopeTenantId, sessionScopeId, tenantId, accessLevel, canReadRelatedContacts, canReadIdentifiedResults, canReadIdentifiedCases)
+SELECT {NEWID}, @sessionScopeId, t.tenantId, {LEVEL.format('t.accessRank')},
+ CASE WHEN EXISTS(SELECT 1 FROM @x x WHERE x.tenantId=t.tenantId AND x.permissionCode='person.edit' AND x.grantRank>=2) THEN 1 ELSE 0 END,
+ CASE WHEN EXISTS(SELECT 1 FROM @x x WHERE x.tenantId=t.tenantId AND x.permissionCode='result.view' AND x.hasIdentified=1) THEN 1 ELSE 0 END,
+ CASE WHEN EXISTS(SELECT 1 FROM @x x WHERE x.tenantId=t.tenantId AND x.permissionCode='case.view' AND x.hasIdentified=1) THEN 1 ELSE 0 END
 FROM @tenants t;
 
 INSERT auth.sessionScopeRoot (sessionScopeRootId, sessionScopeId, rootTenantId, accessLevel)
@@ -222,7 +299,7 @@ SELECT @sessionScopeId                AS sessionScopeId
      , t.tenantName                   AS actingTenantName
      , r.statePostalCode
      , COALESCE (r.timeZone, 'Eastern Standard Time') AS timeZone
-     , u.securityStamp
+     , @validatedStamp                AS securityStamp
      , @expiresUtc                    AS expiresUtc
      , @userProfileId                 AS userProfileId
      , @profileName                   AS profileName

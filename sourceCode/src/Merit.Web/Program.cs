@@ -312,6 +312,9 @@ if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi("/openapi/{documentName}.json").RequireAuthorization(Permissions.SignedIn);
 }
+// Validate sign-in log hash key eagerly at startup so misconfigured non-Development hosts fail fast before reporting ready.
+_ = app.Services.GetRequiredService<IAttemptedNameProtection>();
+
 app.MapHealthChecks("/health").AllowAnonymous();
 app.MapControllers();
 app.MapControllerRoute("default", "{controller=Home}/{action=Index}/{id?}").WithStaticAssets();

@@ -75,12 +75,13 @@
                 string displayName = CurrentSession.DisplayName ?? "";
                 string initials = string.Concat(displayName.Split(' ', StringSplitOptions.RemoveEmptyEntries).Take(2).Select(w => char.ToUpperInvariant(w[0])));
                 if (string.IsNullOrEmpty(initials)) { initials = "U"; }
+                string profileLabel = CurrentSession.ProfileName ?? "Master profile";
                 <div id="merit-user" class="merit-header__user">
                     <details class="merit-account-menu">
-                        <summary class="merit-account-menu__trigger">
+                        <summary class="merit-account-menu__trigger merit-profile-switch" aria-label="Profile: @profileLabel — @CurrentSession.DisplayName, switch profile or jurisdiction">
                             <span class="merit-avatar" aria-hidden="true">@initials</span>
                             <span class="merit-account-menu__id">
-                                <span class="merit-account-menu__name">@CurrentSession.DisplayName</span>
+                                <span class="merit-account-menu__name merit-header__who">@CurrentSession.DisplayName</span>
                                 <span class="merit-account-menu__tenant">@CurrentSession.ActingTenantName</span>
                             </span>
                             <span class="merit-account-menu__caret" aria-hidden="true">&#x25BE;</span>
@@ -88,7 +89,7 @@
                         <div class="merit-account-menu__panel">
                             <div class="merit-account-menu__meta">
                                 <div class="merit-account-menu__meta-label">Active profile</div>
-                                <div class="merit-account-menu__meta-value">@(CurrentSession.ProfileName ?? "Master profile")</div>
+                                <div class="merit-account-menu__meta-value merit-profile-switch__name">@profileLabel</div>
                             </div>
                             <ul class="merit-account-menu__list">
                                 <li><a class="merit-header__profile" href="@profileHref">Switch profile or jurisdiction</a></li>
