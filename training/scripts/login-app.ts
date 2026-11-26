@@ -47,5 +47,18 @@ start('login-app', 'dotnet', [app, '--urls', 'https://localhost:7343'], {
 start('login-no-email', 'dotnet', [app, '--urls', 'https://localhost:7344'], {
   ...common, Email__Provider: 'Disabled', Merit__SignInAttemptsPerMinute: '1',
 });
+// Start Merit.Worker when built so end-to-end training workflows that upload HL7/CSV files process in the background.
+const worker = process.env.MERIT_TRAINING_WORKER ?? join(REPO, 'sourceCode/src/Merit.Worker/bin/Debug/net9.0/Merit.Worker.dll');
+const workerSettingsPath = join(REPO, 'sourceCode/src/Merit.Worker/appsettings.Development.json');
+if (existsSync(worker) && existsSync(workerSettingsPath)) {
+  const workerBase: string = process.env.MERIT_TRAINING_WORKER_CONNECTION
+    ?? JSON.parse(readFileSync(workerSettingsPath, 'utf8')).ConnectionStrings.Merit;
+  const workerConnection = /Database=[^;]+/i.test(workerBase)
+    ? workerBase.replace(/Database=[^;]+/i, `Database=${DATABASE}`)
+    : `${workerBase};Database=${DATABASE}`;
+  start('login-worker', 'dotnet', [worker, '--urls', 'http://127.0.0.1:5343'], {
+    ...common, ConnectionStrings__Merit: workerConnection,
+  });
+}
 console.log('Login training app: https://localhost:7343; no-email/rate-limit example: https://localhost:7344.');
 console.log('Local-only captured mail: http://127.0.0.1:18025. Logs: training/.work/login-*.log. Ctrl+C stops these instances.');
