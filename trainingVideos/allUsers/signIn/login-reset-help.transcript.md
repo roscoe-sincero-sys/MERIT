@@ -1,6 +1,6 @@
 # Password reset: links and support options
 
-**Role:** All users · **Feature:** Signing in and your account · **Length:** 2:35
+**Role:** All users · **Feature:** Signing in and your account · **Length:** 2:34
 
 Handle expired, replaced or closed links, locked accounts, unavailable email, and a missing authenticator.
 
@@ -45,14 +45,14 @@ Handle expired, replaced or closed links, locked accounts, unavailable email, an
 
 ## 3. When email or both factors are unavailable
 
-**[1:37]** Some MERIT installations cannot email reset links. Their reset page tells you to contact an administrator after confirming who you are.
+**[1:36]** Some MERIT installations cannot email reset links. Their reset page tells you to contact an administrator after confirming who you are.
 - *On screen:* Reset your password · MERIT can't email reset links here. Contact your MERIT administrator: after confirming who you are, they can set a new password for you. · Lost your authenticator app as well? Contact your MERIT administrator to verify your identity and reset both. · Back to sign in
 
-**[1:46]** If you have lost both the password and the authenticator, and have no recovery codes, contact your administrator to verify your identity and reset both.
+**[1:45]** If you have lost both the password and the authenticator, and have no recovery codes, contact your administrator to verify your identity and reset both.
 
-**[1:57]** Email never arrives? Check the user name and junk folder, then use your agency support channel. The Check your email page does not prove that an account exists.
+**[1:56]** Email never arrives? Check the user name and junk folder, then use your agency support channel. The Check your email page does not prove that an account exists.
 
-**[2:09]** After a successful reset, return to the normal sign-in process. Your authenticator still works unless an administrator has reset MFA.
+**[2:08]** After a successful reset, return to the normal sign-in process. Your authenticator still works unless an administrator has reset MFA.
 - *Action:* Types “loginresethelp” in User name
 - *Action:* Types into Password (hidden)
 - *Action:* Selects “Continue”
@@ -61,7 +61,7 @@ Handle expired, replaced or closed links, locked accounts, unavailable email, an
 
 ## Recap
 
-**[2:21]** In this video you recognized unusable links and account restrictions, reset a password using an unused recovery code, and identified when administrator assistance is required.
+**[2:20]** In this video you recognized unusable links and account restrictions, reset a password using an unused recovery code, and identified when administrator assistance is required.
 
 - Recognized unusable links and account restrictions
 - Reset a password using an unused recovery code
@@ -69,4 +69,4 @@ Handle expired, replaced or closed links, locked accounts, unavailable email, an
 
 ---
 
-Generated 2026-11-07 from `training/workflows/all-users/sign-in/login-reset-help.workflow.ts` against MERIT be42f6d 2026-11-06.
+Generated 2026-11-26 from `training/workflows/all-users/sign-in/login-reset-help.workflow.ts` against MERIT 8410bca 2026-11-24.

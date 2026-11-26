@@ -1,4 +1,4 @@
-import { LoginAccount, loginWorkflow, requestReset, newPassword, NO_EMAIL, NEW_PASSWORD, password, signedIn } from '../../../lib/login.ts';
+import { LoginAccount, loginWorkflow, freshTotp, requestReset, newPassword, NO_EMAIL, NEW_PASSWORD, password, signedIn } from '../../../lib/login.ts';
 import { BASE_URL } from '../../../lib/config.ts';
 import { sql } from '../../../lib/sql.ts';
 import { totp } from '../../../lib/totp.ts';
@@ -48,7 +48,7 @@ export default loginWorkflow(a, {
       { say: 'Email never arrives? Check the user name and junk folder, then use your agency support channel. The Check your email page does not prove that an account exists.' },
       { say: 'After a successful reset, return to the normal sign-in process. Your authenticator still works unless an administrator has reset MFA.',
         run: async s => { await s.goto(`${BASE_URL}/account/signin`); await password(s, a);
-          await s.type(s.page.locator('#Code'), totp(a.secret)); await s.click(s.page.getByRole('button', { name: 'Verify and sign in', exact: true })); await signedIn(s); } },
+          await s.type(s.page.locator('#Code'), freshTotp(a)); await s.click(s.page.getByRole('button', { name: 'Verify and sign in', exact: true })); await signedIn(s); } },
     ] },
   ],
   recap: ['Recognized unusable links and account restrictions', 'Reset a password using an unused recovery code', 'Identified when administrator assistance is required'],

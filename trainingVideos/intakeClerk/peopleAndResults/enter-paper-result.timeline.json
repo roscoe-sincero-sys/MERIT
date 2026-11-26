@@ -6,13 +6,13 @@
   "feature": "peopleAndResults",
   "user": "intake",
   "source": "training/workflows/intake-clerk/people-and-results/enter-paper-result.workflow.ts",
-  "fingerprint": "0ac9c3654a76198d",
-  "appVersion": "be42f6d 2026-11-06",
-  "built": "2026-11-07",
+  "fingerprint": "670e0c9f59f564cb",
+  "appVersion": "8410bca 2026-11-24",
+  "built": "2026-11-26",
   "engine": "piper",
   "voice": "en_US-kristin-medium",
   "narrated": true,
-  "duration": 123747,
+  "duration": 124629,
   "introMs": 10888,
   "outroMs": 15494,
   "scenes": [
@@ -25,8 +25,8 @@
     {
       "scene": 0,
       "say": "A faxed lab report has arrived for a child named Leo Rivera. Before entering anything, search for him, so the result joins his existing record.",
-      "start": 11781,
-      "end": 22904,
+      "start": 11412,
+      "end": 22524,
       "actions": [
         "Selects “People”"
       ],
@@ -35,11 +35,11 @@
       ],
       "highlights": [
         {
-          "at": 11826,
+          "at": 11443,
           "rect": {
-            "x": 327.109375,
-            "y": 107.1875,
-            "width": 62.1875,
+            "x": 456.796875,
+            "y": 107.578125,
+            "width": 57.375,
             "height": 44
           }
         }
@@ -49,11 +49,11 @@
     {
       "scene": 0,
       "say": "Type the last name, then the first name. Adding the date of birth from the report narrows the search to one person.",
-      "start": 22905,
-      "end": 31284,
+      "start": 22524,
+      "end": 30901,
       "actions": [
         "Types “Rivera Leo 2021-02-02” in Search",
-        "Selects “Search”"
+        "Selects “Search people”"
       ],
       "onScreen": [],
       "highlights": [],
@@ -62,8 +62,8 @@
     {
       "scene": 0,
       "say": "One match, with the same name and date of birth. Open his record.",
-      "start": 31284,
-      "end": 37054,
+      "start": 30901,
+      "end": 36684,
       "actions": [
         "Selects “Rivera, Leo”"
       ],
@@ -72,10 +72,10 @@
       ],
       "highlights": [
         {
-          "at": 31315,
+          "at": 30929,
           "rect": {
             "x": 144,
-            "y": 506.171875,
+            "y": 506.5625,
             "width": 1248,
             "height": 42.421875
           }
@@ -86,8 +86,8 @@
     {
       "scene": 1,
       "say": "The person page shows who he is and his history. Choose Enter a result.",
-      "start": 37054,
-      "end": 42911,
+      "start": 36684,
+      "end": 42543,
       "actions": [
         "Selects “Enter a result”"
       ],
@@ -96,12 +96,12 @@
       ],
       "highlights": [
         {
-          "at": 37066,
+          "at": 36695,
           "rect": {
             "x": 144,
-            "y": 199.1875,
+            "y": 233.96875,
             "width": 1248,
-            "height": 217.75
+            "height": 225.75
           }
         }
       ],
@@ -110,20 +110,20 @@
     {
       "scene": 2,
       "say": "Choose the analyte first. The specimen and unit choices follow it.",
-      "start": 42911,
-      "end": 48678,
+      "start": 42543,
+      "end": 48314,
       "actions": [
-        "Chooses “Lead” for Analyte"
+        "Chooses “Lead” for Substance tested (analyte)"
       ],
       "onScreen": [],
       "highlights": [
         {
-          "at": 45308,
+          "at": 45641,
           "rect": {
             "x": 144,
-            "y": 447.78125,
+            "y": 408.515625,
             "width": 480,
-            "height": 186.09375
+            "height": 230.15625
           }
         }
       ],
@@ -132,8 +132,8 @@
     {
       "scene": 2,
       "say": "The report says the blood was drawn from a vein, so set the sample type to venous.",
-      "start": 48678,
-      "end": 55030,
+      "start": 48314,
+      "end": 54663,
       "actions": [
         "Chooses “Venous” for Sample type"
       ],
@@ -144,8 +144,8 @@
     {
       "scene": 2,
       "say": "Type the value exactly as reported: 4.2 µg/dL.",
-      "start": 55030,
-      "end": 60351,
+      "start": 54663,
+      "end": 59986,
       "actions": [
         "Types “4.2” in Result value"
       ],
@@ -156,11 +156,11 @@
     {
       "scene": 2,
       "say": "Enter the date the blood was collected, which is required, and the date the lab reported it.",
-      "start": 60351,
-      "end": 67287,
+      "start": 59986,
+      "end": 66910,
       "actions": [
-        "Types “2026-10-28” in Collected",
-        "Types “2026-10-30” in Reported"
+        "Types “2026-10-28” in Sample collection date",
+        "Types “2026-10-30” in Laboratory report date"
       ],
       "onScreen": [],
       "highlights": [],
@@ -169,8 +169,8 @@
     {
       "scene": 2,
       "say": "Add the test method, the lab's accession number, and the reason for the test.",
-      "start": 67287,
-      "end": 73444,
+      "start": 66910,
+      "end": 72998,
       "actions": [
         "Chooses “ICP-MS” for Test method",
         "Types “TRN-26-0481” in Accession number",
@@ -183,8 +183,8 @@
     {
       "scene": 2,
       "say": "For the laboratory, type part of its name, then choose it from the list.",
-      "start": 73444,
-      "end": 79618,
+      "start": 72998,
+      "end": 79179,
       "actions": [
         "Types “Chesa” in Laboratory",
         "Selects “Chesapeake Reference Laboratory 100 Research Drive, Columbia, CLIA 21D0712345”"
@@ -196,8 +196,8 @@
     {
       "scene": 3,
       "say": "Check the entries against the paper report, then choose Save result.",
-      "start": 79618,
-      "end": 85006,
+      "start": 79179,
+      "end": 85902,
       "actions": [
         "Selects “Save result”"
       ],
@@ -208,8 +208,8 @@
     {
       "scene": 3,
       "say": "MERIT confirms the result, with the value converted to its standard unit and the population it counts toward.",
-      "start": 85006,
-      "end": 92688,
+      "start": 85902,
+      "end": 93592,
       "actions": [],
       "onScreen": [
         "Result saved · Lead 4.2 ug/dL → canonical 4.2000 ug/dL · population Child"
@@ -217,10 +217,10 @@
       "highlights": [],
       "zooms": [
         {
-          "at": 85025,
+          "at": 85913,
           "rect": {
             "x": 144,
-            "y": 251.203125,
+            "y": 250.59375,
             "width": 1248,
             "height": 86.4375
           },
@@ -231,18 +231,18 @@
     {
       "scene": 3,
       "say": "Below it, MERIT lists each level the result was compared with, and whether a case was opened or updated.",
-      "start": 92688,
-      "end": 100922,
+      "start": 93592,
+      "end": 101820,
       "actions": [],
       "onScreen": [
-        "Thresholds and case outcome · Opened confirmed case PB-2026-000024, owned by Maryland Lead and Metals Program (demo). · Level Type Value This result · Case Case 3.5 ug/dL At or above · Reportable Reportable 0 ug/dL At or above · Child: one venous result at or above the level, by a confirming method. · Tasks created: Investigate 1214 W Lombard Street 2F, Baltimore, MD; Investigate 27 Oak Avenue, To"
+        "Thresholds and case outcome · Opened confirmed case PB-2026-000027, owned by Baltimore City Health Department. · Level Type Value This result · Case Case 3.5 ug/dL At or above · Reportable Reportable 0 ug/dL At or above · Child: one venous result at or above the level, by a confirming method. · Tasks created: Investigate 1214 W Lombard Street 2F, Baltimore, MD; Investigate 27 Oak Avenue, Towson, M"
       ],
       "highlights": [
         {
-          "at": 92702,
+          "at": 93605,
           "rect": {
             "x": 144,
-            "y": 353.640625,
+            "y": 353.03125,
             "width": 1248,
             "height": 342.6875
           }
@@ -253,18 +253,18 @@
     {
       "scene": 3,
       "say": "From here, enter another result from the same report, or go back to his record.",
-      "start": 100923,
-      "end": 107539,
+      "start": 101820,
+      "end": 108434,
       "actions": [],
       "onScreen": [
-        "Open the case Enter another result Back to the person"
+        "View saved result and interpretation Open the case Enter another result Back to the person"
       ],
       "highlights": [
         {
-          "at": 100935,
+          "at": 101831,
           "rect": {
             "x": 144,
-            "y": 712.328125,
+            "y": 711.71875,
             "width": 1248,
             "height": 39.25
           }

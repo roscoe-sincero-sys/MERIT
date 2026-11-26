@@ -16,645 +16,645 @@ an administrator and a
 platform investigator.
 
 4
-00:00:13.188 --> 00:00:16.915
+00:00:12.372 --> 00:00:16.099
 We begin as Sam, a Baltimore
 City security officer.
 
 5
-00:00:16.915 --> 00:00:22.285
+00:00:16.099 --> 00:00:21.469
 All people and events in this video
 are synthetic training examples.
 
 6
-00:00:22.652 --> 00:00:28.353
+00:00:21.836 --> 00:00:27.537
 Security officers review users, sign-ins,
 audit events and usage within their
 
 7
-00:00:28.353 --> 00:00:29.463
+00:00:27.537 --> 00:00:28.647
 granted places.
 
 8
-00:00:29.463 --> 00:00:34.454
+00:00:28.647 --> 00:00:33.638
 This role does not provide patient
 records or account editing.
 
 9
-00:00:34.822 --> 00:00:38.670
+00:00:33.998 --> 00:00:37.846
 Check the active profile and
 working place before reviewing.
 
 10
-00:00:38.670 --> 00:00:43.866
+00:00:37.846 --> 00:00:43.042
 A narrower profile narrows your reports;
 regional and platform administrators can
 
 11
-00:00:43.866 --> 00:00:45.869
+00:00:43.042 --> 00:00:45.045
 cover several data roots.
 
 12
-00:00:46.227 --> 00:00:50.040
+00:00:45.406 --> 00:00:49.219
 Filter listed users by
 name, user name or tenant.
 
 13
-00:00:50.040 --> 00:00:56.422
+00:00:49.219 --> 00:00:55.601
 Review their home agency, master profile,
 MFA enrollment, last sign-in and account
 
 14
-00:00:56.422 --> 00:00:57.422
+00:00:55.601 --> 00:00:56.602
 status.
 
 15
-00:00:57.709 --> 00:01:01.500
+00:00:56.902 --> 00:01:00.693
 Staff can appear because they
 work here or hold access here.
 
 16
-00:01:01.500 --> 00:01:05.691
+00:01:00.693 --> 00:01:04.884
 A home agency alone does not
 describe all their permissions.
 
 17
-00:01:06.060 --> 00:01:09.341
+00:01:05.245 --> 00:01:08.526
 Export users and access
 for an access review.
 
 18
-00:01:09.341 --> 00:01:15.100
+00:01:08.526 --> 00:01:14.285
 The export uses your permitted scope;
 the filter box only filters the on-screen
 
 19
-00:01:15.100 --> 00:01:16.100
+00:01:14.285 --> 00:01:15.285
 list.
 
 20
-00:01:16.229 --> 00:01:20.925
+00:01:15.405 --> 00:01:20.101
 Ask an administrator to correct
 unexpected access or an account problem.
 
 21
-00:01:20.925 --> 00:01:25.500
+00:01:20.101 --> 00:01:24.676
 The security officer reviews
 evidence without changing accounts.
 
 22
-00:01:25.863 --> 00:01:31.184
+00:01:25.037 --> 00:01:30.358
 Open Sign-in activity from Administration
 to investigate suspicious patterns.
 
 23
-00:01:31.184 --> 00:01:36.283
+00:01:30.358 --> 00:01:35.457
 These are leads to check, not proof
 that an account was compromised.
 
 24
-00:01:36.646 --> 00:01:41.090
+00:01:35.815 --> 00:01:40.259
 Choose a window: one hour, one
 day, seven days or thirty days.
 
 25
-00:01:41.090 --> 00:01:44.500
+00:01:40.259 --> 00:01:43.669
 Show refreshes the report for that window.
 
 26
-00:01:44.867 --> 00:01:49.947
+00:01:44.034 --> 00:01:49.114
 One address trying five or more accounts
 or unknown names suggests password
 
 27
-00:01:49.947 --> 00:01:50.947
+00:01:49.114 --> 00:01:50.114
 spraying.
 
 28
-00:01:50.947 --> 00:01:55.098
+00:01:50.114 --> 00:01:54.247
 Compare the target count,
 failures and first and last times.
 
 29
-00:01:55.398 --> 00:01:59.998
+00:01:54.547 --> 00:01:59.147
 One account tried from at least three
 addresses suggests credential stuffing.
 
 30
-00:01:59.998 --> 00:02:04.042
+00:01:59.147 --> 00:02:03.191
 Follow the account link when
 you need its individual history.
 
 31
-00:02:04.406 --> 00:02:09.326
+00:02:03.554 --> 00:02:08.474
 Signed in after repeated failures finds
 a full sign-in preceded by at least three
 
 32
-00:02:09.326 --> 00:02:11.149
+00:02:08.474 --> 00:02:10.297
 failures in the previous hour.
 
 33
-00:02:11.149 --> 00:02:14.768
+00:02:10.297 --> 00:02:13.916
 Compare the success address
 with the failed attempts.
 
 34
-00:02:15.124 --> 00:02:18.867
+00:02:14.274 --> 00:02:18.017
 Failures by address helps
 identify a noisy source.
 
 35
-00:02:18.867 --> 00:02:24.882
+00:02:18.017 --> 00:02:24.032
 Compare affected accounts, unknown
 names, lockouts and rate-limit refusals.
 
 36
-00:02:25.248 --> 00:02:30.481
+00:02:24.397 --> 00:02:29.630
 Failures by account helps distinguish one
 person having trouble from failures spread
 
 37
-00:02:30.481 --> 00:02:33.061
+00:02:29.630 --> 00:02:32.210
 across many accounts and addresses.
 
 38
-00:02:33.420 --> 00:02:37.515
+00:02:32.573 --> 00:02:36.668
 Lockouts and refusals shows
 when access was blocked and why.
 
 39
-00:02:37.515 --> 00:02:43.376
+00:02:36.668 --> 00:02:42.529
 Account-free rate-limit events and unknown
 names require platform investigation.
 
 40
-00:02:43.734 --> 00:02:47.155
+00:02:42.895 --> 00:02:46.316
 None means no matching pattern
 in this period and scope.
 
 41
-00:02:47.155 --> 00:02:52.564
+00:02:46.316 --> 00:02:51.725
 It does not prove there were no attempts
 elsewhere or outside the selected window.
 
 42
-00:02:52.924 --> 00:02:58.004
+00:02:52.091 --> 00:02:57.171
 Export this report downloads every
 report section for the selected window.
 
 43
-00:02:58.004 --> 00:03:02.729
+00:02:57.171 --> 00:03:01.896
 Section names identify the pattern
 represented by each CSV row.
 
 44
-00:03:03.080 --> 00:03:08.634
+00:03:02.248 --> 00:03:07.802
 Open Audit log for the tamper-evident
 history of views, changes and exports.
 
 45
-00:03:08.634 --> 00:03:15.172
+00:03:07.802 --> 00:03:14.340
 It records actions and identifiers, rather
 than copies of free-text record contents.
 
 46
-00:03:15.530 --> 00:03:21.058
+00:03:14.695 --> 00:03:20.223
 Choose Sign-in and account security (all),
 then Search, to see security actions
 
 47
-00:03:21.058 --> 00:03:24.957
+00:03:20.223 --> 00:03:24.122
 together instead of choosing
 one action at a time.
 
 48
-00:03:25.319 --> 00:03:28.482
+00:03:24.487 --> 00:03:27.650
 Clear filters to return
 to the whole ledger.
 
 49
-00:03:28.482 --> 00:03:34.346
+00:03:27.650 --> 00:03:33.514
 Combine User, Action, Record type and
 dates to answer who did what and when.
 
 50
-00:03:34.697 --> 00:03:38.563
+00:03:33.879 --> 00:03:37.745
 For example, find Sam's
 access-review exports.
 
 51
-00:03:38.563 --> 00:03:45.202
+00:03:37.745 --> 00:03:44.384
 Choose Sam under User, Exported under
 Action, and Users and access under Record
 
 52
-00:03:45.202 --> 00:03:46.202
+00:03:44.384 --> 00:03:45.384
 type.
 
 53
-00:03:46.378 --> 00:03:49.664
+00:03:45.571 --> 00:03:48.857
 Set From and To for the
 review period, then Search.
 
 54
-00:03:49.664 --> 00:03:54.058
+00:03:48.857 --> 00:03:53.251
 The count confirms whether your
 combined filters found events.
 
 55
-00:03:54.427 --> 00:03:58.048
+00:03:53.615 --> 00:03:57.236
 For one record, use Record
 id or its all events link.
 
 56
-00:03:58.048 --> 00:04:03.024
+00:03:57.236 --> 00:04:02.212
 A record link opens the record only
 when your permissions allow it.
 
 57
-00:04:03.382 --> 00:04:05.000
+00:04:02.568 --> 00:04:04.186
 Events are newest first.
 
 58
-00:04:05.000 --> 00:04:10.261
+00:04:04.186 --> 00:04:09.447
 Choose twenty-five or one hundred per
 page; use the page links to review older
 
 59
-00:04:10.261 --> 00:04:12.212
+00:04:09.447 --> 00:04:11.398
 events when more exist.
 
 60
-00:04:12.575 --> 00:04:17.509
+00:04:11.750 --> 00:04:16.684
 Download CSV preserves the current
 filters, with at most the newest ten
 
 61
-00:04:17.509 --> 00:04:18.621
+00:04:16.684 --> 00:04:17.796
 thousand events.
 
 62
-00:04:18.621 --> 00:04:22.496
+00:04:17.796 --> 00:04:21.671
 Narrow the dates if you
 need a smaller review set.
 
 63
-00:04:22.850 --> 00:04:28.218
+00:04:22.032 --> 00:04:27.400
 County review includes scoped staff and
 events on records owned there when logged.
 
 64
-00:04:28.218 --> 00:04:32.283
+00:04:27.400 --> 00:04:31.465
 Older events without an owner
 stamp rely on staff scope.
 
 65
-00:04:32.640 --> 00:04:37.059
+00:04:31.830 --> 00:04:36.249
 Open Usage to review screen
 visits and navigation.
 
 66
-00:04:37.059 --> 00:04:42.584
+00:04:36.249 --> 00:04:41.774
 Choose one, seven, thirty or
 ninety days, then Show usage.
 
 67
-00:04:42.940 --> 00:04:47.770
+00:04:42.130 --> 00:04:46.960
 Visits by screen compares visits,
 sessions and timed visits.
 
 68
-00:04:47.770 --> 00:04:54.126
+00:04:46.960 --> 00:04:53.316
 Visible time is optional, capped focused
 time; missing time means unknown.
 
 69
-00:04:54.483 --> 00:04:58.421
+00:04:53.675 --> 00:04:57.613
 Expand Visits by active-profile
 role for role totals.
 
 70
-00:04:58.421 --> 00:05:03.621
+00:04:57.613 --> 00:05:02.813
 One visit can have several roles,
 so adding role counts together would
 
 71
-00:05:03.621 --> 00:05:05.507
+00:05:02.813 --> 00:05:04.699
 double-count visits.
 
 72
-00:05:05.869 --> 00:05:10.615
+00:05:05.066 --> 00:05:09.812
 Paths into Enter a result shows
 up to three preceding screens.
 
 73
-00:05:10.615 --> 00:05:16.219
+00:05:09.812 --> 00:05:15.416
 Back-and-forth paths can be useful
 review, not necessarily mistakes.
 
 74
-00:05:16.573 --> 00:05:21.387
+00:05:15.784 --> 00:05:20.598
 The observed search-to-saved flow
 is a strict four-screen sequence.
 
 75
-00:05:21.387 --> 00:05:26.776
+00:05:20.598 --> 00:05:25.987
 Our seeded example illustrates navigation,
 not actual patient work or staff
 
 76
-00:05:26.776 --> 00:05:28.095
+00:05:25.987 --> 00:05:27.307
 performance.
 
 77
-00:05:28.395 --> 00:05:32.235
+00:05:27.607 --> 00:05:31.447
 Download summary CSV saves
 the report aggregates.
 
 78
-00:05:32.235 --> 00:05:38.192
+00:05:31.447 --> 00:05:37.404
 Recent sessions is a limited list; the
 totals above cover the whole selected
 
 79
-00:05:38.192 --> 00:05:39.197
+00:05:37.404 --> 00:05:38.410
 period.
 
 80
-00:05:39.497 --> 00:05:45.275
+00:05:38.710 --> 00:05:44.488
 Choose View session to inspect the ordered
 screens, active profile and any retained
 
 81
-00:05:45.275 --> 00:05:47.763
+00:05:44.488 --> 00:05:46.976
 sign-in or session-end events.
 
 82
-00:05:48.130 --> 00:05:51.459
+00:05:47.337 --> 00:05:50.666
 Session timestamps are
 UTC with milliseconds.
 
 83
-00:05:51.459 --> 00:05:57.452
+00:05:50.666 --> 00:05:56.659
 Tabs can interleave; expand Visit links
 and follow the predecessor when comparing
 
 84
-00:05:57.452 --> 00:05:58.723
+00:05:56.659 --> 00:05:57.926
 a workflow.
 
 85
-00:05:59.023 --> 00:06:04.582
+00:05:58.226 --> 00:06:03.785
 Download this page CSV exports the
 current page, up to one hundred visits.
 
 86
-00:06:04.582 --> 00:06:08.062
+00:06:03.785 --> 00:06:07.265
 Use session paging for additional visits.
 
 87
-00:06:08.420 --> 00:06:12.841
+00:06:07.627 --> 00:06:12.048
 You can also paste a session reference
 into Open a session reference.
 
 88
-00:06:12.841 --> 00:06:17.470
+00:06:12.048 --> 00:06:16.677
 The reference is a reporting
 identifier, not a sign-in credential.
 
 89
-00:06:18.139 --> 00:06:22.260
+00:06:17.702 --> 00:06:21.823
 No retained events or no visits
 can reflect scope, period,
 
 90
-00:06:22.260 --> 00:06:24.463
+00:06:21.823 --> 00:06:24.026
 missing telemetry or retention.
 
 91
-00:06:24.463 --> 00:06:29.198
+00:06:24.026 --> 00:06:28.761
 Browser closure alone does not
 prove that someone signed out.
 
 92
-00:06:29.561 --> 00:06:32.626
+00:06:29.114 --> 00:06:32.179
 We now switch to the
 Maryland administrator.
 
 93
-00:06:32.626 --> 00:06:38.269
+00:06:32.179 --> 00:06:37.822
 Administrators can open account pages and
 act on problems that a security officer
 
 94
-00:06:38.269 --> 00:06:39.283
+00:06:37.822 --> 00:06:38.845
 reports.
 
 95
-00:06:39.583 --> 00:06:44.048
+00:06:39.145 --> 00:06:43.610
 Filter for Security Training
 Staff 1 and open the account.
 
 96
-00:06:44.048 --> 00:06:50.607
+00:06:43.610 --> 00:06:50.169
 Review the master profile to check places,
 roles, access levels and grant dates.
 
 97
-00:06:50.970 --> 00:06:56.548
+00:06:50.534 --> 00:06:56.112
 Sign-in history shows the latest fifty
 events: time, event, reason, address,
 
 98
-00:06:56.548 --> 00:07:00.838
+00:06:56.112 --> 00:07:00.402
 browser and shortened session
 and attempt references.
 
 99
-00:07:01.195 --> 00:07:06.121
+00:07:00.764 --> 00:07:05.690
 Correlate password and second-factor
 failures, successful sessions,
 
 100
-00:07:06.121 --> 00:07:11.635
+00:07:05.690 --> 00:07:11.204
 expirations, sign-outs and administrator
 actions before deciding what needs
 
 101
-00:07:11.635 --> 00:07:12.837
+00:07:11.204 --> 00:07:12.401
 follow-up.
 
 102
-00:07:13.137 --> 00:07:17.746
+00:07:12.701 --> 00:07:17.310
 Export this account's sign-in history
 downloads up to one thousand events.
 
 103
-00:07:17.746 --> 00:07:22.942
+00:07:17.310 --> 00:07:22.506
 Keep the account history with the activity
 and audit exports for your review.
 
 104
-00:07:23.297 --> 00:07:26.299
+00:07:22.874 --> 00:07:25.876
 We now switch to the
 platform administrator.
 
 105
-00:07:26.299 --> 00:07:31.893
+00:07:25.876 --> 00:07:31.470
 Unknown user names belong to no county,
 so they require the security investigation
 
 106
-00:07:31.893 --> 00:07:33.105
+00:07:31.470 --> 00:07:32.684
 permission.
 
 107
-00:07:33.405 --> 00:07:35.011
+00:07:32.984 --> 00:07:34.590
 Open Unknown user names.
 
 108
-00:07:35.011 --> 00:07:41.097
+00:07:34.590 --> 00:07:40.676
 Hashes group repeated attempts at the same
 name without revealing what someone typed.
 
 109
-00:07:41.461 --> 00:07:46.807
+00:07:41.038 --> 00:07:46.384
 Compare attempts, addresses, first
 and last times, and addresses seen.
 
 110
-00:07:46.807 --> 00:07:52.171
+00:07:46.384 --> 00:07:51.748
 A hash is useful for correlation
 even when a name remains hidden.
 
 111
-00:07:52.534 --> 00:07:56.049
+00:07:52.110 --> 00:07:55.625
 Look up a known suspected name
 without decrypting anything.
 
 112
-00:07:56.049 --> 00:08:01.155
+00:07:55.625 --> 00:08:00.731
 Type the name and choose Look up to see
 its attempts over the last ninety days.
 
 113
-00:08:01.516 --> 00:08:05.575
+00:08:01.094 --> 00:08:05.153
 A lookup with no matches reports
 no attempts in that period.
 
 114
-00:08:05.575 --> 00:08:08.546
+00:08:05.153 --> 00:08:08.124
 Lookups are recorded in the audit log.
 
 115
-00:08:08.903 --> 00:08:11.980
+00:08:08.487 --> 00:08:11.564
 Export the hashed list
 saves hashes and counts.
 
 116
-00:08:11.980 --> 00:08:15.654
+00:08:11.564 --> 00:08:15.238
 The typed names are never
 included in this export.
 
 117
-00:08:16.006 --> 00:08:19.616
+00:08:15.600 --> 00:08:19.210
 Use Show names only when
 the investigation needs it.
 
 118
-00:08:19.616 --> 00:08:25.170
+00:08:19.210 --> 00:08:24.764
 A name may contain a password entered in
 the wrong box; do not copy or share the
 
 119
-00:08:25.170 --> 00:08:26.570
+00:08:24.764 --> 00:08:26.164
 revealed text.
 
 120
-00:08:26.902 --> 00:08:30.552
+00:08:26.498 --> 00:08:30.148
 Enter a current authenticator
 code, then Show names.
 
 121
-00:08:30.552 --> 00:08:36.637
+00:08:30.148 --> 00:08:36.233
 The code stays masked in this video, and
 the reveal is recorded in the audit log.
 
 122
-00:08:36.999 --> 00:08:39.595
+00:08:36.588 --> 00:08:39.184
 Names are revealed for this page only.
 
 123
-00:08:39.595 --> 00:08:44.788
+00:08:39.184 --> 00:08:44.377
 If an encryption key is no longer
 available, a name can instead appear as no
 
 124
-00:08:44.788 --> 00:08:46.281
+00:08:44.377 --> 00:08:45.870
 longer readable.
 
 125
-00:08:46.650 --> 00:08:50.524
+00:08:46.228 --> 00:08:50.102
 Return to Unknown user names
 to restore the hashed view.
 
 126
-00:08:50.524 --> 00:08:53.622
+00:08:50.102 --> 00:08:53.200
 This ends the temporary on-page reveal.
 
 127
-00:08:53.982 --> 00:08:58.030
+00:08:53.561 --> 00:08:57.609
 Finally, open Audit log and
 filter Action to Export.
 
 128
-00:08:58.030 --> 00:09:03.946
+00:08:57.609 --> 00:09:03.525
 Report exports, unknown-name lookups
 and reveals leave an audit trail of the
 
 129
-00:09:03.946 --> 00:09:05.981
+00:09:03.525 --> 00:09:05.560
 investigation itself.
 
 130
-00:09:06.341 --> 00:09:10.949
+00:09:05.928 --> 00:09:10.536
 Use the report that matches the
 question: access for permissions,
 
 131
-00:09:10.949 --> 00:09:16.550
+00:09:10.536 --> 00:09:16.137
 sign-ins for authentication, audit for
 recorded actions, and usage for observed
 
 132
-00:09:16.550 --> 00:09:17.789
+00:09:16.137 --> 00:09:17.374
 navigation.
 
 133
-00:09:18.089 --> 00:09:23.850
+00:09:17.674 --> 00:09:23.435
 Record the scope, time window, affected
 account or session, and your findings.
 
 134
-00:09:23.850 --> 00:09:28.904
+00:09:23.435 --> 00:09:28.489
 Refer account and grant changes
 to an authorized administrator.
 
 135
-00:09:30.072 --> 00:09:33.713
+00:09:29.667 --> 00:09:33.308
 In this video you reviewed
 users and access in scope,
 
 136
-00:09:33.713 --> 00:09:39.072
+00:09:33.308 --> 00:09:38.667
 investigated sign-ins and account history,
 filtered and exported audit events,
 
 137
-00:09:39.072 --> 00:09:44.225
+00:09:38.667 --> 00:09:43.820
 traced usage paths and sessions, and
 investigated unknown names at platform
 
 138
-00:09:44.225 --> 00:09:45.625
+00:09:43.820 --> 00:09:45.220
 level.

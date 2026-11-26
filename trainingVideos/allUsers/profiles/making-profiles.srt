@@ -14,186 +14,186 @@ a state and a county,
 and switch between them.
 
 4
-00:00:12,296 --> 00:00:14,264
+00:00:12,207 --> 00:00:14,175
 Sky works for EPA Region 3.
 
 5
-00:00:14,264 --> 00:00:19,074
+00:00:14,175 --> 00:00:18,985
 The profile box in the header shows
 the profile in use: right now,
 
 6
-00:00:19,074 --> 00:00:20,859
+00:00:18,985 --> 00:00:20,770
 the master profile.
 
 7
-00:00:21,221 --> 00:00:25,041
+00:00:21,123 --> 00:00:24,943
 Work queues shows tasks from
 every state in the region,
 
 8
-00:00:25,041 --> 00:00:27,595
+00:00:24,943 --> 00:00:27,497
 from Delaware to West Virginia.
 
 9
-00:00:27,959 --> 00:00:31,604
+00:00:27,858 --> 00:00:31,503
 Select the profile box
 to open My profiles.
 
 10
-00:00:31,971 --> 00:00:36,009
+00:00:31,921 --> 00:00:35,959
 The master profile is everything
 your administrator gave you:
 
 11
-00:00:36,009 --> 00:00:39,784
+00:00:35,959 --> 00:00:39,734
 Supervisor at EPA Region
 3 and everything under it.
 
 12
-00:00:40,143 --> 00:00:45,414
+00:00:40,095 --> 00:00:45,366
 A profile is a smaller copy of it,
 like a day key cut from a master key.
 
 13
-00:00:45,414 --> 00:00:48,450
+00:00:45,366 --> 00:00:48,402
 It can open fewer doors, never more.
 
 14
-00:00:48,812 --> 00:00:55,301
+00:00:48,759 --> 00:00:55,248
 First, a profile that sees every state
 in the region but cannot change anything,
 
 15
-00:00:55,301 --> 00:00:58,216
+00:00:55,248 --> 00:00:58,163
 for reviews and screen sharing.
 
 16
-00:00:58,573 --> 00:01:02,881
+00:00:58,517 --> 00:01:02,825
 Each grant is a place, a
 role and an access level.
 
 17
-00:01:02,881 --> 00:01:07,588
+00:01:02,825 --> 00:01:07,532
 Choose EPA Region 3, and
 keep everything under it.
 
 18
-00:01:07,954 --> 00:01:10,462
+00:01:07,890 --> 00:01:10,398
 Set the access to read only.
 
 19
-00:01:10,815 --> 00:01:15,732
+00:01:10,752 --> 00:01:15,669
 Beside the form is your master
 profile, the most a profile can have.
 
 20
-00:01:15,732 --> 00:01:19,459
+00:01:15,669 --> 00:01:19,396
 MERIT refuses to save
 one that goes beyond it.
 
 21
-00:01:19,823 --> 00:01:21,808
+00:01:19,753 --> 00:01:21,738
 Save the profile.
 
 22
-00:01:22,612 --> 00:01:26,466
+00:01:22,580 --> 00:01:26,434
 Next, a profile for all of Maryland.
 
 23
-00:01:27,158 --> 00:01:29,485
+00:01:27,199 --> 00:01:29,526
 Choose Maryland as the place.
 
 24
-00:01:29,485 --> 00:01:34,780
+00:01:29,526 --> 00:01:34,821
 Everything under it, including
 Harford County, comes with it.
 
 25
-00:01:35,144 --> 00:01:39,740
+00:01:35,186 --> 00:01:39,782
 Read and write without delete lets you
 work normally while protecting records
 
 26
-00:01:39,740 --> 00:01:41,274
+00:01:39,782 --> 00:01:41,316
 from being deleted.
 
 27
-00:01:41,632 --> 00:01:46,229
+00:01:41,672 --> 00:01:46,269
 Last, a profile for a day
 of Harford County work.
 
 28
-00:01:46,805 --> 00:01:52,215
+00:01:46,957 --> 00:01:52,367
 Choose the Harford County Health
 Department, with full access, and save.
 
 29
-00:01:54,333 --> 00:01:58,481
+00:01:54,463 --> 00:01:58,611
 My profiles now lists the master
 profile and the three new ones,
 
 30
-00:01:58,481 --> 00:02:00,695
+00:01:58,611 --> 00:02:00,825
 each with what it gives you.
 
 31
-00:02:01,055 --> 00:02:04,117
+00:02:01,190 --> 00:02:04,252
 To switch, choose Use beside a profile.
 
 32
-00:02:04,117 --> 00:02:08,364
+00:02:04,252 --> 00:02:08,499
 MERIT changes straight
 away, without signing out.
 
 33
-00:02:08,716 --> 00:02:14,828
+00:02:08,863 --> 00:02:14,975
 The header now shows Maryland only, and
 Work queues lists just the Maryland tasks,
 
 34
-00:02:14,828 --> 00:02:17,017
+00:02:14,975 --> 00:02:17,164
 Harford County included.
 
 35
-00:02:17,373 --> 00:02:23,027
+00:02:17,524 --> 00:02:23,178
 Switch to Harford County only, and
 only the Harford County task is left.
 
 36
-00:02:23,392 --> 00:02:27,406
+00:02:23,851 --> 00:02:28,012
 With the read-only regional
 profile, every state is back.
 
 37
-00:02:27,406 --> 00:02:31,328
-Intake, which adds records,
-is gone from the menu.
+00:02:28,012 --> 00:02:33,157
+Upload lab results, which adds
+records, is gone from Lab imports.
 
 38
-00:02:31,689 --> 00:02:34,689
+00:02:33,519 --> 00:02:36,519
 You can go back to your
 master profile at any time:
 
 39
-00:02:34,689 --> 00:02:37,029
+00:02:36,519 --> 00:02:38,859
 choose Use beside Master profile.
 
 40
-00:02:38,196 --> 00:02:43,428
+00:02:40,031 --> 00:02:45,263
 In this video you saw that the master
 profile holds everything you were given,
 
 41
-00:02:43,428 --> 00:02:48,124
+00:02:45,263 --> 00:02:49,959
 made profiles for every Region 3
 state read only, for all of Maryland,
 
 42
-00:02:48,124 --> 00:02:53,222
+00:02:49,959 --> 00:02:55,057
 and for Harford County, and switched
 between them and saw Work queues follow
 
 43
-00:02:53,222 --> 00:02:54,622
+00:02:55,057 --> 00:02:56,457
 the profile.

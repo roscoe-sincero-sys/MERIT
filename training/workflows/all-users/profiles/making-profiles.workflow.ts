@@ -14,11 +14,22 @@ const REGION = 'Region 3, all states (read only)';
 const MARYLAND = 'Maryland only';
 const HARFORD = 'Harford County only';
 
-const profileBox = (s: Stage) => s.page.locator('header a.merit-profile-switch');
+const profileBox = (s: Stage) => s.page.locator('header summary.merit-profile-switch');
+const accountMenu = (s: Stage) => s.page.locator('header details.merit-account-menu');
+const profileName = (s: Stage) => s.page.locator('header .merit-profile-switch__name');
 const rows = (s: Stage) => s.page.locator('main').getByText(/^\d+ rows?$/);
 
+async function openAccountMenu(s: Stage): Promise<void> {
+  if (await accountMenu(s).getAttribute('open') === null) await s.click(profileBox(s));
+}
+
+async function expectActiveProfile(s: Stage, name: string): Promise<void> {
+  await s.see(s.page.locator(`header summary.merit-profile-switch[aria-label^="Profile: ${name} "]`));
+}
+
 async function openProfiles(s: Stage): Promise<void> {
-  await s.click(profileBox(s));
+  await openAccountMenu(s);
+  await s.click(s.page.locator('header a.merit-header__profile'));
   await s.see(s.page.getByRole('heading', { name: 'My profiles', level: 1 }));
 }
 
@@ -37,7 +48,7 @@ async function use(s: Stage, name: string): Promise<void> {
   const row = s.page.locator('main tbody tr', { hasText: name });
   await s.highlight(row, { describe: false });
   await s.click(row.getByRole('button', { name: `Use ${name}` }));
-  await s.expectText(profileBox(s), name);
+  await expectActiveProfile(s, name);
 }
 
 async function queues(s: Stage, count: number): Promise<void> {
@@ -66,8 +77,9 @@ export default defineWorkflow({
         {
           say: 'Sky works for EPA Region 3. The profile box in the header shows the profile in use: right now, the master profile.',
           run: async s => {
-            await s.expectText(profileBox(s), /Master profile/);
-            await s.highlight(profileBox(s));
+            await openAccountMenu(s);
+            await s.expectText(profileName(s), 'Master profile');
+            await s.highlight(s.page.locator('header .merit-account-menu__panel'));
           },
         },
         {
@@ -187,13 +199,15 @@ export default defineWorkflow({
           hold: 900,
         },
         {
-          say: 'With the read-only regional profile, every state is back. Intake, which adds records, is gone from the menu.',
+          say: 'With the read-only regional profile, every state is back. Upload lab results, which adds records, is gone from Lab imports.',
           run: async s => {
             await openProfiles(s);
             await use(s, REGION);
             await queues(s, 8);
             const menu = s.page.getByRole('navigation');
-            if (await menu.getByText('Intake', { exact: true }).count()) throw new Error('Intake is still in the menu of a read-only profile.');
+            if (await menu.getByRole('link', { name: 'Upload lab results', exact: true }).count()) {
+              throw new Error('Upload lab results is still in the menu of a read-only profile.');
+            }
             await s.highlight(menu.first());
           },
           hold: 900,

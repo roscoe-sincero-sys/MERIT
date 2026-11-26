@@ -1,6 +1,6 @@
 # Cannot sign in: locks, disabled accounts and timeouts
 
-**Role:** All users · **Feature:** Signing in and your account · **Length:** 2:01
+**Role:** All users · **Feature:** Signing in and your account · **Length:** 1:59
 
 Distinguish an account lock from network throttling, and know when to restart or contact your administrator.
 
@@ -10,20 +10,20 @@ Distinguish an account lock from network throttling, and know when to restart or
 
 ## 1. Account locked after failed attempts
 
-**[0:13]** Repeated wrong passwords or verification codes can lock an account. Stop guessing and read the message MERIT gives you.
+**[0:12]** Repeated wrong passwords or verification codes can lock an account. Stop guessing and read the message MERIT gives you.
 - *Action:* Types “loginblocked” in User name
 - *Action:* Types into Password (hidden)
 - *Action:* Selects “Continue”
 
-**[0:22]** The account is locked for fifteen minutes. Wait until it unlocks or ask an administrator to unlock it after verifying your identity.
+**[0:21]** The account is locked for fifteen minutes. Wait until it unlocks or ask an administrator to unlock it after verifying your identity.
 - *On screen:* Too many failed attempts. The account is locked for 15 minutes; an administrator can unlock it.
 
-**[0:31]** Even a correct password does not bypass the lock. A password-reset link also does not bypass it.
+**[0:30]** Even a correct password does not bypass the lock. A password-reset link also does not bypass it.
 - *Action:* Types “loginblocked” in User name
 - *Action:* Types into Password (hidden)
 - *Action:* Selects “Continue”
 
-**[0:39]** After the wait or a confirmed unlock, start again with the correct password and authenticator.
+**[0:38]** After the wait or a confirmed unlock, start again with the correct password and authenticator.
 - *Action:* Types “loginblocked” in User name
 - *Action:* Types into Password (hidden)
 - *Action:* Selects “Continue”
@@ -32,13 +32,13 @@ Distinguish an account lock from network throttling, and know when to restart or
 
 ## 2. Disabled accounts and expired sign-in steps
 
-**[0:50]** A disabled or unknown account gets a general sign-in error. If the details are correct but access still fails, contact your administrator.
+**[0:49]** A disabled or unknown account gets a general sign-in error. If the details are correct but access still fails, contact your administrator.
 - *Action:* Types “loginblocked” in User name
 - *Action:* Types into Password (hidden)
 - *Action:* Selects “Continue”
 - *On screen:* The user name or password is not right.
 
-**[1:00]** A sign-in verification page can expire. If MERIT sends you back to sign in, enter your password again and use a fresh code.
+**[0:59]** A sign-in verification page can expire. If MERIT sends you back to sign in, enter your password again and use a fresh code.
 - *Action:* Types “loginblocked” in User name
 - *Action:* Types into Password (hidden)
 - *Action:* Selects “Continue”
@@ -46,7 +46,7 @@ Distinguish an account lock from network throttling, and know when to restart or
 
 ## 3. Too many attempts from the network
 
-**[1:10]** Too many attempts from one network is a separate limit. This training instance demonstrates that message without affecting other users.
+**[1:09]** Too many attempts from one network is a separate limit. This training instance demonstrates that message without affecting other users.
 - *Action:* Types “loginunknown” in User name
 - *Action:* Types into Password (hidden)
 - *Action:* Selects “Continue”
@@ -54,10 +54,10 @@ Distinguish an account lock from network throttling, and know when to restart or
 - *Action:* Types into Password (hidden)
 - *Action:* Selects “Continue”
 
-**[1:26]** Wait for the number of seconds shown, then use Back to sign in. Repeated retries do not remove either a network limit or an account lock.
+**[1:24]** Wait for the number of seconds shown, then use Back to sign in. Repeated retries do not remove either a network limit or an account lock.
 - *On screen:* Too many attempts · Too many sign-in attempts came from your network in the last minute. Wait 60 seconds, then try again. · Back to sign in · Repeated wrong passwords or codes also lock the account for a while. If you are locked out, ask your administrator.
 
-**[1:36]** If the problem continues, tell support which message you see and your user name. Do not send your password, setup key, recovery codes or verification codes.
+**[1:34]** If the problem continues, tell support which message you see and your user name. Do not send your password, setup key, recovery codes or verification codes.
 - *Action:* Types “loginblocked” in User name
 - *Action:* Types into Password (hidden)
 - *Action:* Selects “Continue”
@@ -66,7 +66,7 @@ Distinguish an account lock from network throttling, and know when to restart or
 
 ## Recap
 
-**[1:48]** In this video you recognized account locks and network throttling, restarted an expired verification step, and identified when to contact an administrator.
+**[1:46]** In this video you recognized account locks and network throttling, restarted an expired verification step, and identified when to contact an administrator.
 
 - Recognized account locks and network throttling
 - Restarted an expired verification step
@@ -74,4 +74,4 @@ Distinguish an account lock from network throttling, and know when to restart or
 
 ---
 
-Generated 2026-11-07 from `training/workflows/all-users/sign-in/login-blocked.workflow.ts` against MERIT be42f6d 2026-11-06.
+Generated 2026-11-26 from `training/workflows/all-users/sign-in/login-blocked.workflow.ts` against MERIT 8410bca 2026-11-24.

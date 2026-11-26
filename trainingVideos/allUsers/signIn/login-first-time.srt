@@ -12,138 +12,138 @@ MERIT to an authenticator app,
 and save your recovery codes.
 
 4
-00:00:11,861 --> 00:00:14,813
+00:00:11,498 --> 00:00:14,450
 Use the MERIT address
 provided by your agency.
 
 5
-00:00:14,813 --> 00:00:18,920
+00:00:14,450 --> 00:00:18,557
 Your administrator supplies your
 user name and initial password;
 
 6
-00:00:18,920 --> 00:00:21,886
+00:00:18,557 --> 00:00:21,523
 there is no public account registration.
 
 7
-00:00:22,247 --> 00:00:25,974
+00:00:21,883 --> 00:00:25,610
 Enter your user name and
 password, then choose Continue.
 
 8
-00:00:25,974 --> 00:00:30,833
+00:00:25,610 --> 00:00:30,469
 Passwords and all security codes
 are hidden in this training video.
 
 9
-00:00:31,188 --> 00:00:33,720
+00:00:30,823 --> 00:00:33,355
 Every account needs a second factor.
 
 10
-00:00:33,720 --> 00:00:38,643
+00:00:33,355 --> 00:00:38,278
 In Microsoft Authenticator, add an
 Other account and scan the QR code.
 
 11
-00:00:38,643 --> 00:00:42,067
+00:00:38,278 --> 00:00:41,702
 Another authenticator
 app can also scan it.
 
 12
-00:00:42,423 --> 00:00:43,423
+00:00:42,063 --> 00:00:43,063
 Cannot scan?
 
 13
-00:00:43,423 --> 00:00:48,430
+00:00:43,063 --> 00:00:48,070
 Choose Other account and enter the
 account name and setup key manually.
 
 14
-00:00:48,430 --> 00:00:50,334
+00:00:48,070 --> 00:00:49,974
 Choose Time based if asked.
 
 15
-00:00:50,334 --> 00:00:52,546
+00:00:49,974 --> 00:00:52,191
 Keep the setup key private.
 
 16
-00:00:52,846 --> 00:00:56,785
+00:00:52,491 --> 00:00:56,430
 Use the current verification code
 from the MERIT entry in your app.
 
 17
-00:00:56,785 --> 00:00:59,772
+00:00:56,430 --> 00:00:59,417
 The setup key is not
 the code to enter here.
 
 18
-00:01:00,127 --> 00:01:05,805
+00:00:59,776 --> 00:01:05,454
 If a code fails, wait for a new one and
 check automatic date and time on your
 
 19
-00:01:05,805 --> 00:01:06,805
+00:01:05,454 --> 00:01:06,454
 phone.
 
 20
-00:01:06,805 --> 00:01:11,728
+00:01:06,454 --> 00:01:11,367
 Keep this page open; starting sign-in
 again creates a new setup key.
 
 21
-00:01:12,028 --> 00:01:15,987
+00:01:11,667 --> 00:01:15,626
 Enter the current code and
 choose Turn on and sign in.
 
 22
-00:01:16,353 --> 00:01:20,298
+00:01:15,989 --> 00:01:19,934
 Each recovery code works once
 if you lose your authenticator.
 
 23
-00:01:20,298 --> 00:01:25,484
+00:01:19,934 --> 00:01:25,120
 Save them securely now; MERIT will not
 show them again after you continue.
 
 24
-00:01:25,839 --> 00:01:28,517
+00:01:25,484 --> 00:01:28,162
 Copy codes and Print codes are available.
 
 25
-00:01:28,517 --> 00:01:33,286
+00:01:28,162 --> 00:01:32,931
 Store your own codes using your
 agency-approved method; do not share them
 
 26
-00:01:33,286 --> 00:01:35,841
+00:01:32,931 --> 00:01:35,486
 or put them in a support message.
 
 27
-00:01:36,197 --> 00:01:41,449
+00:01:35,839 --> 00:01:41,091
 Continue to MERIT stays disabled until
 you confirm that the codes are saved.
 
 28
-00:01:41,449 --> 00:01:45,166
+00:01:41,091 --> 00:01:44,808
 Leaving this page does
 not skip the requirement.
 
 29
-00:01:45,518 --> 00:01:51,351
+00:01:45,170 --> 00:01:51,003
 After saving your codes, select I have
 saved these codes, then Continue to MERIT.
 
 30
-00:01:51,351 --> 00:01:54,847
+00:01:51,003 --> 00:01:54,499
 Your account is ready
 for everyday sign-in.
 
 31
-00:01:56,011 --> 00:02:00,748
+00:01:55,669 --> 00:02:00,406
 In this video you entered an
 agency-provided account, added MERIT to an
 
 32
-00:02:00,748 --> 00:02:05,752
+00:02:00,406 --> 00:02:05,410
 authenticator app, and saved and
 acknowledged one-use recovery codes.

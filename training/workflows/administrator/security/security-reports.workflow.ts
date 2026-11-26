@@ -58,6 +58,8 @@ WHILE @i<=6 BEGIN
 END;
 COMMIT;`);
   forgetSession('securitydemo');
+  forgetSession('admin');
+  forgetSession('platform');
 }
 
 async function switchUser(s: Stage, user: string, path: string): Promise<void> {
@@ -118,7 +120,7 @@ export default defineWorkflow({
         if (await s.page.getByRole('link', { name: 'Add a user', exact: true }).count()) throw new Error('Officer must be read only.');
         if (await s.page.locator('[data-user-row]', { hasText: 'securitystaff6' }).count()) throw new Error('Out-of-county fixture leaked.');
       } },
-      { say: 'Check the active profile and working place before reviewing. A narrower profile narrows your reports; regional and platform administrators can cover several data roots.', run: async s => s.highlight(s.page.locator('header a.merit-profile-switch')) },
+      { say: 'Check the active profile and working place before reviewing. A narrower profile narrows your reports; regional and platform administrators can cover several data roots.', run: async s => s.highlight(s.page.locator('header summary.merit-profile-switch')) },
       { say: 'Filter listed users by name, user name or tenant. Review their home agency, master profile, MFA enrollment, last sign-in and account status.', run: async s => {
         await s.type(s.page.getByLabel('Filter listed users'), 'securitystaff');
         await s.highlight(s.page.locator('#users-table'));
@@ -206,6 +208,7 @@ export default defineWorkflow({
       { say: 'Enter a current authenticator code, then Show names. The code stays masked in this video, and the reveal is recorded in the audit log.', run: async s => {
         await s.scrollTo(s.page.getByLabel('Six-digit code from your authenticator app'));
         // Do not send the code through Stage.type: it would enter the transcript action log.
+        sql("UPDATE auth.appUser SET lastTotpStep = NULL WHERE userName = N'platform';");
         await s.page.getByLabel('Six-digit code from your authenticator app').fill(totp(readFileSync(join(PATHS.auth, 'platform.totp'), 'utf8').trim()));
         await s.click(s.page.getByRole('button', { name: 'Show names', exact: true }));
         await s.see(s.page.getByRole('heading', { name: 'Names (shown for this page only)', exact: true }));

@@ -1,6 +1,6 @@
 # Entering a result from a paper report
 
-**Role:** Intake clerk · **Feature:** People and results · **Length:** 2:04
+**Role:** Intake clerk · **Feature:** People and results · **Length:** 2:05
 
 Search for the person first, enter a faxed lab result on their record, and read what MERIT did with it.
 
@@ -10,13 +10,13 @@ Search for the person first, enter a faxed lab result on their record, and read 
 
 ## 1. Search first
 
-**[0:12]** A faxed lab report has arrived for a child named Leo Rivera. Before entering anything, search for him, so the result joins his existing record.
+**[0:11]** A faxed lab report has arrived for a child named Leo Rivera. Before entering anything, search for him, so the result joins his existing record.
 - *On screen:* People
 - *Action:* Selects “People”
 
 **[0:23]** Type the last name, then the first name. Adding the date of birth from the report narrows the search to one person.
 - *Action:* Types “Rivera Leo 2021-02-02” in Search
-- *Action:* Selects “Search”
+- *Action:* Selects “Search people”
 
 **[0:31]** One match, with the same name and date of birth. Open his record.
 - *On screen:* Rivera, Leo Feb 2, 2021 Male Baltimore City Name
@@ -31,17 +31,17 @@ Search for the person first, enter a faxed lab result on their record, and read 
 ## 3. Enter what the report says
 
 **[0:43]** Choose the analyte first. The specimen and unit choices follow it.
-- *Action:* Chooses “Lead” for Analyte
+- *Action:* Chooses “Lead” for Substance tested (analyte)
 
-**[0:49]** The report says the blood was drawn from a vein, so set the sample type to venous.
+**[0:48]** The report says the blood was drawn from a vein, so set the sample type to venous.
 - *Action:* Chooses “Venous” for Sample type
 
 **[0:55]** Type the value exactly as reported: 4.2 µg/dL.
 - *Action:* Types “4.2” in Result value
 
 **[1:00]** Enter the date the blood was collected, which is required, and the date the lab reported it.
-- *Action:* Types “2026-10-28” in Collected
-- *Action:* Types “2026-10-30” in Reported
+- *Action:* Types “2026-10-28” in Sample collection date
+- *Action:* Types “2026-10-30” in Laboratory report date
 
 **[1:07]** Add the test method, the lab's accession number, and the reason for the test.
 - *Action:* Chooses “ICP-MS” for Test method
@@ -54,17 +54,17 @@ Search for the person first, enter a faxed lab result on their record, and read 
 
 ## 4. Save and read the outcome
 
-**[1:20]** Check the entries against the paper report, then choose Save result.
+**[1:19]** Check the entries against the paper report, then choose Save result.
 - *Action:* Selects “Save result”
 
-**[1:25]** MERIT confirms the result, with the value converted to its standard unit and the population it counts toward.
+**[1:26]** MERIT confirms the result, with the value converted to its standard unit and the population it counts toward.
 - *On screen:* Result saved · Lead 4.2 ug/dL → canonical 4.2000 ug/dL · population Child
 
-**[1:33]** Below it, MERIT lists each level the result was compared with, and whether a case was opened or updated.
-- *On screen:* Thresholds and case outcome · Opened confirmed case PB-2026-000024, owned by Maryland Lead and Metals Program (demo). · Level Type Value This result · Case Case 3.5 ug/dL At or above · Reportable Reportable 0 ug/dL At or above · Child: one venous result at or above the level, by a confirming method. · Tasks created: Investigate 1214 W Lombard Street 2F, Baltimore, MD; Investigate 27 Oak Avenue, To
+**[1:34]** Below it, MERIT lists each level the result was compared with, and whether a case was opened or updated.
+- *On screen:* Thresholds and case outcome · Opened confirmed case PB-2026-000027, owned by Baltimore City Health Department. · Level Type Value This result · Case Case 3.5 ug/dL At or above · Reportable Reportable 0 ug/dL At or above · Child: one venous result at or above the level, by a confirming method. · Tasks created: Investigate 1214 W Lombard Street 2F, Baltimore, MD; Investigate 27 Oak Avenue, Towson, M
 
-**[1:41]** From here, enter another result from the same report, or go back to his record.
-- *On screen:* Open the case Enter another result Back to the person
+**[1:42]** From here, enter another result from the same report, or go back to his record.
+- *On screen:* View saved result and interpretation Open the case Enter another result Back to the person
 
 ## Recap
 
@@ -76,4 +76,4 @@ Search for the person first, enter a faxed lab result on their record, and read 
 
 ---
 
-Generated 2026-11-07 from `training/workflows/intake-clerk/people-and-results/enter-paper-result.workflow.ts` against MERIT be42f6d 2026-11-06.
+Generated 2026-11-26 from `training/workflows/intake-clerk/people-and-results/enter-paper-result.workflow.ts` against MERIT 8410bca 2026-11-24.

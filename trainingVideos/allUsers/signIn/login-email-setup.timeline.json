@@ -6,13 +6,13 @@
   "feature": "signIn",
   "user": "loginemail",
   "source": "training/workflows/all-users/sign-in/login-email-setup.workflow.ts",
-  "fingerprint": "1eeca5b092ef5c17",
-  "appVersion": "be42f6d 2026-11-06",
-  "built": "2026-11-07",
+  "fingerprint": "71bbc82e4e3d0eff",
+  "appVersion": "8410bca 2026-11-24",
+  "built": "2026-11-26",
   "engine": "piper",
   "voice": "en_US-kristin-medium",
   "narrated": true,
-  "duration": 138939,
+  "duration": 140429,
   "introMs": 11863,
   "outroMs": 13393,
   "scenes": [
@@ -24,14 +24,15 @@
     {
       "scene": 0,
       "say": "First sign in with your password and authenticator. Open Sign-in methods from the header.",
-      "start": 12755,
-      "end": 25877,
+      "start": 12383,
+      "end": 26199,
       "actions": [
         "Types “loginemail” in User name",
         "Types into Password (hidden)",
         "Selects “Continue”",
         "Types into Six-digit code from your authenticator app (hidden)",
         "Selects “Verify and sign in”",
+        "Selects “Profile: Master profile — Emery Email, switch profile or jurisdiction”",
         "Selects “Sign-in methods”"
       ],
       "onScreen": [],
@@ -41,18 +42,18 @@
     {
       "scene": 0,
       "say": "Your agency decides whether email codes are allowed. They need an email address on your account and are never available to administrators.",
-      "start": 25877,
-      "end": 35120,
+      "start": 26199,
+      "end": 35430,
       "actions": [],
       "onScreen": [
         "Email codes · OFF · Email codes are less secure than your authenticator app: anyone who can read your email could use them. NIST SP 800-63B-4 does not accept email as an out-of-band authenticator. Your agency allows them as an extra option; your authenticator app stays on either way. · To turn them on, enter a current code from your authenticator app. We will then send a code to l***@merit.example"
       ],
       "highlights": [
         {
-          "at": 26886,
+          "at": 27543,
           "rect": {
             "x": 144,
-            "y": 332.390625,
+            "y": 332.78125,
             "width": 736,
             "height": 410.84375
           }
@@ -63,18 +64,18 @@
     {
       "scene": 0,
       "say": "Read the warning before enabling email codes. Anyone who can read your email could use them. Your authenticator stays required and available.",
-      "start": 35120,
-      "end": 45830,
+      "start": 35430,
+      "end": 46145,
       "actions": [],
       "onScreen": [
         "Email codes are less secure than your authenticator app: anyone who can read your email could use them. NIST SP 800-63B-4 does not accept email as an out-of-band authenticator. Your agency allows them as an extra option; your authenticator app stays on either way."
       ],
       "highlights": [
         {
-          "at": 35131,
+          "at": 35442,
           "rect": {
             "x": 144,
-            "y": 379.890625,
+            "y": 380.28125,
             "width": 736,
             "height": 92.265625
           }
@@ -85,8 +86,8 @@
     {
       "scene": 1,
       "say": "Enter a current authenticator code to start. Confirm that the masked address is yours; ask your administrator to correct it if needed.",
-      "start": 45830,
-      "end": 55398,
+      "start": 46145,
+      "end": 55718,
       "actions": [
         "Types into Six-digit code from your authenticator app (hidden)",
         "Selects “Send a code to l***@merit.example”"
@@ -98,8 +99,8 @@
     {
       "scene": 1,
       "say": "Read the newest email, enter its verification code, and choose Confirm and turn on email codes. This proves access to the address.",
-      "start": 55398,
-      "end": 65338,
+      "start": 55718,
+      "end": 65659,
       "actions": [
         "Types into Six-digit code from the email (hidden)",
         "Selects “Confirm and turn on email codes”"
@@ -111,8 +112,8 @@
     {
       "scene": 1,
       "say": "Under At sign-in, offer first, choose An email code and save your choice. This changes the first option, not the need for a second factor.",
-      "start": 65338,
-      "end": 76777,
+      "start": 65659,
+      "end": 77100,
       "actions": [
         "Selects “An email code”",
         "Selects “Save choice”"
@@ -124,9 +125,10 @@
     {
       "scene": 2,
       "say": "Sign out and enter your password again. Get a code by email is now offered first, while your authenticator remains an alternative.",
-      "start": 76777,
-      "end": 88734,
+      "start": 77100,
+      "end": 89429,
       "actions": [
+        "Selects “Profile: Master profile — Emery Email, switch profile or jurisdiction”",
         "Selects “Sign out”",
         "Types “loginemail” in User name",
         "Types into Password (hidden)",
@@ -137,10 +139,10 @@
       ],
       "highlights": [
         {
-          "at": 87755,
+          "at": 88454,
           "rect": {
             "x": 128,
-            "y": 7.53125,
+            "y": 8.109375,
             "width": 1280,
             "height": 807.734375
           }
@@ -151,8 +153,8 @@
     {
       "scene": 2,
       "say": "Choose Email me a code. Enter the code from the newest email, then Verify and sign in. Codes work once and expire after the time shown.",
-      "start": 88734,
-      "end": 99585,
+      "start": 89429,
+      "end": 100278,
       "actions": [
         "Selects “Email me a code”",
         "Types into Six-digit code from the email (hidden)",
@@ -165,9 +167,10 @@
     {
       "scene": 2,
       "say": "To prefer your authenticator again, open Sign-in methods, choose My authenticator app, and save your choice.",
-      "start": 99585,
-      "end": 108530,
+      "start": 100278,
+      "end": 109230,
       "actions": [
+        "Selects “Profile: Master profile — Emery Email, switch profile or jurisdiction”",
         "Selects “Sign-in methods”",
         "Selects “My authenticator app”",
         "Selects “Save choice”"
@@ -179,10 +182,11 @@
     {
       "scene": 2,
       "say": "Turn off email codes removes that option. Your authenticator still works. Sign in once more to check that the email option is gone.",
-      "start": 108530,
-      "end": 124836,
+      "start": 109230,
+      "end": 126323,
       "actions": [
         "Selects “Turn off email codes”",
+        "Selects “Profile: Master profile — Emery Email, switch profile or jurisdiction”",
         "Selects “Sign out”",
         "Types “loginemail” in User name",
         "Types into Password (hidden)",

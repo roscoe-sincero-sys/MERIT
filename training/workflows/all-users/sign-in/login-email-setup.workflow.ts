@@ -1,5 +1,4 @@
-import { LoginAccount, loginWorkflow, password, verify, sendEmail, signOut, signedIn } from '../../../lib/login.ts';
-import { totp } from '../../../lib/totp.ts';
+import { LoginAccount, loginWorkflow, openSignInMethods, freshTotp, password, verify, sendEmail, signOut, signedIn } from '../../../lib/login.ts';
 
 const a = new LoginAccount('loginemail', 'Emery Email');
 export default loginWorkflow(a, {
@@ -8,7 +7,7 @@ export default loginWorkflow(a, {
   scenes: [
     { title: 'Check whether email codes are available', steps: [
       { say: 'First sign in with your password and authenticator. Open Sign-in methods from the header.',
-        run: async s => { await password(s, a); await verify(s, a); await s.click(s.page.locator('header').getByRole('link', { name: 'Sign-in methods', exact: true })); } },
+        run: async s => { await password(s, a); await verify(s, a); await openSignInMethods(s); } },
       { say: 'Your agency decides whether email codes are allowed. They need an email address on your account and are never available to administrators.',
         run: async s => s.highlight(s.page.locator('section[aria-labelledby="email-heading"]')) },
       { say: 'Read the warning before enabling email codes. Anyone who can read your email could use them. Your authenticator stays required and available.',
@@ -16,7 +15,7 @@ export default loginWorkflow(a, {
     ] },
     { title: 'Confirm your email address', steps: [
       { say: 'Enter a current authenticator code to start. Confirm that the masked address is yours; ask your administrator to correct it if needed.',
-        run: async s => { await s.type(s.page.locator('#AuthenticatorCode'), totp(a.secret));
+        run: async s => { await s.type(s.page.locator('#AuthenticatorCode'), freshTotp(a));
           a.sentAt = Date.now(); await s.click(s.page.getByRole('button', { name: /^Send a code to / }));
           await s.see(s.page.getByRole('heading', { name: 'Confirm your email address', exact: true })); await a.readCode(s.page); } },
       { say: 'Read the newest email, enter its verification code, and choose Confirm and turn on email codes. This proves access to the address.',
@@ -34,7 +33,7 @@ export default loginWorkflow(a, {
         run: async s => { await sendEmail(s, a); await s.type(s.page.locator('#Code'), a.code);
           await s.click(s.page.getByRole('button', { name: 'Verify and sign in', exact: true })); await signedIn(s); } },
       { say: 'To prefer your authenticator again, open Sign-in methods, choose My authenticator app, and save your choice.',
-        run: async s => { await s.click(s.page.locator('header').getByRole('link', { name: 'Sign-in methods', exact: true }));
+        run: async s => { await openSignInMethods(s);
           await s.click(s.page.locator('label[for="prefer-totp"]')); await s.click(s.page.getByRole('button', { name: 'Save choice', exact: true })); } },
       { say: 'Turn off email codes removes that option. Your authenticator still works. Sign in once more to check that the email option is gone.',
         run: async s => { await s.click(s.page.getByRole('button', { name: 'Turn off email codes', exact: true }));

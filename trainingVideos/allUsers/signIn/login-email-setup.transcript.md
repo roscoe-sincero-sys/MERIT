@@ -1,6 +1,6 @@
 # Email codes: enable, choose and turn off
 
-**Role:** All users · **Feature:** Signing in and your account · **Length:** 2:19
+**Role:** All users · **Feature:** Signing in and your account · **Length:** 2:20
 
 Enable optional email verification, choose the method offered first, and keep your authenticator available.
 
@@ -10,12 +10,13 @@ Enable optional email verification, choose the method offered first, and keep yo
 
 ## 1. Check whether email codes are available
 
-**[0:13]** First sign in with your password and authenticator. Open Sign-in methods from the header.
+**[0:12]** First sign in with your password and authenticator. Open Sign-in methods from the header.
 - *Action:* Types “loginemail” in User name
 - *Action:* Types into Password (hidden)
 - *Action:* Selects “Continue”
 - *Action:* Types into Six-digit code from your authenticator app (hidden)
 - *Action:* Selects “Verify and sign in”
+- *Action:* Selects “Profile: Master profile — Emery Email, switch profile or jurisdiction”
 - *Action:* Selects “Sign-in methods”
 
 **[0:26]** Your agency decides whether email codes are allowed. They need an email address on your account and are never available to administrators.
@@ -30,17 +31,18 @@ Enable optional email verification, choose the method offered first, and keep yo
 - *Action:* Types into Six-digit code from your authenticator app (hidden)
 - *Action:* Selects “Send a code to l***@merit.example”
 
-**[0:55]** Read the newest email, enter its verification code, and choose Confirm and turn on email codes. This proves access to the address.
+**[0:56]** Read the newest email, enter its verification code, and choose Confirm and turn on email codes. This proves access to the address.
 - *Action:* Types into Six-digit code from the email (hidden)
 - *Action:* Selects “Confirm and turn on email codes”
 
-**[1:05]** Under At sign-in, offer first, choose An email code and save your choice. This changes the first option, not the need for a second factor.
+**[1:06]** Under At sign-in, offer first, choose An email code and save your choice. This changes the first option, not the need for a second factor.
 - *Action:* Selects “An email code”
 - *Action:* Selects “Save choice”
 
 ## 3. Use either method and turn email off
 
 **[1:17]** Sign out and enter your password again. Get a code by email is now offered first, while your authenticator remains an alternative.
+- *Action:* Selects “Profile: Master profile — Emery Email, switch profile or jurisdiction”
 - *Action:* Selects “Sign out”
 - *Action:* Types “loginemail” in User name
 - *Action:* Types into Password (hidden)
@@ -53,12 +55,14 @@ Enable optional email verification, choose the method offered first, and keep yo
 - *Action:* Selects “Verify and sign in”
 
 **[1:40]** To prefer your authenticator again, open Sign-in methods, choose My authenticator app, and save your choice.
+- *Action:* Selects “Profile: Master profile — Emery Email, switch profile or jurisdiction”
 - *Action:* Selects “Sign-in methods”
 - *Action:* Selects “My authenticator app”
 - *Action:* Selects “Save choice”
 
 **[1:49]** Turn off email codes removes that option. Your authenticator still works. Sign in once more to check that the email option is gone.
 - *Action:* Selects “Turn off email codes”
+- *Action:* Selects “Profile: Master profile — Emery Email, switch profile or jurisdiction”
 - *Action:* Selects “Sign out”
 - *Action:* Types “loginemail” in User name
 - *Action:* Types into Password (hidden)
@@ -68,7 +72,7 @@ Enable optional email verification, choose the method offered first, and keep yo
 
 ## Recap
 
-**[2:05]** In this video you confirmed an email address with both verification steps, changed the sign-in method offered first, and used email verification and turned it off again.
+**[2:06]** In this video you confirmed an email address with both verification steps, changed the sign-in method offered first, and used email verification and turned it off again.
 
 - Confirmed an email address with both verification steps
 - Changed the sign-in method offered first
@@ -76,4 +80,4 @@ Enable optional email verification, choose the method offered first, and keep yo
 
 ---
 
-Generated 2026-11-07 from `training/workflows/all-users/sign-in/login-email-setup.workflow.ts` against MERIT be42f6d 2026-11-06.
+Generated 2026-11-26 from `training/workflows/all-users/sign-in/login-email-setup.workflow.ts` against MERIT 8410bca 2026-11-24.

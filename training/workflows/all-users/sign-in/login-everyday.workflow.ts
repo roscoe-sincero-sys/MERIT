@@ -37,7 +37,7 @@ export default loginWorkflow(a, {
           await s.page.context().clearCookies();
           await s.goto('/account/security'); await s.see(s.page.locator('#UserName')); } },
       { say: 'Use the normal two steps to return. If sign-in succeeds but you lack the access you need, check your profile or ask your administrator.',
-        run: async s => { await password(s, a); await verify(s, a); await s.highlight(s.page.locator('header a.merit-profile-switch')); } },
+        run: async s => { await password(s, a); await verify(s, a); await s.highlight(s.page.locator('header summary.merit-profile-switch')); } },
     ] },
   ],
   recap: ['Corrected password and verification mistakes', 'Returned to the requested page with two-factor sign-in', 'Signed out and returned after a session ended'],

@@ -16,7 +16,7 @@ All examples use synthetic training data. Duration: approximately 9 minutes 46 s
 | 3:02 | Trace views, changes and exports in the audit log |
 | 4:32 | Understand screen usage and reconstruct a session |
 | 6:29 | Administrator: investigate one account |
-| 7:22 | Platform investigator: unknown user names |
+| 7:23 | Platform investigator: unknown user names |
 | 8:53 | Follow up and preserve the review trail |
 
 The walkthrough covers every security report and report export, including matching and nonmatching name lookups,

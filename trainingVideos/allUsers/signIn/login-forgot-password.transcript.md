@@ -1,6 +1,6 @@
 # Forgotten password: reset and sign in
 
-**Role:** All users · **Feature:** Signing in and your account · **Length:** 2:14
+**Role:** All users · **Feature:** Signing in and your account · **Length:** 2:13
 
 Request a reset link, verify your identity, choose a new password, and sign in again.
 
@@ -33,13 +33,13 @@ Request a reset link, verify your identity, choose a new password, and sign in a
 - *Action:* Types into New password again (hidden)
 - *Action:* Selects “Reset password”
 
-**[1:16]** Choose a long passphrase that meets the minimum shown. Enter the same new password twice. MERIT also rejects known breached passwords.
+**[1:15]** Choose a long passphrase that meets the minimum shown. Enter the same new password twice. MERIT also rejects known breached passwords.
 - *Action:* Types into Code from your authenticator app, or a recovery code (hidden)
 - *Action:* Types into New password (hidden)
 - *Action:* Types into New password again (hidden)
 - *Action:* Selects “Reset password”
 
-**[1:28]** Correct the fields, enter a current code, and choose Reset password. MERIT confirms the reset and signs out other sessions on this account.
+**[1:27]** Correct the fields, enter a current code, and choose Reset password. MERIT confirms the reset and signs out other sessions on this account.
 - *Action:* Types into Code from your authenticator app, or a recovery code (hidden)
 - *Action:* Types into New password (hidden)
 - *Action:* Types into New password again (hidden)
@@ -68,4 +68,4 @@ Request a reset link, verify your identity, choose a new password, and sign in a
 
 ---
 
-Generated 2026-11-07 from `training/workflows/all-users/sign-in/login-forgot-password.workflow.ts` against MERIT be42f6d 2026-11-06.
+Generated 2026-11-26 from `training/workflows/all-users/sign-in/login-forgot-password.workflow.ts` against MERIT 8410bca 2026-11-24.

@@ -39,16 +39,17 @@ Use your password and authenticator, correct common mistakes, switch users, and 
 - *Action:* Selects “Verify and sign in”
 - *On screen:* That code did not work. Enter the current code from your authenticator app, or choose Can't access your authenticator? for help.
 
-**[1:12]** Enter the current code and choose Verify and sign in. MERIT returns you to the page you requested, when your access permits it.
+**[1:11]** Enter the current code and choose Verify and sign in. MERIT returns you to the page you requested, when your access permits it.
 - *Action:* Types into Six-digit code from your authenticator app (hidden)
 - *Action:* Selects “Verify and sign in”
 
 ## 3. End your session and return safely
 
 **[1:21]** Check your name and active profile in the header. The profile determines which records and tools are available after sign-in.
-- *On screen:* MERIT · Metals Exposure Registry and Investigation Tracking · Home · Work queues · People · Intake · Surveillance · Registry & reports · Administration · Search people, cases and accession numbers · Search · Robin Return · MERIT Sign-in Training (demo) · Profile · Master profile · Switch ▾ · : switch profile or jurisdiction · User guide · (opens in a new tab) · Sign-in methods · Sign out
+- *On screen:* MERIT · Metals Exposure Registry and Investigation Tracking · Home · Work queues · Contact corrections · People · Lab imports · Case management · Lab results & reports · Administration · Search people, cases and accession numbers · Search · Ctrl+K · RR · Robin Return · MERIT Sign-in Training (demo) · ▾
 
-**[1:30]** Choose Sign out when you finish, especially on a shared computer. MERIT returns to the sign-in page and ends this session.
+**[1:29]** Choose Sign out when you finish, especially on a shared computer. MERIT returns to the sign-in page and ends this session.
+- *Action:* Selects “Profile: Master profile — Robin Return, switch profile or jurisdiction”
 - *Action:* Selects “Sign out”
 - *On screen:* 
 
@@ -65,11 +66,11 @@ Use your password and authenticator, correct common mistakes, switch users, and 
 - *Action:* Selects “Continue”
 - *Action:* Types into Six-digit code from your authenticator app (hidden)
 - *Action:* Selects “Verify and sign in”
-- *On screen:* Profile · Master profile · Switch ▾ · : switch profile or jurisdiction
+- *On screen:* RR · Robin Return · MERIT Sign-in Training (demo) · ▾
 
 ## Recap
 
-**[2:03]** In this video you corrected password and verification mistakes, returned to the requested page with two-factor sign-in, and signed out and returned after a session ended.
+**[2:02]** In this video you corrected password and verification mistakes, returned to the requested page with two-factor sign-in, and signed out and returned after a session ended.
 
 - Corrected password and verification mistakes
 - Returned to the requested page with two-factor sign-in
@@ -77,4 +78,4 @@ Use your password and authenticator, correct common mistakes, switch users, and 
 
 ---
 
-Generated 2026-11-07 from `training/workflows/all-users/sign-in/login-everyday.workflow.ts` against MERIT be42f6d 2026-11-06.
+Generated 2026-11-26 from `training/workflows/all-users/sign-in/login-everyday.workflow.ts` against MERIT 8410bca 2026-11-24.

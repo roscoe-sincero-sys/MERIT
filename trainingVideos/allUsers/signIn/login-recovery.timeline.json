@@ -6,13 +6,13 @@
   "feature": "signIn",
   "user": "loginrecovery",
   "source": "training/workflows/all-users/sign-in/login-recovery.workflow.ts",
-  "fingerprint": "136b8a1f2bb229c1",
-  "appVersion": "be42f6d 2026-11-06",
-  "built": "2026-11-07",
+  "fingerprint": "ee67019c75addb8a",
+  "appVersion": "8410bca 2026-11-24",
+  "built": "2026-11-26",
   "engine": "piper",
   "voice": "en_US-kristin-medium",
   "narrated": true,
-  "duration": 131885,
+  "duration": 131676,
   "introMs": 12200,
   "outroMs": 11454,
   "scenes": [
@@ -23,8 +23,8 @@
     {
       "scene": 0,
       "say": "If you lose the MERIT entry in your authenticator, start with your user name and password as usual.",
-      "start": 13099,
-      "end": 21426,
+      "start": 12714,
+      "end": 20920,
       "actions": [
         "Types “loginrecovery” in User name",
         "Types into Password (hidden)",
@@ -37,8 +37,8 @@
     {
       "scene": 0,
       "say": "Choose Can't access your authenticator? to see recovery options. An enabled email-code option may also be available on the previous screen.",
-      "start": 21426,
-      "end": 31562,
+      "start": 20920,
+      "end": 31053,
       "actions": [
         "Selects “Can't access your authenticator?”"
       ],
@@ -49,18 +49,18 @@
     {
       "scene": 0,
       "say": "Enter an unused recovery code saved during setup. It has ten characters; the hyphen is optional. Never share a recovery code.",
-      "start": 31562,
-      "end": 42308,
+      "start": 31054,
+      "end": 41792,
       "actions": [],
       "onScreen": [
         "Fields marked with an asterisk (*) are required. · Recovery code * · Enter an unused ten-character recovery code. You can include or omit its hyphen. · Use recovery code and sign in"
       ],
       "highlights": [
         {
-          "at": 31586,
+          "at": 31077,
           "rect": {
             "x": 561,
-            "y": 296.84375,
+            "y": 326.421875,
             "width": 414,
             "height": 223.375
           }
@@ -71,8 +71,8 @@
     {
       "scene": 0,
       "say": "Choose Use recovery code and sign in. A successful recovery code signs you in once; it does not repair or replace your authenticator.",
-      "start": 42308,
-      "end": 52546,
+      "start": 41792,
+      "end": 52037,
       "actions": [
         "Types into Recovery code (hidden)",
         "Selects “Use recovery code and sign in”"
@@ -84,9 +84,10 @@
     {
       "scene": 0,
       "say": "A used code cannot work a second time. If it is rejected, use another unused code or ask for an MFA reset.",
-      "start": 52546,
-      "end": 68620,
+      "start": 52037,
+      "end": 68397,
       "actions": [
+        "Selects “Profile: Master profile — River Recovery, switch profile or jurisdiction”",
         "Selects “Sign out”",
         "Types “loginrecovery” in User name",
         "Types into Password (hidden)",
@@ -102,18 +103,18 @@
     {
       "scene": 1,
       "say": "Contact your agency's MERIT administrator or help desk through your usual support channel. Give your user name and explain what you lost.",
-      "start": 68620,
-      "end": 78015,
+      "start": 68397,
+      "end": 77799,
       "actions": [],
       "onScreen": [
         "No recovery codes available? · Contact your agency's MERIT administrator or help desk through your usual agency support channel. Give them your MERIT user name and explain that the authenticator entry is missing. · Ask them to verify your identity and reset MFA for your account. If you are an administrator, ask another administrator to help. Platform administrators should contact another platform "
       ],
       "highlights": [
         {
-          "at": 69344,
+          "at": 69403,
           "rect": {
             "x": 561,
-            "y": 196.375,
+            "y": 195.953125,
             "width": 414,
             "height": 451.53125
           }
@@ -124,8 +125,8 @@
     {
       "scene": 1,
       "say": "Ask them to verify your identity and reset MFA. Administrators need another administrator; platform administrators need another platform administrator.",
-      "start": 78015,
-      "end": 88570,
+      "start": 77799,
+      "end": 88356,
       "actions": [],
       "onScreen": [],
       "highlights": [],
@@ -134,18 +135,18 @@
     {
       "scene": 1,
       "say": "An MFA reset ends active sessions and invalidates old authenticator and recovery codes. Wait for your administrator to confirm it before restarting.",
-      "start": 88570,
-      "end": 99206,
+      "start": 88356,
+      "end": 98992,
       "actions": [],
       "onScreen": [
         "Sign in again after an MFA reset"
       ],
       "highlights": [
         {
-          "at": 88883,
+          "at": 88704,
           "rect": {
             "x": 561,
-            "y": 608.65625,
+            "y": 608.234375,
             "width": 271.796875,
             "height": 39.25
           }
@@ -156,8 +157,8 @@
     {
       "scene": 1,
       "say": "After the confirmed reset, choose Sign in again after an MFA reset and enter your password. MERIT asks you to set up a new authenticator entry.",
-      "start": 99206,
-      "end": 109643,
+      "start": 98992,
+      "end": 109420,
       "actions": [
         "Selects “Sign in again after an MFA reset”",
         "Types “loginrecovery” in User name",
@@ -171,8 +172,8 @@
     {
       "scene": 1,
       "say": "Add the new MERIT entry to your app, verify its current code, and save the new recovery codes. Use the new entry for future sign-ins.",
-      "start": 109643,
-      "end": 119725,
+      "start": 109420,
+      "end": 119510,
       "actions": [
         "Types into Code from the app (hidden)",
         "Selects “Turn on and sign in”",

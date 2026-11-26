@@ -34,8 +34,10 @@ export async function ensureSession(browser: Browser, user: string): Promise<str
 
   const secret = existsSync(secretFile) ? readFileSync(secretFile, 'utf8').trim() : null;
   if (!secret) {
-    sql(`UPDATE auth.appUser SET mfaEnabled = 0, mfaSecretProtected = NULL, failedSignInCount = 0, lockoutEndUtc = NULL
+    sql(`UPDATE auth.appUser SET mfaEnabled = 0, mfaSecretProtected = NULL, failedSignInCount = 0, lockoutEndUtc = NULL, lastTotpStep = NULL
           WHERE userName = ${lit(user)};`);
+  } else {
+    sql(`UPDATE auth.appUser SET lastTotpStep = NULL WHERE userName = ${lit(user)};`);
   }
 
   const context = await browser.newContext({ baseURL: BASE_URL, ignoreHTTPSErrors: true });

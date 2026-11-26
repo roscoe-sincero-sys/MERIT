@@ -1,4 +1,4 @@
-import { LoginAccount, loginWorkflow, password, verify, NEW_PASSWORD } from '../../../lib/login.ts';
+import { LoginAccount, loginWorkflow, openSignInMethods, password, verify, NEW_PASSWORD } from '../../../lib/login.ts';
 import { sql } from '../../../lib/sql.ts';
 
 const a = new LoginAccount('loginadmin', 'Avery Administrator', true);
@@ -11,7 +11,7 @@ export default loginWorkflow(a, {
       { say: 'Use your agency\'s identity-verification procedure before changing sign-in security. Confirm the person through a trusted channel, not a message containing a code.',
         run: async s => { await password(s, a); await verify(s, a); } },
       { say: 'Administrator accounts use an authenticator or recovery code. Email verification is never available to administrators.',
-        run: async s => { await s.click(s.page.locator('header').getByRole('link', { name: 'Sign-in methods', exact: true }));
+        run: async s => { await openSignInMethods(s);
           await s.expectText(s.page.locator('section[aria-labelledby="email-heading"]'), /never available to administrators/);
           await s.highlight(s.page.locator('section[aria-labelledby="email-heading"]')); } },
       { say: 'Open Administration, then Users. Filter by the person\'s name or user name and open the correct account. You can manage only accounts within your authority.',
@@ -25,8 +25,10 @@ export default loginWorkflow(a, {
         run: async s => { await s.click(s.page.getByRole('button', { name: 'Unlock account', exact: true }));
           await s.expectText(s.page.locator('main'), /Account unlocked/); } },
       { say: 'For a lost authenticator, choose Reset MFA after verifying the person. The confirmation explains that active sessions and old codes will stop working.',
-        run: async s => { s.page.once('dialog', dialog => dialog.accept());
+        run: async s => {
           await s.click(s.page.getByRole('button', { name: 'Reset MFA after verifying the person', exact: true }));
+          await s.see(s.page.locator('#confirmation-dialog[open]'));
+          await s.click(s.page.locator('#confirmation-dialog [data-confirm-accept]'));
           await s.expectText(s.page.locator('main'), /MFA reset/); } },
       { say: 'Tell the person to sign in again with their password, add the new MERIT authenticator entry, and save the new recovery codes.',
         run: async s => s.highlight(s.page.getByText('Not yet enrolled; the person enrolls at next sign-in.', { exact: true })) },

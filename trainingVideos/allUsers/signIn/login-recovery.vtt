@@ -15,138 +15,138 @@ one-use codes, and enroll again after an
 administrator resets MFA.
 
 4
-00:00:13.399 --> 00:00:18.743
+00:00:13.014 --> 00:00:18.358
 If you lose the MERIT entry in your
 authenticator, start with your user name
 
 5
-00:00:18.743 --> 00:00:20.690
+00:00:18.358 --> 00:00:20.305
 and password as usual.
 
 6
-00:00:21.726 --> 00:00:24.395
+00:00:21.220 --> 00:00:23.889
 Choose Can't access your authenticator?
 
 7
-00:00:24.395 --> 00:00:26.038
+00:00:23.889 --> 00:00:25.532
 to see recovery options.
 
 8
-00:00:26.038 --> 00:00:31.502
+00:00:25.532 --> 00:00:30.996
 An enabled email-code option may also
 be available on the previous screen.
 
 9
-00:00:31.862 --> 00:00:35.838
+00:00:31.354 --> 00:00:35.330
 Enter an unused recovery
 code saved during setup.
 
 10
-00:00:35.838 --> 00:00:39.570
+00:00:35.330 --> 00:00:39.062
 It has ten characters;
 the hyphen is optional.
 
 11
-00:00:39.570 --> 00:00:42.242
+00:00:39.062 --> 00:00:41.734
 Never share a recovery code.
 
 12
-00:00:42.608 --> 00:00:45.287
+00:00:42.092 --> 00:00:44.771
 Choose Use recovery code and sign in.
 
 13
-00:00:45.287 --> 00:00:51.080
+00:00:44.771 --> 00:00:50.564
 A successful recovery code signs you in
 once; it does not repair or replace your
 
 14
-00:00:51.080 --> 00:00:52.494
+00:00:50.564 --> 00:00:51.978
 authenticator.
 
 15
-00:00:52.846 --> 00:00:55.729
+00:00:52.337 --> 00:00:55.220
 A used code cannot work a second time.
 
 16
-00:00:55.729 --> 00:01:01.211
+00:00:55.220 --> 00:01:00.702
 If it is rejected, use another
 unused code or ask for an MFA reset.
 
 17
-00:01:08.920 --> 00:01:14.103
+00:01:08.697 --> 00:01:13.880
 Contact your agency's MERIT administrator
 or help desk through your usual support
 
 18
-00:01:14.103 --> 00:01:15.103
+00:01:13.880 --> 00:01:14.880
 channel.
 
 19
-00:01:15.103 --> 00:01:18.015
+00:01:14.880 --> 00:01:17.799
 Give your user name and
 explain what you lost.
 
 20
-00:01:18.315 --> 00:01:21.406
+00:01:18.099 --> 00:01:21.190
 Ask them to verify your
 identity and reset MFA.
 
 21
-00:01:21.406 --> 00:01:26.602
+00:01:21.190 --> 00:01:26.386
 Administrators need another administrator;
 platform administrators need another
 
 22
-00:01:26.602 --> 00:01:28.515
+00:01:26.386 --> 00:01:28.299
 platform administrator.
 
 23
-00:01:28.870 --> 00:01:34.284
+00:01:28.656 --> 00:01:34.070
 An MFA reset ends active sessions and
 invalidates old authenticator and recovery
 
 24
-00:01:34.284 --> 00:01:35.284
+00:01:34.070 --> 00:01:35.070
 codes.
 
 25
-00:01:35.284 --> 00:01:39.206
+00:01:35.070 --> 00:01:38.992
 Wait for your administrator to
 confirm it before restarting.
 
 26
-00:01:39.506 --> 00:01:45.062
+00:01:39.292 --> 00:01:44.848
 After the confirmed reset, choose Sign in
 again after an MFA reset and enter your
 
 27
-00:01:45.062 --> 00:01:46.062
+00:01:44.848 --> 00:01:45.848
 password.
 
 28
-00:01:46.062 --> 00:01:49.643
+00:01:45.848 --> 00:01:49.420
 MERIT asks you to set up
 a new authenticator entry.
 
 29
-00:01:49.943 --> 00:01:54.284
+00:01:49.720 --> 00:01:54.061
 Add the new MERIT entry to your
 app, verify its current code,
 
 30
-00:01:54.284 --> 00:01:56.562
+00:01:54.061 --> 00:01:56.339
 and save the new recovery codes.
 
 31
-00:01:56.562 --> 00:01:59.667
+00:01:56.339 --> 00:01:59.444
 Use the new entry for future sign-ins.
 
 32
-00:02:00.831 --> 00:02:06.395
+00:02:00.622 --> 00:02:06.186
 In this video you used a one-use recovery
 code, identified the support path when no
 
 33
-00:02:06.395 --> 00:02:10.885
+00:02:06.186 --> 00:02:10.676
 codes remain, and enrolled again
 after a confirmed MFA reset.

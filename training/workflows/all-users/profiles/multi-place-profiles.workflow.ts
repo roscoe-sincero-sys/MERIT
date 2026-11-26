@@ -21,11 +21,21 @@ const TWO_PLACES = 'Maryland state and Delaware';
 const THREE_STATES = 'West Virginia, Virginia and Pennsylvania';
 const LAYERED = 'Region read, Maryland write, Harford full';
 
-const profileBox = (s: Stage) => s.page.locator('header a.merit-profile-switch');
+const profileBox = (s: Stage) => s.page.locator('header summary.merit-profile-switch');
+const accountMenu = (s: Stage) => s.page.locator('header details.merit-account-menu');
 const rows = (s: Stage) => s.page.locator('main').getByText(/^\d+ rows?$/);
 
+async function openAccountMenu(s: Stage): Promise<void> {
+  if (await accountMenu(s).getAttribute('open') === null) await s.click(profileBox(s));
+}
+
+async function expectActiveProfile(s: Stage, name: string): Promise<void> {
+  await s.see(s.page.locator(`header summary.merit-profile-switch[aria-label^="Profile: ${name} "]`));
+}
+
 async function openProfiles(s: Stage): Promise<void> {
-  await s.click(profileBox(s));
+  await openAccountMenu(s);
+  await s.click(s.page.locator('header a.merit-header__profile'));
   await s.see(s.page.getByRole('heading', { name: 'My profiles', level: 1 }));
 }
 
@@ -45,7 +55,7 @@ async function use(s: Stage, name: string): Promise<void> {
   const row = s.page.locator('main tbody tr', { hasText: name });
   await s.highlight(row, { describe: false });
   await s.click(row.getByRole('button', { name: `Use ${name}` }));
-  await s.expectText(profileBox(s), name);
+  await expectActiveProfile(s, name);
 }
 
 async function queues(s: Stage, count: number): Promise<void> {
@@ -74,7 +84,7 @@ export default defineWorkflow({
         {
           say: 'A profile can hold more than one place. Select the profile box in the header to open My profiles.',
           run: async s => {
-            await s.expectText(profileBox(s), /Master profile/);
+            await expectActiveProfile(s, 'Master profile');
             await openProfiles(s);
           },
         },
@@ -239,12 +249,14 @@ export default defineWorkflow({
           hold: 900,
         },
         {
-          say: 'Switch to the layered profile. All eight regional tasks appear, and Intake stays in the menu because Maryland and Harford allow writing.',
+          say: 'Switch to the layered profile. All eight regional tasks appear, and Upload lab results stays under Lab imports because Maryland and Harford allow writing.',
           run: async s => {
             await openProfiles(s);
             await use(s, LAYERED);
             await queues(s, 8);
-            await s.see(s.page.locator('#merit-nav summary', { hasText: 'Intake' }));
+            const labImports = s.page.locator('#merit-nav details', { has: s.page.locator('summary', { hasText: 'Lab imports' }) });
+            await s.click(labImports.locator('summary'));
+            await s.see(labImports.getByRole('link', { name: 'Upload lab results', exact: true }));
             await s.highlight(s.page.locator('#merit-nav'));
           },
           hold: 900,
@@ -255,8 +267,8 @@ export default defineWorkflow({
             await openProfiles(s);
             await s.select(s.page.locator('#actingTenantId'), 'Harford County Health Department');
             await s.click(s.page.getByRole('button', { name: 'Work here' }));
-            await s.expectText(s.page.locator('.merit-header__who'), /Harford County Health Department/);
-            await s.highlight(s.page.locator('.merit-header__who'));
+            await s.expectText(s.page.locator('header .merit-account-menu__tenant'), /Harford County Health Department/);
+            await s.highlight(profileBox(s));
           },
           hold: 800,
         },
