@@ -1,0 +1,549 @@
+{
+  "id": "daily-intake-workflow",
+  "title": "A typical day in MERIT: sign in, profiles, HL7 intake and manual entry",
+  "summary": "Reset a forgotten password, switch between read-only and full profiles, import an HL7 file, match records, enter results and sign out.",
+  "role": "intakeClerk",
+  "feature": "intake",
+  "user": "logindaily",
+  "source": "training/workflows/intake-clerk/intake/daily-intake-workflow.workflow.ts",
+  "fingerprint": "8b0fbe1f35821a0a",
+  "appVersion": "8410bca 2026-11-24",
+  "built": "2026-11-26",
+  "engine": "piper",
+  "voice": "en_US-kristin-medium",
+  "narrated": true,
+  "duration": 307847,
+  "introMs": 17958,
+  "outroMs": 25154,
+  "scenes": [
+    "Reset a forgotten password and sign in",
+    "Review data with a read-only profile",
+    "Switch to a full CRUD profile",
+    "Import an HL7 file",
+    "Match imported records to existing patients",
+    "Manually enter results for existing patients",
+    "Add a new patient and enter new records",
+    "Sign out"
+  ],
+  "steps": [
+    {
+      "scene": 0,
+      "say": "Jordan starts the day on the sign-in screen, enters a user name and password, and realizes the password does not work.",
+      "start": 18532,
+      "end": 27331,
+      "actions": [
+        "Types “logindaily” in User name",
+        "Types into Password (hidden)",
+        "Selects “Continue”"
+      ],
+      "onScreen": [
+        "The user name or password is not right."
+      ],
+      "highlights": [
+        {
+          "at": 25143,
+          "rect": {
+            "x": 361,
+            "y": 254.296875,
+            "width": 382,
+            "height": 41.421875
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 0,
+      "say": "Choose Forgot your password? to request a private reset link by email.",
+      "start": 27332,
+      "end": 33670,
+      "actions": [
+        "Selects “Forgot your password?”",
+        "Types “logindaily” in User name",
+        "Selects “Email me a reset link”"
+      ],
+      "onScreen": [
+        "Check your email · If MERIT has an account with that user name and an email address, we've sent it a link to reset the password. The link works once, for 20 minutes. · Email can take a minute or two to arrive. Check your junk or spam folder too. Only the newest link works. · No email? You may have mistyped the user name, or the account may have no email address. Contact your MERIT administrator. ·"
+      ],
+      "highlights": [
+        {
+          "at": 32679,
+          "rect": {
+            "x": 128,
+            "y": 93.109375,
+            "width": 1280,
+            "height": 602.21875
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 0,
+      "say": "Open the reset link from email, verify with an authenticator code, and set a new passphrase.",
+      "start": 33670,
+      "end": 47593,
+      "actions": [
+        "Types into Code from your authenticator app, or a recovery code (hidden)",
+        "Types into New password (hidden)",
+        "Types into New password again (hidden)",
+        "Selects “Reset password”"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 0,
+      "say": "Return to sign in with the new password and complete the authenticator step.",
+      "start": 47593,
+      "end": 60274,
+      "actions": [
+        "Selects “Sign in”",
+        "Types “logindaily” in User name",
+        "Types into Password (hidden)",
+        "Selects “Continue”",
+        "Types into Six-digit code from your authenticator app (hidden)",
+        "Selects “Verify and sign in”"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 1,
+      "say": "Before making changes, open My profiles from the account menu and pick a read-only profile to review data safely.",
+      "start": 60274,
+      "end": 68259,
+      "actions": [
+        "Selects “Profile: Master profile — Jordan Daily, switch profile or jurisdiction”",
+        "Selects “Switch profile or jurisdiction”",
+        "Selects “Use Maryland review (read only)”"
+      ],
+      "onScreen": [],
+      "highlights": [
+        {
+          "at": 64641,
+          "rect": {
+            "x": 144,
+            "y": 348.15625,
+            "width": 1248,
+            "height": 81.671875
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 1,
+      "say": "With the read-only profile active, review Work queues and existing records. Write tools like Upload lab results stay hidden.",
+      "start": 68260,
+      "end": 77828,
+      "actions": [
+        "Selects “Work queues”"
+      ],
+      "onScreen": [
+        "Task · ⇅ · Quick view Queue · ⇅ · Person Case Due · ▲ · Assigned · Notify the prenatal care provider · Case PB-2026-000003 is for a pregnant person. · Quick view Prenatal provider notifications Okafor, Grace PB-2026-000003 Nov 11, 2026 · Overdue · Newborn testing follow-up · Arrange testing of the newborn after delivery (case PB-2026-000003). · Quick view Newborn testing Okafor, Grace PB-2026-0000"
+      ],
+      "highlights": [
+        {
+          "at": 71346,
+          "rect": {
+            "x": 456,
+            "y": 53.375,
+            "width": 936,
+            "height": 670.09375
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 2,
+      "say": "Ready for daily intake work, open My profiles again and switch to the full access profile.",
+      "start": 77828,
+      "end": 84633,
+      "actions": [
+        "Selects “Profile: Maryland review (read only) — Jordan Daily, switch profile or jurisdict”",
+        "Selects “Switch profile or jurisdiction”",
+        "Selects “Use Maryland daily intake (full CRUD)”"
+      ],
+      "onScreen": [],
+      "highlights": [
+        {
+          "at": 81890,
+          "rect": {
+            "x": 144,
+            "y": 659.484375,
+            "width": 1248,
+            "height": 81.671875
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 2,
+      "say": "The header confirms the full profile is active, and Lab imports now offers Upload lab results and Match review.",
+      "start": 84633,
+      "end": 92847,
+      "actions": [
+        "Selects “Lab imports”"
+      ],
+      "onScreen": [
+        "Lab imports · Upload lab results · Held records · Match review · Receipt quality"
+      ],
+      "highlights": [
+        {
+          "at": 85773,
+          "rect": {
+            "x": 521.359375,
+            "y": 107.578125,
+            "width": 104.125,
+            "height": 44
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 3,
+      "say": "Open Upload lab results, choose the HL7 profile for Chesapeake Reference Laboratory, and attach the HL7 file.",
+      "start": 92847,
+      "end": 102394,
+      "actions": [
+        "Selects “Upload lab results”",
+        "Chooses “HL7 message from Chesapeake Reference Laboratory” for Sender and intake profile"
+      ],
+      "onScreen": [],
+      "highlights": [
+        {
+          "at": 97190,
+          "rect": {
+            "x": 165,
+            "y": 324.921875,
+            "width": 736,
+            "height": 128.734375
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 3,
+      "say": "Choose Upload. MERIT queues the HL7 file and processes each message in the background.",
+      "start": 102394,
+      "end": 110113,
+      "actions": [
+        "Selects “Upload”"
+      ],
+      "onScreen": [
+        "daily-hl7-training.hl7 · All rows held Chesapeake Reference Laboratory · Nov 26, 2026 1:58 PM · Jordan Daily · Received 2 · loaded 0 · held 2 · rejected 0"
+      ],
+      "highlights": [
+        {
+          "at": 107887,
+          "rect": {
+            "x": 173,
+            "y": 512.3125,
+            "width": 273.5,
+            "height": 234.140625
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 4,
+      "say": "Two imported rows need person matching. Open Match review under Lab imports.",
+      "start": 110114,
+      "end": 116918,
+      "actions": [
+        "Selects “Lab imports (current section)”",
+        "Selects “Match review”"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 4,
+      "say": "First is Jim Carter. Date of birth and address agree with James Carter, and Jim is a nickname. Choose Same person to link it.",
+      "start": 116918,
+      "end": 126617,
+      "actions": [
+        "Selects “Carter, Jim · 1980-08-19”",
+        "Selects “Same person as James Carter (Alt+Shift+S)”"
+      ],
+      "onScreen": [],
+      "highlights": [
+        {
+          "at": 118913,
+          "rect": {
+            "x": 424,
+            "y": 64.828125,
+            "width": 968,
+            "height": 648.203125
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 4,
+      "say": "Next is Rosa Martines. The date of birth and address match Rosa Martinez with a one-letter typo. Choose Same person to link it.",
+      "start": 126617,
+      "end": 136547,
+      "actions": [
+        "Selects “Same person as Rosa Martinez (Alt+Shift+S)”"
+      ],
+      "onScreen": [],
+      "highlights": [
+        {
+          "at": 127626,
+          "rect": {
+            "x": 424,
+            "y": 77.25,
+            "width": 968,
+            "height": 622.78125
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 5,
+      "say": "Next, enter two paper lab reports for existing patients. Open People and search for Leo Rivera first.",
+      "start": 136548,
+      "end": 145586,
+      "actions": [
+        "Selects “People”",
+        "Types “Rivera Leo 2021-02-02” in Search",
+        "Selects “Search people”",
+        "Selects “Rivera, Leo”"
+      ],
+      "onScreen": [],
+      "highlights": [],
+      "zooms": []
+    },
+    {
+      "scene": 5,
+      "say": "Open Enter a result on Leo Rivera, fill in the venous lead result from the report, and save.",
+      "start": 145586,
+      "end": 169251,
+      "actions": [
+        "Selects “Enter a result”",
+        "Chooses “Lead” for Substance tested (analyte)",
+        "Chooses “Venous” for Sample type",
+        "Types “4.1” in Result value",
+        "Types “2026-10-28” in Sample collection date",
+        "Types “2026-10-30” in Laboratory report date",
+        "Chooses “ICP-MS” for Test method",
+        "Types “TRN-DAY-MAN-01” in Accession number",
+        "Chooses “Screening” for Reason for test",
+        "Types “Chesa” in Laboratory",
+        "Selects “Chesapeake Reference Laboratory 100 Research Drive, Columbia, CLIA 21D0712345”",
+        "Selects “Save result”"
+      ],
+      "onScreen": [
+        "Result saved · Lead 4.1 ug/dL → canonical 4.1000 ug/dL · population Child"
+      ],
+      "highlights": [
+        {
+          "at": 168275,
+          "rect": {
+            "x": 144,
+            "y": 310.59375,
+            "width": 1248,
+            "height": 86.4375
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 5,
+      "say": "Now search for Mia Rivera and enter her paper lead result the same way.",
+      "start": 169251,
+      "end": 203827,
+      "actions": [
+        "Selects “People”",
+        "Types “Rivera Mia 2023-05-14” in Search",
+        "Selects “Search people”",
+        "Selects “Rivera, Mia”",
+        "Selects “Enter a result”",
+        "Chooses “Lead” for Substance tested (analyte)",
+        "Chooses “Venous” for Sample type",
+        "Types “2.4” in Result value",
+        "Types “2026-10-28” in Sample collection date",
+        "Types “2026-10-30” in Laboratory report date",
+        "Chooses “ICP-MS” for Test method",
+        "Types “TRN-DAY-MAN-02” in Accession number",
+        "Chooses “Screening” for Reason for test",
+        "Types “Chesa” in Laboratory",
+        "Selects “Chesapeake Reference Laboratory 100 Research Drive, Columbia, CLIA 21D0712345”",
+        "Selects “Save result”"
+      ],
+      "onScreen": [
+        "Result saved · Lead 2.4 ug/dL → canonical 2.4000 ug/dL · population Child"
+      ],
+      "highlights": [
+        {
+          "at": 202839,
+          "rect": {
+            "x": 144,
+            "y": 310.59375,
+            "width": 1248,
+            "height": 86.4375
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 6,
+      "say": "Finally, a new patient has two paper reports. Search People first to confirm Tessa Holloway is not already in MERIT.",
+      "start": 203827,
+      "end": 212646,
+      "actions": [
+        "Selects “People”",
+        "Types “Holloway Tessa 2022-06-15” in Search",
+        "Selects “Search people”"
+      ],
+      "onScreen": [
+        "Not the person you are looking for? Check the spelling and date of birth, then: · Add a person"
+      ],
+      "highlights": [
+        {
+          "at": 210577,
+          "rect": {
+            "x": 144,
+            "y": 473.96875,
+            "width": 1248,
+            "height": 80.671875
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 6,
+      "say": "Choose Add a person. The name and date of birth carry over from the search. Select sex and save the new record.",
+      "start": 212647,
+      "end": 220911,
+      "actions": [
+        "Selects “Add a person”",
+        "Chooses “Female” for Sex",
+        "Selects “Save”"
+      ],
+      "onScreen": [
+        "Tessa Holloway · Enter a result · Edit identity · Child Born Jun 15, 2022 (age 4) · Female · County: no current primary residence Contact only · Preferred language: Not recorded · Aliases, race and ethnicity, contact methods"
+      ],
+      "highlights": [
+        {
+          "at": 219542,
+          "rect": {
+            "x": 144,
+            "y": 233.96875,
+            "width": 1248,
+            "height": 225.75
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 6,
+      "say": "Choose Enter a result on the new person page to record her initial capillary screening result.",
+      "start": 220911,
+      "end": 248530,
+      "actions": [
+        "Selects “Enter a result”",
+        "Chooses “Lead” for Substance tested (analyte)",
+        "Chooses “Capillary” for Sample type",
+        "Types “4.8” in Result value",
+        "Types “2026-10-20” in Sample collection date",
+        "Types “2026-10-22” in Laboratory report date",
+        "Chooses “Point-of-care analyzer” for Test method",
+        "Types “TRN-DAY-NEW-01” in Accession number",
+        "Chooses “Screening” for Reason for test",
+        "Types “Chesa” in Laboratory",
+        "Selects “Chesapeake Reference Laboratory 100 Research Drive, Columbia, CLIA 21D0712345”",
+        "Selects “Save result”"
+      ],
+      "onScreen": [
+        "Result saved · Lead 4.8 ug/dL → canonical 4.8000 ug/dL · population Child"
+      ],
+      "highlights": [
+        {
+          "at": 247557,
+          "rect": {
+            "x": 144,
+            "y": 324.59375,
+            "width": 1248,
+            "height": 86.4375
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 6,
+      "say": "Choose Enter another result to record her follow-up venous confirmation on the same patient record.",
+      "start": 248530,
+      "end": 274959,
+      "actions": [
+        "Selects “Enter another result”",
+        "Chooses “Lead” for Substance tested (analyte)",
+        "Chooses “Venous” for Sample type",
+        "Types “4.5” in Result value",
+        "Types “2026-10-28” in Sample collection date",
+        "Types “2026-10-30” in Laboratory report date",
+        "Chooses “ICP-MS” for Test method",
+        "Types “TRN-DAY-NEW-02” in Accession number",
+        "Chooses “Confirmation” for Reason for test",
+        "Types “Chesa” in Laboratory",
+        "Selects “Chesapeake Reference Laboratory 100 Research Drive, Columbia, CLIA 21D0712345”",
+        "Selects “Save result”"
+      ],
+      "onScreen": [
+        "Thresholds and case outcome · Attached to open case PB-2026-000029; classification changed from suspect to confirmed. · Level Type Value This result · Case Case 3.5 ug/dL At or above · Reportable Reportable 0 ug/dL At or above · Child: one venous result at or above the level, by a confirming method. · The open case is upgraded from Suspect to Confirmed."
+      ],
+      "highlights": [
+        {
+          "at": 273568,
+          "rect": {
+            "x": 144,
+            "y": 383.03125,
+            "width": 1248,
+            "height": 313.015625
+          }
+        }
+      ],
+      "zooms": []
+    },
+    {
+      "scene": 7,
+      "say": "At the end of the day, open the account menu in the header and choose Sign out to end the session cleanly.",
+      "start": 274959,
+      "end": 281982,
+      "actions": [
+        "Selects “Profile: Maryland daily intake (full CRUD) — Jordan Daily, switch profile or jur”",
+        "Selects “Sign out”"
+      ],
+      "onScreen": [],
+      "highlights": [
+        {
+          "at": 278590,
+          "rect": {
+            "x": 361,
+            "y": 331.3125,
+            "width": 382,
+            "height": 40
+          }
+        }
+      ],
+      "zooms": []
+    }
+  ]
+}

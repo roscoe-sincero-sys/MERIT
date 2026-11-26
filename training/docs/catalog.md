@@ -51,6 +51,7 @@ Status: **built** has a script in `workflows/`. **Planned** is proposed, in roug
 | All users | **Profiles: combining places and access levels** (second and third grant rows, excluding child jurisdictions, tri-state and layered access, Working in) | profiles | `r3staff` | High. Expands on profiles with multi-grant and Working in examples. | **Built** |
 | All users | **Profiles: choosing roles for your work** (assigned roles, Role versus Access, intake and case profiles, read-only review, combining roles) | profiles | `rolesdemo` | High. Shows how switching roles changes available tools at the same place. | **Built** |
 | All users | Finding your way: menu and search | navigation | `cmboth` | High | Planned |
+| Intake clerk | **A typical day in MERIT: sign in, profiles, HL7 intake and manual entry** | intake | `logindaily` | High. End-to-end daily workflow: password reset, read-only and full profiles, HL7 import, match review, manual entry for existing and new patients, and sign out. Uses `npm run app:login` (with Mailpit and `Merit.Worker`). | **Built** |
 | Intake clerk | **Entering a result from a paper report** | peopleAndResults | `intake` | High. Done daily; covers search first, the form, the lookup and the outcome. | **Built** (proof of concept) |
 | Intake clerk | Uploading a lab file and reading the batch | intake | `intake` | High. Uses `samples/chesapeake_lab_sample.csv`. Needs the worker. | Planned |
 | Intake clerk | Clearing held records | intake | `intake` | High | Planned |

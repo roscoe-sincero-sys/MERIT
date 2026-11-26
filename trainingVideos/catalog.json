@@ -140,6 +140,16 @@
     "files": "allUsers/signIn/login-reset-help"
   },
   {
+    "id": "daily-intake-workflow",
+    "title": "A typical day in MERIT: sign in, profiles, HL7 intake and manual entry",
+    "role": "intakeClerk",
+    "feature": "intake",
+    "built": "2026-11-26",
+    "current": true,
+    "seconds": 308,
+    "files": "intakeClerk/intake/daily-intake-workflow"
+  },
+  {
     "id": "enter-paper-result",
     "title": "Entering a result from a paper report",
     "role": "intakeClerk",
