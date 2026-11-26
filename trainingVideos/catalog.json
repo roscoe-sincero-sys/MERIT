@@ -1,10 +1,20 @@
 [
   {
+    "id": "security-reports",
+    "title": "Security reports: the complete walkthrough",
+    "role": "administrator",
+    "feature": "security",
+    "built": "2026-11-26",
+    "current": true,
+    "seconds": 586,
+    "files": "administrator/security/security-reports"
+  },
+  {
     "id": "login-admin-support",
     "title": "Administrator: help someone sign in again",
     "role": "administrator",
     "feature": "signIn",
-    "built": "2026-11-07",
+    "built": "2026-11-26",
     "current": true,
     "seconds": 128,
     "files": "administrator/signIn/login-admin-support"
@@ -14,9 +24,9 @@
     "title": "Profiles: the right access for the work in hand",
     "role": "allUsers",
     "feature": "profiles",
-    "built": "2026-11-07",
+    "built": "2026-11-26",
     "current": true,
-    "seconds": 175,
+    "seconds": 177,
     "files": "allUsers/profiles/making-profiles"
   },
   {
@@ -24,9 +34,9 @@
     "title": "Profiles: combining places and access levels",
     "role": "allUsers",
     "feature": "profiles",
-    "built": "2026-11-07",
+    "built": "2026-11-26",
     "current": true,
-    "seconds": 231,
+    "seconds": 251,
     "files": "allUsers/profiles/multi-place-profiles"
   },
   {
@@ -34,9 +44,9 @@
     "title": "Profiles: choosing roles for your work",
     "role": "allUsers",
     "feature": "profiles",
-    "built": "2026-11-07",
+    "built": "2026-11-26",
     "current": true,
-    "seconds": 238,
+    "seconds": 240,
     "files": "allUsers/profiles/roles-in-profiles"
   },
   {
@@ -44,9 +54,9 @@
     "title": "Cannot sign in: locks, disabled accounts and timeouts",
     "role": "allUsers",
     "feature": "signIn",
-    "built": "2026-11-07",
+    "built": "2026-11-26",
     "current": true,
-    "seconds": 121,
+    "seconds": 119,
     "files": "allUsers/signIn/login-blocked"
   },
   {
@@ -54,9 +64,9 @@
     "title": "Email sign-in: missing, old and rejected codes",
     "role": "allUsers",
     "feature": "signIn",
-    "built": "2026-11-07",
+    "built": "2026-11-26",
     "current": true,
-    "seconds": 164,
+    "seconds": 167,
     "files": "allUsers/signIn/login-email-help"
   },
   {
@@ -64,9 +74,9 @@
     "title": "Email codes: enable, choose and turn off",
     "role": "allUsers",
     "feature": "signIn",
-    "built": "2026-11-07",
+    "built": "2026-11-26",
     "current": true,
-    "seconds": 139,
+    "seconds": 140,
     "files": "allUsers/signIn/login-email-setup"
   },
   {
@@ -74,7 +84,7 @@
     "title": "Everyday sign-in and signing out",
     "role": "allUsers",
     "feature": "signIn",
-    "built": "2026-11-07",
+    "built": "2026-11-26",
     "current": true,
     "seconds": 137,
     "files": "allUsers/signIn/login-everyday"
@@ -84,9 +94,9 @@
     "title": "First sign-in: set up your authenticator",
     "role": "allUsers",
     "feature": "signIn",
-    "built": "2026-11-07",
+    "built": "2026-11-26",
     "current": true,
-    "seconds": 127,
+    "seconds": 126,
     "files": "allUsers/signIn/login-first-time"
   },
   {
@@ -94,9 +104,9 @@
     "title": "Forgotten password: reset and sign in",
     "role": "allUsers",
     "feature": "signIn",
-    "built": "2026-11-07",
+    "built": "2026-11-26",
     "current": true,
-    "seconds": 134,
+    "seconds": 133,
     "files": "allUsers/signIn/login-forgot-password"
   },
   {
@@ -104,9 +114,9 @@
     "title": "Change your password and temporary passwords",
     "role": "allUsers",
     "feature": "signIn",
-    "built": "2026-11-07",
+    "built": "2026-11-26",
     "current": true,
-    "seconds": 130,
+    "seconds": 131,
     "files": "allUsers/signIn/login-password-changes"
   },
   {
@@ -114,7 +124,7 @@
     "title": "Lost authenticator: recovery and MFA reset",
     "role": "allUsers",
     "feature": "signIn",
-    "built": "2026-11-07",
+    "built": "2026-11-26",
     "current": true,
     "seconds": 132,
     "files": "allUsers/signIn/login-recovery"
@@ -124,9 +134,9 @@
     "title": "Password reset: links and support options",
     "role": "allUsers",
     "feature": "signIn",
-    "built": "2026-11-07",
+    "built": "2026-11-26",
     "current": true,
-    "seconds": 155,
+    "seconds": 154,
     "files": "allUsers/signIn/login-reset-help"
   },
   {
@@ -134,19 +144,9 @@
     "title": "Entering a result from a paper report",
     "role": "intakeClerk",
     "feature": "peopleAndResults",
-    "built": "2026-11-07",
+    "built": "2026-11-26",
     "current": true,
-    "seconds": 124,
+    "seconds": 125,
     "files": "intakeClerk/peopleAndResults/enter-paper-result"
-  },
-  {
-    "id": "security-reports",
-    "title": "Security reports: the complete walkthrough",
-    "role": "administrator",
-    "feature": "security",
-    "built": "2026-11-16",
-    "current": true,
-    "seconds": 586,
-    "files": "administrator/security/security-reports"
   }
 ]

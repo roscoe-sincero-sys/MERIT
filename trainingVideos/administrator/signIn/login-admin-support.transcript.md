@@ -18,10 +18,11 @@ Unlock an account, reset a lost authenticator, and require a private password af
 - *Action:* Selects “Verify and sign in”
 
 **[0:25]** Administrator accounts use an authenticator or recovery code. Email verification is never available to administrators.
+- *Action:* Selects “Profile: Master profile — Avery Administrator, switch profile or jurisdiction”
 - *Action:* Selects “Sign-in methods”
 - *On screen:* Email codes · OFF · Email codes are not available for your account. Your agency decides whether they can be used, they need an email address on your account, and they are never available to administrators.
 
-**[0:34]** Open Administration, then Users. Filter by the person's name or user name and open the correct account. You can manage only accounts within your authority.
+**[0:33]** Open Administration, then Users. Filter by the person's name or user name and open the correct account. You can manage only accounts within your authority.
 - *Action:* Selects “Administration”
 - *Action:* Selects “Users”
 - *Action:* Types “loginsupport” in Filter listed users
@@ -32,10 +33,11 @@ Unlock an account, reset a lost authenticator, and require a private password af
 **[0:44]** For a locked account, choose Unlock account after verifying the person. This clears the lock; it does not change their password or authenticator.
 - *Action:* Selects “Unlock account”
 
-**[0:54]** For a lost authenticator, choose Reset MFA after verifying the person. The confirmation explains that active sessions and old codes will stop working.
+**[0:53]** For a lost authenticator, choose Reset MFA after verifying the person. The confirmation explains that active sessions and old codes will stop working.
 - *Action:* Selects “Reset MFA after verifying the person”
+- *Action:* Selects “Continue”
 
-**[1:05]** Tell the person to sign in again with their password, add the new MERIT authenticator entry, and save the new recovery codes.
+**[1:04]** Tell the person to sign in again with their password, add the new MERIT authenticator entry, and save the new recovery codes.
 - *On screen:* Not yet enrolled; the person enrolls at next sign-in.
 
 ## 3. Set a temporary password when needed
@@ -62,4 +64,4 @@ Unlock an account, reset a lost authenticator, and require a private password af
 
 ---
 
-Generated 2026-11-07 from `training/workflows/administrator/sign-in/login-admin-support.workflow.ts` against MERIT be42f6d 2026-11-06.
+Generated 2026-11-26 from `training/workflows/administrator/sign-in/login-admin-support.workflow.ts` against MERIT 8410bca 2026-11-24.

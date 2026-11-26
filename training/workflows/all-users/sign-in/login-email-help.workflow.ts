@@ -7,6 +7,8 @@ async function waitForResend(s: import('../../../lib/stage.ts').Stage): Promise<
     const button = document.querySelector<HTMLButtonElement>('[data-resend-button]');
     return button && !button.disabled && button.getAttribute('aria-disabled') !== 'true';
   }, undefined, { timeout: 35_000 });
+  // Client countdown can finish slightly ahead of the server's clock; leave a brief margin.
+  await s.page.waitForTimeout(1500);
 }
 export default loginWorkflow(a, {
   id: 'login-email-help', title: 'Email sign-in: missing, old and rejected codes',

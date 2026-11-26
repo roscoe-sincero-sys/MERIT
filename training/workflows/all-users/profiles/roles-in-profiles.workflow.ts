@@ -12,7 +12,16 @@ const CASES = 'Maryland case duties';
 const REVIEW = 'Maryland case review';
 const COMBINED = 'Maryland intake and cases';
 const PLACE = 'Maryland Lead and Metals Program (demo)';
-const profileBox = (s: Stage) => s.page.locator('header a.merit-profile-switch');
+const profileBox = (s: Stage) => s.page.locator('header summary.merit-profile-switch');
+const accountMenu = (s: Stage) => s.page.locator('header details.merit-account-menu');
+
+async function openAccountMenu(s: Stage): Promise<void> {
+  if (await accountMenu(s).getAttribute('open') === null) await s.click(profileBox(s));
+}
+
+async function expectActiveProfile(s: Stage, name: string): Promise<void> {
+  await s.see(s.page.locator(`header summary.merit-profile-switch[aria-label^="Profile: ${name} "]`));
+}
 
 function prepareRoles(): void {
   sql(`SET XACT_ABORT ON;
@@ -36,7 +45,8 @@ COMMIT;`);
 }
 
 async function openProfiles(s: Stage): Promise<void> {
-  await s.click(profileBox(s));
+  await openAccountMenu(s);
+  await s.click(s.page.locator('header a.merit-header__profile'));
   await s.see(s.page.getByRole('heading', { name: 'My profiles', level: 1 }));
 }
 
@@ -59,14 +69,16 @@ async function save(s: Stage, name: string): Promise<void> {
 
 async function use(s: Stage, name: string): Promise<void> {
   await s.click(s.page.getByRole('button', { name: `Use ${name}`, exact: true }));
-  await s.expectText(profileBox(s), name);
+  await expectActiveProfile(s, name);
   await s.highlight(profileBox(s));
 }
 
 async function intakeMenu(s: Stage, present: boolean): Promise<void> {
-  const item = s.page.locator('#merit-nav summary', { hasText: 'Intake' });
-  if (present) await s.see(item);
-  else if (await item.count()) throw new Error('Intake should be absent from this profile.');
+  const group = s.page.locator('#merit-nav details', { has: s.page.locator('summary', { hasText: 'Lab imports' }) });
+  if (await group.count() && await group.getAttribute('open') === null) await s.click(group.locator('summary'));
+  const upload = s.page.locator('#merit-nav').getByRole('link', { name: 'Upload lab results', exact: true });
+  if (present) await s.see(upload);
+  else if (await upload.count()) throw new Error('Upload lab results should be absent from this profile.');
   await s.highlight(s.page.locator('#merit-nav'));
 }
 
@@ -86,7 +98,7 @@ export default defineWorkflow({
         {
           say: 'Riley handles both intake and case work in Maryland. Open My profiles using the profile box in the header.',
           run: async s => {
-            await s.expectText(profileBox(s), /Master profile/);
+            await expectActiveProfile(s, 'Master profile');
             await openProfiles(s);
           },
         },
@@ -146,16 +158,14 @@ export default defineWorkflow({
           run: async s => use(s, INTAKE),
         },
         {
-          say: 'The Intake menu is available for uploading files and handling held records.',
+          say: 'Under Lab imports, Upload lab results and Held records are available for intake work.',
           run: async s => {
             await intakeMenu(s, true);
-            await s.click(s.page.locator('#merit-nav summary', { hasText: 'Intake' }));
             await s.see(s.page.locator('#merit-nav').getByRole('link', { name: 'Held records', exact: true }));
-            await s.highlight(s.page.locator('#merit-nav'));
           },
         },
         {
-          say: 'Switch to Maryland case duties. The place and access level stay the same, but the Intake menu disappears because Case manager lacks those intake permissions.',
+          say: 'Switch to Maryland case duties. The place and access level stay the same, but Upload lab results and Held records disappear because Case manager lacks those intake permissions.',
           run: async s => {
             await use(s, CASES);
             await intakeMenu(s, false);
@@ -222,7 +232,7 @@ export default defineWorkflow({
           },
         },
         {
-          say: 'Use the combined profile. Intake is available again, alongside case work, because this profile includes both roles.',
+          say: 'Use the combined profile. Upload lab results is available again under Lab imports, alongside case work, because this profile includes both roles.',
           run: async s => {
             await use(s, COMBINED);
             await intakeMenu(s, true);
@@ -231,7 +241,10 @@ export default defineWorkflow({
         },
         {
           say: 'Choose the profile that fits today\'s duties, and check its name in the header. Use Master profile to return to everything you were assigned.',
-          run: async s => use(s, 'Master profile'),
+          run: async s => {
+            await s.scrollTo(s.page.locator('header'));
+            await use(s, 'Master profile');
+          },
         },
       ],
     },

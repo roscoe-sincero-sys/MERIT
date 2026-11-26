@@ -1,6 +1,6 @@
 # Profiles: choosing roles for your work
 
-**Role:** All users · **Feature:** Profiles and working in · **Length:** 3:58
+**Role:** All users · **Feature:** Profiles and working in · **Length:** 4:00
 
 Choose roles, compare them with access levels, and switch between intake, case work and review profiles.
 
@@ -11,7 +11,8 @@ Choose roles, compare them with access levels, and switch between intake, case w
 ## 1. Roles come from your master profile
 
 **[0:12]** Riley handles both intake and case work in Maryland. Open My profiles using the profile box in the header.
-- *Action:* Selects “Profile Master profile Switch ▾ : switch profile or jurisdiction”
+- *Action:* Selects “Profile: Master profile — Riley Roles, switch profile or jurisdiction”
+- *Action:* Selects “Switch profile or jurisdiction”
 
 **[0:20]** The administrator assigned two roles: Intake clerk and Case manager. Both are in Riley's master profile, at Maryland and everything under it.
 - *On screen:* Master profile Master · Everything you have been given. Managed by your administrator. · Case manager at Maryland Lead and Metals Program (demo) and everything under it · Full (read, write and delete) · Intake clerk at Maryland Lead and Metals Program (demo) and everything under it · Full (read, write and delete) · In use
@@ -23,7 +24,7 @@ Choose roles, compare them with access levels, and switch between intake, case w
 **[0:39]** Place sets where a grant applies. Role sets the permitted tasks. Access limits those permissions to reading, writing, or full access.
 - *On screen:* Place · (none) · Maryland Lead and Metals Program (demo) · Baltimore City Health Department · Baltimore County Department of Health · Occupational Health Program · Prince George's County Health Department · Role · Case manager · Intake clerk · Access · Read only · Read and write (no delete) · Full (read, write and delete) · Include everything under this place
 
-**[0:51]** The Role list comes from your master profile. If a needed role is missing, ask your administrator; creating a profile cannot assign it to you.
+**[0:50]** The Role list comes from your master profile. If a needed role is missing, ask your administrator; creating a profile cannot assign it to you.
 - *Action:* Chooses “Intake clerk” for Role
 
 ## 2. Same place and access, different roles
@@ -43,79 +44,82 @@ Choose roles, compare them with access levels, and switch between intake, case w
 - *Action:* Chooses “Case manager” for Role
 - *Action:* Chooses “Full (read, write and delete)” for Access
 
-**[1:32]** Case manager includes case editing and investigation work. Intake clerk includes file upload and held-record work. Save the case profile.
+**[1:31]** Case manager includes case editing and investigation work. Intake clerk includes file upload and held-record work. Save the case profile.
 - *Action:* Selects “Save profile”
 
 **[1:42]** Choose Use beside Maryland intake duties. The header confirms the active profile; no sign-out is needed.
 - *Action:* Selects “Use Maryland intake duties”
-- *On screen:* Profile · Maryland intake duties · Switch ▾ · : switch profile or jurisdiction
+- *On screen:* RR · Riley Roles · Maryland Lead and Metals Program (demo) · ▾
 
-**[1:51]** The Intake menu is available for uploading files and handling held records.
-- *On screen:* Home · Work queues · People · Intake · Surveillance · Registry & reports · Administration
-- *Action:* Selects “Intake”
-- *On screen:* Home · Work queues · People · Intake · Intake · Held records · Match review · Surveillance · Registry & reports · Administration
+**[1:51]** Under Lab imports, Upload lab results and Held records are available for intake work.
+- *Action:* Selects “Lab imports”
+- *On screen:* Home · Work queues · Contact corrections · People · Lab imports · Upload lab results · Held records · Match review · Receipt quality · Case management · Lab results & reports · Administration
 
-**[1:57]** Switch to Maryland case duties. The place and access level stay the same, but the Intake menu disappears because Case manager lacks those intake permissions.
+**[1:57]** Switch to Maryland case duties. The place and access level stay the same, but Upload lab results and Held records disappear because Case manager lacks those intake permissions.
 - *Action:* Selects “Use Maryland case duties”
-- *On screen:* Profile · Maryland case duties · Switch ▾ · : switch profile or jurisdiction
-- *On screen:* Home · Work queues · People · Surveillance · Registry & reports · Administration
+- *On screen:* RR · Riley Roles · Maryland Lead and Metals Program (demo) · ▾
+- *Action:* Selects “Lab imports”
+- *On screen:* Home · Work queues · Contact corrections · People · Lab imports · Receipt quality · Case management · Lab results & reports · Administration
 
 ## 3. Keep a role, reduce its access
 
-**[2:09]** For a review session, create Maryland case review. Keep Case manager and the same place, but choose Read only.
+**[2:10]** For a review session, create Maryland case review. Keep Case manager and the same place, but choose Read only.
 - *Action:* Selects “Create a profile”
 - *Action:* Types “Maryland case review” in Name
 - *Action:* Chooses “Maryland Lead and Metals Program (demo)” for Place
 - *Action:* Chooses “Case manager” for Role
 - *Action:* Chooses “Read only” for Access
 
-**[2:21]** Read only removes writing permissions from that role. It is useful when checking records without making changes. Save and use this profile.
+**[2:22]** Read only removes writing permissions from that role. It is useful when checking records without making changes. Save and use this profile.
 - *Action:* Selects “Save profile”
 - *Action:* Selects “Use Maryland case review”
-- *On screen:* Profile · Maryland case review · Switch ▾ · : switch profile or jurisdiction
+- *On screen:* RR · Riley Roles · Maryland Lead and Metals Program (demo) · ▾
 
 **[2:31]** People and Work queues remain available for review. The role is still Case manager; Access is what limits it to reading.
-- *On screen:* Home · Work queues · People · Surveillance · Registry & reports · Administration
+- *Action:* Selects “Lab imports”
+- *On screen:* Home · Work queues · People · Lab imports · Receipt quality · Case management · Lab results & reports · Administration
 - *Action:* Selects “Work queues”
-- *On screen:* Work queues · Hide queues · All queues · Cross-link tasks (3) · Investigation requests (2) · Prenatal provider notifications (1) · Newborn testing (1) · All queues · Queue counts show open tasks. · Status · Open · Done · Dismissed · Assigned to me · Urgent only · Overdue only · 7 rows · Columns · Skip table to pagination · Task · ⇅ · Queue · ⇅ · Person Case Due · ▲ · Assigned · Notify the prenatal
+- *On screen:* Work queues · Clinical testing outreach: upcoming tests and caregiver contacts · Hide queues · All queues · Cross-link tasks (3) · Investigation requests (2) · Prenatal provider notifications (1) · Newborn testing (1) · All queues · Queue counts show open tasks. Notification tasks require recorded delivery evidence; use the patient notification workspace to complete or review them. Notification de
 
 ## 4. Combine roles when the work needs both
 
 **[2:40]** A profile can combine roles too. Return to My profiles and create Maryland intake and cases.
-- *Action:* Selects “Profile Maryland case review Switch ▾ : switch profile or jurisdiction”
+- *Action:* Selects “Profile: Maryland case review — Riley Roles, switch profile or jurisdiction”
+- *Action:* Selects “Switch profile or jurisdiction”
 - *Action:* Selects “Create a profile”
 - *Action:* Types “Maryland intake and cases” in Name
 
-**[2:49]** In the first row, choose Maryland and Intake clerk, with Read and write without delete.
+**[2:50]** In the first row, choose Maryland and Intake clerk, with Read and write without delete.
 - *Action:* Chooses “Maryland Lead and Metals Program (demo)” for Place
 - *Action:* Chooses “Intake clerk” for Role
 - *Action:* Chooses “Read and write (no delete)” for Access
 
-**[2:56]** In the second row, choose the same Maryland place, but Case manager, also with Read and write without delete.
+**[2:57]** In the second row, choose the same Maryland place, but Case manager, also with Read and write without delete.
 - *Action:* Chooses “Maryland Lead and Metals Program (demo)” for Place
 - *Action:* Chooses “Case manager” for Role
 - *Action:* Chooses “Read and write (no delete)” for Access
 
-**[3:05]** The grants add together. Both sets of permissions apply; a read-only grant would not cancel writing allowed by another grant at the same place.
+**[3:07]** The grants add together. Both sets of permissions apply; a read-only grant would not cancel writing allowed by another grant at the same place.
 - *On screen:* Grants · Each grant is a role, a place, and how much you can do there. Leave a row's place empty to skip it. · Place · (none) · Maryland Lead and Metals Program (demo) · Baltimore City Health Department · Baltimore County Department of Health · Occupational Health Program · Prince George's County Health Department · Role · Case manager · Intake clerk · Access · Read only · Read and write (no delet
 
-**[3:15]** Every grant must fit within your master profile. Check the master summary, then save the combined profile.
+**[3:17]** Every grant must fit within your master profile. Check the master summary, then save the combined profile.
 - *On screen:* Your master profile · This is the most you can have. A profile can be smaller, never bigger: MERIT refuses to save one that goes beyond it. · Case manager at Maryland Lead and Metals Program (demo) and everything under it · Full (read, write and delete) · Intake clerk at Maryland Lead and Metals Program (demo) and everything under it · Full (read, write and delete)
 - *Action:* Selects “Save profile”
 
-**[3:24]** Use the combined profile. Intake is available again, alongside case work, because this profile includes both roles.
+**[3:25]** Use the combined profile. Upload lab results is available again under Lab imports, alongside case work, because this profile includes both roles.
 - *Action:* Selects “Use Maryland intake and cases”
-- *On screen:* Profile · Maryland intake and cases · Switch ▾ · : switch profile or jurisdiction
-- *On screen:* Home · Work queues · People · Intake · Surveillance · Registry & reports · Administration
+- *On screen:* RR · Riley Roles · Maryland Lead and Metals Program (demo) · ▾
+- *Action:* Selects “Lab imports”
+- *On screen:* Home · Work queues · Contact corrections · People · Lab imports · Upload lab results · Held records · Match review · Receipt quality · Case management · Lab results & reports · Administration
 - *On screen:* Maryland intake and cases · Intake clerk at Maryland Lead and Metals Program (demo) and everything under it · Read and write (no delete) · Case manager at Maryland Lead and Metals Program (demo) and everything under it · Read and write (no delete) · In use Change · Maryland intake and cases
 
-**[3:34]** Choose the profile that fits today's duties, and check its name in the header. Use Master profile to return to everything you were assigned.
+**[3:36]** Choose the profile that fits today's duties, and check its name in the header. Use Master profile to return to everything you were assigned.
 - *Action:* Selects “Use Master profile”
-- *On screen:* Profile · Master profile · Switch ▾ · : switch profile or jurisdiction
+- *On screen:* RR · Riley Roles · Maryland Lead and Metals Program (demo) · ▾
 
 ## Recap
 
-**[3:43]** In this video you chose assigned roles for intake and case duties at the same place, used Read only to reduce the permissions of a role, and combined roles in one profile and checked the header when switching.
+**[3:45]** In this video you chose assigned roles for intake and case duties at the same place, used Read only to reduce the permissions of a role, and combined roles in one profile and checked the header when switching.
 
 - Chose assigned roles for intake and case duties at the same place
 - Used Read only to reduce the permissions of a role
@@ -123,4 +127,4 @@ Choose roles, compare them with access levels, and switch between intake, case w
 
 ---
 
-Generated 2026-11-07 from `training/workflows/all-users/profiles/roles-in-profiles.workflow.ts` against MERIT be42f6d 2026-11-06.
+Generated 2026-11-26 from `training/workflows/all-users/profiles/roles-in-profiles.workflow.ts` against MERIT 8410bca 2026-11-24.

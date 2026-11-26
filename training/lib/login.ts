@@ -80,7 +80,10 @@ UPDATE auth.mfaEmailChallenge SET isDeleted = 1 WHERE appUserId = @user AND isDe
 UPDATE auth.passwordReset SET isDeleted = 1 WHERE appUserId = @user AND isDeleted = 0;
 UPDATE config.jurisdictionSetting SET settingValue = N'true' WHERE rootTenantId = @home
      AND settingKey = 'emailCodesEnabled' AND isDeleted = 0 AND effectiveTo IS NULL;`);
-    if (enrolled) await this.enrollOffCamera();
+    if (enrolled) {
+      await this.enrollOffCamera();
+      sql(`UPDATE auth.appUser SET lastTotpStep = NULL WHERE ${this.where};`);
+    }
     if (emailOn) sql(`UPDATE auth.appUser SET mfaEmailVerifiedUtc = SYSUTCDATETIME() WHERE ${this.where};`);
   }
 
@@ -180,18 +183,36 @@ export async function password(s: Stage, a: LoginAccount, destination = '/'): Pr
   await s.click(s.page.getByRole('button', { name: 'Continue', exact: true }));
 }
 
+export function freshTotp(a: LoginAccount): string {
+  sql(`UPDATE auth.appUser SET lastTotpStep = NULL WHERE ${a.where};`);
+  return totp(a.secret);
+}
+
 export async function verify(s: Stage, a: LoginAccount): Promise<void> {
-  await s.type(s.page.locator('#Code'), totp(a.secret));
+  await s.type(s.page.locator('#Code'), freshTotp(a));
   await s.click(s.page.getByRole('button', { name: 'Verify and sign in', exact: true }));
   await signedIn(s);
 }
 
+export async function openAccountMenu(s: Stage): Promise<void> {
+  const menu = s.page.locator('header details.merit-account-menu');
+  if (await menu.count() && await menu.getAttribute('open') === null) {
+    await s.click(s.page.locator('header summary.merit-profile-switch'));
+  }
+}
+
+export async function openSignInMethods(s: Stage): Promise<void> {
+  await openAccountMenu(s);
+  await s.click(s.page.locator('header').getByRole('link', { name: 'Sign-in methods', exact: true }));
+}
+
 export async function signedIn(s: Stage): Promise<void> {
   if (!(await s.page.request.get('/api/v1/me')).ok()) throw new Error('The expected signed-in session was not created.');
-  await s.see(s.page.locator('header').getByRole('link', { name: 'Sign-in methods', exact: true }));
+  await s.see(s.page.locator('header summary.merit-profile-switch'));
 }
 
 export async function signOut(s: Stage): Promise<void> {
+  await openAccountMenu(s);
   await s.click(s.page.locator('form[action="/account/signout"]').getByRole('button', { name: 'Sign out', exact: true }).first());
   await s.see(s.page.locator('#UserName'));
   if ((await s.page.request.get('/api/v1/me')).ok()) throw new Error('Sign out left the session active.');

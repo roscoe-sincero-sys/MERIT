@@ -15,127 +15,127 @@ password after confirming
 the person's identity.
 
 4
-00:00:13.703 --> 00:00:18.608
+00:00:13.346 --> 00:00:18.251
 Use your agency's identity-verification
 procedure before changing sign-in
 
 5
-00:00:18.608 --> 00:00:19.608
+00:00:18.251 --> 00:00:19.251
 security.
 
 6
-00:00:19.608 --> 00:00:24.911
+00:00:19.251 --> 00:00:24.562
 Confirm the person through a trusted
 channel, not a message containing a code.
 
 7
-00:00:25.211 --> 00:00:29.340
+00:00:24.863 --> 00:00:28.992
 Administrator accounts use an
 authenticator or recovery code.
 
 8
-00:00:29.340 --> 00:00:33.530
+00:00:28.992 --> 00:00:33.182
 Email verification is never
 available to administrators.
 
 9
-00:00:33.895 --> 00:00:35.883
+00:00:33.541 --> 00:00:35.529
 Open Administration, then Users.
 
 10
-00:00:35.883 --> 00:00:40.231
+00:00:35.529 --> 00:00:39.877
 Filter by the person's name or user
 name and open the correct account.
 
 11
-00:00:40.231 --> 00:00:43.799
+00:00:39.877 --> 00:00:43.445
 You can manage only accounts
 within your authority.
 
 12
-00:00:44.163 --> 00:00:48.674
+00:00:43.811 --> 00:00:48.322
 For a locked account, choose Unlock
 account after verifying the person.
 
 13
-00:00:48.674 --> 00:00:53.712
+00:00:48.322 --> 00:00:53.360
 This clears the lock; it does not
 change their password or authenticator.
 
 14
-00:00:54.077 --> 00:00:58.894
+00:00:53.726 --> 00:00:58.543
 For a lost authenticator, choose
 Reset MFA after verifying the person.
 
 15
-00:00:58.894 --> 00:01:04.729
+00:00:58.543 --> 00:01:04.378
 The confirmation explains that active
 sessions and old codes will stop working.
 
 16
-00:01:05.091 --> 00:01:08.835
+00:01:04.739 --> 00:01:08.483
 Tell the person to sign in
 again with their password,
 
 17
-00:01:08.835 --> 00:01:14.251
+00:01:08.483 --> 00:01:13.899
 add the new MERIT authenticator entry,
 and save the new recovery codes.
 
 18
-00:01:14.613 --> 00:01:19.983
+00:01:14.255 --> 00:01:19.625
 If a password reset is also needed, enter
 a new temporary password and select Ask
 
 19
-00:01:19.983 --> 00:01:23.831
+00:01:19.625 --> 00:01:23.473
 them to choose a new password
 at their next sign-in.
 
 20
-00:01:24.189 --> 00:01:25.377
+00:01:23.830 --> 00:01:25.018
 Save the account.
 
 21
-00:01:25.377 --> 00:01:30.337
+00:01:25.018 --> 00:01:29.978
 Share the temporary password only
 through your approved secure channel.
 
 22
-00:01:30.337 --> 00:01:34.859
+00:01:29.978 --> 00:01:34.500
 Never request the person's
 authenticator or recovery codes.
 
 23
-00:01:35.218 --> 00:01:39.435
+00:01:34.861 --> 00:01:39.078
 The person completes MFA and
 chooses a password only they know.
 
 24
-00:01:39.435 --> 00:01:45.325
+00:01:39.078 --> 00:01:44.968
 If both password and authenticator were
 lost, they must complete both reset paths.
 
 25
-00:01:45.681 --> 00:01:50.077
+00:01:45.334 --> 00:01:49.730
 Another administrator must help an
 administrator who cannot sign in.
 
 26
-00:01:50.077 --> 00:01:55.068
+00:01:49.730 --> 00:01:54.721
 A platform administrator should
 contact another platform administrator.
 
 27
-00:01:56.231 --> 00:02:00.116
+00:01:55.895 --> 00:01:59.780
 In this video you verified
 the account and unlocked it,
 
 28
-00:02:00.116 --> 00:02:05.626
+00:01:59.780 --> 00:02:05.290
 reset MFA and explained re-enrollment,
 and required a private password after a
 
 29
-00:02:05.626 --> 00:02:07.156
+00:02:05.290 --> 00:02:06.820
 temporary reset.

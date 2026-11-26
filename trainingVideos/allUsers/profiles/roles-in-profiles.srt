@@ -12,256 +12,260 @@ levels, and switch between intake,
 case work and review profiles.
 
 4
-00:00:12,437 --> 00:00:15,922
+00:00:12,096 --> 00:00:15,581
 Riley handles both intake
 and case work in Maryland.
 
 5
-00:00:15,922 --> 00:00:19,873
+00:00:15,581 --> 00:00:19,532
 Open My profiles using the
 profile box in the header.
 
 6
-00:00:20,230 --> 00:00:24,849
+00:00:19,896 --> 00:00:24,515
 The administrator assigned two
 roles: Intake clerk and Case manager.
 
 7
-00:00:24,849 --> 00:00:30,139
+00:00:24,515 --> 00:00:29,805
 Both are in Riley's master profile,
 at Maryland and everything under it.
 
 8
-00:00:30,503 --> 00:00:33,840
+00:00:30,172 --> 00:00:33,509
 A role supplies permissions
 for particular duties.
 
 9
-00:00:33,840 --> 00:00:39,379
+00:00:33,509 --> 00:00:39,048
 A profile chooses which of your assigned
 roles to use, and where to use them.
 
 10
-00:00:39,745 --> 00:00:42,402
+00:00:39,412 --> 00:00:42,069
 Place sets where a grant applies.
 
 11
-00:00:42,402 --> 00:00:44,818
+00:00:42,069 --> 00:00:44,485
 Role sets the permitted tasks.
 
 12
-00:00:44,818 --> 00:00:50,694
+00:00:44,485 --> 00:00:50,361
 Access limits those permissions to
 reading, writing, or full access.
 
 13
-00:00:51,048 --> 00:00:54,075
+00:00:50,715 --> 00:00:53,742
 The Role list comes from
 your master profile.
 
 14
-00:00:54,075 --> 00:00:57,572
+00:00:53,742 --> 00:00:57,239
 If a needed role is missing,
 ask your administrator;
 
 15
-00:00:57,572 --> 00:01:00,864
+00:00:57,239 --> 00:01:00,531
 creating a profile
 cannot assign it to you.
 
 16
-00:01:01,226 --> 00:01:06,356
+00:01:00,895 --> 00:01:06,025
 For intake duties, choose Maryland,
 Intake clerk, and Full access.
 
 17
-00:01:06,356 --> 00:01:10,021
+00:01:06,025 --> 00:01:09,690
 Keep everything under this place selected.
 
 18
-00:01:10,378 --> 00:01:14,014
+00:01:10,056 --> 00:01:13,692
 Full access still stays
 within the role's permissions.
 
 19
-00:01:14,014 --> 00:01:18,458
+00:01:13,692 --> 00:01:18,136
 It does not make an Intake clerk
 a supervisor or an administrator.
 
 20
-00:01:18,458 --> 00:01:20,003
+00:01:18,136 --> 00:01:19,681
 Save the profile.
 
 21
-00:01:20,358 --> 00:01:25,903
+00:01:20,046 --> 00:01:25,591
 Create a second profile for case duties,
 using the same Maryland place and Full
 
 22
-00:01:25,903 --> 00:01:29,181
+00:01:25,591 --> 00:01:28,869
 access, but choose Case manager for Role.
 
 23
-00:01:32,129 --> 00:01:36,367
+00:01:31,652 --> 00:01:35,890
 Case manager includes case
 editing and investigation work.
 
 24
-00:01:36,367 --> 00:01:40,385
+00:01:35,890 --> 00:01:39,908
 Intake clerk includes file
 upload and held-record work.
 
 25
-00:01:40,385 --> 00:01:42,393
+00:01:39,908 --> 00:01:41,916
 Save the case profile.
 
 26
-00:01:42,749 --> 00:01:46,017
+00:01:42,281 --> 00:01:45,549
 Choose Use beside Maryland intake duties.
 
 27
-00:01:46,017 --> 00:01:51,358
+00:01:45,549 --> 00:01:50,890
 The header confirms the active
 profile; no sign-out is needed.
 
 28
-00:01:51,718 --> 00:01:57,267
-The Intake menu is available for
-uploading files and handling held records.
+00:01:51,243 --> 00:01:56,337
+Under Lab imports, Upload lab results
+and Held records are available for intake
 
 29
-00:01:57,627 --> 00:01:59,796
-Switch to Maryland case duties.
+00:01:56,337 --> 00:01:57,337
+work.
 
 30
-00:01:59,796 --> 00:02:05,393
-The place and access level stay the same,
-but the Intake menu disappears because
+00:01:57,421 --> 00:01:59,545
+Switch to Maryland case duties.
 
 31
-00:02:05,393 --> 00:02:08,871
-Case manager lacks those
-intake permissions.
+00:01:59,545 --> 00:02:05,096
+The place and access level stay the same,
+but Upload lab results and Held records
 
 32
-00:02:09,232 --> 00:02:12,864
+00:02:05,096 --> 00:02:09,745
+disappear because Case manager
+lacks those intake permissions.
+
+33
+00:02:10,113 --> 00:02:13,745
 For a review session,
 create Maryland case review.
 
-33
-00:02:12,864 --> 00:02:17,551
+34
+00:02:13,745 --> 00:02:18,432
 Keep Case manager and the same
 place, but choose Read only.
 
-34
-00:02:21,433 --> 00:02:24,926
+35
+00:02:21,837 --> 00:02:25,330
 Read only removes writing
 permissions from that role.
 
-35
-00:02:24,926 --> 00:02:28,748
+36
+00:02:25,330 --> 00:02:29,152
 It is useful when checking
 records without making changes.
 
-36
-00:02:28,748 --> 00:02:30,861
+37
+00:02:29,152 --> 00:02:31,265
 Save and use this profile.
 
-37
-00:02:31,222 --> 00:02:34,651
+38
+00:02:31,621 --> 00:02:35,050
 People and Work queues
 remain available for review.
 
-38
-00:02:34,651 --> 00:02:39,622
+39
+00:02:35,050 --> 00:02:40,021
 The role is still Case manager;
 Access is what limits it to reading.
 
-39
-00:02:39,975 --> 00:02:42,511
+40
+00:02:40,374 --> 00:02:42,910
 A profile can combine roles too.
 
-40
-00:02:42,511 --> 00:02:47,586
+41
+00:02:42,910 --> 00:02:47,985
 Return to My profiles and create
 Maryland intake and cases.
 
-41
-00:02:49,010 --> 00:02:54,657
+42
+00:02:50,401 --> 00:02:56,048
 In the first row, choose Maryland and
 Intake clerk, with Read and write without
 
-42
-00:02:54,657 --> 00:02:55,684
+43
+00:02:56,048 --> 00:02:57,048
 delete.
 
-43
-00:02:55,984 --> 00:03:01,617
+44
+00:02:57,304 --> 00:03:02,937
 In the second row, choose the same
 Maryland place, but Case manager,
 
-44
-00:03:01,617 --> 00:03:05,330
+45
+00:03:02,937 --> 00:03:06,650
 also with Read and write without delete.
 
-45
-00:03:05,690 --> 00:03:07,255
+46
+00:03:07,002 --> 00:03:08,567
 The grants add together.
 
-46
-00:03:07,255 --> 00:03:12,081
+47
+00:03:08,567 --> 00:03:13,393
 Both sets of permissions apply; a
 read-only grant would not cancel writing
 
-47
-00:03:12,081 --> 00:03:15,286
+48
+00:03:13,393 --> 00:03:16,598
 allowed by another
 grant at the same place.
 
-48
-00:03:15,642 --> 00:03:19,082
+49
+00:03:16,952 --> 00:03:20,392
 Every grant must fit
 within your master profile.
 
-49
-00:03:19,082 --> 00:03:23,566
+50
+00:03:20,392 --> 00:03:24,876
 Check the master summary, then
 save the combined profile.
 
-50
-00:03:23,926 --> 00:03:25,973
+51
+00:03:25,232 --> 00:03:26,978
 Use the combined profile.
 
-51
-00:03:25,973 --> 00:03:32,689
-Intake is available again, alongside case
-work, because this profile includes both
-
 52
-00:03:32,689 --> 00:03:33,689
-roles.
+00:03:26,978 --> 00:03:32,354
+Upload lab results is available again
+under Lab imports, alongside case work,
 
 53
-00:03:33,938 --> 00:03:38,753
+00:03:32,354 --> 00:03:35,617
+because this profile includes both roles.
+
+54
+00:03:35,974 --> 00:03:40,789
 Choose the profile that fits today's
 duties, and check its name in the header.
 
-54
-00:03:38,753 --> 00:03:42,918
+55
+00:03:40,789 --> 00:03:44,954
 Use Master profile to return to
 everything you were assigned.
 
-55
-00:03:44,086 --> 00:03:49,172
+56
+00:03:46,133 --> 00:03:51,219
 In this video you chose assigned roles for
 intake and case duties at the same place,
 
-56
-00:03:49,172 --> 00:03:52,260
+57
+00:03:51,219 --> 00:03:54,307
 used Read only to reduce
 the permissions of a role,
 
-57
-00:03:52,260 --> 00:03:57,019
+58
+00:03:54,307 --> 00:03:59,066
 and combined roles in one profile and
 checked the header when switching.
