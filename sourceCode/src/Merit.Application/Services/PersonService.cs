@@ -129,31 +129,53 @@ public sealed class PersonService(
     public async Task<PersonHeader> GetHeaderAsync(Guid personId, CancellationToken ct = default)
     {
         session.Require(Permissions.PersonView);
-        return await data.GetPersonAsync(personId, ct).ConfigureAwait(false);
+        var header = await data.GetPersonAsync(personId, ct).ConfigureAwait(false);
+        await audit.ViewedAsync("person", personId, ct).ConfigureAwait(false);
+        return header;
     }
 
-    public Task<IReadOnlyList<RelationshipRow>> GetRelationshipsAsync(Guid personId, CancellationToken ct = default)
-        => Read(() => data.GetRelationshipsAsync(personId, ct));
+    public async Task<IReadOnlyList<RelationshipRow>> GetRelationshipsAsync(Guid personId, CancellationToken ct = default)
+    {
+        var rows = await Read(() => data.GetRelationshipsAsync(personId, ct)).ConfigureAwait(false);
+        await audit.ViewedAsync("person", personId, ct).ConfigureAwait(false);
+        return rows;
+    }
 
-    public Task<IReadOnlyList<EmploymentRow>> GetEmploymentAsync(Guid personId, CancellationToken ct = default)
-        => Read(() => data.GetEmploymentAsync(personId, ct));
+    public async Task<IReadOnlyList<EmploymentRow>> GetEmploymentAsync(Guid personId, CancellationToken ct = default)
+    {
+        var rows = await Read(() => data.GetEmploymentAsync(personId, ct)).ConfigureAwait(false);
+        await audit.ViewedAsync("person", personId, ct).ConfigureAwait(false);
+        return rows;
+    }
 
-    public Task<IReadOnlyList<ExposureSourceRow>> GetExposureSourcesAsync(Guid personId, CancellationToken ct = default)
-        => Read(() => data.GetExposureSourcesAsync(personId, ct));
+    public async Task<IReadOnlyList<ExposureSourceRow>> GetExposureSourcesAsync(Guid personId, CancellationToken ct = default)
+    {
+        var rows = await Read(() => data.GetExposureSourcesAsync(personId, ct)).ConfigureAwait(false);
+        await audit.ViewedAsync("person", personId, ct).ConfigureAwait(false);
+        return rows;
+    }
 
-    public Task<IReadOnlyList<PregnancyRow>> GetPregnanciesAsync(Guid personId, CancellationToken ct = default)
-        => Read(() => data.GetPregnanciesAsync(personId, ct));
+    public async Task<IReadOnlyList<PregnancyRow>> GetPregnanciesAsync(Guid personId, CancellationToken ct = default)
+    {
+        var rows = await Read(() => data.GetPregnanciesAsync(personId, ct)).ConfigureAwait(false);
+        await audit.ViewedAsync("person", personId, ct).ConfigureAwait(false);
+        return rows;
+    }
 
-    public Task<IReadOnlyList<PersonResultRow>> GetResultsAsync(Guid personId, Guid? analyteId, CancellationToken ct = default)
+    public async Task<IReadOnlyList<PersonResultRow>> GetResultsAsync(Guid personId, Guid? analyteId, CancellationToken ct = default)
     {
         session.Require(Permissions.ResultView);
-        return Read(() => data.GetResultsAsync(personId, analyteId, ct));
+        var rows = await Read(() => data.GetResultsAsync(personId, analyteId, ct)).ConfigureAwait(false);
+        await audit.ViewedAsync("person", personId, ct).ConfigureAwait(false);
+        return rows;
     }
 
-    public Task<IReadOnlyList<PersonCaseRow>> GetCasesAsync(Guid personId, CancellationToken ct = default)
+    public async Task<IReadOnlyList<PersonCaseRow>> GetCasesAsync(Guid personId, CancellationToken ct = default)
     {
         session.Require(Permissions.CaseView);
-        return Read(() => data.GetCasesAsync(personId, ct));
+        var rows = await Read(() => data.GetCasesAsync(personId, ct)).ConfigureAwait(false);
+        await audit.ViewedAsync("person", personId, ct).ConfigureAwait(false);
+        return rows;
     }
 
     public async Task<PersonSaveOutcome> SaveAsync(PersonInput input, CancellationToken ct = default)

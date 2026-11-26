@@ -76,7 +76,7 @@ public sealed class SignInActivityController(SignInLogService log, ICurrentSessi
                 }
             }
 
-            model.Names = await log.UnknownNamesAsync(model.Hours, ct);
+            model.Names = await log.UnknownNamesAsync(model.Hours, ct, auditView: false);
         }
 
         model.AuthenticatorCode = null;
@@ -99,7 +99,7 @@ public sealed class SignInActivityController(SignInLogService log, ICurrentSessi
             ModelState.AddModelError(nameof(UnknownNamesModel.LookupName), ex.Errors.Values.SelectMany(v => v).First());
         }
 
-        model.Names = await log.UnknownNamesAsync(model.Hours, ct);
+        model.Names = await log.UnknownNamesAsync(model.Hours, ct, auditView: false);
         return View(nameof(UnknownNames), model);
     }
 

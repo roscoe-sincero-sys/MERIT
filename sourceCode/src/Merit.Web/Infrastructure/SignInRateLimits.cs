@@ -27,9 +27,13 @@ public static class SignInRateLimits
     /// <summary>Requests to email a one-time code (sign-in and turning email codes on). Each sends a message, so it is counted on its own.</summary>
     public const string EmailCode = "signin-email";
 
+    /// <summary>Authenticated high-value endpoints (API, search, exports) to surface automated scraping/fuzzing (#325).</summary>
+    public const string Authenticated = "authenticated";
+
     public const string PasswordSetting = "Merit:SignInAttemptsPerMinute";
     public const string CodeSetting = "Merit:MfaAttemptsPerMinute";
     public const string EmailCodeSetting = "Merit:EmailCodeSendsPerMinute";
+    public const string AuthenticatedSetting = "Merit:AuthenticatedRequestsPerMinute";
 
     /// <summary>Defaults sized for an office behind one address: about 30 people signing in within a minute.</summary>
     public const int DefaultPerMinute = 30;
@@ -37,12 +41,28 @@ public static class SignInRateLimits
     /// <summary>Per address; each account is also limited in the database (EmailCodes:MaxCodesPerAccount).</summary>
     public const int DefaultEmailCodesPerMinute = 10;
 
+    /// <summary>Generous per-user default for authenticated API/search/export bursts; configurable lower in production.</summary>
+    public const int DefaultAuthenticatedPerMinute = 600;
+
     public static void Configure(RateLimiterOptions o)
     {
         o.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
         o.AddPolicy(Password, http => Partition(http, PasswordSetting, DefaultPerMinute));
         o.AddPolicy(Code, http => Partition(http, CodeSetting, DefaultPerMinute));
         o.AddPolicy(EmailCode, http => Partition(http, EmailCodeSetting, DefaultEmailCodesPerMinute));
+        o.AddPolicy(Authenticated, http =>
+        {
+            int limit = Math.Clamp(http.RequestServices.GetRequiredService<IConfiguration>()
+                .GetValue(AuthenticatedSetting, DefaultAuthenticatedPerMinute), 1, 100_000);
+            string key = http.User.FindFirst(MeritClaims.UserId)?.Value ?? ClientKey(http);
+            return RateLimitPartition.GetSlidingWindowLimiter(key, _ => new SlidingWindowRateLimiterOptions
+            {
+                PermitLimit = limit,
+                Window = TimeSpan.FromMinutes(1),
+                SegmentsPerWindow = 6,
+                QueueLimit = 0,
+            });
+        });
         o.AddPolicy("screenUsage", http => RateLimitPartition.GetFixedWindowLimiter(
             http.User.FindFirst(MeritClaims.UserId)?.Value ?? ClientKey(http),
             _ => new FixedWindowRateLimiterOptions
@@ -80,6 +100,14 @@ public static class SignInRateLimits
             http.Response.StatusCode = StatusCodes.Status429TooManyRequests;
             http.Response.Headers.RetryAfter = "60";
             return; // Usage loss must not render an alarming sign-in failure or flood the security log.
+        }
+
+        if (policy == Authenticated)
+        {
+            int retrySec = context.Lease.TryGetMetadata(MetadataName.RetryAfter, out TimeSpan wait) ? Math.Clamp((int)Math.Ceiling(wait.TotalSeconds), 1, 60) : 60;
+            http.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+            http.Response.Headers.RetryAfter = retrySec.ToString(CultureInfo.InvariantCulture);
+            return; // SecurityTelemetryMiddleware logs the 429 with route, user, IP and trace id without sign-in lockout.
         }
         await http.RequestServices.GetRequiredService<Merit.Application.Security.ISignInEvents>().RecordAsync(
             new Merit.Application.Security.SignInEvent(Merit.Application.Security.SignInEventTypes.RateLimited,

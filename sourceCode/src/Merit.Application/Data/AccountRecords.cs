@@ -372,13 +372,28 @@ public sealed class AuditEventRow
 
     public string? ClientAddress { get; init; }
 
+    public Guid? SessionReference { get; init; }
+
+    public string? TraceId { get; init; }
+
+    public Guid? ActingTenantId { get; init; }
+
+    public Guid? ViewAsUserId { get; init; }
+
+    public string? ViewKind { get; init; }
+
+    public string? FilterJson { get; init; }
+
+    public int ManifestCount { get; init; }
+
     /// <summary>Events matching the search, across all pages.</summary>
     public int TotalCount { get; init; }
 }
 
 /// <summary>An audit search (issue #45): every filter optional; times are UTC, <see cref="ToUtc"/> exclusive.</summary>
 public sealed record AuditQuery(Guid? AppUserId = null, Guid? EntityId = null, string? EventAction = null, string? EntityType = null,
-                                DateTime? FromUtc = null, DateTime? ToUtc = null, int PageNumber = 1, int PageSize = 100);
+                                DateTime? FromUtc = null, DateTime? ToUtc = null, int PageNumber = 1, int PageSize = 100,
+                                string? ViewKind = null);
 
 public sealed class AuditUserRow
 {

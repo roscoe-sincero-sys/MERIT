@@ -22,8 +22,9 @@ public static class DependencyInjection
         services.TryAddSingleton(TimeProvider.System);
         services.AddScoped<IClock, JurisdictionClock>();
 
-        // Sign-in events (#191): the web application records them; elsewhere (the worker) there is nothing to record.
+        // Sign-in events (#191) and request audit context (#326): the web application provides HTTP context; the worker uses defaults.
         services.TryAddScoped<ISignInEvents, NoSignInEvents>();
+        services.TryAddScoped<IRequestAuditContext, NullRequestAuditContext>();
         services.AddScoped<AccountService>();
         // Email one-time codes need a mail server and the verifier key, which only the web application configures; without
         // a mail server the disabled sender keeps the feature hidden. The worker never issues codes; the throwaway key

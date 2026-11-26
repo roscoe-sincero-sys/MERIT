@@ -90,7 +90,7 @@ public sealed class ClustersController(ClusterService clusters, ICurrentSession 
     public async Task<IActionResult> Picker(string? q, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(q) || q.Trim().Length < 2) return Ok(Array.Empty<object>());
-        var rows = await cases.ListAsync(new CaseListQuery(OpenOnly: false, Search: q.Trim()[..Math.Min(q.Trim().Length, 60)], PageSize: 10), ct);
+        var rows = await cases.ListAsync(new CaseListQuery(OpenOnly: false, Search: q.Trim()[..Math.Min(q.Trim().Length, 60)], PageSize: 10), ct, searchSource: "casePicker");
         return Ok(rows.Select(r => new { r.CaseNumber, PersonName = $"{r.FirstName} {r.LastName}".Trim() }));
     }
 

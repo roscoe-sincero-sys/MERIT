@@ -1,5 +1,5 @@
 """Case, case activity, cross-link task and investigation procedures."""
-from procs_common import NEWID, WEB, BOTH, CONCURRENCY, not_found
+from procs_common import NEWID, WEB, BOTH, CONCURRENCY, not_found, AUDIT_SESSION_VARS
 
 CASE_VISIBLE = not_found("@exposureCaseId", "dbo.exposureCase", "exposureCaseId", "The case")
 INV_VISIBLE = not_found("@investigationId", "dbo.investigation", "investigationId", "The investigation")
@@ -114,6 +114,12 @@ END;
 
 EXEC dbo.uspRefreshPersonAccess @personId = @personId;
 
+{AUDIT_SESSION_VARS}
+INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, clientAddress, owningTenantId,
+                        sessionReference, traceId, actingTenantId, viewAsUserId)
+VALUES (auth.udfSessionUserId (), @root, 'create', 'exposureCase', @exposureCaseId, @auditClientAddress, @owner,
+        @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs);
+
 SELECT @number AS caseNumber, @owner AS owningTenantId, t.tenantName AS owningTenantName
   FROM auth.tenant AS t WHERE t.tenantId = @owner;
 
@@ -170,6 +176,12 @@ BEGIN
       JOIN config.analyteSpecimen s ON s.analyteSpecimenId=r.analyteSpecimenId AND s.analyteId=c.analyteId
      WHERE c.exposureCaseId=@exposureCaseId AND c.isDeleted=0;
 END;
+{AUDIT_SESSION_VARS}
+INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, clientAddress, owningTenantId,
+                        sessionReference, traceId, actingTenantId, viewAsUserId)
+VALUES (auth.udfSessionUserId (), @root, 'update', 'exposureCase', @exposureCaseId, @auditClientAddress, @owner,
+        @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs);
+
 SELECT @before AS classificationBefore, @after AS classificationAfter;
 
 SET @Comments = N'Result attached to case.';

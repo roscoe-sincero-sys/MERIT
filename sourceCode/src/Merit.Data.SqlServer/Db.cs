@@ -20,7 +20,7 @@ public sealed class MeritDatabaseOptions
 /// change them; row-level security predicates read them. Pooled connections are reset (sp_reset_connection) before
 /// reuse, which clears session context, so each open sets it afresh. With no session the predicates fail closed.
 /// </summary>
-public sealed class Db(IOptions<MeritDatabaseOptions> options, ICurrentSession session)
+public sealed class Db(IOptions<MeritDatabaseOptions> options, ICurrentSession session, IRequestAuditContext? auditContext = null)
 {
     private const string SetContextSql =
         "EXEC sys.sp_set_session_context @key = N'scopeKey', @value = @scopeKey, @read_only = 1;" +
@@ -29,7 +29,10 @@ public sealed class Db(IOptions<MeritDatabaseOptions> options, ICurrentSession s
         "EXEC sys.sp_set_session_context @key = N'actingTenantId', @value = @actingTenantId, @read_only = 1;" +
         // The jurisdiction's time zone, for auth.udfSessionToday (issue #36). Only a signed-in session sets it: a sign-in
         // leaves it open, and auth.uspCreateSessionScope sets it from the user's data root.
-        "IF @timeZone IS NOT NULL EXEC sys.sp_set_session_context @key = N'timeZone', @value = @timeZone, @read_only = 1;";
+        "IF @timeZone IS NOT NULL EXEC sys.sp_set_session_context @key = N'timeZone', @value = @timeZone, @read_only = 1;" +
+        // Request correlation context for logs.auditEvent and logs.searchLog (#326).
+        "IF @clientAddress IS NOT NULL EXEC sys.sp_set_session_context @key = N'clientAddress', @value = @clientAddress, @read_only = 1;" +
+        "IF @traceId IS NOT NULL EXEC sys.sp_set_session_context @key = N'traceId', @value = @traceId, @read_only = 1;";
 
     static Db()
     {
@@ -52,6 +55,8 @@ public sealed class Db(IOptions<MeritDatabaseOptions> options, ICurrentSession s
                 appUser = session.AuditName,
                 actingTenantId = session.ActingTenantId,
                 timeZone = session.TimeZoneId,
+                clientAddress = auditContext?.ClientAddress,
+                traceId = auditContext?.TraceId,
             }, commandTimeout: Timeout, cancellationToken: ct)).ConfigureAwait(false);
         }
 

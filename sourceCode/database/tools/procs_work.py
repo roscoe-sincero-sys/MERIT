@@ -1,5 +1,5 @@
 """Work queues, tasks, dashboard, background job queue, cluster detection and the audit ledger."""
-from procs_common import NEWID, WEB, WORKER, BOTH, CONCURRENCY, JOB_SCOPE, JOB_SCOPE_COLUMNS, JOB_SCOPE_VALUES
+from procs_common import NEWID, WEB, WORKER, BOTH, CONCURRENCY, JOB_SCOPE, JOB_SCOPE_COLUMNS, JOB_SCOPE_VALUES, AUDIT_SESSION_VARS
 
 QUEUE_NAMES = """('unmatchedResult', N'Unmatched results'), ('unknownCode', N'Unknown LOINC codes or units'),
         ('pausedBatch', N'Paused intake batches'), ('addressReview', N'Address review'),
@@ -598,15 +598,20 @@ SET @Comments = CONCAT ((SELECT COUNT (*) FROM @new), N' new cluster(s).');
     # -------------------------------------------------------------------------------------------- audit
     {
         "schema": "logs", "name": "uspRecordAuditEvent", "kind": "write", "grants": BOTH, "ticket": "T051",
-        "desc": "Writes one event to the tamper-evident audit ledger: a view, change, merge or export of a person, result "
-                "or case. The user and root tenant come from the session, never from a parameter.",
+        "desc": "Writes one event to the tamper-evident audit ledger: a view, change, merge, export, search or permission "
+                "denial. The user, root tenant, session reference, acting tenant and view-as user come from the session, "
+                "never from a parameter. Optional manifest record IDs are stored in logs.auditEventRecord (#326, #333).",
         "params": """@eventAction   VARCHAR (40)
 , @entityType    VARCHAR (30)
 , @entityId      UNIQUEIDENTIFIER = NULL
 , @recordCount   INT = NULL
-, @clientAddress VARCHAR (45) = NULL""",
+, @clientAddress VARCHAR (45) = NULL
+, @viewKind      VARCHAR (16) = NULL
+, @filterJson    NVARCHAR (MAX) = NULL
+, @recordIdsJson NVARCHAR (MAX) = NULL
+, @traceId       VARCHAR (64) = NULL""",
         "key": "CONCAT (N'eventAction=', @eventAction, N', entityType=', @entityType, N', entityId=', @entityId)",
-        "body": """
+        "body": f"""
 -- Issue 270: stamp the owner the actor's own session can see now, so a tenant-scoped reviewer later sees events on
 -- that tenant's records without needing row access to the records themselves.
 DECLARE @owner UNIQUEIDENTIFIER;
@@ -625,9 +630,31 @@ BEGIN
     END;
 END;
 
-INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, recordCount, clientAddress, owningTenantId)
-VALUES (auth.udfSessionUserId (), auth.udfSessionRootTenantId (), @eventAction, @entityType, @entityId, @recordCount,
-        @clientAddress, @owner);
+{AUDIT_SESSION_VARS}
+DECLARE @root UNIQUEIDENTIFIER = auth.udfSessionRootTenantId ();
+DECLARE @resolvedAddress VARCHAR (45) = COALESCE (NULLIF (@clientAddress, ''), @auditClientAddress);
+DECLARE @resolvedTrace VARCHAR (64) = COALESCE (NULLIF (@traceId, ''), @auditTraceId);
+
+INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, recordCount, clientAddress, owningTenantId,
+                        sessionReference, traceId, actingTenantId, viewAsUserId, viewKind, filterJson)
+VALUES (auth.udfSessionUserId (), @root, @eventAction, @entityType, @entityId, @recordCount,
+        @resolvedAddress, @owner, @auditSessionRef, @resolvedTrace, @auditActingTenant, @auditViewAs, @viewKind, @filterJson);
+
+DECLARE @auditEventId BIGINT = SCOPE_IDENTITY ();
+
+IF @recordIdsJson IS NOT NULL AND ISJSON (@recordIdsJson) = 1 AND @root IS NOT NULL
+BEGIN
+    INSERT logs.auditEventRecord (auditEventRecordId, auditEventId, rootTenantId, entityType, entityId)
+    SELECT {NEWID}, @auditEventId, @root, x.entityType, x.entityId
+      FROM (SELECT DISTINCT
+                   COALESCE (NULLIF (JSON_VALUE (j.[value], '$.entityType'), ''), @entityType) AS entityType,
+                   COALESCE (TRY_CAST (JSON_VALUE (j.[value], '$.entityId') AS UNIQUEIDENTIFIER),
+                             TRY_CAST (j.[value] AS UNIQUEIDENTIFIER)) AS entityId
+              FROM OPENJSON (@recordIdsJson) AS j) AS x
+     WHERE x.entityId IS NOT NULL;
+END;
+
+SELECT @auditEventId AS auditEventId;
 
 SET @Comments = N'Audit event recorded.';
 """,
@@ -644,7 +671,8 @@ SET @Comments = N'Audit event recorded.';
 , @fromUtc     DATETIME2 (3) = NULL
 , @toUtc       DATETIME2 (3) = NULL
 , @pageNumber  INT = 1
-, @pageSize    INT = 100""",
+, @pageSize    INT = 100
+, @viewKind    VARCHAR (16) = NULL""",
         "key": "CONCAT (N'appUserId=', @appUserId, N', entityId=', @entityId, N', eventAction=', @eventAction, "
                "N', entityType=', @entityType, N', pageNumber=', @pageNumber, N', pageSize=', @pageSize)",
         "validate": """IF @pageNumber < 1 OR @pageSize NOT BETWEEN 1 AND 10000
@@ -670,7 +698,10 @@ INSERT @users SELECT u.appUserId FROM auth.appUser AS u
         OR EXISTS (SELECT 1 FROM auth.userAssignment AS ua JOIN @scope AS s ON s.tenantId = ua.tenantId WHERE ua.appUserId = u.appUserId AND ua.isDeleted = 0));
 
 SELECT e.auditEventId, e.eventUtc, e.appUserId, u.displayName, e.eventAction, e.entityType, e.entityId,
-       e.recordCount, e.clientAddress, e.administrationJson, COUNT (*) OVER () AS totalCount
+       e.recordCount, e.clientAddress, e.administrationJson, e.sessionReference, e.traceId, e.actingTenantId,
+       e.viewAsUserId, e.viewKind, e.filterJson,
+       (SELECT COUNT (*) FROM logs.auditEventRecord AS r WHERE r.auditEventId = e.auditEventId AND r.isDeleted = 0) AS manifestCount,
+       COUNT (*) OVER () AS totalCount
   FROM logs.auditEvent AS e
   LEFT JOIN auth.appUser AS u ON u.appUserId = e.appUserId
  WHERE (EXISTS (SELECT 1 FROM @wholeRoots AS w WHERE w.rootTenantId = e.rootTenantId)
@@ -680,17 +711,102 @@ SELECT e.auditEventId, e.eventUtc, e.appUserId, u.displayName, e.eventAction, e.
                  -- Root configuration applies to every reviewed county in this root, never to another root.
                  OR (e.owningTenantId=e.rootTenantId AND e.entityType IN ('jurisdictionSetting','threshold','notificationRule')))))
    AND (@appUserId IS NULL OR e.appUserId = @appUserId)
-   AND (@entityId IS NULL OR e.entityId = @entityId)
+   AND (@entityId IS NULL OR e.entityId = @entityId
+        OR EXISTS (SELECT 1 FROM logs.auditEventRecord AS r WHERE r.auditEventId = e.auditEventId AND r.entityId = @entityId AND r.isDeleted = 0))
    AND (@eventAction IS NULL OR e.eventAction = @eventAction
         -- "signInEvents": every sign-in and account-security action at once (#191).
         OR (@eventAction = 'signInEvents' AND e.eventAction IN ('signIn', 'signInFailed', 'signOut', 'mfaEnrolled', 'mfaEmailEnabled', 'mfaEmailDisabled', 'mfaMethodChanged', 'mfaCodeSent', 'mfaCodeNotSent', 'mfaCodeRefused', 'mfaCodeLocked', 'passwordChanged', 'passwordResetRequested', 'passwordResetCompleted', 'passwordSetByAdmin')))
    AND (@entityType IS NULL OR e.entityType = @entityType OR (@entityType = 'report' AND e.entityType LIKE 'report:%'))
+   AND (@viewKind IS NULL OR e.viewKind = @viewKind OR (@viewKind = 'direct' AND e.viewKind IS NULL))
    AND (@fromUtc IS NULL OR e.eventUtc >= @fromUtc)
    AND (@toUtc IS NULL OR e.eventUtc < @toUtc)
  ORDER BY e.auditEventId DESC
 OFFSET (@pageNumber - 1) * @pageSize ROWS
  FETCH NEXT @pageSize ROWS ONLY
 OPTION (RECOMPILE);
+""",
+    },
+    {
+        "schema": "logs", "name": "uspGetAuditEventRecords", "kind": "read", "grants": WEB, "ticket": "#333",
+        "permission": "audit.view",
+        "desc": "Returns the manifest of record identifiers associated with one list, export or batch audit event, "
+                "checking that the caller's review scope covers that event (#333).",
+        "params": "@auditEventId BIGINT",
+        "key": "CONCAT (N'auditEventId=', @auditEventId)",
+        "body": """
+DECLARE @scope TABLE (tenantId UNIQUEIDENTIFIER PRIMARY KEY);
+INSERT @scope SELECT tenantId FROM auth.tvfReviewTenants ('audit.view');
+DECLARE @wholeRoots TABLE (rootTenantId UNIQUEIDENTIFIER PRIMARY KEY);
+INSERT @wholeRoots SELECT t.tenantId FROM auth.tenant AS t JOIN @scope AS s ON s.tenantId = t.tenantId WHERE t.tenantId = t.rootTenantId;
+DECLARE @partRoots TABLE (rootTenantId UNIQUEIDENTIFIER PRIMARY KEY);
+INSERT @partRoots SELECT DISTINCT t.rootTenantId FROM auth.tenant AS t JOIN @scope AS s ON s.tenantId = t.tenantId
+ WHERE NOT EXISTS (SELECT 1 FROM @wholeRoots AS w WHERE w.rootTenantId = t.rootTenantId);
+DECLARE @users TABLE (appUserId UNIQUEIDENTIFIER PRIMARY KEY);
+INSERT @users SELECT u.appUserId FROM auth.appUser AS u
+ WHERE EXISTS (SELECT 1 FROM @partRoots)
+   AND (EXISTS (SELECT 1 FROM @scope AS s WHERE s.tenantId = u.homeTenantId)
+        OR EXISTS (SELECT 1 FROM auth.userAssignment AS ua JOIN @scope AS s ON s.tenantId = ua.tenantId WHERE ua.appUserId = u.appUserId AND ua.isDeleted = 0));
+
+IF NOT EXISTS (SELECT 1
+                 FROM logs.auditEvent AS e
+                WHERE e.auditEventId = @auditEventId
+                  AND (EXISTS (SELECT 1 FROM @wholeRoots AS w WHERE w.rootTenantId = e.rootTenantId)
+                       OR (EXISTS (SELECT 1 FROM @partRoots AS p WHERE p.rootTenantId = e.rootTenantId)
+                           AND ((e.owningTenantId IS NULL AND EXISTS (SELECT 1 FROM @users AS x WHERE x.appUserId = e.appUserId))
+                                OR EXISTS (SELECT 1 FROM @scope AS s WHERE s.tenantId = e.owningTenantId)
+                                OR (e.owningTenantId = e.rootTenantId AND e.entityType IN ('jurisdictionSetting', 'threshold', 'notificationRule'))))))
+BEGIN
+    ;THROW 51404, N'The audit event was not found, or you do not have access to it.', 1;
+END;
+
+SELECT r.entityType, r.entityId
+  FROM logs.auditEventRecord AS r
+ WHERE r.auditEventId = @auditEventId AND r.isDeleted = 0
+ ORDER BY r.entityType, r.entityId;
+""",
+    },
+    {
+        "schema": "logs", "name": "uspRecordSearchLog", "kind": "write", "grants": WEB, "ticket": "#331",
+        "desc": "Writes a free-text search entry (case picker or case list search) to logs.searchLog and a corresponding "
+                "search event (plus optional manifest) to logs.auditEvent (#331, #326, #333).",
+        "params": """@searchText     NVARCHAR (400)
+, @resultCount    INT
+, @searchSource   VARCHAR (30) = 'casePicker'
+, @entityType     VARCHAR (30) = 'exposureCase'
+, @filterJson     NVARCHAR (MAX) = NULL
+, @recordIdsJson  NVARCHAR (MAX) = NULL""",
+        "key": "CONCAT (N'searchSource=', @searchSource, N', entityType=', @entityType, N', resultCount=', @resultCount)",
+        "body": f"""
+{AUDIT_SESSION_VARS}
+DECLARE @user UNIQUEIDENTIFIER = auth.udfSessionUserId ();
+DECLARE @root UNIQUEIDENTIFIER = auth.udfSessionRootTenantId ();
+
+INSERT logs.searchLog (searchLogId, appUserId, rootTenantId, searchText, resultCount, searchedUtc,
+                       sessionReference, clientAddress, actingTenantId, existsElsewhere, searchSource)
+VALUES ({NEWID}, COALESCE (@user, '00000000-0000-0000-0000-000000000000'),
+        COALESCE (@root, '00000000-0000-0000-0000-000000000000'), LEFT (@searchText, 400),
+        @resultCount, SYSUTCDATETIME (), @auditSessionRef, @auditClientAddress, @auditActingTenant, 0, @searchSource);
+
+INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, recordCount, clientAddress, owningTenantId,
+                        sessionReference, traceId, actingTenantId, viewAsUserId, viewKind, filterJson)
+VALUES (@user, @root, 'search', @entityType, NULL, @resultCount, @auditClientAddress, NULL,
+        @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs, 'direct', @filterJson);
+
+DECLARE @auditEventId BIGINT = SCOPE_IDENTITY ();
+
+IF @recordIdsJson IS NOT NULL AND ISJSON (@recordIdsJson) = 1 AND @root IS NOT NULL
+BEGIN
+    INSERT logs.auditEventRecord (auditEventRecordId, auditEventId, rootTenantId, entityType, entityId)
+    SELECT {NEWID}, @auditEventId, @root, x.entityType, x.entityId
+      FROM (SELECT DISTINCT
+                   COALESCE (NULLIF (JSON_VALUE (j.[value], '$.entityType'), ''), @entityType) AS entityType,
+                   COALESCE (TRY_CAST (JSON_VALUE (j.[value], '$.entityId') AS UNIQUEIDENTIFIER),
+                             TRY_CAST (j.[value] AS UNIQUEIDENTIFIER)) AS entityId
+              FROM OPENJSON (@recordIdsJson) AS j) AS x
+     WHERE x.entityId IS NOT NULL;
+END;
+
+SET @Comments = N'Search logged.';
 """,
     },
     {

@@ -4,6 +4,7 @@ using Merit.Web.Infrastructure;
 using Merit.Web.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace Merit.Web.Controllers;
 
@@ -36,7 +37,7 @@ public sealed class HomeController(QueueService queues, ICurrentSession session)
     [HttpGet("/home/error")]
     [AllowAnonymous]
     public IActionResult Error() => View("Error", new AlertModel("error", "Something went wrong",
-        $"The request could not be completed. Reference {HttpContext.TraceIdentifier}."));
+        $"The request could not be completed. Reference {RequestTrace.Id(HttpContext)}."));
 
     /// <summary>
     /// The page for an error status that came back with no body, such as an address that matches no page (issue #43):
@@ -62,7 +63,7 @@ public sealed class HomeController(QueueService queues, ICurrentSession session)
             405 or 415 => new AlertModel("warning", "That did not work",
                 "The page cannot be used that way. Go back and try again from the screen's own buttons."),
             >= 500 => new AlertModel("error", "Something went wrong",
-                $"The request could not be completed. Reference {HttpContext.TraceIdentifier}."),
+                $"The request could not be completed. Reference {RequestTrace.Id(HttpContext)}."),
             _ => new AlertModel("warning", "That did not work", "The request could not be completed. Go back and try again."),
         };
         return View("Error", alert);
@@ -71,6 +72,7 @@ public sealed class HomeController(QueueService queues, ICurrentSession session)
 
 /// <summary>Global search by name, DOB, address, organization, accession or case number.</summary>
 [Route("search")]
+[EnableRateLimiting(SignInRateLimits.Authenticated)]
 public sealed class SearchController(SearchService search) : Controller
 {
     [HttpGet("")]

@@ -51,26 +51,43 @@ public sealed class SignInLogService(IAccountData data, AccountService accounts,
 
     public const string ActivityEntity = "signInActivity";
 
-    public Task<SignInActivity> ActivityAsync(int hours, CancellationToken ct = default)
+    public async Task<SignInActivity> ActivityAsync(int hours, CancellationToken ct = default, bool auditView = true)
     {
         session.RequireAny(Permissions.TenantAdminister, Permissions.SecurityReview);
-        return data.GetSignInActivityAsync(Hours(hours), 5, 3, 3, ct);
+        int window = Hours(hours);
+        var report = await data.GetSignInActivityAsync(window, 5, 3, 3, ct).ConfigureAwait(false);
+        if (auditView)
+        {
+            int rows = report.ByAddress.Count + report.ByAccount.Count + report.Spraying.Count + report.Stuffing.Count
+                       + report.SuccessAfterFailures.Count + report.LockoutsAndLimits.Count;
+            await audit.ListedAsync(ActivityEntity, rows, ct, new { hours = window }).ConfigureAwait(false);
+        }
+
+        return report;
     }
 
     /// <summary>The suspicious-activity report as a file (#272); the export is audited with its row count.</summary>
     public async Task<SignInActivity> ExportActivityAsync(int hours, CancellationToken ct = default)
     {
-        var report = await ActivityAsync(hours, ct).ConfigureAwait(false);
+        int window = Hours(hours);
+        var report = await ActivityAsync(window, ct, auditView: false).ConfigureAwait(false);
         int rows = report.ByAddress.Count + report.ByAccount.Count + report.Spraying.Count + report.Stuffing.Count
                    + report.SuccessAfterFailures.Count + report.LockoutsAndLimits.Count;
-        await audit.ExportedAsync(ActivityEntity, null, rows, ct).ConfigureAwait(false);
+        await audit.ExportedAsync(ActivityEntity, null, rows, ct, new { hours = window }).ConfigureAwait(false);
         return report;
     }
 
-    public async Task<IReadOnlyList<UnknownUserName>> UnknownNamesAsync(int hours, CancellationToken ct = default)
+    public async Task<IReadOnlyList<UnknownUserName>> UnknownNamesAsync(int hours, CancellationToken ct = default, bool auditView = true)
     {
         session.Require(Permissions.SecurityInvestigate);
-        return (await data.ListUnknownUserNamesAsync(Hours(hours), false, ct).ConfigureAwait(false)).Select(r => Map(r, null)).ToList();
+        int window = Hours(hours);
+        var rows = (await data.ListUnknownUserNamesAsync(window, false, ct).ConfigureAwait(false)).Select(r => Map(r, null)).ToList();
+        if (auditView)
+        {
+            await audit.ListedAsync(UnknownNamesEntity, rows.Count, ct, new { hours = window }).ConfigureAwait(false);
+        }
+
+        return rows;
     }
 
     /// <summary>The names themselves: a current authenticator code first, then one audited reveal for this report run.</summary>

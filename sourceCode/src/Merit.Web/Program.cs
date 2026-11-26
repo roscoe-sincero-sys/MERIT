@@ -14,11 +14,22 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
+if (string.Equals(builder.Configuration["Logging:Format"], "Json", StringComparison.OrdinalIgnoreCase))
+{
+    builder.Logging.AddJsonConsole(o =>
+    {
+        o.IncludeScopes = true;
+        o.TimestampFormat = "yyyy-MM-ddTHH:mm:ss.fffZ";
+        o.UseUtcTimestamp = true;
+    });
+}
+
 var services = builder.Services;
 
 // ---------------------------------------------------------------------------------------------- application layers
 services.AddHttpContextAccessor();
 services.AddScoped<ICurrentSession, WebCurrentSession>();
+services.AddScoped<IRequestAuditContext, WebRequestAuditContext>();
 services.AddScoped<SessionRenewal>();
 services.AddScoped<ScreenUsageRecorder>();
 services.AddScoped<ScreenVisitFilter>();
@@ -116,8 +127,25 @@ services.AddAuthentication(AuthSchemes.Session)
 
                 return Task.CompletedTask;
             },
-            OnRedirectToAccessDenied = ctx =>
+            OnRedirectToAccessDenied = async ctx =>
             {
+                if (ctx.HttpContext.User.Identity?.IsAuthenticated == true)
+                {
+                    try
+                    {
+                        var audit = ctx.HttpContext.RequestServices.GetService<AuditService>();
+                        if (audit is not null)
+                        {
+                            await audit.PermissionDeniedAsync(RequestTrace.EntityTypeFromRoute(ctx.HttpContext),
+                                RequestTrace.EntityIdFromRoute(ctx.HttpContext), CancellationToken.None).ConfigureAwait(false);
+                        }
+                    }
+                    catch
+                    {
+                        // Never turn a 403 refusal into a 500 if the audit write fails.
+                    }
+                }
+
                 ctx.Response.StatusCode = StatusCodes.Status403Forbidden;
                 if (ctx.Request.IsHtmx())
                 {
@@ -131,8 +159,6 @@ services.AddAuthentication(AuthSchemes.Session)
                 {
                     ctx.Response.Redirect(ctx.RedirectUri);
                 }
-
-                return Task.CompletedTask;
             },
             // Re-check the session scope every five minutes: sign-out, an assignment change or an MFA reset ends it.
             OnValidatePrincipal = async ctx =>
@@ -287,6 +313,7 @@ app.UseStaticFiles(new StaticFileOptions
 
 app.UseRouting();
 app.UseAuthentication();
+app.UseMiddleware<SecurityTelemetryMiddleware>(); // structured 401/403/404/405/422/429 & antiforgery telemetry (#325)
 app.UseMiddleware<SessionExpiryMiddleware>();     // an idle session that ended in the browser is recorded once (issue #191)
 app.Use(async (http, next) =>
 {

@@ -1,5 +1,5 @@
 """Person registry procedures: search, person page sections, and saves of the person and its child records."""
-from procs_common import NEWID, WEB, BOTH, CONCURRENCY, not_found
+from procs_common import NEWID, WEB, BOTH, CONCURRENCY, not_found, AUDIT_SESSION_VARS
 
 PERSON_VISIBLE = not_found("@personId", "dbo.person", "personId", "The person")
 
@@ -116,6 +116,8 @@ SELECT TOP (@maxRows) o.organizationId, o.organizationName, o.naicsCode, o.cliaN
 
 SET @found = @found + @@ROWCOUNT;
 
+{AUDIT_SESSION_VARS}
+
 -- Outside scope: only on an exact name and DOB match, through the match-key table, and every hit is audited.
 IF NOT EXISTS (SELECT 1 FROM OPENJSON (COALESCE (@namePairsJson, N'[]'))) AND @found = 0 AND @nameKey1 IS NOT NULL AND @nameKey2 IS NOT NULL AND @dob IS NOT NULL
    AND EXISTS (SELECT 1 FROM dbo.personMatchKey AS mk
@@ -124,16 +126,19 @@ IF NOT EXISTS (SELECT 1 FROM OPENJSON (COALESCE (@namePairsJson, N'[]'))) AND @f
                     OR (mk.lastNameKey = @nameKey2 AND mk.firstNameKey = @nameKey1)))
 BEGIN
     SET @elsewhere = 1;
-    INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, recordCount)
-    VALUES (auth.udfSessionUserId (), auth.udfSessionRootTenantId (), 'search', 'personOutsideScope', NULL, 1);
+    INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, recordCount, clientAddress,
+                            sessionReference, traceId, actingTenantId, viewAsUserId)
+    VALUES (auth.udfSessionUserId (), auth.udfSessionRootTenantId (), 'search', 'personOutsideScope', NULL, 1,
+            @auditClientAddress, @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs);
 END;
 
 SELECT @elsewhere AS existsElsewhere;
 
-INSERT logs.searchLog (searchLogId, appUserId, rootTenantId, searchText, resultCount, searchedUtc)
+INSERT logs.searchLog (searchLogId, appUserId, rootTenantId, searchText, resultCount, searchedUtc,
+                       sessionReference, clientAddress, actingTenantId, existsElsewhere, searchSource)
 VALUES ({NEWID}, COALESCE (auth.udfSessionUserId (), '00000000-0000-0000-0000-000000000000'),
         COALESCE (auth.udfSessionRootTenantId (), '00000000-0000-0000-0000-000000000000'), LEFT (@searchText, 400),
-        @found, SYSUTCDATETIME ());
+        @found, SYSUTCDATETIME (), @auditSessionRef, @auditClientAddress, @auditActingTenant, @elsewhere, 'global');
 
 SET @Comments = CONCAT (@found, N' match(es).');
 """,

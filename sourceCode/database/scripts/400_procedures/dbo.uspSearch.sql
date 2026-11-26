@@ -196,6 +196,14 @@ BEGIN
 
         SET @found = @found + @@ROWCOUNT;
 
+        DECLARE @auditScope UNIQUEIDENTIFIER = TRY_CAST (SESSION_CONTEXT (N'scopeKey') AS UNIQUEIDENTIFIER);
+        DECLARE @auditSessionRef UNIQUEIDENTIFIER, @auditActingTenant UNIQUEIDENTIFIER, @auditViewAs UNIQUEIDENTIFIER;
+        SELECT @auditSessionRef = sessionReference, @auditActingTenant = actingTenantId, @auditViewAs = viewAsUserId
+          FROM auth.sessionScope
+         WHERE sessionScopeId = @auditScope AND revokedUtc IS NULL AND expiresUtc > SYSUTCDATETIME () AND isDeleted = 0;
+        DECLARE @auditClientAddress VARCHAR (45) = TRY_CAST (SESSION_CONTEXT (N'clientAddress') AS VARCHAR (45));
+        DECLARE @auditTraceId VARCHAR (64) = TRY_CAST (SESSION_CONTEXT (N'traceId') AS VARCHAR (64));
+
         -- Outside scope: only on an exact name and DOB match, through the match-key table, and every hit is audited.
         IF NOT EXISTS (SELECT 1 FROM OPENJSON (COALESCE (@namePairsJson, N'[]'))) AND @found = 0 AND @nameKey1 IS NOT NULL AND @nameKey2 IS NOT NULL AND @dob IS NOT NULL
            AND EXISTS (SELECT 1 FROM dbo.personMatchKey AS mk
@@ -204,16 +212,19 @@ BEGIN
                             OR (mk.lastNameKey = @nameKey2 AND mk.firstNameKey = @nameKey1)))
         BEGIN
             SET @elsewhere = 1;
-            INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, recordCount)
-            VALUES (auth.udfSessionUserId (), auth.udfSessionRootTenantId (), 'search', 'personOutsideScope', NULL, 1);
+            INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, recordCount, clientAddress,
+                                    sessionReference, traceId, actingTenantId, viewAsUserId)
+            VALUES (auth.udfSessionUserId (), auth.udfSessionRootTenantId (), 'search', 'personOutsideScope', NULL, 1,
+                    @auditClientAddress, @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs);
         END;
 
         SELECT @elsewhere AS existsElsewhere;
 
-        INSERT logs.searchLog (searchLogId, appUserId, rootTenantId, searchText, resultCount, searchedUtc)
+        INSERT logs.searchLog (searchLogId, appUserId, rootTenantId, searchText, resultCount, searchedUtc,
+                               sessionReference, clientAddress, actingTenantId, existsElsewhere, searchSource)
         VALUES (CAST (CAST (NEWID () AS BINARY (10)) + CAST (DATEDIFF_BIG (MILLISECOND, '19700101', SYSUTCDATETIME ()) AS BINARY (6)) AS UNIQUEIDENTIFIER), COALESCE (auth.udfSessionUserId (), '00000000-0000-0000-0000-000000000000'),
                 COALESCE (auth.udfSessionRootTenantId (), '00000000-0000-0000-0000-000000000000'), LEFT (@searchText, 400),
-                @found, SYSUTCDATETIME ());
+                @found, SYSUTCDATETIME (), @auditSessionRef, @auditClientAddress, @auditActingTenant, @elsewhere, 'global');
 
         SET @Comments = CONCAT (@found, N' match(es).');
 

@@ -47,6 +47,14 @@
         <input class="usa-input" id="entityId" name="entityId" value="@f.EntityId" />
     </div>
     <div class="usa-form-group">
+        <label class="usa-label" for="viewKind">View type</label>
+        <select class="usa-select" id="viewKind" name="viewKind">
+            <option value="">All views</option>
+            <option value="direct" selected="@(f.ViewKind == "direct")">Direct opens only</option>
+            <option value="incidental" selected="@(f.ViewKind == "incidental")">Incidental (side-effect) only</option>
+        </select>
+    </div>
+    <div class="usa-form-group">
         <label class="usa-label" for="pageSize">Events per page</label>
         <select class="usa-select" name="pageSize" id="pageSize"><option value="25" selected="@(f.PageSize==25)">25</option><option value="100" selected="@(f.PageSize==100)">100</option></select>
     </div>
@@ -80,10 +88,19 @@
                     <tr>
                         <td class="merit-nowrap">@Options.Date(e.EventUtc)</td>
                         <td>@(e.DisplayName ?? "Unknown user")</td>
-                        <td>@AuditText.Action(e.EventAction)</td>
+                        <td>
+                            @AuditText.Action(e.EventAction)
+                            @if (e.ViewKind == "incidental") { <span class="usa-tag merit-meta">incidental</span> }
+                        </td>
                         <td>
                             @AuditText.RecordType(e.EntityType)
                             @if (e.AdministrationJson is string details) { <details><summary>Administration and configuration details</summary><p class="merit-mono merit-meta">@details</p></details> }
+                            @if (e.FilterJson is string filterSnap) { <details><summary>Filter snapshot</summary><p class="merit-mono merit-meta">@filterSnap</p></details> }
+                            @if (e.ManifestCount > 0)
+                            {
+                                <br />
+                                <a class="usa-link merit-meta" href="/admin/audit/@e.AuditEventId/records">Records in this event (@e.ManifestCount.ToString("N0"))</a>
+                            }
                             @if (e.EntityId is Guid id)
                             {
                                 <br />

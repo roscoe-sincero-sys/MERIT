@@ -1,5 +1,5 @@
 """Intake: profiles, batches, staging rows, held records and person-match candidates."""
-from procs_common import NEWID, WEB, WORKER, BOTH, CONCURRENCY, not_found, JOB_SCOPE, JOB_SCOPE_COLUMNS, JOB_SCOPE_VALUES
+from procs_common import NEWID, WEB, WORKER, BOTH, CONCURRENCY, not_found, JOB_SCOPE, JOB_SCOPE_COLUMNS, JOB_SCOPE_VALUES, AUDIT_SESSION_VARS
 
 HELD_SUMMARY_QUERY = """
 SELECT COUNT (*) AS totalCount,
@@ -436,8 +436,10 @@ OFFSET (@pageNumber - 1) * @pageSize ROWS
         "key": "N'group correction'",
         "validate": """IF NULLIF (@reason, '') IS NULL OR @field LIKE '%[^a-zA-Z0-9]%' OR @field IN ('matchPersonId', 'matchNewPerson')
     THROW 50000, N'Choose a cause and a reported field.', 1;""",
-        "body": """
-UPDATE s SET correctedJson = JSON_MODIFY (COALESCE (s.correctedJson, N'{}'), CONCAT (N'$.', @field), @value)
+        "body": f"""
+DECLARE @corrected TABLE (stagingRowId UNIQUEIDENTIFIER PRIMARY KEY, owningTenantId UNIQUEIDENTIFIER);
+UPDATE s SET correctedJson = JSON_MODIFY (COALESCE (s.correctedJson, N'{{}}'), CONCAT (N'$.', @field), @value)
+OUTPUT inserted.stagingRowId, inserted.owningTenantId INTO @corrected
 FROM dbo.stagingRow AS s JOIN dbo.intakeBatch AS b ON b.intakeBatchId = s.intakeBatchId
 WHERE s.rowStatus = 'held' AND s.isDeleted = 0 AND b.isDeleted = 0
   AND b.senderOrganizationId IS NOT DISTINCT FROM @sender
@@ -445,7 +447,21 @@ WHERE s.rowStatus = 'held' AND s.isDeleted = 0 AND b.isDeleted = 0
   AND (@selectedIdsJson IS NULL OR s.stagingRowId IN (SELECT TRY_CONVERT (UNIQUEIDENTIFIER, [value]) FROM OPENJSON (@selectedIdsJson)))
   AND EXISTS (SELECT 1 FROM dbo.stagingHoldReason AS h WHERE h.stagingRowId = s.stagingRowId
     AND h.reasonCode = @reason AND h.reportedValue IS NOT DISTINCT FROM @reportedValue AND h.isResolved = 0 AND h.isDeleted = 0);
-DECLARE @count INT = @@ROWCOUNT;
+DECLARE @count INT = (SELECT COUNT (*) FROM @corrected);
+IF @count > 0
+BEGIN
+    {AUDIT_SESSION_VARS}
+    DECLARE @root UNIQUEIDENTIFIER = auth.udfSessionRootTenantId ();
+    DECLARE @singleOwner UNIQUEIDENTIFIER = (SELECT CASE WHEN COUNT (DISTINCT owningTenantId) = 1 THEN MAX (owningTenantId) END FROM @corrected);
+    INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, recordCount, clientAddress, owningTenantId,
+                            sessionReference, traceId, actingTenantId, viewAsUserId)
+    VALUES (auth.udfSessionUserId (), @root, 'update', 'stagingRow', NULL, @count, @auditClientAddress, @singleOwner,
+            @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs);
+    DECLARE @auditEventId BIGINT = SCOPE_IDENTITY ();
+    IF @root IS NOT NULL
+        INSERT logs.auditEventRecord (auditEventRecordId, auditEventId, rootTenantId, entityType, entityId)
+        SELECT {NEWID}, @auditEventId, @root, 'stagingRow', stagingRowId FROM @corrected;
+END;
 SELECT @count AS updated;
 SET @Comments = CONCAT (@count, N' rows corrected.');
 """,
@@ -465,19 +481,30 @@ END;""",
         "notes": "@correctedJson is a patch merged into the row's corrections: each field it names is set, a field set to "
                  "null is removed (the reported value applies again), and fields it leaves out are kept. Replacing the "
                  "whole object let a second correction erase the first (issue #10).",
-        "body": """
+        "body": f"""
 UPDATE s
-   SET correctedJson = (SELECT N'{' + STRING_AGG (CONCAT (N'"', STRING_ESCAPE (m.[key], 'json'), N'":"',
-                                                        STRING_ESCAPE (m.[value], 'json'), N'"'), N',') + N'}'
+   SET correctedJson = (SELECT N'{{' + STRING_AGG (CONCAT (N'"', STRING_ESCAPE (m.[key], 'json'), N'":"',
+                                                        STRING_ESCAPE (m.[value], 'json'), N'"'), N',') + N'}}'
                           FROM (SELECT COALESCE (p.[key], e.[key]) AS [key],
                                        CASE WHEN p.[key] IS NOT NULL THEN p.[value] ELSE e.[value] END AS [value]
-                                  FROM OPENJSON (COALESCE (s.correctedJson, N'{}')) AS e
+                                  FROM OPENJSON (COALESCE (s.correctedJson, N'{{}}')) AS e
                                   FULL JOIN OPENJSON (@correctedJson) AS p ON p.[key] = e.[key]) AS m
                          WHERE m.[value] IS NOT NULL)
   FROM dbo.stagingRow AS s
  WHERE s.stagingRowId = @stagingRowId AND s.rowStatus = 'held' AND s.isDeleted = 0;
 
-SET @Comments = CONCAT (@@ROWCOUNT, N' row(s) corrected.');
+DECLARE @updated INT = @@ROWCOUNT;
+IF @updated > 0
+BEGIN
+    {AUDIT_SESSION_VARS}
+    DECLARE @owner UNIQUEIDENTIFIER = (SELECT owningTenantId FROM dbo.stagingRow WHERE stagingRowId = @stagingRowId);
+    INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, clientAddress, owningTenantId,
+                            sessionReference, traceId, actingTenantId, viewAsUserId)
+    VALUES (auth.udfSessionUserId (), auth.udfSessionRootTenantId (), 'update', 'stagingRow', @stagingRowId,
+            @auditClientAddress, @owner, @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs);
+END;
+
+SET @Comments = CONCAT (@updated, N' row(s) corrected.');
 """,
     },
     {
@@ -522,7 +549,25 @@ SELECT {NEWID}, b.rootTenantId, b.owningTenantId, 'intakeBatch',
        auth.udfSessionUserId (), {JOB_SCOPE_VALUES}
   FROM dbo.intakeBatch AS b JOIN @batches AS x ON x.intakeBatchId = b.intakeBatchId;
 
-SELECT COUNT (*) AS releasedCount FROM @released;
+DECLARE @releasedCount INT = (SELECT COUNT (*) FROM @released);
+IF @releasedCount > 0
+BEGIN
+    {AUDIT_SESSION_VARS}
+    DECLARE @auditRoot UNIQUEIDENTIFIER = auth.udfSessionRootTenantId ();
+    DECLARE @singleOwner UNIQUEIDENTIFIER = (SELECT CASE WHEN COUNT (DISTINCT s.owningTenantId) = 1 THEN MAX (s.owningTenantId) END
+                                               FROM dbo.stagingRow AS s JOIN @released AS r ON r.stagingRowId = s.stagingRowId);
+    INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, recordCount, clientAddress, owningTenantId,
+                            sessionReference, traceId, actingTenantId, viewAsUserId)
+    VALUES (auth.udfSessionUserId (), @auditRoot, 'update', 'stagingRow',
+            CASE WHEN @releasedCount = 1 THEN (SELECT TOP (1) stagingRowId FROM @released) END,
+            @releasedCount, @auditClientAddress, @singleOwner, @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs);
+    DECLARE @auditEventId BIGINT = SCOPE_IDENTITY ();
+    IF @auditRoot IS NOT NULL
+        INSERT logs.auditEventRecord (auditEventRecordId, auditEventId, rootTenantId, entityType, entityId)
+        SELECT {NEWID}, @auditEventId, @auditRoot, 'stagingRow', stagingRowId FROM @released;
+END;
+
+SELECT @releasedCount AS releasedCount;
 
 SET @Comments = N'Rows released.';
 """,
@@ -544,13 +589,33 @@ IF NULLIF (LTRIM (RTRIM (@rejectReason)), N'') IS NULL
 BEGIN
     ;THROW 51422, N'A reason is required to reject a held record.', 1;
 END;""",
-        "body": """
+        "body": f"""
+DECLARE @rejected TABLE (stagingRowId UNIQUEIDENTIFIER PRIMARY KEY, owningTenantId UNIQUEIDENTIFIER);
+
 UPDATE s SET rowStatus = 'rejected', rejectReason = @rejectReason
+OUTPUT inserted.stagingRowId, inserted.owningTenantId INTO @rejected
   FROM dbo.stagingRow AS s
   JOIN OPENJSON (@stagingRowIdsJson) AS j ON TRY_CAST (j.[value] AS UNIQUEIDENTIFIER) = s.stagingRowId
  WHERE s.rowStatus = 'held' AND s.isDeleted = 0;
 
-SELECT @@ROWCOUNT AS rejectedCount;
+DECLARE @rejectedCount INT = (SELECT COUNT (*) FROM @rejected);
+IF @rejectedCount > 0
+BEGIN
+    {AUDIT_SESSION_VARS}
+    DECLARE @auditRoot UNIQUEIDENTIFIER = auth.udfSessionRootTenantId ();
+    DECLARE @singleOwner UNIQUEIDENTIFIER = (SELECT CASE WHEN COUNT (DISTINCT owningTenantId) = 1 THEN MAX (owningTenantId) END FROM @rejected);
+    INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, recordCount, clientAddress, owningTenantId,
+                            sessionReference, traceId, actingTenantId, viewAsUserId)
+    VALUES (auth.udfSessionUserId (), @auditRoot, 'update', 'stagingRow',
+            CASE WHEN @rejectedCount = 1 THEN (SELECT TOP (1) stagingRowId FROM @rejected) END,
+            @rejectedCount, @auditClientAddress, @singleOwner, @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs);
+    DECLARE @auditEventId BIGINT = SCOPE_IDENTITY ();
+    IF @auditRoot IS NOT NULL
+        INSERT logs.auditEventRecord (auditEventRecordId, auditEventId, rootTenantId, entityType, entityId)
+        SELECT {NEWID}, @auditEventId, @auditRoot, 'stagingRow', stagingRowId FROM @rejected;
+END;
+
+SELECT @rejectedCount AS rejectedCount;
 SET @Comments = N'Rows rejected.';
 """,
     },

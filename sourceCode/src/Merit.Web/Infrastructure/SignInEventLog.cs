@@ -109,7 +109,7 @@ public sealed class SignInEventRecorder(IHttpContextAccessor http, IAccountData 
             string? address = e.ClientAddress ?? context?.Connection.RemoteIpAddress?.ToString();
             string? forwarded = Forwarded(context);
             string? agent = context?.Request.Headers.UserAgent.ToString() is { Length: > 0 } ua ? SanitizeLogText(Truncate(ua, 400)) : null;
-            string? trace = e.TraceId ?? Activity.Current?.TraceId.ToString() ?? context?.TraceIdentifier;
+            string? trace = e.TraceId ?? RequestTrace.Id(context);
 
             await data.RecordSignInEventAsync(new SignInEventInput(e.Type, e.Step, e.Method, e.Reason, appUserId, e.ActorUserId, hash, protectedName,
                 address, forwarded, agent, scope, attempt, trace), CancellationToken.None).ConfigureAwait(false);

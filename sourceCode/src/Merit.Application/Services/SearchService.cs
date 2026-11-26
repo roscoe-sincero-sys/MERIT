@@ -6,31 +6,79 @@ using Merit.Domain.Text;
 
 namespace Merit.Application.Services;
 
-/// <summary>Writes the audit ledger: every view, change, merge and export of a person, result or case.</summary>
-public sealed class AuditService(IWorkData data)
+/// <summary>
+/// Writes the audit ledger: every view, change, merge, search, export and permission denial. Scoped per request so
+/// duplicate reads of the same record within one request are collapsed to a single row (#333), and every event carries
+/// the request's client address and W3C trace id (#326).
+/// </summary>
+public sealed class AuditService(IWorkData data, IRequestAuditContext? request = null)
 {
-    public Task ViewedAsync(string entityType, Guid id, CancellationToken ct = default)
-        => data.RecordAuditAsync("view", entityType, id, null, null, ct);
+    private readonly IRequestAuditContext context = request ?? NullRequestAuditContext.Instance;
+    private readonly HashSet<(string EntityType, Guid EntityId)> viewedThisRequest = [];
+    private bool permissionDeniedRecorded;
+
+    public Task ViewedAsync(string entityType, Guid id, CancellationToken ct = default, string viewKind = "direct")
+    {
+        if (!viewedThisRequest.Add((entityType, id)))
+        {
+            return Task.CompletedTask;
+        }
+
+        return data.RecordAuditAsync("view", entityType, id, null, context.ClientAddress, ct, viewKind: viewKind, traceId: context.TraceId);
+    }
+
+    public Task ViewedIncidentalAsync(string entityType, Guid id, CancellationToken ct = default)
+        => ViewedAsync(entityType, id, ct, viewKind: "incidental");
 
     public Task ChangedAsync(string entityType, Guid id, CancellationToken ct = default)
-        => data.RecordAuditAsync("update", entityType, id, null, null, ct);
+        => data.RecordAuditAsync("update", entityType, id, null, context.ClientAddress, ct, traceId: context.TraceId);
 
     public Task CreatedAsync(string entityType, Guid id, CancellationToken ct = default)
-        => data.RecordAuditAsync("create", entityType, id, null, null, ct);
+        => data.RecordAuditAsync("create", entityType, id, null, context.ClientAddress, ct, traceId: context.TraceId);
 
-    public Task SearchedAsync(string entityType, int rowCount, CancellationToken ct = default)
-        => data.RecordAuditAsync("search", entityType, null, rowCount, null, ct);
+    public Task SearchedAsync(string entityType, int rowCount, CancellationToken ct = default, object? filter = null,
+                              IEnumerable<AuditManifestEntry>? manifest = null)
+        => data.RecordAuditAsync("search", entityType, null, rowCount, context.ClientAddress, ct, viewKind: "direct",
+            filterJson: SerializeFilter(filter), recordIdsJson: SerializeManifest(manifest), traceId: context.TraceId);
 
-    public Task ExportedAsync(string entityType, Guid? id, int rowCount, CancellationToken ct = default)
-        => data.RecordAuditAsync("export", entityType, id, rowCount, null, ct);
+    public Task ExportedAsync(string entityType, Guid? id, int rowCount, CancellationToken ct = default, object? filter = null,
+                              IEnumerable<AuditManifestEntry>? manifest = null)
+        => data.RecordAuditAsync("export", entityType, id, rowCount, context.ClientAddress, ct,
+            filterJson: SerializeFilter(filter), recordIdsJson: SerializeManifest(manifest), traceId: context.TraceId);
 
-    public Task ListedAsync(string entityType, int rowCount, CancellationToken ct = default)
-        => data.RecordAuditAsync("view", entityType, null, rowCount, null, ct);
+    public Task ListedAsync(string entityType, int rowCount, CancellationToken ct = default, object? filter = null,
+                            IEnumerable<AuditManifestEntry>? manifest = null)
+        => data.RecordAuditAsync("view", entityType, null, rowCount, context.ClientAddress, ct, viewKind: "direct",
+            filterJson: SerializeFilter(filter), recordIdsJson: SerializeManifest(manifest), traceId: context.TraceId);
+
+    /// <summary>Records a free-text search in logs.searchLog and a matching search event (+ optional manifest) in logs.auditEvent (#331).</summary>
+    public Task RecordSearchAsync(string searchText, int rowCount, string searchSource, string entityType, CancellationToken ct = default,
+                                  object? filter = null, IEnumerable<AuditManifestEntry>? manifest = null)
+        => data.RecordSearchLogAsync(searchText, rowCount, searchSource, entityType, SerializeFilter(filter), SerializeManifest(manifest), ct);
+
+    /// <summary>Records permissionDenied once per request (#325), even when caught by a controller or policy handler.</summary>
+    public Task PermissionDeniedAsync(string entityType, Guid? entityId = null, CancellationToken ct = default)
+    {
+        if (permissionDeniedRecorded)
+        {
+            return Task.CompletedTask;
+        }
+
+        permissionDeniedRecorded = true;
+        return data.RecordAuditAsync("permissionDenied", entityType, entityId, null, context.ClientAddress, ct, traceId: context.TraceId);
+    }
 
     public Task<IReadOnlyList<AuditEventRow>> SearchAsync(ICurrentSession session, AuditQuery query, CancellationToken ct = default)
     {
         session.Require(Permissions.AuditView);
         return data.SearchAuditAsync(query, ct);
+    }
+
+    /// <summary>Record manifest for one list, export or batch audit event (#333).</summary>
+    public Task<IReadOnlyList<AuditEventRecordRow>> RecordsAsync(ICurrentSession session, long auditEventId, CancellationToken ct = default)
+    {
+        session.Require(Permissions.AuditView);
+        return data.GetAuditEventRecordsAsync(auditEventId, ct);
     }
 
     /// <summary>The users who appear in the ledger, for its user filter.</summary>
@@ -39,6 +87,22 @@ public sealed class AuditService(IWorkData data)
         session.Require(Permissions.AuditView);
         return data.ListAuditUsersAsync(ct);
     }
+
+    private static string? SerializeFilter(object? filter)
+        => filter is null ? null : JsonSerializer.Serialize(filter, JsonOpts);
+
+    private static string? SerializeManifest(IEnumerable<AuditManifestEntry>? manifest)
+    {
+        if (manifest is null) return null;
+        var list = manifest.Distinct().ToList();
+        return list.Count == 0 ? null : JsonSerializer.Serialize(list, JsonOpts);
+    }
+
+    private static readonly JsonSerializerOptions JsonOpts = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
+    };
 }
 
 /// <summary>

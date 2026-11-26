@@ -34,7 +34,10 @@ public sealed class MatchReviewService(IClock clock, IReviewData review, IPerson
     public async Task<IReadOnlyList<MatchReviewRow>> QueueAsync(bool escalatedOnly, int pageNumber, int pageSize, CancellationToken ct = default)
     {
         session.Require(Permissions.ResultReleaseHold);
-        return await review.ListMatchReviewRowsAsync(escalatedOnly, null, pageNumber, pageSize, ct).ConfigureAwait(false);
+        var rows = await review.ListMatchReviewRowsAsync(escalatedOnly, null, pageNumber, pageSize, ct).ConfigureAwait(false);
+        await audit.ListedAsync("stagingRow", rows.Count, ct, new { escalatedOnly, pageNumber, pageSize },
+            rows.Select(r => new AuditManifestEntry("stagingRow", r.StagingRowId))).ConfigureAwait(false);
+        return rows;
     }
 
     public async Task<MatchReviewDetail> GetAsync(Guid stagingRowId, CancellationToken ct = default)

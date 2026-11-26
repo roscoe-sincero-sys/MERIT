@@ -5,6 +5,15 @@ using Merit.Data.SqlServer;
 using Merit.Worker;
 
 var builder = WebApplication.CreateBuilder(args);
+if (string.Equals(builder.Configuration["Logging:Format"], "Json", StringComparison.OrdinalIgnoreCase))
+{
+    builder.Logging.AddJsonConsole(o =>
+    {
+        o.IncludeScopes = true;
+        o.TimestampFormat = "yyyy-MM-ddTHH:mm:ss.fffZ";
+        o.UseUtcTimestamp = true;
+    });
+}
 
 builder.Services.AddSingleton<JobSessionHolder>();
 builder.Services.AddScoped<ICurrentSession, JobCurrentSession>();

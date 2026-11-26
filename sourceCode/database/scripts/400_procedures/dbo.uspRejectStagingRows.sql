@@ -105,12 +105,38 @@ BEGIN
         -- ===== The procedure's own work starts here. Everything above and below is boilerplate. ==
         -- =========================================================================================
 
+        DECLARE @rejected TABLE (stagingRowId UNIQUEIDENTIFIER PRIMARY KEY, owningTenantId UNIQUEIDENTIFIER);
+
         UPDATE s SET rowStatus = 'rejected', rejectReason = @rejectReason
+        OUTPUT inserted.stagingRowId, inserted.owningTenantId INTO @rejected
           FROM dbo.stagingRow AS s
           JOIN OPENJSON (@stagingRowIdsJson) AS j ON TRY_CAST (j.[value] AS UNIQUEIDENTIFIER) = s.stagingRowId
          WHERE s.rowStatus = 'held' AND s.isDeleted = 0;
 
-        SELECT @@ROWCOUNT AS rejectedCount;
+        DECLARE @rejectedCount INT = (SELECT COUNT (*) FROM @rejected);
+        IF @rejectedCount > 0
+        BEGIN
+            DECLARE @auditScope UNIQUEIDENTIFIER = TRY_CAST (SESSION_CONTEXT (N'scopeKey') AS UNIQUEIDENTIFIER);
+        DECLARE @auditSessionRef UNIQUEIDENTIFIER, @auditActingTenant UNIQUEIDENTIFIER, @auditViewAs UNIQUEIDENTIFIER;
+        SELECT @auditSessionRef = sessionReference, @auditActingTenant = actingTenantId, @auditViewAs = viewAsUserId
+          FROM auth.sessionScope
+         WHERE sessionScopeId = @auditScope AND revokedUtc IS NULL AND expiresUtc > SYSUTCDATETIME () AND isDeleted = 0;
+        DECLARE @auditClientAddress VARCHAR (45) = TRY_CAST (SESSION_CONTEXT (N'clientAddress') AS VARCHAR (45));
+        DECLARE @auditTraceId VARCHAR (64) = TRY_CAST (SESSION_CONTEXT (N'traceId') AS VARCHAR (64));
+            DECLARE @auditRoot UNIQUEIDENTIFIER = auth.udfSessionRootTenantId ();
+            DECLARE @singleOwner UNIQUEIDENTIFIER = (SELECT CASE WHEN COUNT (DISTINCT owningTenantId) = 1 THEN MAX (owningTenantId) END FROM @rejected);
+            INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, recordCount, clientAddress, owningTenantId,
+                                    sessionReference, traceId, actingTenantId, viewAsUserId)
+            VALUES (auth.udfSessionUserId (), @auditRoot, 'update', 'stagingRow',
+                    CASE WHEN @rejectedCount = 1 THEN (SELECT TOP (1) stagingRowId FROM @rejected) END,
+                    @rejectedCount, @auditClientAddress, @singleOwner, @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs);
+            DECLARE @auditEventId BIGINT = SCOPE_IDENTITY ();
+            IF @auditRoot IS NOT NULL
+                INSERT logs.auditEventRecord (auditEventRecordId, auditEventId, rootTenantId, entityType, entityId)
+                SELECT CAST (CAST (NEWID () AS BINARY (10)) + CAST (DATEDIFF_BIG (MILLISECOND, '19700101', SYSUTCDATETIME ()) AS BINARY (6)) AS UNIQUEIDENTIFIER), @auditEventId, @auditRoot, 'stagingRow', stagingRowId FROM @rejected;
+        END;
+
+        SELECT @rejectedCount AS rejectedCount;
         SET @Comments = N'Rows rejected.';
 
         -- =========================================================================================

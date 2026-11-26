@@ -1,5 +1,5 @@
 """Lab result procedures."""
-from procs_common import NEWID, WEB, BOTH, CONCURRENCY, not_found
+from procs_common import NEWID, WEB, BOTH, CONCURRENCY, not_found, AUDIT_SESSION_VARS
 
 PROCS = [
     {
@@ -178,6 +178,12 @@ VALUES (@labResultId, @root, @root, @personId, @analyteSpecimenId, @collectedDat
         @creatinineValue, @valueCreatinineAdj, @reasonForTest, @payerType, @labOrganizationId, @orderingProviderId,
         @orderingFacilityId, @accessionNumber, @loincReported, @reportedSnapshotJson, @reportedLocationId,
         @ageAtCollectionMonths, @population, @isIndeterminate, @resultRowStatus, @intakeBatchId);
+
+{AUDIT_SESSION_VARS}
+INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, clientAddress, owningTenantId,
+                        sessionReference, traceId, actingTenantId, viewAsUserId)
+VALUES (auth.udfSessionUserId (), @root, 'create', 'labResult', @labResultId, @auditClientAddress,
+        dbo.udfPatientWorkOwner (@personId), @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs);
 
 SELECT @labResultId AS labResultId, @intakeBatchId AS intakeBatchId;
 

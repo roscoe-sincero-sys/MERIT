@@ -1428,9 +1428,14 @@ TABLES = [
             c("searchText", "NVARCHAR (400)", "Text searched for.", null=False),
             c("resultCount", "INT", "Rows returned.", null=False),
             c("searchedUtc", "DATETIME2 (3)", "UTC time of the search.", null=False),
+            c("sessionReference", UUID, "Non-secret logical sign-in session reference for cross-log correlation (#326)."),
+            c("clientAddress", "VARCHAR (45)", "Client IP address after trusted forwarded headers (#326)."),
+            c("actingTenantId", UUID, "Working tenant active when the search ran (#326)."),
+            c("existsElsewhere", "BIT", "1 when an exact name and DOB match existed outside the caller's scope (#326)."),
+            c("searchSource", "VARCHAR (30)", "Where the search ran: global, casePicker, or caseList (#331)."),
         ],
         "fks": [],
-        "indexes": [],
+        "indexes": [{"name": "IX_logs_searchLog_sessionReference_searchedUtc", "cols": "sessionReference, searchedUtc"}],
     },
     # ------------------------------------------------------------------------------------------------ matching review
     {
@@ -1830,3 +1835,21 @@ TABLES += [{"schema":"dbo","name":"contactCorrection","rls":"correction","person
  c("reviewNote","NVARCHAR (1000)","Reviewer explanation and application evidence."),c("reviewedByUserId",UUID,"Reviewer."),c("reviewedUtc","DATETIME2 (3)","Actual review time."),ROW_VERSION],
  "fks":[("personId","dbo.person","personId"),("caregiverId","dbo.person","personId"),("responsibleTenantId","auth.tenant","tenantId")],
  "indexes":[{"name":"IX_dbo_contactCorrection_owner_status","cols":"responsibleTenantId, requestStatus"},{"name":"IX_dbo_contactCorrection_patient","cols":"personId"}]}]
+
+TABLES += [{
+    "schema": "logs", "name": "auditEventRecord", "rls": None, "tenantKey": False,
+    "desc": "Purgeable manifest of record identifiers returned by list views, exports, or batch actions, keyed by "
+            "logs.auditEvent.auditEventId. Holds identifiers and entity types only, never patient data (#333).",
+    "cols": [
+        c("auditEventRecordId", UUID, "Surrogate key.", null=False),
+        c("auditEventId", "BIGINT", "Parent ledger event in logs.auditEvent.", null=False),
+        c("rootTenantId", UUID, "Data root of the audit event.", null=False),
+        c("entityType", "VARCHAR (30)", "Kind of record in the manifest, e.g. person, labResult, exposureCase, stagingRow.", null=False),
+        c("entityId", UUID, "Identifier of the record returned or acted on.", null=False),
+    ],
+    "fks": [],
+    "indexes": [
+        {"name": "IX_logs_auditEventRecord_auditEventId", "cols": "auditEventId"},
+        {"name": "IX_logs_auditEventRecord_entityType_entityId", "cols": "entityType, entityId"},
+    ],
+}]

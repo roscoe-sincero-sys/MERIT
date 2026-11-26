@@ -175,3 +175,63 @@ GO
 EXEC util.uspSetObjectDescription @SchemaName=N'logs',@ObjectType=N'TABLE',@ObjectName=N'auditEvent',@ColumnName=N'administrationJson',
  @Description=N'Immutable administration/configuration snapshot: identifiers, allowlisted codes, canonical numeric settings, thresholds, flags and effective dates. No free text, names, credentials or secrets.';
 GO
+
+-- Issues 326 & 333: cross-log correlation context, view kind (direct vs incidental), and canonical non-PHI filter snapshot.
+IF COL_LENGTH (N'logs.auditEvent', N'sessionReference') IS NULL
+    ALTER TABLE logs.auditEvent ADD sessionReference UNIQUEIDENTIFIER NULL;
+GO
+IF COL_LENGTH (N'logs.auditEvent', N'traceId') IS NULL
+    ALTER TABLE logs.auditEvent ADD traceId VARCHAR (64) NULL;
+GO
+IF COL_LENGTH (N'logs.auditEvent', N'actingTenantId') IS NULL
+    ALTER TABLE logs.auditEvent ADD actingTenantId UNIQUEIDENTIFIER NULL;
+GO
+IF COL_LENGTH (N'logs.auditEvent', N'viewAsUserId') IS NULL
+    ALTER TABLE logs.auditEvent ADD viewAsUserId UNIQUEIDENTIFIER NULL;
+GO
+IF COL_LENGTH (N'logs.auditEvent', N'viewKind') IS NULL
+    ALTER TABLE logs.auditEvent ADD viewKind VARCHAR (16) NULL;
+GO
+IF COL_LENGTH (N'logs.auditEvent', N'filterJson') IS NULL
+    ALTER TABLE logs.auditEvent ADD filterJson NVARCHAR (MAX) NULL;
+GO
+
+IF NOT EXISTS (SELECT 1
+                 FROM sys.check_constraints
+                WHERE name = N'CK_logs_auditEvent_viewKind'
+                  AND parent_object_id = OBJECT_ID (N'logs.auditEvent'))
+BEGIN
+    ALTER TABLE logs.auditEvent WITH CHECK ADD CONSTRAINT CK_logs_auditEvent_viewKind
+        CHECK (viewKind IS NULL OR viewKind IN ('direct', 'incidental'));
+END;
+GO
+
+IF NOT EXISTS (SELECT 1
+                 FROM sys.indexes
+                WHERE name      = N'IX_logs_auditEvent_sessionReference_eventUtc'
+                  AND object_id = OBJECT_ID (N'logs.auditEvent'))
+BEGIN
+    CREATE INDEX IX_logs_auditEvent_sessionReference_eventUtc
+        ON logs.auditEvent (sessionReference, eventUtc)
+        WHERE sessionReference IS NOT NULL;
+END;
+GO
+
+IF NOT EXISTS (SELECT 1
+                 FROM sys.indexes
+                WHERE name      = N'IX_logs_auditEvent_traceId'
+                  AND object_id = OBJECT_ID (N'logs.auditEvent'))
+BEGIN
+    CREATE INDEX IX_logs_auditEvent_traceId
+        ON logs.auditEvent (traceId)
+        WHERE traceId IS NOT NULL;
+END;
+GO
+
+EXEC util.uspSetObjectDescription @SchemaName = N'logs', @ObjectType = N'TABLE', @ObjectName = N'auditEvent', @ColumnName = N'sessionReference', @Description = N'Non-secret logical sign-in session reference (auth.sessionScope.sessionReference) for cross-log correlation (#326).';
+EXEC util.uspSetObjectDescription @SchemaName = N'logs', @ObjectType = N'TABLE', @ObjectName = N'auditEvent', @ColumnName = N'traceId', @Description = N'W3C trace identifier of the originating request for joining ledger events to application and sign-in logs (#326).';
+EXEC util.uspSetObjectDescription @SchemaName = N'logs', @ObjectType = N'TABLE', @ObjectName = N'auditEvent', @ColumnName = N'actingTenantId', @Description = N'Working tenant active in the session when the event occurred (#326).';
+EXEC util.uspSetObjectDescription @SchemaName = N'logs', @ObjectType = N'TABLE', @ObjectName = N'auditEvent', @ColumnName = N'viewAsUserId', @Description = N'User whose access an administrator was viewing when the event occurred; NULL outside View As (#326).';
+EXEC util.uspSetObjectDescription @SchemaName = N'logs', @ObjectType = N'TABLE', @ObjectName = N'auditEvent', @ColumnName = N'viewKind', @Description = N'For view events: direct (user opened the record) or incidental (loaded as a side effect of another screen, e.g. timeline); NULL for non-view or legacy rows (#333).';
+EXEC util.uspSetObjectDescription @SchemaName = N'logs', @ObjectType = N'TABLE', @ObjectName = N'auditEvent', @ColumnName = N'filterJson', @Description = N'Canonical non-PHI snapshot of list or export filter parameters (codes, IDs, dates, flags, sort, page). Never holds free-text search terms or patient data (#333).';
+GO

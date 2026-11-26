@@ -1,5 +1,5 @@
 """Places, organizations, employment, exposure sources, products and providers."""
-from procs_common import NEWID, WEB, BOTH, CONCURRENCY, not_found
+from procs_common import NEWID, WEB, BOTH, CONCURRENCY, not_found, AUDIT_SESSION_VARS
 
 PERSON_VISIBLE = not_found("@personId", "dbo.person", "personId", "The person")
 
@@ -211,7 +211,7 @@ IF ISJSON (@changesJson) = 0
 BEGIN
     ;THROW 50000, N'@changesJson must be a JSON array.', 1;
 END;""",
-        "body": """
+        "body": f"""
 DECLARE @changes TABLE
 (
     personLocationId   UNIQUEIDENTIFIER PRIMARY KEY,
@@ -320,6 +320,12 @@ SELECT TOP (1) @msg = CONCAT (N'On ', CONVERT (NVARCHAR (10), c.d, 23),
 IF @msg IS NOT NULL THROW 51422, @msg, 1;
 
 EXEC dbo.uspRefreshPersonAccess @personId = @personId;
+
+{AUDIT_SESSION_VARS}
+INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, clientAddress, owningTenantId,
+                        sessionReference, traceId, actingTenantId, viewAsUserId)
+VALUES (auth.udfSessionUserId (), auth.udfSessionRootTenantId (), 'update', 'person', @personId, @auditClientAddress,
+        dbo.udfPatientWorkOwner (@personId), @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs);
 
 SET @Comments = CONCAT ((SELECT COUNT (*) FROM @changes), N' place change(s) applied.');
 """,
