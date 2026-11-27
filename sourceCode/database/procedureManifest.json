@@ -1224,6 +1224,12 @@
     "type": "INT",
     "hasDefault": true,
     "isOutput": false
+   },
+   {
+    "name": "maxAuditEventId",
+    "type": "BIGINT",
+    "hasDefault": true,
+    "isOutput": false
    }
   ]
  },
@@ -1254,6 +1260,12 @@
    {
     "name": "pageSize",
     "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "maxAuditEventId",
+    "type": "BIGINT",
     "hasDefault": true,
     "isOutput": false
    }
