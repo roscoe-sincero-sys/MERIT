@@ -150,7 +150,7 @@ BEGIN
         INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, clientAddress, owningTenantId,
                                 sessionReference, traceId, actingTenantId, viewAsUserId, userAgentHash)
         VALUES (auth.udfSessionUserId (), auth.udfSessionRootTenantId (), 'update', 'testingPlan', @workTaskId,
-                @auditClientAddress, dbo.udfPatientWorkOwner (@personId), @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs, @auditUserAgentHash);
+                @auditClientAddress, (SELECT owningTenantId FROM dbo.workTask WHERE workTaskId = @workTaskId), @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs, @auditUserAgentHash);
 
 
         -- =========================================================================================

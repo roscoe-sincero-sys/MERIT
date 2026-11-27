@@ -679,7 +679,8 @@ SET @Comments = N'Pregnancy episode saved.';
 , @source               VARCHAR (20)
 , @verifiedDate         DATE = NULL
 , @isDeleted            BIT = 0
-, @rowVersion           BINARY (8) = NULL""",
+, @rowVersion           BINARY (8) = NULL
+, @isVerification       BIT = 0""",
         "key": "CONCAT (N'personRelationshipId=', @personRelationshipId, N', personId=', @personId)",
         "validate": PERSON_VISIBLE,
         "body": f"""

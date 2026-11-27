@@ -131,7 +131,24 @@ BEGIN
                AND (@entityId IS NULL OR e.auditEventId IN (
                         SELECT a.auditEventId FROM logs.auditEvent AS a WHERE a.entityId = @entityId
                         UNION
-                        SELECT r.auditEventId FROM logs.auditEventRecord AS r WHERE r.entityId = @entityId AND r.isDeleted = 0))
+                        SELECT r.auditEventId
+                          FROM logs.auditEventRecord AS r
+                         WHERE r.entityId = @entityId AND r.isDeleted = 0
+                           AND (EXISTS (SELECT 1 FROM @wholeRoots AS w WHERE w.rootTenantId = r.rootTenantId)
+                                OR (r.entityType IN ('person', 'patientCare', 'labResult', 'exposureCase', 'investigation', 'stagingRow', 'workTask', 'testingPlan', 'notificationObligation')
+                                    AND COALESCE (r.owningTenantId,
+                                        CASE r.entityType
+                                            WHEN 'person'                 THEN dbo.udfPatientWorkOwner (r.entityId)
+                                            WHEN 'patientCare'            THEN dbo.udfPatientWorkOwner (r.entityId)
+                                            WHEN 'labResult'              THEN dbo.udfPatientWorkOwner ((SELECT lr.personId FROM dbo.labResult AS lr WHERE lr.labResultId = r.entityId))
+                                            WHEN 'exposureCase'           THEN (SELECT ec.owningTenantId FROM dbo.exposureCase AS ec WHERE ec.exposureCaseId = r.entityId)
+                                            WHEN 'investigation'          THEN (SELECT inv.owningTenantId FROM dbo.investigation AS inv WHERE inv.investigationId = r.entityId)
+                                            WHEN 'stagingRow'             THEN (SELECT sr.owningTenantId FROM dbo.stagingRow AS sr WHERE sr.stagingRowId = r.entityId)
+                                            WHEN 'workTask'               THEN (SELECT wt.owningTenantId FROM dbo.workTask AS wt WHERE wt.workTaskId = r.entityId)
+                                            WHEN 'testingPlan'            THEN (SELECT wt.owningTenantId FROM dbo.workTask AS wt WHERE wt.workTaskId = r.entityId)
+                                            WHEN 'notificationObligation' THEN (SELECT no2.owningTenantId FROM dbo.notificationObligation AS no2 WHERE no2.notificationObligationId = r.entityId)
+                                        END) IN (SELECT tenantId FROM @scope))
+                                OR r.entityType NOT IN ('person', 'patientCare', 'labResult', 'exposureCase', 'investigation', 'stagingRow', 'workTask', 'testingPlan', 'notificationObligation'))))
                AND (@eventAction IS NULL OR e.eventAction = @eventAction
                     -- "signInEvents": every sign-in and account-security action at once (#191).
                     OR (@eventAction = 'signInEvents' AND e.eventAction IN ('signIn', 'signInFailed', 'signOut', 'mfaEnrolled', 'mfaEmailEnabled', 'mfaEmailDisabled', 'mfaMethodChanged', 'mfaCodeSent', 'mfaCodeNotSent', 'mfaCodeRefused', 'mfaCodeLocked', 'passwordChanged', 'passwordResetRequested', 'passwordResetCompleted', 'passwordSetByAdmin')))

@@ -305,7 +305,7 @@ public sealed class PersonService(
         if(!confirmed) throw new ValidationException("confirmed","Verify the caregiver identity, relationship and contact information before confirming.");
         var rel=(await data.GetRelationshipsAsync(personId,ct)).FirstOrDefault(r=>r.PersonRelationshipId==relationshipId && !r.IsInverse && r.EndDate is null) ?? throw new NotFoundException();
         if(role is not ("parent" or "legalGuardian" or "fosterParent" or "caregiver")) throw new ValidationException("role","Choose the verified caregiver relationship.");
-        await data.SaveRelationshipAsync(new(relationshipId,personId,rel.OtherPersonId,role,primary,legalCustody,rel.StartDate,null,"interview",clock.Today,false,version),ct);
+        await data.SaveRelationshipAsync(new(relationshipId,personId,rel.OtherPersonId,role,primary,legalCustody,rel.StartDate,null,"interview",clock.Today,false,version,IsVerification:true),ct);
     }
 
     public async Task SaveEmploymentAsync(EmploymentInput input, CancellationToken ct = default)

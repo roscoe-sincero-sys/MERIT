@@ -136,19 +136,60 @@ public sealed class LoggingWave3IntegrationTests(MeritFixture fixture)
             await SetContextAsync(retryConn, scopeKey, admin.appUserId, "admin", admin.homeTenantId);
             await SaveSyntheticPersonAsync(retryConn, personId, admin.homeTenantId);
 
-            // Also verify a newly migrated secondary write path (dbo.uspSavePersonContactMethod) writes an in-tx auditEvent.
+        // Also verify a newly migrated secondary write path (dbo.uspSavePersonContactMethod) writes an in-tx auditEvent,
+            // and Codex #3: uspSavePersonRelationship preserves personRelationship + @personRelationshipId on verification
+            // while using person + @personId on normal saves.
             Guid contactId = TimeOrderedId.New();
             await retryConn.ExecuteAsync("dbo.uspSavePersonContactMethod",
                 new { personContactMethodId = contactId, personId, contactType = "phone", contactValue = "4105550199", isPreferred = true, isDeleted = false },
+                commandType: CommandType.StoredProcedure);
+
+            Guid relId = TimeOrderedId.New();
+            await retryConn.ExecuteAsync("dbo.uspSavePersonRelationship",
+                new { personRelationshipId = relId, personId, relatedPersonId = fixture.Ids.MiaPersonId, role = "parent", isPrimaryContact = true, hasLegalCustody = true, source = "interview", isDeleted = false, isVerification = false },
+                commandType: CommandType.StoredProcedure);
+            byte[] relVersion = await retryConn.ExecuteScalarAsync<byte[]>(
+                "SELECT rowVersion FROM dbo.personRelationship WHERE personRelationshipId = @rid", new { rid = relId }) ?? [];
+            await retryConn.ExecuteAsync("dbo.uspSavePersonRelationship",
+                new { personRelationshipId = relId, personId, relatedPersonId = fixture.Ids.MiaPersonId, role = "parent", isPrimaryContact = true, hasLegalCustody = true, source = "interview", verifiedDate = DateTime.UtcNow.Date, isDeleted = false, rowVersion = relVersion, isVerification = true },
                 commandType: CommandType.StoredProcedure);
         }
 
         Assert.Equal(1, await conn.ExecuteScalarAsync<int>("SELECT COUNT (*) FROM dbo.person WHERE personId = @id AND isDeleted = 0", new { id = personId }));
         Assert.Equal(1, await conn.ExecuteScalarAsync<int>("SELECT COUNT (*) FROM logs.auditEvent WHERE entityId = @id AND eventAction = 'create' AND entityType = 'person'", new { id = personId }));
-        Assert.Equal(1, await conn.ExecuteScalarAsync<int>("SELECT COUNT (*) FROM logs.auditEvent WHERE entityId = @id AND eventAction = 'update' AND entityType = 'person'", new { id = personId }));
+        Assert.Equal(2, await conn.ExecuteScalarAsync<int>("SELECT COUNT (*) FROM logs.auditEvent WHERE entityId = @id AND eventAction = 'update' AND entityType = 'person'", new { id = personId }));
+        Assert.Equal(1, await conn.ExecuteScalarAsync<int>(
+            "SELECT COUNT (*) FROM logs.auditEvent WHERE eventAction = 'update' AND entityType = 'personRelationship' AND entityId IN (SELECT personRelationshipId FROM dbo.personRelationship WHERE personId = @id)",
+            new { id = personId }));
+
+        // Codex #1: Verify task audit uses the task's actual owningTenantId (from linked case), NOT recomputed patient work owner.
+        var splitCase = await conn.QueryFirstOrDefaultAsync<(Guid exposureCaseId, Guid personId, Guid caseOwner)>(
+            """
+            SELECT TOP (1) c.exposureCaseId, c.personId, c.owningTenantId
+              FROM dbo.exposureCase AS c
+             WHERE c.isDeleted = 0 AND c.owningTenantId <> dbo.udfPatientWorkOwner (c.personId)
+             ORDER BY c.openedDate DESC
+            """);
+        if (splitCase.exposureCaseId != Guid.Empty)
+        {
+            Guid taskId = TimeOrderedId.New();
+            await using (var taskConn = new SqlConnection(TestEnvironment.AdminConnectionString()))
+            {
+                await taskConn.OpenAsync();
+                await SetContextAsync(taskConn, scopeKey, admin.appUserId, "admin", admin.homeTenantId);
+                await taskConn.ExecuteAsync("dbo.uspCreateAdHocWork",
+                    new { workTaskId = taskId, personId = splitCase.personId, title = "Wave3 owner test", description = "Verify task audit owner", completionKind = "internal", exposureCaseId = splitCase.exposureCaseId, dueDate = DateTime.UtcNow.Date.AddDays(7) },
+                    commandType: CommandType.StoredProcedure);
+            }
+            var auditedOwner = await conn.ExecuteScalarAsync<Guid?>(
+                "SELECT TOP (1) owningTenantId FROM logs.auditEvent WHERE entityType = 'workTask' AND entityId = @tid ORDER BY auditEventId DESC",
+                new { tid = taskId });
+            Assert.Equal(splitCase.caseOwner, auditedOwner);
+            await conn.ExecuteAsync("UPDATE dbo.workTask SET isDeleted = 1 WHERE workTaskId = @tid;", new { tid = taskId });
+        }
 
         // Clean up synthetic person and scope.
-        await conn.ExecuteAsync("UPDATE dbo.personContactMethod SET isDeleted = 1 WHERE personId = @id; UPDATE dbo.person SET isDeleted = 1 WHERE personId = @id; UPDATE auth.sessionScope SET revokedUtc = SYSUTCDATETIME () WHERE sessionScopeId = @sk;",
+        await conn.ExecuteAsync("UPDATE dbo.personRelationship SET isDeleted = 1 WHERE personId = @id; UPDATE dbo.personContactMethod SET isDeleted = 1 WHERE personId = @id; UPDATE dbo.person SET isDeleted = 1 WHERE personId = @id; UPDATE auth.sessionScope SET revokedUtc = SYSUTCDATETIME () WHERE sessionScopeId = @sk;",
             new { id = personId, sk = scopeKey });
     }
 
@@ -169,8 +210,19 @@ public sealed class LoggingWave3IntegrationTests(MeritFixture fixture)
             VALUES (@id, @dt, 'passwordFailed', @u, @r, '198.51.100.88', '198.51.100.88, 10.0.0.1', 'Mozilla/5.0 Test', 0x01020304, @sr, 'trace-336-test');
             """, new { id = expiredId, dt = oldUtc, u = sup.appUserId, r = sup.rootTenantId, sr = TimeOrderedId.New() });
 
+        // Also verify a legacy soft-deleted row (isDeleted = 1 from an earlier purge) has sessionReference/traceId scrubbed idempotently (#336, Codex #4).
+        Guid legacyPurgedId = TimeOrderedId.New();
+        await conn.ExecuteAsync(
+            """
+            INSERT logs.signInEvent (signInEventId, eventUtc, eventType, appUserId, rootTenantId, sessionReference, traceId, isDeleted)
+            VALUES (@id, @dt, 'passwordFailed', @u, @r, @sr, 'trace-336-legacy', 1);
+            """, new { id = legacyPurgedId, dt = oldUtc, u = sup.appUserId, r = sup.rootTenantId, sr = TimeOrderedId.New() });
+
         int purged = await conn.ExecuteScalarAsync<int>("logs.uspPurgeSignInEvents", new { retentionDays = 365 }, commandType: CommandType.StoredProcedure);
-        Assert.True(purged >= 1);
+        Assert.True(purged >= 2);
+        // Second run is idempotent (0 rows remaining for these test IDs).
+        int secondPurge = await conn.ExecuteScalarAsync<int>("logs.uspPurgeSignInEvents", new { retentionDays = 365 }, commandType: CommandType.StoredProcedure);
+        Assert.Equal(0, secondPurge);
 
         var row = await conn.QuerySingleAsync<dynamic>(
             "SELECT isDeleted, eventType, rootTenantId, clientAddress, forwardedFor, userAgent, attemptedNameHash, attemptedNameProtected, sessionReference, traceId FROM logs.signInEvent WHERE signInEventId = @id",
@@ -185,6 +237,15 @@ public sealed class LoggingWave3IntegrationTests(MeritFixture fixture)
         Assert.Null((object?)row.attemptedNameProtected);
         Assert.Null((object?)row.sessionReference);
         Assert.Null((object?)row.traceId);
+
+        var legacyRow = await conn.QuerySingleAsync<dynamic>(
+            "SELECT isDeleted, eventType, rootTenantId, sessionReference, traceId FROM logs.signInEvent WHERE signInEventId = @id",
+            new { id = legacyPurgedId });
+        Assert.True((bool)legacyRow.isDeleted);
+        Assert.Equal("passwordFailed", (string)legacyRow.eventType);
+        Assert.Equal(sup.rootTenantId, (Guid)legacyRow.rootTenantId);
+        Assert.Null((object?)legacyRow.sessionReference);
+        Assert.Null((object?)legacyRow.traceId);
     }
 
     [SqlFact]
@@ -303,6 +364,12 @@ public sealed class LoggingWave3IntegrationTests(MeritFixture fixture)
             Assert.Contains(cityCaseId.ToString(), html, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain(countyCaseId.ToString(), html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("1 additional record(s) in this event are outside your review scope.", html, StringComparison.Ordinal);
+
+            // Codex #2: Entity-ID search on logs.uspSearchAuditEvents must also apply per-record manifest visibility.
+            string citySearchCsv = await officerClient.Http.GetStringAsync($"/admin/audit.csv?entityId={cityCaseId}");
+            Assert.Contains("Viewed", citySearchCsv, StringComparison.Ordinal);
+            string countySearchCsv = await officerClient.Http.GetStringAsync($"/admin/audit.csv?entityId={countyCaseId}");
+            Assert.DoesNotContain("Viewed", countySearchCsv, StringComparison.Ordinal);
         }
 
         // 2. ExecutionLog completion rows attribute modifiedBy to the app user (not meritWeb).

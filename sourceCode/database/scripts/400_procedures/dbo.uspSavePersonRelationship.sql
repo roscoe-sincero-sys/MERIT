@@ -59,6 +59,7 @@ CREATE OR ALTER PROCEDURE dbo.uspSavePersonRelationship
       , @verifiedDate         DATE = NULL
       , @isDeleted            BIT = 0
       , @rowVersion           BINARY (8) = NULL
+      , @isVerification       BIT = 0
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -156,7 +157,7 @@ BEGIN
         DECLARE @auditUserAgentHash CHAR (16) = TRY_CAST (SESSION_CONTEXT (N'userAgentHash') AS CHAR (16));
         INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, clientAddress, owningTenantId,
                                 sessionReference, traceId, actingTenantId, viewAsUserId, userAgentHash)
-        VALUES (auth.udfSessionUserId (), auth.udfSessionRootTenantId (), 'update', 'person', @personId,
+        VALUES (auth.udfSessionUserId (), auth.udfSessionRootTenantId (), 'update', CASE WHEN @isVerification = 1 THEN 'personRelationship' ELSE 'person' END, CASE WHEN @isVerification = 1 THEN @personRelationshipId ELSE @personId END,
                 @auditClientAddress, dbo.udfPatientWorkOwner (@personId), @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs, @auditUserAgentHash);
 
 

@@ -6981,6 +6981,12 @@
     "type": "BINARY (8)",
     "hasDefault": true,
     "isOutput": false
+   },
+   {
+    "name": "isVerification",
+    "type": "BIT",
+    "hasDefault": true,
+    "isOutput": false
    }
   ]
  },
