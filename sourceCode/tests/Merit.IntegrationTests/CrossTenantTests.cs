@@ -321,6 +321,7 @@ public sealed class CrossTenantProcedureTests(MeritFixture fixture, ITestOutputH
         if (type.StartsWith("UNIQUEIDENTIFIER", StringComparison.Ordinal)) return Guid.NewGuid();
         if (type.StartsWith("BINARY", StringComparison.Ordinal) || type.StartsWith("VARBINARY", StringComparison.Ordinal)) return new byte[8];
         if (type.StartsWith("BIT", StringComparison.Ordinal)) return false;
+        if (type.StartsWith("BIGINT", StringComparison.Ordinal)) return 1L;
         if (type.StartsWith("INT", StringComparison.Ordinal) || type.StartsWith("SMALLINT", StringComparison.Ordinal)) return 1;
         if (type.StartsWith("DECIMAL", StringComparison.Ordinal)) return 1m;
         if (type.StartsWith("DATETIME", StringComparison.Ordinal)) return DateTime.UtcNow;

@@ -88,10 +88,7 @@
                     <tr>
                         <td class="merit-nowrap">@Options.Date(e.EventUtc)</td>
                         <td>@(e.DisplayName ?? "Unknown user")</td>
-                        <td>
-                            @AuditText.Action(e.EventAction)
-                            @if (e.ViewKind == "incidental") { <span class="usa-tag merit-meta">incidental</span> }
-                        </td>
+                        <td>@AuditText.Action(e.EventAction)@if (e.ViewKind == "incidental") {<text> </text><span class="usa-tag merit-meta">incidental</span>}</td>
                         <td>
                             @AuditText.RecordType(e.EntityType)
                             @if (e.AdministrationJson is string details) { <details><summary>Administration and configuration details</summary><p class="merit-mono merit-meta">@details</p></details> }

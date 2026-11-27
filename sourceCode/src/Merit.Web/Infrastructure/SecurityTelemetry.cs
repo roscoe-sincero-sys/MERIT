@@ -3,6 +3,9 @@ using System.Globalization;
 using System.Security.Claims;
 using Merit.Application.Security;
 using Microsoft.AspNetCore.Antiforgery;
+using Microsoft.AspNetCore.Diagnostics;
+using Microsoft.AspNetCore.Mvc.Core.Infrastructure;
+using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.AspNetCore.Routing;
 
 namespace Merit.Web.Infrastructure;
@@ -87,11 +90,32 @@ public sealed class WebRequestAuditContext(IHttpContextAccessor accessor) : IReq
 }
 
 /// <summary>
-/// Emits structured, non-PHI security telemetry for HTTP 401, 403, 404 (non-static), 405, 422, 429 and antiforgery
-/// validation failures (#325). Never logs query parameter values, form bodies, patient data or credentials.
+/// Flags MVC antiforgery validation failures (returned by AutoValidateAntiforgeryTokenAttribute as
+/// IAntiforgeryValidationFailedResult) so <see cref="SecurityTelemetryMiddleware"/> logs them (#325).
+/// </summary>
+public sealed class AntiforgeryTelemetryFilter : IAlwaysRunResultFilter
+{
+    public void OnResultExecuting(ResultExecutingContext context)
+    {
+        if (context.Result is IAntiforgeryValidationFailedResult)
+        {
+            context.HttpContext.Items[SecurityTelemetryMiddleware.AntiforgeryFailedItem] = true;
+        }
+    }
+
+    public void OnResultExecuted(ResultExecutedContext context) { }
+}
+
+/// <summary>
+/// Emits structured, non-PHI security telemetry for HTTP 401, 403 (including browser 302 access-denied redirects),
+/// 404 (non-static), 405, 422, 429 and antiforgery validation failures (#325). Skips StatusCodePages re-executions so
+/// each failed request is logged once. Never logs query parameter values, form bodies, patient data or credentials.
 /// </summary>
 public sealed partial class SecurityTelemetryMiddleware(RequestDelegate next, ILogger<SecurityTelemetryMiddleware> logger)
 {
+    public const string AccessDeniedItem = "merit.telemetry.accessDenied";
+    public const string AntiforgeryFailedItem = "merit.telemetry.antiforgeryFailed";
+
     private static readonly string[] StaticExtensions = [".js", ".css", ".png", ".jpg", ".svg", ".ico", ".woff", ".woff2", ".map"];
 
     public async Task InvokeAsync(HttpContext http)
@@ -99,20 +123,30 @@ public sealed partial class SecurityTelemetryMiddleware(RequestDelegate next, IL
         long started = Stopwatch.GetTimestamp();
         await next(http).ConfigureAwait(false);
 
+        // Skip re-executed /home/status/{code} passes so each failed request is logged once with its original path.
+        if (http.Features.Get<IStatusCodeReExecuteFeature>() is not null)
+        {
+            return;
+        }
+
         int status = http.Response.StatusCode;
-        bool antiforgeryFailed = http.Features.Get<IAntiforgeryValidationFeature>() is { IsValid: false };
-        if (!antiforgeryFailed && status is not (401 or 403 or 404 or 405 or 422 or 429))
+        bool accessDenied = http.Items.ContainsKey(AccessDeniedItem);
+        bool antiforgeryFailed = http.Items.ContainsKey(AntiforgeryFailedItem)
+                                 || http.Features.Get<IAntiforgeryValidationFeature>() is { IsValid: false };
+        if (!antiforgeryFailed && !accessDenied && status is not (401 or 403 or 404 or 405 or 422 or 429))
         {
             return;
         }
 
         string path = http.Request.Path.Value ?? "/";
-        if (status == 404 && StaticExtensions.Any(ext => path.EndsWith(ext, StringComparison.OrdinalIgnoreCase)))
+        if (status == 404 && !accessDenied && !antiforgeryFailed
+            && StaticExtensions.Any(ext => path.EndsWith(ext, StringComparison.OrdinalIgnoreCase)))
         {
             return;
         }
 
-        string category = antiforgeryFailed ? "antiforgery" : status switch
+        int reportedStatus = accessDenied ? StatusCodes.Status403Forbidden : status;
+        string category = antiforgeryFailed ? "antiforgery" : accessDenied ? "forbidden" : status switch
         {
             401 => "unauthorized",
             403 => "forbidden",
@@ -130,7 +164,7 @@ public sealed partial class SecurityTelemetryMiddleware(RequestDelegate next, IL
         string? ua = RequestTrace.SanitizeUserAgent(http.Request.Headers.UserAgent.ToString());
         long elapsedMs = (long)Stopwatch.GetElapsedTime(started).TotalMilliseconds;
 
-        SecurityHttpEvent(logger, category, status, http.Request.Method, route, appUserId, address, ua, traceId, elapsedMs);
+        SecurityHttpEvent(logger, category, reportedStatus, http.Request.Method, route, appUserId, address, ua, traceId, elapsedMs);
     }
 
     [LoggerMessage(Level = LogLevel.Warning,

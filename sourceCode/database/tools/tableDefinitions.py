@@ -1848,8 +1848,10 @@ TABLES += [{
         c("entityId", UUID, "Identifier of the record returned or acted on.", null=False),
     ],
     "fks": [],
+    "dropIndexes": ["IX_logs_auditEventRecord_auditEventId", "IX_logs_auditEventRecord_entityType_entityId"],
     "indexes": [
-        {"name": "IX_logs_auditEventRecord_auditEventId", "cols": "auditEventId"},
-        {"name": "IX_logs_auditEventRecord_entityType_entityId", "cols": "entityType, entityId"},
+        {"name": "IX_logs_auditEventRecord_auditEventId_active", "cols": "auditEventId", "filter": "isDeleted = 0"},
+        {"name": "IX_logs_auditEventRecord_entityId_auditEventId", "cols": "entityId, auditEventId", "filter": "isDeleted = 0"},
+        {"name": "IX_logs_auditEventRecord_createdDateUtc", "cols": "createdDateUtc", "filter": "isDeleted = 0"},
     ],
 }]

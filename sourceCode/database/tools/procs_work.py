@@ -697,32 +697,41 @@ INSERT @users SELECT u.appUserId FROM auth.appUser AS u
    AND (EXISTS (SELECT 1 FROM @scope AS s WHERE s.tenantId = u.homeTenantId)
         OR EXISTS (SELECT 1 FROM auth.userAssignment AS ua JOIN @scope AS s ON s.tenantId = ua.tenantId WHERE ua.appUserId = u.appUserId AND ua.isDeleted = 0));
 
-SELECT e.auditEventId, e.eventUtc, e.appUserId, u.displayName, e.eventAction, e.entityType, e.entityId,
-       e.recordCount, e.clientAddress, e.administrationJson, e.sessionReference, e.traceId, e.actingTenantId,
-       e.viewAsUserId, e.viewKind, e.filterJson,
-       (SELECT COUNT (*) FROM logs.auditEventRecord AS r WHERE r.auditEventId = e.auditEventId AND r.isDeleted = 0) AS manifestCount,
-       COUNT (*) OVER () AS totalCount
-  FROM logs.auditEvent AS e
-  LEFT JOIN auth.appUser AS u ON u.appUserId = e.appUserId
- WHERE (EXISTS (SELECT 1 FROM @wholeRoots AS w WHERE w.rootTenantId = e.rootTenantId)
-        OR (EXISTS (SELECT 1 FROM @partRoots AS p WHERE p.rootTenantId = e.rootTenantId)
-            AND ((e.owningTenantId IS NULL AND EXISTS (SELECT 1 FROM @users AS x WHERE x.appUserId = e.appUserId))
-                 OR EXISTS (SELECT 1 FROM @scope AS s WHERE s.tenantId = e.owningTenantId)
-                 -- Root configuration applies to every reviewed county in this root, never to another root.
-                 OR (e.owningTenantId=e.rootTenantId AND e.entityType IN ('jurisdictionSetting','threshold','notificationRule')))))
-   AND (@appUserId IS NULL OR e.appUserId = @appUserId)
-   AND (@entityId IS NULL OR e.entityId = @entityId
-        OR EXISTS (SELECT 1 FROM logs.auditEventRecord AS r WHERE r.auditEventId = e.auditEventId AND r.entityId = @entityId AND r.isDeleted = 0))
-   AND (@eventAction IS NULL OR e.eventAction = @eventAction
-        -- "signInEvents": every sign-in and account-security action at once (#191).
-        OR (@eventAction = 'signInEvents' AND e.eventAction IN ('signIn', 'signInFailed', 'signOut', 'mfaEnrolled', 'mfaEmailEnabled', 'mfaEmailDisabled', 'mfaMethodChanged', 'mfaCodeSent', 'mfaCodeNotSent', 'mfaCodeRefused', 'mfaCodeLocked', 'passwordChanged', 'passwordResetRequested', 'passwordResetCompleted', 'passwordSetByAdmin')))
-   AND (@entityType IS NULL OR e.entityType = @entityType OR (@entityType = 'report' AND e.entityType LIKE 'report:%'))
-   AND (@viewKind IS NULL OR e.viewKind = @viewKind OR (@viewKind = 'direct' AND e.viewKind IS NULL))
-   AND (@fromUtc IS NULL OR e.eventUtc >= @fromUtc)
-   AND (@toUtc IS NULL OR e.eventUtc < @toUtc)
- ORDER BY e.auditEventId DESC
-OFFSET (@pageNumber - 1) * @pageSize ROWS
- FETCH NEXT @pageSize ROWS ONLY
+;WITH paged AS
+(
+    SELECT e.auditEventId, e.eventUtc, e.appUserId, u.displayName, e.eventAction, e.entityType, e.entityId,
+           e.recordCount, e.clientAddress, e.administrationJson, e.sessionReference, e.traceId, e.actingTenantId,
+           e.viewAsUserId, e.viewKind, e.filterJson,
+           COUNT (*) OVER () AS totalCount
+      FROM logs.auditEvent AS e
+      LEFT JOIN auth.appUser AS u ON u.appUserId = e.appUserId
+     WHERE (EXISTS (SELECT 1 FROM @wholeRoots AS w WHERE w.rootTenantId = e.rootTenantId)
+            OR (EXISTS (SELECT 1 FROM @partRoots AS p WHERE p.rootTenantId = e.rootTenantId)
+                AND ((e.owningTenantId IS NULL AND EXISTS (SELECT 1 FROM @users AS x WHERE x.appUserId = e.appUserId))
+                     OR EXISTS (SELECT 1 FROM @scope AS s WHERE s.tenantId = e.owningTenantId)
+                     -- Root configuration applies to every reviewed county in this root, never to another root.
+                     OR (e.owningTenantId=e.rootTenantId AND e.entityType IN ('jurisdictionSetting','threshold','notificationRule')))))
+       AND (@appUserId IS NULL OR e.appUserId = @appUserId)
+       AND (@entityId IS NULL OR e.entityId = @entityId
+            OR EXISTS (SELECT 1 FROM logs.auditEventRecord AS r WHERE r.auditEventId = e.auditEventId AND r.entityId = @entityId AND r.isDeleted = 0))
+       AND (@eventAction IS NULL OR e.eventAction = @eventAction
+            -- "signInEvents": every sign-in and account-security action at once (#191).
+            OR (@eventAction = 'signInEvents' AND e.eventAction IN ('signIn', 'signInFailed', 'signOut', 'mfaEnrolled', 'mfaEmailEnabled', 'mfaEmailDisabled', 'mfaMethodChanged', 'mfaCodeSent', 'mfaCodeNotSent', 'mfaCodeRefused', 'mfaCodeLocked', 'passwordChanged', 'passwordResetRequested', 'passwordResetCompleted', 'passwordSetByAdmin')))
+       AND (@entityType IS NULL OR e.entityType = @entityType OR (@entityType = 'report' AND e.entityType LIKE 'report:%'))
+       AND (@viewKind IS NULL OR e.viewKind = @viewKind OR (@viewKind = 'direct' AND e.viewKind IS NULL))
+       AND (@fromUtc IS NULL OR e.eventUtc >= @fromUtc)
+       AND (@toUtc IS NULL OR e.eventUtc < @toUtc)
+     ORDER BY e.auditEventId DESC
+    OFFSET (@pageNumber - 1) * @pageSize ROWS
+     FETCH NEXT @pageSize ROWS ONLY
+)
+SELECT p.auditEventId, p.eventUtc, p.appUserId, p.displayName, p.eventAction, p.entityType, p.entityId,
+       p.recordCount, p.clientAddress, p.administrationJson, p.sessionReference, p.traceId, p.actingTenantId,
+       p.viewAsUserId, p.viewKind, p.filterJson,
+       (SELECT COUNT (*) FROM logs.auditEventRecord AS r WHERE r.auditEventId = p.auditEventId AND r.isDeleted = 0) AS manifestCount,
+       p.totalCount
+  FROM paged AS p
+ ORDER BY p.auditEventId DESC
 OPTION (RECOMPILE);
 """,
     },
@@ -807,6 +816,33 @@ BEGIN
 END;
 
 SET @Comments = N'Search logged.';
+""",
+    },
+    {
+        "schema": "logs", "name": "uspPurgeAuditEventRecords", "kind": "write", "grants": WORKER, "ticket": "#333",
+        "desc": "Retention purger for logs.auditEventRecord: soft-deletes and scrubs record identifiers older than "
+                "@retentionDays (default 365, minimum 30) in batches. Granted to meritWorkerRole only (#333).",
+        "params": "@retentionDays INT = 365",
+        "key": "CONCAT (N'retentionDays=', @retentionDays)",
+        "body": """
+DECLARE @days INT = CASE WHEN @retentionDays BETWEEN 30 AND 3650 THEN @retentionDays ELSE 365 END;
+DECLARE @cutoff DATETIME2 (3) = DATEADD (DAY, -@days, SYSUTCDATETIME ());
+DECLARE @total INT = 0, @batch INT = 1;
+
+WHILE @batch > 0
+BEGIN
+    UPDATE TOP (5000) logs.auditEventRecord
+       SET entityId   = '00000000-0000-0000-0000-000000000000'
+         , isDeleted  = 1
+         , modifiedBy = N'retention'
+     WHERE isDeleted = 0 AND createdDateUtc < @cutoff;
+
+    SET @batch = @@ROWCOUNT;
+    SET @total = @total + @batch;
+END;
+
+SELECT @total AS purgedCount;
+SET @Comments = CONCAT (@total, N' manifest row(s) purged.');
 """,
     },
     {

@@ -50,6 +50,22 @@ GO
 -- 4. Indexes. The clustered index leads with rootTenantId so each state's rows sit together and the
 --    row-level security predicate stays cheap. Unique indexes are filtered on isDeleted = 0.
 -- -------------------------------------------------------------------------------------------
+IF EXISTS (SELECT 1
+             FROM sys.indexes
+            WHERE name      = N'IX_logs_auditEventRecord_auditEventId'
+              AND object_id = OBJECT_ID (N'logs.auditEventRecord'))
+BEGIN
+    DROP INDEX IX_logs_auditEventRecord_auditEventId ON logs.auditEventRecord;
+END;
+GO
+IF EXISTS (SELECT 1
+             FROM sys.indexes
+            WHERE name      = N'IX_logs_auditEventRecord_entityType_entityId'
+              AND object_id = OBJECT_ID (N'logs.auditEventRecord'))
+BEGIN
+    DROP INDEX IX_logs_auditEventRecord_entityType_entityId ON logs.auditEventRecord;
+END;
+GO
 IF NOT EXISTS (SELECT 1
                  FROM sys.indexes
                 WHERE name      = N'IX_logs_auditEventRecord_rootTenantId_auditEventRecordId'
@@ -61,20 +77,32 @@ END;
 GO
 IF NOT EXISTS (SELECT 1
                  FROM sys.indexes
-                WHERE name      = N'IX_logs_auditEventRecord_auditEventId'
+                WHERE name      = N'IX_logs_auditEventRecord_auditEventId_active'
                   AND object_id = OBJECT_ID (N'logs.auditEventRecord'))
 BEGIN
-    CREATE INDEX IX_logs_auditEventRecord_auditEventId
-        ON logs.auditEventRecord (auditEventId);
+    CREATE INDEX IX_logs_auditEventRecord_auditEventId_active
+        ON logs.auditEventRecord (auditEventId)
+        WHERE isDeleted = 0;
 END;
 GO
 IF NOT EXISTS (SELECT 1
                  FROM sys.indexes
-                WHERE name      = N'IX_logs_auditEventRecord_entityType_entityId'
+                WHERE name      = N'IX_logs_auditEventRecord_entityId_auditEventId'
                   AND object_id = OBJECT_ID (N'logs.auditEventRecord'))
 BEGIN
-    CREATE INDEX IX_logs_auditEventRecord_entityType_entityId
-        ON logs.auditEventRecord (entityType, entityId);
+    CREATE INDEX IX_logs_auditEventRecord_entityId_auditEventId
+        ON logs.auditEventRecord (entityId, auditEventId)
+        WHERE isDeleted = 0;
+END;
+GO
+IF NOT EXISTS (SELECT 1
+                 FROM sys.indexes
+                WHERE name      = N'IX_logs_auditEventRecord_createdDateUtc'
+                  AND object_id = OBJECT_ID (N'logs.auditEventRecord'))
+BEGIN
+    CREATE INDEX IX_logs_auditEventRecord_createdDateUtc
+        ON logs.auditEventRecord (createdDateUtc)
+        WHERE isDeleted = 0;
 END;
 GO
 

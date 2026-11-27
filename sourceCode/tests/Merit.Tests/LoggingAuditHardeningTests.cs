@@ -77,6 +77,56 @@ public sealed class LoggingAuditHardeningTests
         Assert.Equal("Permission denied", AuditText.Action("permissionDenied"));
     }
 
+    [Fact]
+    public async Task SecurityTelemetryLogsAntiforgeryAndBrowserAccessDeniedAndSkipsReExecution()
+    {
+        var entries = new List<string>();
+        var logger = new ListLogger<SecurityTelemetryMiddleware>(entries);
+
+        // 1. Antiforgery failure (400 + AntiforgeryFailedItem set by AntiforgeryTelemetryFilter) -> logged once as antiforgery.
+        var afMiddleware = new SecurityTelemetryMiddleware(ctx =>
+        {
+            ctx.Items[SecurityTelemetryMiddleware.AntiforgeryFailedItem] = true;
+            ctx.Response.StatusCode = StatusCodes.Status400BadRequest;
+            return Task.CompletedTask;
+        }, logger);
+        var afHttp = new DefaultHttpContext();
+        afHttp.Request.Method = "POST";
+        afHttp.Request.Path = "/config/settings/sessionTimeoutMinutes";
+        await afMiddleware.InvokeAsync(afHttp);
+        Assert.Single(entries);
+        Assert.Contains("Security HTTP antiforgery status 400", entries[0]);
+
+        // 2. Browser access denied (302 redirect + AccessDeniedItem set by OnRedirectToAccessDenied) -> logged as forbidden 403.
+        entries.Clear();
+        var deniedMiddleware = new SecurityTelemetryMiddleware(ctx =>
+        {
+            ctx.Items[SecurityTelemetryMiddleware.AccessDeniedItem] = true;
+            ctx.Response.StatusCode = StatusCodes.Status302Found;
+            return Task.CompletedTask;
+        }, logger);
+        var deniedHttp = new DefaultHttpContext();
+        deniedHttp.Request.Method = "GET";
+        deniedHttp.Request.Path = "/admin/audit";
+        await deniedMiddleware.InvokeAsync(deniedHttp);
+        Assert.Single(entries);
+        Assert.Contains("Security HTTP forbidden status 403", entries[0]);
+
+        // 3. StatusCodePages re-execution -> skipped so failed requests are never double-logged.
+        entries.Clear();
+        var reexecMiddleware = new SecurityTelemetryMiddleware(ctx =>
+        {
+            ctx.Response.StatusCode = StatusCodes.Status404NotFound;
+            return Task.CompletedTask;
+        }, logger);
+        var reexecHttp = new DefaultHttpContext();
+        reexecHttp.Features.Set<Microsoft.AspNetCore.Diagnostics.IStatusCodeReExecuteFeature>(new FakeReExecuteFeature());
+        reexecHttp.Request.Method = "GET";
+        reexecHttp.Request.Path = "/home/status/404";
+        await reexecMiddleware.InvokeAsync(reexecHttp);
+        Assert.Empty(entries);
+    }
+
     /// <summary>
     /// Issue #331 inventory test: reflects over every GET action requiring a patient-data or security-log permission
     /// and fails if any new action lacks audit coverage or an explicit reviewed exemption.
@@ -202,10 +252,8 @@ public sealed class LoggingAuditHardeningTests
                 var policies = classPolicy.Concat(method.GetCustomAttributes<AuthorizeAttribute>(true).Select(a => a.Policy).Where(p => p is not null));
                 if (!policies.Any(p => p is not null && guardedPolicies.Contains(p))) continue;
 
-                bool hasAttr = method.GetCustomAttribute<AuditedReadAttribute>() is not null
-                               || method.GetCustomAttribute<AuditExemptAttribute>() is not null;
                 string key = $"{controller.Name}.{method.Name}";
-                if (!hasAttr && !reviewedActions.Contains(key))
+                if (!reviewedActions.Contains(key))
                 {
                     unreviewed.Add(key);
                 }
@@ -265,6 +313,7 @@ public sealed class LoggingAuditHardeningTests
         }
 
         public Task<IReadOnlyList<AuditEventRecordRow>> GetAuditEventRecordsAsync(long auditEventId, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<AuditEventRecordRow>>([]);
+        public Task<int> PurgeAuditEventRecordsAsync(int retentionDays, CancellationToken ct = default) => Task.FromResult(0);
         public Task RecordSearchLogAsync(string searchText, int resultCount, string searchSource, string entityType, string? filterJson = null, string? recordIdsJson = null, CancellationToken ct = default) => Task.CompletedTask;
         public Task CreateTaskAsync(WorkTaskCreate task, CancellationToken ct = default) => throw new NotImplementedException();
         public Task<IReadOnlyList<QueueCountRow>> GetQueueCountsAsync(CancellationToken ct = default) => throw new NotImplementedException();
@@ -281,5 +330,21 @@ public sealed class LoggingAuditHardeningTests
         public Task<int> DetectClustersAsync(int windowDays, int minCount, CancellationToken ct = default) => throw new NotImplementedException();
         public Task<IReadOnlyList<AuditEventRow>> SearchAuditAsync(AuditQuery query, CancellationToken ct = default) => throw new NotImplementedException();
         public Task<IReadOnlyList<AuditUserRow>> ListAuditUsersAsync(CancellationToken ct = default) => throw new NotImplementedException();
+    }
+
+    private sealed class ListLogger<T>(List<string> entries) : Microsoft.Extensions.Logging.ILogger<T>
+    {
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public bool IsEnabled(Microsoft.Extensions.Logging.LogLevel logLevel) => true;
+        public void Log<TState>(Microsoft.Extensions.Logging.LogLevel logLevel, Microsoft.Extensions.Logging.EventId eventId,
+                                TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+            => entries.Add(formatter(state, exception));
+    }
+
+    private sealed class FakeReExecuteFeature : Microsoft.AspNetCore.Diagnostics.IStatusCodeReExecuteFeature
+    {
+        public string OriginalPathBase { get; set; } = string.Empty;
+        public string OriginalPath { get; set; } = "/missing";
+        public string? OriginalQueryString { get; set; }
     }
 }

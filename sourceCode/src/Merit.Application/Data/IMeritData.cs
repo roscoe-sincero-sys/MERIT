@@ -319,6 +319,8 @@ public interface IWorkData
 
     Task<IReadOnlyList<Merit.Application.Security.AuditEventRecordRow>> GetAuditEventRecordsAsync(long auditEventId, CancellationToken ct = default);
 
+    Task<int> PurgeAuditEventRecordsAsync(int retentionDays, CancellationToken ct = default);
+
     Task RecordSearchLogAsync(string searchText, int resultCount, string searchSource, string entityType, string? filterJson = null,
                               string? recordIdsJson = null, CancellationToken ct = default);
 

@@ -8082,6 +8082,22 @@
   ]
  },
  {
+  "name": "logs.uspPurgeAuditEventRecords",
+  "kind": "write",
+  "grants": [
+   "meritWorkerRole"
+  ],
+  "permission": null,
+  "params": [
+   {
+    "name": "retentionDays",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
   "name": "logs.uspPurgeScreenVisits",
   "kind": "write",
   "grants": [

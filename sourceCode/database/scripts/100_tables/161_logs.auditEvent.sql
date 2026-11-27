@@ -228,6 +228,17 @@ BEGIN
 END;
 GO
 
+IF NOT EXISTS (SELECT 1
+                 FROM sys.indexes
+                WHERE name      = N'IX_logs_auditEvent_entityId_eventUtc'
+                  AND object_id = OBJECT_ID (N'logs.auditEvent'))
+BEGIN
+    CREATE INDEX IX_logs_auditEvent_entityId_eventUtc
+        ON logs.auditEvent (entityId, eventUtc)
+        WHERE entityId IS NOT NULL;
+END;
+GO
+
 EXEC util.uspSetObjectDescription @SchemaName = N'logs', @ObjectType = N'TABLE', @ObjectName = N'auditEvent', @ColumnName = N'sessionReference', @Description = N'Non-secret logical sign-in session reference (auth.sessionScope.sessionReference) for cross-log correlation (#326).';
 EXEC util.uspSetObjectDescription @SchemaName = N'logs', @ObjectType = N'TABLE', @ObjectName = N'auditEvent', @ColumnName = N'traceId', @Description = N'W3C trace identifier of the originating request for joining ledger events to application and sign-in logs (#326).';
 EXEC util.uspSetObjectDescription @SchemaName = N'logs', @ObjectType = N'TABLE', @ObjectName = N'auditEvent', @ColumnName = N'actingTenantId', @Description = N'Working tenant active in the session when the event occurred (#326).';

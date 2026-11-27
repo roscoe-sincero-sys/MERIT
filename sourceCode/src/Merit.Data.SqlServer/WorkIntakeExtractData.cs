@@ -80,6 +80,9 @@ public sealed class WorkData(Db db) : IWorkData
     public Task<IReadOnlyList<Merit.Application.Security.AuditEventRecordRow>> GetAuditEventRecordsAsync(long auditEventId, CancellationToken ct = default)
         => db.QueryAsync<Merit.Application.Security.AuditEventRecordRow>("logs.uspGetAuditEventRecords", new { auditEventId }, ct);
 
+    public Task<int> PurgeAuditEventRecordsAsync(int retentionDays, CancellationToken ct = default)
+        => db.QuerySingleAsync<int>("logs.uspPurgeAuditEventRecords", new { retentionDays }, ct)!;
+
     public Task RecordSearchLogAsync(string searchText, int resultCount, string searchSource, string entityType,
                                      string? filterJson = null, string? recordIdsJson = null, CancellationToken ct = default)
         => db.ExecuteAsync("logs.uspRecordSearchLog", new { searchText, resultCount, searchSource, entityType, filterJson, recordIdsJson }, ct);

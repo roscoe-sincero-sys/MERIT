@@ -21,8 +21,6 @@ public sealed partial class MeritExceptionFilter(ILogger<MeritExceptionFilter> l
         var http = context.HttpContext;
         string traceId = RequestTrace.Id(http) ?? http.TraceIdentifier;
         var session = http.RequestServices.GetService<ICurrentSession>();
-        string? route = RequestTrace.RouteTemplate(http);
-        string? address = http.Connection.RemoteIpAddress?.ToString();
 
         if (context.Exception is not MeritException)
         {
@@ -31,24 +29,20 @@ public sealed partial class MeritExceptionFilter(ILogger<MeritExceptionFilter> l
             LogUnhandled(logger, context.Exception.GetType().FullName ?? "Exception", traceId,
                 context.Exception.StackTrace ?? string.Empty);
         }
-        else
+        else if (context.Exception is PermissionDeniedException && session?.IsAuthenticated == true)
         {
-            LogMeritException(logger, context.Exception.GetType().Name, route, session?.UserId, address, traceId);
-            if (context.Exception is PermissionDeniedException && session?.IsAuthenticated == true)
+            try
             {
-                try
+                var audit = http.RequestServices.GetService<AuditService>();
+                if (audit is not null)
                 {
-                    var audit = http.RequestServices.GetService<AuditService>();
-                    if (audit is not null)
-                    {
-                        await audit.PermissionDeniedAsync(RequestTrace.EntityTypeFromRoute(http),
-                            RequestTrace.EntityIdFromRoute(http), CancellationToken.None).ConfigureAwait(false);
-                    }
+                    await audit.PermissionDeniedAsync(RequestTrace.EntityTypeFromRoute(http),
+                        RequestTrace.EntityIdFromRoute(http), CancellationToken.None).ConfigureAwait(false);
                 }
-                catch (Exception ex)
-                {
-                    LogAuditFailure(logger, ex.GetType().Name, traceId);
-                }
+            }
+            catch (Exception ex)
+            {
+                LogAuditFailure(logger, ex.GetType().Name, traceId);
             }
         }
 
@@ -111,9 +105,6 @@ public sealed partial class MeritExceptionFilter(ILogger<MeritExceptionFilter> l
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Unhandled {ExceptionType} (trace {TraceId}) at {StackTrace}")]
     private static partial void LogUnhandled(ILogger logger, string exceptionType, string traceId, string stackTrace);
-
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Security/domain exception {ExceptionType} on {RouteTemplate} user {AppUserId} address {ClientAddress} trace {TraceId}")]
-    private static partial void LogMeritException(ILogger logger, string exceptionType, string? routeTemplate, Guid? appUserId, string? clientAddress, string traceId);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "PermissionDenied audit event could not be recorded ({ExceptionType}, trace {TraceId})")]
     private static partial void LogAuditFailure(ILogger logger, string exceptionType, string traceId);

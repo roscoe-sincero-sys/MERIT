@@ -129,6 +129,7 @@ services.AddAuthentication(AuthSchemes.Session)
             },
             OnRedirectToAccessDenied = async ctx =>
             {
+                ctx.HttpContext.Items[SecurityTelemetryMiddleware.AccessDeniedItem] = true;
                 if (ctx.HttpContext.User.Identity?.IsAuthenticated == true)
                 {
                     try
@@ -140,9 +141,11 @@ services.AddAuthentication(AuthSchemes.Session)
                                 RequestTrace.EntityIdFromRoute(ctx.HttpContext), CancellationToken.None).ConfigureAwait(false);
                         }
                     }
-                    catch
+                    catch (Exception ex)
                     {
-                        // Never turn a 403 refusal into a 500 if the audit write fails.
+                        var log = ctx.HttpContext.RequestServices.GetService<ILoggerFactory>()?.CreateLogger("Merit.Web.AccessDenied");
+                        log?.LogWarning("PermissionDenied audit event could not be recorded ({ExceptionType}, trace {TraceId})",
+                            ex.GetType().Name, RequestTrace.Id(ctx.HttpContext));
                     }
                 }
 
@@ -237,6 +240,7 @@ services.AddControllersWithViews(o =>
 {
     o.Filters.Add<MeritExceptionFilter>();
     o.Filters.Add(new AutoValidateAntiforgeryTokenAttribute());
+    o.Filters.Add<AntiforgeryTelemetryFilter>();
     o.Filters.Add<ScreenVisitFilter>();
 });
 services.AddProblemDetails();
