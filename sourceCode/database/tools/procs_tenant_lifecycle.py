@@ -285,9 +285,11 @@ def _export_body() -> str:
         lines.append(
             f"    INSERT @manifest (tableName, activeRows, deletedRows, totalRows, disposition)\n"
             f"    SELECT N'{full}', COUNT (*), 0, COUNT (*), 'ledgerReadOnly'\n"
-            f"      FROM {full} WHERE rootTenantId = @rootTenantId;"
+            f"      FROM {full}\n"
+            f"     WHERE rootTenantId = @rootTenantId\n"
+            f"       AND (@maxAuditEventId IS NULL OR auditEventId <= @maxAuditEventId);"
         )
-    lines.append("    SELECT tableName, COALESCE (activeRows, 0) AS activeRows, COALESCE (deletedRows, 0) AS deletedRows, totalRows, disposition FROM @manifest ORDER BY tableName;")
+    lines.append("    SELECT tableName, COALESCE (activeRows, 0) AS activeRows, COALESCE (deletedRows, 0) AS deletedRows, totalRows, disposition, @maxAuditEventId AS maxAuditEventId FROM @manifest ORDER BY tableName;")
     lines.append("    RETURN;")
     lines.append("END;")
     lines.append("")
@@ -318,6 +320,7 @@ def _export_body() -> str:
             f"    SELECT {col_list}\n"
             f"      FROM {full}\n"
             f"     WHERE rootTenantId = @rootTenantId\n"
+            f"       AND (@maxAuditEventId IS NULL OR auditEventId <= @maxAuditEventId)\n"
             f"     ORDER BY auditEventId\n"
             f"    OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY;\n"
             f"END"
@@ -330,11 +333,44 @@ def _export_body() -> str:
 
 
 def _purge_body() -> str:
-    unscrubbed = "(isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge')"
+    # S21: Rely on createdBy/modifiedBy (preserved by trg_au_updt_*) so live rows scrub in a single pass.
+    unscrubbed = "(isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge')"
     lines = [
         "IF @dryRun IS NULL",
         "BEGIN",
         "    ;THROW 51422, N'@dryRun must be 0 or 1.', 1;",
+        "END;",
+        "DECLARE @report TABLE (",
+        "    tableName           NVARCHAR (128) NOT NULL PRIMARY KEY,",
+        "    rowsAffected        INT NOT NULL,",
+        "    remainingUnscrubbed INT NOT NULL,",
+        "    disposition         VARCHAR (40) NOT NULL",
+        ");",
+        "DECLARE @n INT = 0, @batch INT = 0, @rem INT = 0;",
+        "DECLARE @startedDryRunTx BIT = 0;",
+        "IF @dryRun = 1",
+        "BEGIN",
+        "    BEGIN TRANSACTION;",
+        "    SET @startedDryRunTx = 1;",
+        "END;",
+        "",
+        "-- Step 1 (I18, Codex round 1 & 2): Acquire MERIT.tenantHierarchy and MERIT.grants exclusive applocks,",
+        "-- recheck descendant roots under the hierarchy lock, revoke EVERY live sessionScope deriving access from",
+        "-- @rootTenantId (including cross-root and View As scopes) BEFORE clearing membership rows, deactivate",
+        "-- tenants, and fail queued/running jobs using a distinct N'MERIT tenant fence' marker.",
+        "BEGIN TRANSACTION;",
+        "DECLARE @hierLock INT, @grantLock INT;",
+        "EXEC @hierLock = sys.sp_getapplock @Resource = N'MERIT.tenantHierarchy', @LockMode = 'Exclusive',",
+        "     @LockOwner = 'Transaction', @LockTimeout = 10000;",
+        "IF @hierLock < 0",
+        "BEGIN",
+        "    ;THROW 51409, N'Tenant hierarchy changes are busy; please retry.', 1;",
+        "END;",
+        "EXEC @grantLock = sys.sp_getapplock @Resource = N'MERIT.grants', @LockMode = 'Exclusive',",
+        "     @LockOwner = 'Transaction', @LockTimeout = 10000;",
+        "IF @grantLock < 0",
+        "BEGIN",
+        "    ;THROW 51409, N'Authorization changes are busy; please retry.', 1;",
         "END;",
         "IF EXISTS (",
         "    SELECT 1",
@@ -352,32 +388,17 @@ def _purge_body() -> str:
         "BEGIN",
         "    ;THROW 51422, N'This root tenant has live descendant data roots. Reparent or purge all child roots before purging this root.', 1;",
         "END;",
-        "DECLARE @report TABLE (",
-        "    tableName           NVARCHAR (128) NOT NULL PRIMARY KEY,",
-        "    rowsAffected        INT NOT NULL,",
-        "    remainingUnscrubbed INT NOT NULL,",
-        "    disposition         VARCHAR (40) NOT NULL",
-        ");",
-        "DECLARE @n INT = 0, @batch INT = 0, @rem INT = 0;",
-        "DECLARE @startedDryRunTx BIT = 0;",
-        "IF @dryRun = 1",
-        "BEGIN",
-        "    BEGIN TRANSACTION;",
-        "    SET @startedDryRunTx = 1;",
-        "END;",
-        "",
-        "-- Step 1 (I18, Codex #2/#4): Fence the root under the MERIT.grants exclusive applock BEFORE purging any table.",
-        "-- Uses a distinct fence marker (N'MERIT tenant fence') so previously soft-deleted rows are never mistaken for scrubbed.",
-        "BEGIN TRANSACTION;",
-        "DECLARE @grantLock INT;",
-        "EXEC @grantLock = sys.sp_getapplock @Resource = N'MERIT.grants', @LockMode = 'Exclusive',",
-        "     @LockOwner = 'Transaction', @LockTimeout = 10000;",
-        "IF @grantLock < 0",
-        "BEGIN",
-        "    ;THROW 51409, N'Authorization changes are busy; please retry.', 1;",
-        "END;",
         "UPDATE auth.tenant SET isActive = 0, modifiedBy = N'MERIT tenant fence' WHERE rootTenantId = @rootTenantId AND isActive = 1;",
-        "UPDATE auth.sessionScope SET revokedUtc = COALESCE (revokedUtc, SYSUTCDATETIME ()), modifiedBy = N'MERIT tenant fence' WHERE rootTenantId = @rootTenantId AND revokedUtc IS NULL;",
+        "UPDATE auth.sessionScope",
+        "   SET revokedUtc = COALESCE (revokedUtc, SYSUTCDATETIME ()),",
+        "       modifiedBy = N'MERIT tenant fence'",
+        " WHERE revokedUtc IS NULL",
+        "   AND (   rootTenantId = @rootTenantId",
+        "        OR appUserId IN (SELECT appUserId FROM auth.appUser WHERE rootTenantId = @rootTenantId)",
+        "        OR viewAsUserId IN (SELECT appUserId FROM auth.appUser WHERE rootTenantId = @rootTenantId)",
+        "        OR sessionScopeId IN (SELECT sessionScopeId FROM auth.sessionScopeRoot WHERE rootTenantId = @rootTenantId AND isDeleted = 0)",
+        "        OR sessionScopeId IN (SELECT sessionScopeId FROM auth.sessionScopeTenant WHERE tenantId IN (SELECT tenantId FROM auth.tenant WHERE rootTenantId = @rootTenantId) AND isDeleted = 0)",
+        "        OR sessionScopeId IN (SELECT sessionScopeId FROM auth.sessionScopeAdminTenant WHERE tenantId IN (SELECT tenantId FROM auth.tenant WHERE rootTenantId = @rootTenantId) AND isDeleted = 0));",
         "UPDATE auth.sessionScopeRoot SET isDeleted = 1, modifiedBy = N'MERIT tenant fence' WHERE rootTenantId = @rootTenantId AND isDeleted = 0;",
         "UPDATE auth.sessionScopeTenant SET isDeleted = 1, modifiedBy = N'MERIT tenant fence' WHERE tenantId IN (SELECT tenantId FROM auth.tenant WHERE rootTenantId = @rootTenantId) AND isDeleted = 0;",
         "UPDATE auth.sessionScopeAdminTenant SET isDeleted = 1, modifiedBy = N'MERIT tenant fence' WHERE tenantId IN (SELECT tenantId FROM auth.tenant WHERE rootTenantId = @rootTenantId) AND isDeleted = 0;",
@@ -452,31 +473,29 @@ PROCS = [
         "schema": "config", "name": "uspExportRootTenantInternal", "kind": "read", "grants": [], "execute_as": "OWNER",
         "ticket": "346",
         "desc": "Ungranted owner-context helper for config.uspExportRootTenant: returns the 71-table manifest (including "
-                "active and soft-deleted counts) or streams one table page without credential columns (#346, I17).",
-        "params": """@rootTenantId UNIQUEIDENTIFIER
-, @tableName    NVARCHAR (128) = NULL
-, @pageNumber   INT = 1
-, @pageSize     INT = 1000""",
+                "active/soft-deleted counts and maxAuditEventId cutoff) or streams one table page without credential columns (#346, I17).",
+        "params": """@rootTenantId    UNIQUEIDENTIFIER
+, @tableName       NVARCHAR (128) = NULL
+, @pageNumber      INT = 1
+, @pageSize        INT = 1000
+, @maxAuditEventId BIGINT = NULL""",
         "key": "CONCAT (N'rootTenantId=', @rootTenantId, N', pageNumber=', @pageNumber, N', pageSize=', @pageSize)",
         "body": _export_body(),
     },
     {
-        "schema": "config", "name": "uspExportRootTenant", "kind": "write", "no_tx": True, "grants": BOTH, "ticket": "346",
+        "schema": "config", "name": "uspExportRootTenant", "kind": "write", "no_tx": True, "require_standalone": True, "grants": BOTH, "ticket": "346",
         "permission_all": ["security.investigate", "tenant.create"],
         "desc": "Platform-only, audited per-root-tenant data export covering all 70 mutable tenant/auth tables plus "
-                "read-only logs.auditEvent (#346, I17). Commits its durable export audit event before streaming rows "
-                "and rejects enclosing transactions. Pass @tableName = NULL for the full manifest (active + "
-                "soft-deleted counts) or a table name to stream paginated rows with credential columns excluded.",
-        "params": """@rootTenantId UNIQUEIDENTIFIER
-, @tableName    NVARCHAR (128) = NULL
-, @pageNumber   INT = 1
-, @pageSize     INT = 1000""",
+                "read-only logs.auditEvent (#346, I17). Must be called outside an enclosing transaction (preserves caller "
+                "transaction on rejection), commits its durable export audit event before streaming rows, and bounds "
+                "logs.auditEvent to @maxAuditEventId (returned by the manifest) so paging terminates cleanly.",
+        "params": """@rootTenantId    UNIQUEIDENTIFIER
+, @tableName       NVARCHAR (128) = NULL
+, @pageNumber      INT = 1
+, @pageSize        INT = 1000
+, @maxAuditEventId BIGINT = NULL""",
         "key": "CONCAT (N'rootTenantId=', @rootTenantId, N', pageNumber=', @pageNumber, N', pageSize=', @pageSize)",
-        "validate": """IF @@TRANCOUNT > 0
-BEGIN
-    ;THROW 51422, N'config.uspExportRootTenant must not be called inside an enclosing transaction; it commits its export audit event before streaming rows.', 1;
-END;
-IF NOT EXISTS (SELECT 1 FROM auth.tenant WHERE tenantId = @rootTenantId AND tenantId = rootTenantId)
+        "validate": """IF NOT EXISTS (SELECT 1 FROM auth.tenant WHERE tenantId = @rootTenantId AND tenantId = rootTenantId)
 BEGIN
     ;THROW 51404, N'The root tenant was not found.', 1;
 END;""",
@@ -485,29 +504,34 @@ DECLARE @exportFilterJson NVARCHAR (MAX) = (
     SELECT @rootTenantId AS rootTenantId,
            COALESCE (@tableName, N'[manifest]') AS tableName,
            @pageNumber AS pageNumber,
-           @pageSize AS pageSize
+           @pageSize AS pageSize,
+           @maxAuditEventId AS maxAuditEventId
     FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
 );
+DECLARE @exportAudit TABLE (auditEventId BIGINT NOT NULL);
 BEGIN TRANSACTION;
 {AUDIT_SESSION_VARS}
 INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, clientAddress, owningTenantId,
                         sessionReference, traceId, actingTenantId, viewAsUserId, userAgentHash, filterJson)
+OUTPUT INSERTED.auditEventId INTO @exportAudit (auditEventId)
 VALUES (auth.udfSessionUserId (), @rootTenantId, 'export', 'tenant', @rootTenantId, @auditClientAddress, @rootTenantId,
         @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs, @auditUserAgentHash, @exportFilterJson);
 COMMIT TRANSACTION;
 
+DECLARE @effectiveMaxAuditEventId BIGINT = COALESCE (@maxAuditEventId, (SELECT TOP (1) auditEventId - 1 FROM @exportAudit));
 EXEC config.uspExportRootTenantInternal @rootTenantId = @rootTenantId, @tableName = @tableName,
-     @pageNumber = @pageNumber, @pageSize = @pageSize;
+     @pageNumber = @pageNumber, @pageSize = @pageSize, @maxAuditEventId = @effectiveMaxAuditEventId;
 SET @Comments = CONCAT (N'Root tenant export completed for ', @rootTenantId);
 """,
     },
     {
-        "schema": "config", "name": "uspPurgeRootTenantInternal", "kind": "write", "no_tx": True, "grants": [], "execute_as": "OWNER",
+        "schema": "config", "name": "uspPurgeRootTenantInternal", "kind": "write", "no_tx": True, "require_standalone": True, "grants": [], "execute_as": "OWNER",
         "ticket": "346",
-        "desc": "Ungranted owner-context helper for config.uspPurgeRootTenant: fences tenants/sessions/jobs first, scrubs "
-                "every PHI, free-text, binary, geocode, and credential column across all 70 mutable tenant/auth tables "
-                "(including previously soft-deleted rows) in independently committed 5,000-row batches (or rolls back "
-                "all work when @dryRun = 1), and runs a final post-purge verification pass (#346, B4, B5, I16, I18).",
+        "desc": "Ungranted owner-context helper for config.uspPurgeRootTenant: fences tenants/sessions/jobs first under "
+                "MERIT.tenantHierarchy and MERIT.grants applocks, scrubs every PHI, free-text, binary, geocode, actor, "
+                "and credential column across all 70 mutable tenant/auth tables (including previously soft-deleted rows) "
+                "in independently committed 5,000-row batches (or rolls back all work when @dryRun = 1), and runs a final "
+                "post-purge verification pass (#346, B4, B5, I16, I18).",
         "params": """@rootTenantId        UNIQUEIDENTIFIER
 , @backupRetentionDays INT = 35
 , @dryRun              BIT = 0""",
@@ -515,7 +539,7 @@ SET @Comments = CONCAT (N'Root tenant export completed for ', @rootTenantId);
         "body": _purge_body(),
     },
     {
-        "schema": "config", "name": "uspPurgeRootTenant", "kind": "write", "no_tx": True, "grants": BOTH, "ticket": "346",
+        "schema": "config", "name": "uspPurgeRootTenant", "kind": "write", "no_tx": True, "require_standalone": True, "grants": BOTH, "ticket": "346",
         "permission_all": ["security.investigate", "tenant.create"],
         "desc": "Platform-only, two-step confirmed, audited per-root-tenant purge (#346, B4, B5, I16, I18). Requires "
                 "@confirmationCode = N'PURGE:' + tenantCode and refuses the platform root. Fences the root first "

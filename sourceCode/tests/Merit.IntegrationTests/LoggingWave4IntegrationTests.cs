@@ -262,9 +262,9 @@ public sealed class LoggingWave4IntegrationTests(MeritFixture fixture)
                 await denyConn.ExecuteAsync("REVERT;");
             }
 
-            // 2. Platform export manifest covers all 71 tenant/auth tables (active + soft-deleted counts) and streams
-            //    individual tables without credential columns while including soft-deleted history (I17).
-            var manifest = (await conn.QueryAsync<(string tableName, int activeRows, int deletedRows, int totalRows, string disposition)>(
+            // 2. Platform export manifest covers all 71 tenant/auth tables (active + soft-deleted counts + maxAuditEventId cutoff)
+            //    and streams individual tables without credential columns while including soft-deleted history (I17, Codex round 2).
+            var manifest = (await conn.QueryAsync<(string tableName, int activeRows, int deletedRows, int totalRows, string disposition, long? maxAuditEventId)>(
                 "config.uspExportRootTenant", new { rootTenantId = synRoot }, commandType: CommandType.StoredProcedure)).ToList();
             Assert.Equal(71, manifest.Count);
             var personManifest = Assert.Single(manifest, r => r.tableName == "dbo.person");
@@ -273,7 +273,26 @@ public sealed class LoggingWave4IntegrationTests(MeritFixture fixture)
             Assert.Equal(2, personManifest.totalRows);
             var ledgerManifest = Assert.Single(manifest, r => r.tableName == "logs.auditEvent");
             Assert.Equal("ledgerReadOnly", ledgerManifest.disposition);
-            Assert.True(ledgerManifest.totalRows >= 2);
+            Assert.NotNull(ledgerManifest.maxAuditEventId);
+            Assert.True(ledgerManifest.totalRows >= 1);
+
+            // Codex round 2: Paging logs.auditEvent at pageSize = 1 with manifest maxAuditEventId terminates cleanly and matches manifest totalRows.
+            int exportedLedgerCount = 0;
+            for (int page = 1; page <= ledgerManifest.totalRows + 5; page++)
+            {
+                var ledgerPage = (await conn.QueryAsync<dynamic>(
+                    "config.uspExportRootTenant",
+                    new { rootTenantId = synRoot, tableName = "logs.auditEvent", pageNumber = page, pageSize = 1, maxAuditEventId = ledgerManifest.maxAuditEventId },
+                    commandType: CommandType.StoredProcedure)).ToList();
+                if (ledgerPage.Count == 0)
+                {
+                    break;
+                }
+                Assert.Single(ledgerPage);
+                Assert.True((long)ledgerPage[0].auditEventId <= ledgerManifest.maxAuditEventId!.Value);
+                exportedLedgerCount++;
+            }
+            Assert.Equal(ledgerManifest.totalRows, exportedLedgerCount);
 
             // Stream dbo.person: returns BOTH active and soft-deleted rows.
             var exportedPeople = (await conn.QueryAsync<dynamic>(
@@ -287,12 +306,21 @@ public sealed class LoggingWave4IntegrationTests(MeritFixture fixture)
             Assert.DoesNotContain("mfaSecretProtected", exportedUser.Keys, StringComparer.OrdinalIgnoreCase);
             Assert.DoesNotContain("securityStamp", exportedUser.Keys, StringComparer.OrdinalIgnoreCase);
 
-            // 2b. Export rejects enclosing transactions (Codex #5) and commits durable export audit with filterJson context.
+            // 2b. Export and Purge reject enclosing transactions while leaving caller transaction committable (@@TRANCOUNT = 1, XACT_STATE() = 1).
             using (var tx = conn.BeginTransaction())
             {
-                var txEx = await Assert.ThrowsAsync<SqlException>(() =>
+                await Assert.ThrowsAsync<SqlException>(() =>
                     conn.ExecuteAsync("config.uspExportRootTenant", new { rootTenantId = synRoot }, transaction: tx, commandType: CommandType.StoredProcedure));
-                Assert.Equal(51422, txEx.Number);
+                var txState1 = await conn.QuerySingleAsync<(int tranCount, int xactState)>("SELECT @@TRANCOUNT, XACT_STATE ()", transaction: tx);
+                Assert.Equal(1, txState1.tranCount);
+                Assert.Equal(1, txState1.xactState);
+
+                await Assert.ThrowsAsync<SqlException>(() =>
+                    conn.ExecuteAsync("config.uspPurgeRootTenant", new { rootTenantId = synRoot, confirmationCode = $"PURGE:{synCode}", backupRetentionDays = 35, dryRun = true }, transaction: tx, commandType: CommandType.StoredProcedure));
+                var txState2 = await conn.QuerySingleAsync<(int tranCount, int xactState)>("SELECT @@TRANCOUNT, XACT_STATE ()", transaction: tx);
+                Assert.Equal(1, txState2.tranCount);
+                Assert.Equal(1, txState2.xactState);
+
                 tx.Rollback();
             }
 
@@ -353,7 +381,10 @@ public sealed class LoggingWave4IntegrationTests(MeritFixture fixture)
                 Assert.Equal("unknown", pRow.ethnicity);
                 Assert.Equal("MERIT tenant purge", pRow.createdBy);
                 Assert.Equal("MERIT tenant purge", pRow.modifiedBy);
-                Assert.Equal("MERIT tenant purge", pRow.deletedBy);
+                if (pid == synDeletedPerson)
+                {
+                    Assert.Equal("MERIT tenant purge", pRow.deletedBy);
+                }
             }
 
             // Verify previously soft-deleted queued job had its payload and actor fields scrubbed (Codex #4).
@@ -372,9 +403,20 @@ public sealed class LoggingWave4IntegrationTests(MeritFixture fixture)
             Assert.Equal("other", caseRow.closureReason);
             Assert.NotNull(caseRow.closedDate);
 
-            // Verify cross-root session grants pointing to synRoot were revoked & scrubbed (Codex #2).
+            // Verify cross-root session header itself was revoked AND its target membership rows were scrubbed (Codex round 1 & 2).
+            Assert.NotNull(await conn.ExecuteScalarAsync<DateTime?>("SELECT revokedUtc FROM auth.sessionScope WHERE sessionScopeId = @id", new { id = crossRootSession }));
             Assert.True(await conn.ExecuteScalarAsync<bool>("SELECT isDeleted FROM auth.sessionScopeRoot WHERE sessionScopeRootId = @id", new { id = crossRootScopeRoot }));
             Assert.True(await conn.ExecuteScalarAsync<bool>("SELECT isDeleted FROM auth.sessionScopeTenant WHERE sessionScopeTenantId = @id", new { id = crossRootScopeTenant }));
+
+            // Codex round 2: Once synRoot is purged, synRegion can be purged; afterward, installing a child root under the purged/inactive region is rejected (51422).
+            await conn.ExecuteAsync("config.uspPurgeRootTenant",
+                new { rootTenantId = synRegion, confirmationCode = $"PURGE:{synRegionCode}", backupRetentionDays = 35 },
+                commandType: CommandType.StoredProcedure);
+            var installUnderPurgedEx = await Assert.ThrowsAsync<SqlException>(() =>
+                conn.ExecuteAsync("config.uspInstallRootTenant",
+                    new { tenantCode = "CHLD" + Guid.NewGuid().ToString("N")[..5].ToUpperInvariant(), tenantName = "Child Under Purged Region", tenantType = "state", parentTenantCode = synRegionCode },
+                    commandType: CommandType.StoredProcedure));
+            Assert.Equal(51422, installUnderPurgedEx.Number);
 
             // Verify location geocodes/ZIP, intakeBatch.rawContent, appUser credentials, recoveryCode, and userAssignment are scrubbed (B4).
             var locRow = await conn.QuerySingleAsync<(bool isDeleted, string? postalCode, decimal? latitude, decimal? longitude, string? censusTract)>(

@@ -207,6 +207,15 @@ def write_proc(p: dict) -> str:
         END;
 
 """
+    standalone_guard = ""
+    if p.get("require_standalone"):
+        standalone_guard = f"""    IF @@TRANCOUNT > 0
+    BEGIN
+        RAISERROR (N'{full} must be called outside an enclosing transaction.', 16, 1);
+        RETURN -1;
+    END;
+
+"""
     return f"""{PROLOGUE}
 {header(p)}
 CREATE OR ALTER PROCEDURE {full}
@@ -214,7 +223,7 @@ CREATE OR ALTER PROCEDURE {full}
 AS
 BEGIN
     SET NOCOUNT ON;
-    SET XACT_ABORT ON;
+{standalone_guard}    SET XACT_ABORT ON;
 
     -- =============================================================================================
     -- Rule 8 instrumentation. Boilerplate: copy verbatim.
@@ -331,6 +340,15 @@ def read_proc(p: dict) -> str:
     lit = f"[{p['schema']}].[{p['name']}]"
     params = indent(p.get("params", ""), 6) if p.get("params") else ""
     validation = indent(p["validate"], 8) + "\n\n" if p.get("validate") else ""
+    standalone_guard = ""
+    if p.get("require_standalone"):
+        standalone_guard = f"""    IF @@TRANCOUNT > 0
+    BEGIN
+        RAISERROR (N'{full} must be called outside an enclosing transaction.', 16, 1);
+        RETURN -1;
+    END;
+
+"""
     return f"""{PROLOGUE}
 {header(p)}
 CREATE OR ALTER PROCEDURE {full}
@@ -338,7 +356,7 @@ CREATE OR ALTER PROCEDURE {full}
 AS
 BEGIN
     SET NOCOUNT ON;
-    SET XACT_ABORT ON;
+{standalone_guard}    SET XACT_ABORT ON;
 
     -- =============================================================================================
     -- Rule 8 error-only instrumentation. Boilerplate: copy verbatim.

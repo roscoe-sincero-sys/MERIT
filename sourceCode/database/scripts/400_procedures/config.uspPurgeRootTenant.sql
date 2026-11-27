@@ -52,6 +52,12 @@ CREATE OR ALTER PROCEDURE config.uspPurgeRootTenant
 AS
 BEGIN
     SET NOCOUNT ON;
+    IF @@TRANCOUNT > 0
+    BEGIN
+        RAISERROR (N'config.uspPurgeRootTenant must be called outside an enclosing transaction.', 16, 1);
+        RETURN -1;
+    END;
+
     SET XACT_ABORT ON;
 
     -- =============================================================================================

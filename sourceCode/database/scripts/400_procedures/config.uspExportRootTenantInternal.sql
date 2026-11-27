@@ -13,7 +13,7 @@ CreateDate:   2026-10-24
 ========================================================================================================================
 Description:
 
-Ungranted owner-context helper for config.uspExportRootTenant: returns the 71-table manifest (including active and soft-deleted counts) or streams one table page without credential columns (#346, I17).
+Ungranted owner-context helper for config.uspExportRootTenant: returns the 71-table manifest (including active/soft-deleted counts and maxAuditEventId cutoff) or streams one table page without credential columns (#346, I17).
 
 ========================================================================================================================
 Requirements and Key Dependencies:
@@ -45,10 +45,11 @@ Description:	Initial version.
 
 ***********************************************************************************************************************/
 CREATE OR ALTER PROCEDURE config.uspExportRootTenantInternal
-      @rootTenantId UNIQUEIDENTIFIER
-      , @tableName    NVARCHAR (128) = NULL
-      , @pageNumber   INT = 1
-      , @pageSize     INT = 1000
+      @rootTenantId    UNIQUEIDENTIFIER
+      , @tableName       NVARCHAR (128) = NULL
+      , @pageNumber      INT = 1
+      , @pageSize        INT = 1000
+      , @maxAuditEventId BIGINT = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -513,8 +514,10 @@ BEGIN
               FROM auth.tenant WHERE rootTenantId = @rootTenantId;
             INSERT @manifest (tableName, activeRows, deletedRows, totalRows, disposition)
             SELECT N'logs.auditEvent', COUNT (*), 0, COUNT (*), 'ledgerReadOnly'
-              FROM logs.auditEvent WHERE rootTenantId = @rootTenantId;
-            SELECT tableName, COALESCE (activeRows, 0) AS activeRows, COALESCE (deletedRows, 0) AS deletedRows, totalRows, disposition FROM @manifest ORDER BY tableName;
+              FROM logs.auditEvent
+             WHERE rootTenantId = @rootTenantId
+               AND (@maxAuditEventId IS NULL OR auditEventId <= @maxAuditEventId);
+            SELECT tableName, COALESCE (activeRows, 0) AS activeRows, COALESCE (deletedRows, 0) AS deletedRows, totalRows, disposition, @maxAuditEventId AS maxAuditEventId FROM @manifest ORDER BY tableName;
             RETURN;
         END;
 
@@ -1083,6 +1086,7 @@ BEGIN
             SELECT auditEventId, eventUtc, appUserId, rootTenantId, owningTenantId, eventAction, entityType, entityId, recordCount, clientAddress, userAgentHash, sessionReference, traceId, actingTenantId, viewAsUserId, viewKind, filterJson, administrationJson, createdBy, createdDateUtc
               FROM logs.auditEvent
              WHERE rootTenantId = @rootTenantId
+               AND (@maxAuditEventId IS NULL OR auditEventId <= @maxAuditEventId)
              ORDER BY auditEventId
             OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY;
         END
@@ -1128,5 +1132,5 @@ EXEC util.uspSetObjectDescription
       @SchemaName  = N'config'
     , @ObjectType  = N'PROCEDURE'
     , @ObjectName  = N'uspExportRootTenantInternal'
-    , @Description = N'Ungranted owner-context helper for config.uspExportRootTenant: returns the 71-table manifest (including active and soft-deleted counts) or streams one table page without credential columns (#346, I17).';
+    , @Description = N'Ungranted owner-context helper for config.uspExportRootTenant: returns the 71-table manifest (including active/soft-deleted counts and maxAuditEventId cutoff) or streams one table page without credential columns (#346, I17).';
 GO

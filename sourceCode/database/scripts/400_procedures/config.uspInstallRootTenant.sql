@@ -99,11 +99,34 @@ BEGIN
         -- ===== The procedure's own work starts here. Everything above and below is boilerplate. ==
         -- =========================================================================================
 
+        -- Serialize root-tenant hierarchy mutations with config.uspPurgeRootTenantInternal (Codex #2).
+        DECLARE @hierLock INT;
+        EXEC @hierLock = sys.sp_getapplock @Resource = N'MERIT.tenantHierarchy', @LockMode = 'Exclusive',
+             @LockOwner = 'Transaction', @LockTimeout = 10000;
+        IF @hierLock < 0
+        BEGIN
+            ;THROW 51409, N'Tenant hierarchy changes are busy; please retry.', 1;
+        END;
+
         DECLARE @root UNIQUEIDENTIFIER = CAST (HASHBYTES ('MD5', CONCAT (N'tenant:', @tenantCode)) AS UNIQUEIDENTIFIER);
         SET @effectiveFrom=COALESCE(@effectiveFrom,auth.udfSessionToday());
-        DECLARE @parent UNIQUEIDENTIFIER = COALESCE ((SELECT tenantId FROM auth.tenant WHERE tenantCode = @parentTenantCode
-                                                                                        AND isDeleted = 0),
-                                                     CAST (HASHBYTES ('MD5', N'tenant:PLATFORM') AS UNIQUEIDENTIFIER));
+        DECLARE @parent UNIQUEIDENTIFIER;
+        IF @parentTenantCode IS NOT NULL
+        BEGIN
+            SELECT @parent = tenantId
+              FROM auth.tenant
+             WHERE tenantCode = @parentTenantCode
+               AND isDeleted = 0
+               AND isActive = 1;
+            IF @parent IS NULL
+            BEGIN
+                ;THROW 51422, N'The selected parent tenant was not found or is inactive.', 1;
+            END;
+        END
+        ELSE
+        BEGIN
+            SET @parent = CAST (HASHBYTES ('MD5', N'tenant:PLATFORM') AS UNIQUEIDENTIFIER);
+        END;
 
         IF @tenantType NOT IN ('region', 'state', 'tribe', 'jurisdiction')
         BEGIN
