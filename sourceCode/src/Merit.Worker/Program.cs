@@ -5,6 +5,15 @@ using Merit.Data.SqlServer;
 using Merit.Worker;
 
 var builder = WebApplication.CreateBuilder(args);
+if (string.Equals(builder.Configuration["Logging:Format"], "Json", StringComparison.OrdinalIgnoreCase))
+{
+    builder.Logging.AddJsonConsole(o =>
+    {
+        o.IncludeScopes = true;
+        o.TimestampFormat = "yyyy-MM-ddTHH:mm:ss.fffZ";
+        o.UseUtcTimestamp = true;
+    });
+}
 
 builder.Services.AddSingleton<JobSessionHolder>();
 builder.Services.AddScoped<ICurrentSession, JobCurrentSession>();
@@ -27,6 +36,7 @@ builder.Services.AddHostedService<ClusterScheduler>();
 // Sign-in events lose their personal data after SignInLog:RetentionDays (#191).
 builder.Services.AddHostedService<SignInLogPurger>();
 builder.Services.AddHostedService<ScreenVisitPurger>();
+builder.Services.AddHostedService<AuditEventRecordPurger>();
 builder.Services.AddHealthChecks().AddCheck<QueueHealthCheck>("queues");
 
 var app = builder.Build();

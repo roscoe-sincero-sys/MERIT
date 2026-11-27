@@ -103,7 +103,9 @@ BEGIN
         -- ===== The procedure's own work starts here. Everything above and below is boilerplate. ==
         -- =========================================================================================
 
+        DECLARE @corrected TABLE (stagingRowId UNIQUEIDENTIFIER PRIMARY KEY, owningTenantId UNIQUEIDENTIFIER);
         UPDATE s SET correctedJson = JSON_MODIFY (COALESCE (s.correctedJson, N'{}'), CONCAT (N'$.', @field), @value)
+        OUTPUT inserted.stagingRowId, inserted.owningTenantId INTO @corrected
         FROM dbo.stagingRow AS s JOIN dbo.intakeBatch AS b ON b.intakeBatchId = s.intakeBatchId
         WHERE s.rowStatus = 'held' AND s.isDeleted = 0 AND b.isDeleted = 0
           AND b.senderOrganizationId IS NOT DISTINCT FROM @sender
@@ -111,7 +113,27 @@ BEGIN
           AND (@selectedIdsJson IS NULL OR s.stagingRowId IN (SELECT TRY_CONVERT (UNIQUEIDENTIFIER, [value]) FROM OPENJSON (@selectedIdsJson)))
           AND EXISTS (SELECT 1 FROM dbo.stagingHoldReason AS h WHERE h.stagingRowId = s.stagingRowId
             AND h.reasonCode = @reason AND h.reportedValue IS NOT DISTINCT FROM @reportedValue AND h.isResolved = 0 AND h.isDeleted = 0);
-        DECLARE @count INT = @@ROWCOUNT;
+        DECLARE @count INT = (SELECT COUNT (*) FROM @corrected);
+        IF @count > 0
+        BEGIN
+            DECLARE @auditScope UNIQUEIDENTIFIER = TRY_CAST (SESSION_CONTEXT (N'scopeKey') AS UNIQUEIDENTIFIER);
+        DECLARE @auditSessionRef UNIQUEIDENTIFIER, @auditActingTenant UNIQUEIDENTIFIER, @auditViewAs UNIQUEIDENTIFIER;
+        SELECT @auditSessionRef = sessionReference, @auditActingTenant = actingTenantId, @auditViewAs = viewAsUserId
+          FROM auth.sessionScope
+         WHERE sessionScopeId = @auditScope AND revokedUtc IS NULL AND expiresUtc > SYSUTCDATETIME () AND isDeleted = 0;
+        DECLARE @auditClientAddress VARCHAR (45) = TRY_CAST (SESSION_CONTEXT (N'clientAddress') AS VARCHAR (45));
+        DECLARE @auditTraceId VARCHAR (64) = TRY_CAST (SESSION_CONTEXT (N'traceId') AS VARCHAR (64));
+            DECLARE @root UNIQUEIDENTIFIER = auth.udfSessionRootTenantId ();
+            DECLARE @singleOwner UNIQUEIDENTIFIER = (SELECT CASE WHEN COUNT (DISTINCT owningTenantId) = 1 THEN MAX (owningTenantId) END FROM @corrected);
+            INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, recordCount, clientAddress, owningTenantId,
+                                    sessionReference, traceId, actingTenantId, viewAsUserId)
+            VALUES (auth.udfSessionUserId (), @root, 'update', 'stagingRow', NULL, @count, @auditClientAddress, @singleOwner,
+                    @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs);
+            DECLARE @auditEventId BIGINT = SCOPE_IDENTITY ();
+            IF @root IS NOT NULL
+                INSERT logs.auditEventRecord (auditEventRecordId, auditEventId, rootTenantId, entityType, entityId)
+                SELECT CAST (CAST (NEWID () AS BINARY (10)) + CAST (DATEDIFF_BIG (MILLISECOND, '19700101', SYSUTCDATETIME ()) AS BINARY (6)) AS UNIQUEIDENTIFIER), @auditEventId, @root, 'stagingRow', stagingRowId FROM @corrected;
+        END;
         SELECT @count AS updated;
         SET @Comments = CONCAT (@count, N' rows corrected.');
 

@@ -133,7 +133,31 @@ BEGIN
                auth.udfSessionUserId (), @jobProfile, @jobViewAs, @jobActing
           FROM dbo.intakeBatch AS b JOIN @batches AS x ON x.intakeBatchId = b.intakeBatchId;
 
-        SELECT COUNT (*) AS releasedCount FROM @released;
+        DECLARE @releasedCount INT = (SELECT COUNT (*) FROM @released);
+        IF @releasedCount > 0
+        BEGIN
+            DECLARE @auditScope UNIQUEIDENTIFIER = TRY_CAST (SESSION_CONTEXT (N'scopeKey') AS UNIQUEIDENTIFIER);
+        DECLARE @auditSessionRef UNIQUEIDENTIFIER, @auditActingTenant UNIQUEIDENTIFIER, @auditViewAs UNIQUEIDENTIFIER;
+        SELECT @auditSessionRef = sessionReference, @auditActingTenant = actingTenantId, @auditViewAs = viewAsUserId
+          FROM auth.sessionScope
+         WHERE sessionScopeId = @auditScope AND revokedUtc IS NULL AND expiresUtc > SYSUTCDATETIME () AND isDeleted = 0;
+        DECLARE @auditClientAddress VARCHAR (45) = TRY_CAST (SESSION_CONTEXT (N'clientAddress') AS VARCHAR (45));
+        DECLARE @auditTraceId VARCHAR (64) = TRY_CAST (SESSION_CONTEXT (N'traceId') AS VARCHAR (64));
+            DECLARE @auditRoot UNIQUEIDENTIFIER = auth.udfSessionRootTenantId ();
+            DECLARE @singleOwner UNIQUEIDENTIFIER = (SELECT CASE WHEN COUNT (DISTINCT s.owningTenantId) = 1 THEN MAX (s.owningTenantId) END
+                                                       FROM dbo.stagingRow AS s JOIN @released AS r ON r.stagingRowId = s.stagingRowId);
+            INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, recordCount, clientAddress, owningTenantId,
+                                    sessionReference, traceId, actingTenantId, viewAsUserId)
+            VALUES (auth.udfSessionUserId (), @auditRoot, 'update', 'stagingRow',
+                    CASE WHEN @releasedCount = 1 THEN (SELECT TOP (1) stagingRowId FROM @released) END,
+                    @releasedCount, @auditClientAddress, @singleOwner, @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs);
+            DECLARE @auditEventId BIGINT = SCOPE_IDENTITY ();
+            IF @auditRoot IS NOT NULL
+                INSERT logs.auditEventRecord (auditEventRecordId, auditEventId, rootTenantId, entityType, entityId)
+                SELECT CAST (CAST (NEWID () AS BINARY (10)) + CAST (DATEDIFF_BIG (MILLISECOND, '19700101', SYSUTCDATETIME ()) AS BINARY (6)) AS UNIQUEIDENTIFIER), @auditEventId, @auditRoot, 'stagingRow', stagingRowId FROM @released;
+        END;
+
+        SELECT @releasedCount AS releasedCount;
 
         SET @Comments = N'Rows released.';
 

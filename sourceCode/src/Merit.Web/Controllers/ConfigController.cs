@@ -217,6 +217,7 @@ public sealed class AdminController(IClock clock, AdminService admin, AuditServi
                 SignInHistory = await admin.SignInHistoryAsync(uid, 50, ct),
                 CanViewAs = !session.IsPlatformAdmin && u.User.HomeTenantType != "platform" && u.User.AppUserId != session.UserId,
             };
+            await audit.ListedAsync("signInHistory", form.SignInHistory.Count, ct, new { appUserId = uid });
         }
 
         return View(await UserFormAsync(form, ct));
@@ -259,6 +260,7 @@ public sealed class AdminController(IClock clock, AdminService admin, AuditServi
                 }
                 catch (MeritException ex) when (ex is ValidationException or PermissionDeniedException)
                 {
+                    if (ex is PermissionDeniedException) await audit.PermissionDeniedAsync("userAssignment", id, ct);
                     TempData["userError"] = $"The user was saved, but the access was not given: {ex.Message} Give access below.";
                     return Redirect(Url.Action(nameof(EditUser), new { id }) + "#give-access");
                 }
@@ -290,6 +292,7 @@ public sealed class AdminController(IClock clock, AdminService admin, AuditServi
         }
         catch (MeritException ex) when (ex is ValidationException or PermissionDeniedException or BusinessRuleException)
         {
+            if (ex is PermissionDeniedException) await audit.PermissionDeniedAsync("userAssignment", id, ct);
             // #271: a business rule (for example "platform roles are granted only at the platform") is shown beside the
             // grant form like any other refusal, not as a bare error page.
             TempData["userError"] = ex.Message;
@@ -338,9 +341,21 @@ public sealed class AdminController(IClock clock, AdminService admin, AuditServi
         filter.Page = Math.Max(filter.Page, 1);
         filter.PageSize = filter.PageSize == 25 ? 25 : AuditPageSize;
         var events = await audit.SearchAsync(session, AuditQuery(filter, filter.Page, filter.PageSize), ct);
+        await audit.ListedAsync("auditEvent", events.Count, ct,
+            new { filter.UserId, filter.EntityId, filter.Action, filter.RecordType, filter.ViewKind, filter.From, filter.To, filter.Page, filter.PageSize });
         var users = (await audit.UsersAsync(session, ct))
             .Select(u => new SelectOption(u.AppUserId.ToString(), u.DisplayName, u.AppUserId == filter.UserId)).ToList();
         return View(new AuditModel(events, filter, events.FirstOrDefault()?.TotalCount ?? 0, filter.PageSize, users));
+    }
+
+    /// <summary>Record identifiers associated with a list, export or batch audit event (#333).</summary>
+    [HttpGet("audit/{id:long}/records")]
+    [Authorize(Policy = Permissions.AuditView)]
+    public async Task<IActionResult> AuditRecords(long id, CancellationToken ct)
+    {
+        var records = await audit.RecordsAsync(session, id, ct);
+        await audit.ListedAsync("auditEvent", records.Count, ct, new { auditEventId = id });
+        return View("AuditRecords", (id, records));
     }
 
     /// <summary>The filtered view as CSV, up to 10,000 events. The export is itself audited.</summary>
@@ -371,7 +386,8 @@ public sealed class AdminController(IClock clock, AdminService admin, AuditServi
             ? TimeZoneInfo.ConvertTimeToUtc(d.ToDateTime(TimeOnly.MinValue, DateTimeKind.Unspecified), clock.Zone)
             : null;
         return new AuditQuery(f.UserId, f.EntityId, string.IsNullOrEmpty(f.Action) ? null : f.Action,
-            string.IsNullOrEmpty(f.RecordType) ? null : f.RecordType, Utc(f.From), Utc(f.To?.AddDays(1)), page, pageSize);
+            string.IsNullOrEmpty(f.RecordType) ? null : f.RecordType, Utc(f.From), Utc(f.To?.AddDays(1)), page, pageSize,
+            string.IsNullOrEmpty(f.ViewKind) ? null : f.ViewKind);
     }
 
     /// <summary>A CSV field, quoted when needed; a leading =, +, - or @ is defused so a spreadsheet does not run it.</summary>

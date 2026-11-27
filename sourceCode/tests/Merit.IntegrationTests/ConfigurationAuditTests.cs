@@ -9,7 +9,7 @@ public sealed partial class AdministrationAndTestingPolicyTests
     private static async Task<JsonDocument> ConfigurationEvent(Guid id)
         => JsonDocument.Parse(await Sql<string>("SELECT TOP(1) administrationJson FROM logs.auditEvent WHERE entityId=@id AND entityType IN('jurisdictionSetting','threshold','notificationRule') ORDER BY auditEventId DESC", ("@id", id)));
     private static Task<int> ConfigurationEventCount(Guid actor)
-        => Sql<int>("SELECT COUNT(*) FROM logs.auditEvent WHERE appUserId=@actor AND entityType IN('jurisdictionSetting','threshold','notificationRule')", ("@actor", actor));
+        => Sql<int>("SELECT COUNT(*) FROM logs.auditEvent WHERE appUserId=@actor AND entityType IN('jurisdictionSetting','threshold','notificationRule') AND eventAction<>'permissionDenied'", ("@actor", actor));
     private static async Task SetConfiguration(MeritClient client, string key, string value)
     {
         await client.Http.GetStringAsync("/config/settings");
@@ -76,6 +76,7 @@ public sealed partial class AdministrationAndTestingPolicyTests
                 using var refused = await reviewer.NoRedirect.PostAsync("/config/settings/sessionTimeoutMinutes", Form(("settingValue", "120")));
                 Assert.True(refused.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.Redirect);
                 Assert.Equal(0, await ConfigurationEventCount(officer.Id));
+                Assert.Equal(1, await Sql<int>("SELECT COUNT(*) FROM logs.auditEvent WHERE appUserId=@actor AND eventAction='permissionDenied' AND entityType='jurisdictionSetting'", ("@actor", officer.Id)));
                 Assert.Equal("30", await Sql<string>("SELECT settingValue FROM config.jurisdictionSetting WHERE rootTenantId=@r AND settingKey='sessionTimeoutMinutes' AND isDeleted=0 AND effectiveTo IS NULL", ("@r", root)));
             }
             var otherRoot = await NewRoot("VA");

@@ -312,9 +312,17 @@ public interface IWorkData
 
     Task<int> DetectClustersAsync(int windowDays, int minCount, CancellationToken ct = default);
 
-    Task RecordAuditAsync(string eventAction, string entityType, Guid? entityId, int? recordCount, string? clientAddress, CancellationToken ct = default);
+    Task RecordAuditAsync(string eventAction, string entityType, Guid? entityId, int? recordCount, string? clientAddress, CancellationToken ct = default,
+                          string? viewKind = null, string? filterJson = null, string? recordIdsJson = null, string? traceId = null);
 
     Task<IReadOnlyList<AuditEventRow>> SearchAuditAsync(AuditQuery query, CancellationToken ct = default);
+
+    Task<IReadOnlyList<Merit.Application.Security.AuditEventRecordRow>> GetAuditEventRecordsAsync(long auditEventId, CancellationToken ct = default);
+
+    Task<int> PurgeAuditEventRecordsAsync(int retentionDays, CancellationToken ct = default);
+
+    Task RecordSearchLogAsync(string searchText, int resultCount, string searchSource, string entityType, string? filterJson = null,
+                              string? recordIdsJson = null, CancellationToken ct = default);
 
     Task<IReadOnlyList<AuditUserRow>> ListAuditUsersAsync(CancellationToken ct = default);
 }

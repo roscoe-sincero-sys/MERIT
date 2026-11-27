@@ -7,6 +7,8 @@ using Merit.Application.Services;
 using Merit.Contracts;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
+using Merit.Web.Infrastructure;
 
 namespace Merit.Web.Controllers.Api;
 
@@ -179,6 +181,7 @@ public sealed class HeldRecordsController(IntakeService intake, IReferenceDataPr
 
 [ApiController]
 [Route("api/v1")]
+[EnableRateLimiting(SignInRateLimits.Authenticated)]
 public sealed class ResultsApiController(ResultService results, PersonService people, IReferenceDataProvider reference, AuditService audit, CaseService cases, ICurrentSession session)
     : ControllerBase
 {
@@ -226,7 +229,7 @@ public sealed class ResultsApiController(ResultService results, PersonService pe
         if (session.Has(Permissions.CaseView))
         foreach (var c in page.Cases)
         {
-            var history = await cases.GetAsync(c.ExposureCaseId, ct);
+            var history = await cases.GetAsync(c.ExposureCaseId, ct, incidental: true);
             if (!history.Activities.Any(a => a.LifecycleKind == "opened"))
                 events.Add(new TimelineEventDto(c.OpenedDate, c.OpenedDate, "case", $"Case {c.CaseNumber}: original opening",
                     $"Current status: {names.Of(c.CaseStatus)}. Open the case for episode membership and follow-up.", null, null, null, c.AnalyteCode, $"/cases/{c.ExposureCaseId}#case-history"));

@@ -35,7 +35,7 @@ public sealed record AddPlaceInput(
 /// enforced again by dbo.uspSavePersonLocations under row locks; this service turns user intent into a plan, shows it,
 /// and applies exactly the plan that was shown.
 /// </summary>
-public sealed class PlaceService(IClock clock, IPlaceData places, IPersonData persons, ICurrentSession session)
+public sealed class PlaceService(IClock clock, IPlaceData places, IPersonData persons, ICurrentSession session, AuditService? audit = null)
 {
     public static PlaceRow ToPlaceRow(PlaceListRow r) => new(
         r.PersonLocationId, r.LocationId, r.OrganizationSiteId, r.Role, r.IsPrimary, r.PrimaryReason, r.ScheduleType,
@@ -45,7 +45,9 @@ public sealed class PlaceService(IClock clock, IPlaceData places, IPersonData pe
     public async Task<IReadOnlyList<PlaceListRow>> GetPlacesAsync(Guid personId, CancellationToken ct = default)
     {
         session.Require(Permissions.PersonView);
-        return await persons.GetPlacesAsync(personId, ct).ConfigureAwait(false);
+        var rows = await persons.GetPlacesAsync(personId, ct).ConfigureAwait(false);
+        if (audit is not null) await audit.ViewedAsync("person", personId, ct).ConfigureAwait(false);
+        return rows;
     }
 
     /// <summary>The "Set as primary" dialog: the row split and the county change, computed by the server rule.</summary>

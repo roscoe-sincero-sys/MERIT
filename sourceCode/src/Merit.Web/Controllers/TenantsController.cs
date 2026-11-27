@@ -14,7 +14,7 @@ namespace Merit.Web.Controllers;
 /// need tenant.create and add under the tenants they administer. The database repeats every check.
 /// </summary>
 [Route("admin/tenants")]
-public sealed class TenantsController(AdminService admin, ConfigService config, SessionRenewal sessions, ICurrentSession session) : Controller
+public sealed class TenantsController(AdminService admin, ConfigService config, SessionRenewal sessions, ICurrentSession session, AuditService audit) : Controller
 {
     [HttpGet("")]
     [Authorize(Policy = Permissions.TenantCreate)]
@@ -52,6 +52,7 @@ public sealed class TenantsController(AdminService admin, ConfigService config, 
         }
         catch (MeritException ex) when (ex is BusinessRuleException or PermissionDeniedException or NotFoundException)
         {
+            if (ex is PermissionDeniedException) await audit.PermissionDeniedAsync("tenant", form.ParentTenantId, ct);
             ModelState.AddModelError(string.Empty, ex.Message);
             return View("Index", await FormAsync(form, ct));
         }

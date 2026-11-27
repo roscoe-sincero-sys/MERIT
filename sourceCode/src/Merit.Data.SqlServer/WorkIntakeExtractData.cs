@@ -59,8 +59,9 @@ public sealed class WorkData(Db db) : IWorkData
         => await db.QuerySingleAsync<int>("dbo.uspDetectClusters", new { windowDays, minCount }, ct).ConfigureAwait(false);
 
     public Task RecordAuditAsync(string eventAction, string entityType, Guid? entityId, int? recordCount, string? clientAddress,
-                                 CancellationToken ct = default)
-        => db.ExecuteAsync("logs.uspRecordAuditEvent", new { eventAction, entityType, entityId, recordCount, clientAddress }, ct);
+                                 CancellationToken ct = default, string? viewKind = null, string? filterJson = null,
+                                 string? recordIdsJson = null, string? traceId = null)
+        => db.ExecuteAsync("logs.uspRecordAuditEvent", new { eventAction, entityType, entityId, recordCount, clientAddress, viewKind, filterJson, recordIdsJson, traceId }, ct);
 
     public Task<IReadOnlyList<AuditEventRow>> SearchAuditAsync(AuditQuery query, CancellationToken ct = default)
         => db.QueryAsync<AuditEventRow>("logs.uspSearchAuditEvents", new
@@ -73,7 +74,18 @@ public sealed class WorkData(Db db) : IWorkData
             toUtc = query.ToUtc,
             pageNumber = query.PageNumber,
             pageSize = query.PageSize,
+            viewKind = query.ViewKind,
         }, ct);
+
+    public Task<IReadOnlyList<Merit.Application.Security.AuditEventRecordRow>> GetAuditEventRecordsAsync(long auditEventId, CancellationToken ct = default)
+        => db.QueryAsync<Merit.Application.Security.AuditEventRecordRow>("logs.uspGetAuditEventRecords", new { auditEventId }, ct);
+
+    public Task<int> PurgeAuditEventRecordsAsync(int retentionDays, CancellationToken ct = default)
+        => db.QuerySingleAsync<int>("logs.uspPurgeAuditEventRecords", new { retentionDays }, ct)!;
+
+    public Task RecordSearchLogAsync(string searchText, int resultCount, string searchSource, string entityType,
+                                     string? filterJson = null, string? recordIdsJson = null, CancellationToken ct = default)
+        => db.ExecuteAsync("logs.uspRecordSearchLog", new { searchText, resultCount, searchSource, entityType, filterJson, recordIdsJson }, ct);
 
     public Task<IReadOnlyList<AuditUserRow>> ListAuditUsersAsync(CancellationToken ct = default)
         => db.QueryAsync<AuditUserRow>("logs.uspListAuditUsers", null, ct);

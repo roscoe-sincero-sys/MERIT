@@ -19,18 +19,43 @@ public sealed class CaseService(IClock clock, ICaseData cases, IWorkData work, I
     private static readonly string[] ClosureReasons =
         ["belowLevelOnRetest", "lostToFollowUp", "movedOutOfState", "declined", "deceased", "duplicate", "other"];
 
-    public async Task<CaseDetail> GetAsync(Guid exposureCaseId, CancellationToken ct = default)
+    public async Task<CaseDetail> GetAsync(Guid exposureCaseId, CancellationToken ct = default, bool incidental = false)
     {
         session.Require(Permissions.CaseView);
         var detail = await cases.GetCaseAsync(exposureCaseId, ct).ConfigureAwait(false) ?? throw new NotFoundException();
-        await audit.ViewedAsync("exposureCase", exposureCaseId, ct).ConfigureAwait(false);
+        await audit.ViewedAsync("exposureCase", exposureCaseId, ct, viewKind: incidental ? "incidental" : "direct").ConfigureAwait(false);
         return detail;
     }
 
-    public async Task<IReadOnlyList<CaseListRow>> ListAsync(CaseListQuery query, CancellationToken ct = default)
+    public async Task<IReadOnlyList<CaseListRow>> ListAsync(CaseListQuery query, CancellationToken ct = default, string? searchSource = null)
     {
         session.Require(Permissions.CaseView);
-        return await cases.ListCasesAsync(query, ct).ConfigureAwait(false);
+        var rows = await cases.ListCasesAsync(query, ct).ConfigureAwait(false);
+        var filter = new
+        {
+            query.OpenOnly,
+            query.Assigned,
+            query.AnalyteId,
+            query.Population,
+            query.Classification,
+            query.OwningTenantId,
+            query.Sort,
+            query.Descending,
+            query.PageNumber,
+            query.PageSize,
+            hasSearch = !string.IsNullOrWhiteSpace(query.Search),
+        };
+        var manifest = rows.Select(r => new AuditManifestEntry("exposureCase", r.ExposureCaseId));
+        if (!string.IsNullOrWhiteSpace(query.Search))
+        {
+            await audit.RecordSearchAsync(query.Search.Trim(), rows.Count, searchSource ?? "caseList", "exposureCase", ct, filter, manifest).ConfigureAwait(false);
+        }
+        else
+        {
+            await audit.ListedAsync("exposureCase", rows.Count, ct, filter, manifest).ConfigureAwait(false);
+        }
+
+        return rows;
     }
 
     /// <summary>The tenants that own a case the caller can see, for the list's owner filter.</summary>
@@ -196,9 +221,31 @@ public sealed class InvestigationService(IClock clock, ICaseData cases, AuditSer
     public async Task<(IReadOnlyList<InvestigationListRow> Rows, int Total, int Page)> ListAsync(InvestigationQuery query, CancellationToken ct = default)
     {
         session.Require(Permissions.CaseView);
-        return await Paging.ReadAsync(Math.Max(1, query.PageNumber), 25,
+        var result = await Paging.ReadAsync(Math.Max(1, query.PageNumber), 25,
             p => cases.ListInvestigationsAsync(query.OpenOnly, false, p, 25, ct, query.Search, query.Assigned,
                 query.Status, query.Type, query.Sort, query.Descending), r => r.TotalCount).ConfigureAwait(false);
+        var filter = new
+        {
+            query.OpenOnly,
+            query.Assigned,
+            query.Status,
+            query.Type,
+            query.Sort,
+            query.Descending,
+            page = result.Page,
+            hasSearch = !string.IsNullOrWhiteSpace(query.Search),
+        };
+        var manifest = result.Rows.Select(r => new AuditManifestEntry("investigation", r.InvestigationId));
+        if (!string.IsNullOrWhiteSpace(query.Search))
+        {
+            await audit.RecordSearchAsync(query.Search.Trim(), result.Rows.Count, "investigationList", "investigation", ct, filter, manifest).ConfigureAwait(false);
+        }
+        else
+        {
+            await audit.ListedAsync("investigation", result.Rows.Count, ct, filter, manifest).ConfigureAwait(false);
+        }
+
+        return result;
     }
 
     public async Task SaveAsync(InvestigationUpdate update, CancellationToken ct = default)

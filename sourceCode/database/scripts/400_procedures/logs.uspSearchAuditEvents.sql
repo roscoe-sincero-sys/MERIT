@@ -55,6 +55,7 @@ CREATE OR ALTER PROCEDURE logs.uspSearchAuditEvents
       , @toUtc       DATETIME2 (3) = NULL
       , @pageNumber  INT = 1
       , @pageSize    INT = 100
+      , @viewKind    VARCHAR (16) = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -112,27 +113,41 @@ BEGIN
            AND (EXISTS (SELECT 1 FROM @scope AS s WHERE s.tenantId = u.homeTenantId)
                 OR EXISTS (SELECT 1 FROM auth.userAssignment AS ua JOIN @scope AS s ON s.tenantId = ua.tenantId WHERE ua.appUserId = u.appUserId AND ua.isDeleted = 0));
 
-        SELECT e.auditEventId, e.eventUtc, e.appUserId, u.displayName, e.eventAction, e.entityType, e.entityId,
-               e.recordCount, e.clientAddress, e.administrationJson, COUNT (*) OVER () AS totalCount
-          FROM logs.auditEvent AS e
-          LEFT JOIN auth.appUser AS u ON u.appUserId = e.appUserId
-         WHERE (EXISTS (SELECT 1 FROM @wholeRoots AS w WHERE w.rootTenantId = e.rootTenantId)
-                OR (EXISTS (SELECT 1 FROM @partRoots AS p WHERE p.rootTenantId = e.rootTenantId)
-                    AND ((e.owningTenantId IS NULL AND EXISTS (SELECT 1 FROM @users AS x WHERE x.appUserId = e.appUserId))
-                         OR EXISTS (SELECT 1 FROM @scope AS s WHERE s.tenantId = e.owningTenantId)
-                         -- Root configuration applies to every reviewed county in this root, never to another root.
-                         OR (e.owningTenantId=e.rootTenantId AND e.entityType IN ('jurisdictionSetting','threshold','notificationRule')))))
-           AND (@appUserId IS NULL OR e.appUserId = @appUserId)
-           AND (@entityId IS NULL OR e.entityId = @entityId)
-           AND (@eventAction IS NULL OR e.eventAction = @eventAction
-                -- "signInEvents": every sign-in and account-security action at once (#191).
-                OR (@eventAction = 'signInEvents' AND e.eventAction IN ('signIn', 'signInFailed', 'signOut', 'mfaEnrolled', 'mfaEmailEnabled', 'mfaEmailDisabled', 'mfaMethodChanged', 'mfaCodeSent', 'mfaCodeNotSent', 'mfaCodeRefused', 'mfaCodeLocked', 'passwordChanged', 'passwordResetRequested', 'passwordResetCompleted', 'passwordSetByAdmin')))
-           AND (@entityType IS NULL OR e.entityType = @entityType OR (@entityType = 'report' AND e.entityType LIKE 'report:%'))
-           AND (@fromUtc IS NULL OR e.eventUtc >= @fromUtc)
-           AND (@toUtc IS NULL OR e.eventUtc < @toUtc)
-         ORDER BY e.auditEventId DESC
-        OFFSET (@pageNumber - 1) * @pageSize ROWS
-         FETCH NEXT @pageSize ROWS ONLY
+        ;WITH paged AS
+        (
+            SELECT e.auditEventId, e.eventUtc, e.appUserId, u.displayName, e.eventAction, e.entityType, e.entityId,
+                   e.recordCount, e.clientAddress, e.administrationJson, e.sessionReference, e.traceId, e.actingTenantId,
+                   e.viewAsUserId, e.viewKind, e.filterJson,
+                   COUNT (*) OVER () AS totalCount
+              FROM logs.auditEvent AS e
+              LEFT JOIN auth.appUser AS u ON u.appUserId = e.appUserId
+             WHERE (EXISTS (SELECT 1 FROM @wholeRoots AS w WHERE w.rootTenantId = e.rootTenantId)
+                    OR (EXISTS (SELECT 1 FROM @partRoots AS p WHERE p.rootTenantId = e.rootTenantId)
+                        AND ((e.owningTenantId IS NULL AND EXISTS (SELECT 1 FROM @users AS x WHERE x.appUserId = e.appUserId))
+                             OR EXISTS (SELECT 1 FROM @scope AS s WHERE s.tenantId = e.owningTenantId)
+                             -- Root configuration applies to every reviewed county in this root, never to another root.
+                             OR (e.owningTenantId=e.rootTenantId AND e.entityType IN ('jurisdictionSetting','threshold','notificationRule')))))
+               AND (@appUserId IS NULL OR e.appUserId = @appUserId)
+               AND (@entityId IS NULL OR e.entityId = @entityId
+                    OR EXISTS (SELECT 1 FROM logs.auditEventRecord AS r WHERE r.auditEventId = e.auditEventId AND r.entityId = @entityId AND r.isDeleted = 0))
+               AND (@eventAction IS NULL OR e.eventAction = @eventAction
+                    -- "signInEvents": every sign-in and account-security action at once (#191).
+                    OR (@eventAction = 'signInEvents' AND e.eventAction IN ('signIn', 'signInFailed', 'signOut', 'mfaEnrolled', 'mfaEmailEnabled', 'mfaEmailDisabled', 'mfaMethodChanged', 'mfaCodeSent', 'mfaCodeNotSent', 'mfaCodeRefused', 'mfaCodeLocked', 'passwordChanged', 'passwordResetRequested', 'passwordResetCompleted', 'passwordSetByAdmin')))
+               AND (@entityType IS NULL OR e.entityType = @entityType OR (@entityType = 'report' AND e.entityType LIKE 'report:%'))
+               AND (@viewKind IS NULL OR e.viewKind = @viewKind OR (@viewKind = 'direct' AND e.viewKind IS NULL))
+               AND (@fromUtc IS NULL OR e.eventUtc >= @fromUtc)
+               AND (@toUtc IS NULL OR e.eventUtc < @toUtc)
+             ORDER BY e.auditEventId DESC
+            OFFSET (@pageNumber - 1) * @pageSize ROWS
+             FETCH NEXT @pageSize ROWS ONLY
+        )
+        SELECT p.auditEventId, p.eventUtc, p.appUserId, p.displayName, p.eventAction, p.entityType, p.entityId,
+               p.recordCount, p.clientAddress, p.administrationJson, p.sessionReference, p.traceId, p.actingTenantId,
+               p.viewAsUserId, p.viewKind, p.filterJson,
+               (SELECT COUNT (*) FROM logs.auditEventRecord AS r WHERE r.auditEventId = p.auditEventId AND r.isDeleted = 0) AS manifestCount,
+               p.totalCount
+          FROM paged AS p
+         ORDER BY p.auditEventId DESC
         OPTION (RECOMPILE);
 
         -- =========================================================================================

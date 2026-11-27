@@ -113,7 +113,24 @@ BEGIN
           FROM dbo.stagingRow AS s
          WHERE s.stagingRowId = @stagingRowId AND s.rowStatus = 'held' AND s.isDeleted = 0;
 
-        SET @Comments = CONCAT (@@ROWCOUNT, N' row(s) corrected.');
+        DECLARE @updated INT = @@ROWCOUNT;
+        IF @updated > 0
+        BEGIN
+            DECLARE @auditScope UNIQUEIDENTIFIER = TRY_CAST (SESSION_CONTEXT (N'scopeKey') AS UNIQUEIDENTIFIER);
+        DECLARE @auditSessionRef UNIQUEIDENTIFIER, @auditActingTenant UNIQUEIDENTIFIER, @auditViewAs UNIQUEIDENTIFIER;
+        SELECT @auditSessionRef = sessionReference, @auditActingTenant = actingTenantId, @auditViewAs = viewAsUserId
+          FROM auth.sessionScope
+         WHERE sessionScopeId = @auditScope AND revokedUtc IS NULL AND expiresUtc > SYSUTCDATETIME () AND isDeleted = 0;
+        DECLARE @auditClientAddress VARCHAR (45) = TRY_CAST (SESSION_CONTEXT (N'clientAddress') AS VARCHAR (45));
+        DECLARE @auditTraceId VARCHAR (64) = TRY_CAST (SESSION_CONTEXT (N'traceId') AS VARCHAR (64));
+            DECLARE @owner UNIQUEIDENTIFIER = (SELECT owningTenantId FROM dbo.stagingRow WHERE stagingRowId = @stagingRowId);
+            INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, clientAddress, owningTenantId,
+                                    sessionReference, traceId, actingTenantId, viewAsUserId)
+            VALUES (auth.udfSessionUserId (), auth.udfSessionRootTenantId (), 'update', 'stagingRow', @stagingRowId,
+                    @auditClientAddress, @owner, @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs);
+        END;
+
+        SET @Comments = CONCAT (@updated, N' row(s) corrected.');
 
         -- =========================================================================================
         -- ===== End of the procedure's own work. ===================================================

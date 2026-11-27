@@ -179,7 +179,7 @@ public sealed class ResultService(
             ReportedSnapshotJson = snapshot,
             ResultRowStatus = isDuplicate ? "duplicate" : "valid",
         }, ct).ConfigureAwait(false);
-        await audit.CreatedAsync("labResult", id, ct).ConfigureAwait(false);
+        // create labResult is audited inside dbo.uspSaveLabResult's transaction (#332).
         if (input.CorrectsLabResultId is Guid supersededId)
         {
             await audit.ChangedAsync("labResult", supersededId, ct).ConfigureAwait(false);
@@ -256,7 +256,23 @@ public sealed class ResultService(
     {
         session.Require(Permissions.ResultView);
         var rows = await results.ListResultsAsync(query, ct).ConfigureAwait(false);
-        await audit.ListedAsync("labResult", rows.Count, ct).ConfigureAwait(false);
+        var filter = new
+        {
+            query.AnalyteId,
+            query.CollectedFrom,
+            query.CollectedTo,
+            query.Population,
+            query.MinValue,
+            query.LabOrganizationId,
+            query.UnmatchedOnly,
+            query.SortBy,
+            query.SortDescending,
+            query.PageNumber,
+            query.PageSize,
+        };
+        var manifest = rows.Select(r => new AuditManifestEntry("labResult", r.LabResultId))
+            .Concat(rows.Where(r => r.PersonId is not null).Select(r => new AuditManifestEntry("person", r.PersonId!.Value)));
+        await audit.ListedAsync("labResult", rows.Count, ct, filter, manifest).ConfigureAwait(false);
         return rows;
     }
 

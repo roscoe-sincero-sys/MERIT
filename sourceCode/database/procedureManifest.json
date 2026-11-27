@@ -7935,6 +7935,22 @@
   ]
  },
  {
+  "name": "logs.uspGetAuditEventRecords",
+  "kind": "read",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": "audit.view",
+  "params": [
+   {
+    "name": "auditEventId",
+    "type": "BIGINT",
+    "hasDefault": false,
+    "isOutput": false
+   }
+  ]
+ },
+ {
   "name": "logs.uspGetScreenSession",
   "kind": "read",
   "grants": [
@@ -8066,6 +8082,22 @@
   ]
  },
  {
+  "name": "logs.uspPurgeAuditEventRecords",
+  "kind": "write",
+  "grants": [
+   "meritWorkerRole"
+  ],
+  "permission": null,
+  "params": [
+   {
+    "name": "retentionDays",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
   "name": "logs.uspPurgeScreenVisits",
   "kind": "write",
   "grants": [
@@ -8135,6 +8167,30 @@
     "type": "VARCHAR (45)",
     "hasDefault": true,
     "isOutput": false
+   },
+   {
+    "name": "viewKind",
+    "type": "VARCHAR (16)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "filterJson",
+    "type": "NVARCHAR (MAX)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "recordIdsJson",
+    "type": "NVARCHAR (MAX)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "traceId",
+    "type": "VARCHAR (64)",
+    "hasDefault": true,
+    "isOutput": false
    }
   ]
  },
@@ -8173,6 +8229,52 @@
    {
     "name": "navigationType",
     "type": "VARCHAR (12)",
+    "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
+  "name": "logs.uspRecordSearchLog",
+  "kind": "write",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": null,
+  "params": [
+   {
+    "name": "searchText",
+    "type": "NVARCHAR (400)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "resultCount",
+    "type": "INT",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "searchSource",
+    "type": "VARCHAR (30)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "entityType",
+    "type": "VARCHAR (30)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "filterJson",
+    "type": "NVARCHAR (MAX)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "recordIdsJson",
+    "type": "NVARCHAR (MAX)",
     "hasDefault": true,
     "isOutput": false
    }
@@ -8325,6 +8427,12 @@
    {
     "name": "pageSize",
     "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "viewKind",
+    "type": "VARCHAR (16)",
     "hasDefault": true,
     "isOutput": false
    }

@@ -127,6 +127,11 @@ public sealed class ProfilesController(ProfileService profiles, AdminService adm
         }
         catch (MeritException ex)
         {
+            if (ex is PermissionDeniedException)
+            {
+                var audit = HttpContext.RequestServices.GetService<AuditService>();
+                if (audit is not null) await audit.PermissionDeniedAsync("userProfile", userProfileId ?? viewAsUserId, ct);
+            }
             TempData["profileError"] = ex.Message;
             return RedirectToAction(nameof(Index));
         }

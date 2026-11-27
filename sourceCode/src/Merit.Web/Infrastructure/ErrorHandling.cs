@@ -1,4 +1,6 @@
 using Merit.Application.Errors;
+using Merit.Application.Security;
+using Merit.Application.Services;
 using Merit.Web.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
@@ -12,16 +14,36 @@ namespace Merit.Web.Infrastructure;
 /// USWDS alert partial retargeted at the page's alert region (htmx 4 swaps error responses by default); full-page
 /// requests get the error page. Messages come from application exceptions and never carry patient data.
 /// </summary>
-public sealed partial class MeritExceptionFilter(ILogger<MeritExceptionFilter> logger, IModelMetadataProvider metadata) : IExceptionFilter
+public sealed partial class MeritExceptionFilter(ILogger<MeritExceptionFilter> logger, IModelMetadataProvider metadata) : IAsyncExceptionFilter
 {
-    public void OnException(ExceptionContext context)
+    public async Task OnExceptionAsync(ExceptionContext context)
     {
+        var http = context.HttpContext;
+        string traceId = RequestTrace.Id(http) ?? http.TraceIdentifier;
+        var session = http.RequestServices.GetService<ICurrentSession>();
+
         if (context.Exception is not MeritException)
         {
             // Type and stack only: exception messages (SQL errors in particular) can quote data values, and logs carry
             // record ids, never patient data.
-            LogUnhandled(logger, context.Exception.GetType().FullName ?? "Exception", context.HttpContext.TraceIdentifier,
+            LogUnhandled(logger, context.Exception.GetType().FullName ?? "Exception", traceId,
                 context.Exception.StackTrace ?? string.Empty);
+        }
+        else if (context.Exception is PermissionDeniedException && session?.IsAuthenticated == true)
+        {
+            try
+            {
+                var audit = http.RequestServices.GetService<AuditService>();
+                if (audit is not null)
+                {
+                    await audit.PermissionDeniedAsync(RequestTrace.EntityTypeFromRoute(http),
+                        RequestTrace.EntityIdFromRoute(http), CancellationToken.None).ConfigureAwait(false);
+                }
+            }
+            catch (Exception ex)
+            {
+                LogAuditFailure(logger, ex.GetType().Name, traceId);
+            }
         }
 
         var (status, title, message) = context.Exception switch
@@ -34,15 +56,15 @@ public sealed partial class MeritExceptionFilter(ILogger<MeritExceptionFilter> l
             ValidationException e => (StatusCodes.Status422UnprocessableEntity, "Check the form",
                 string.Join(" ", e.Errors.SelectMany(kv => kv.Value))),
             _ => (StatusCodes.Status500InternalServerError, "Something went wrong",
-                $"The request could not be completed. Reference {context.HttpContext.TraceIdentifier}."),
+                $"The request could not be completed. Reference {traceId}."),
         };
 
-        var request = context.HttpContext.Request;
+        var request = http.Request;
         if (context.ActionDescriptor.EndpointMetadata.OfType<ApiControllerAttribute>().Any()
             || request.Path.StartsWithSegments("/api", StringComparison.OrdinalIgnoreCase))
         {
             var problem = new ProblemDetails { Status = status, Title = title, Detail = message, Instance = request.Path };
-            problem.Extensions["traceId"] = context.HttpContext.TraceIdentifier;
+            problem.Extensions["traceId"] = traceId;
             if (context.Exception is ValidationException ve)
             {
                 problem.Extensions["errors"] = ve.Errors;
@@ -52,9 +74,9 @@ public sealed partial class MeritExceptionFilter(ILogger<MeritExceptionFilter> l
         }
         else if (request.IsHtmx())
         {
-            context.HttpContext.Response.Headers["HX-Retarget"] = request.Headers["X-Merit-Dialog"] == "true"
+            http.Response.Headers["HX-Retarget"] = request.Headers["X-Merit-Dialog"] == "true"
                 ? "#dialog-alert-region" : "#alert-region";
-            context.HttpContext.Response.Headers["HX-Reswap"] = "innerHTML";
+            http.Response.Headers["HX-Reswap"] = "innerHTML";
             context.Result = new PartialViewResult
             {
                 ViewName = "_Alert",
@@ -83,4 +105,7 @@ public sealed partial class MeritExceptionFilter(ILogger<MeritExceptionFilter> l
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Unhandled {ExceptionType} (trace {TraceId}) at {StackTrace}")]
     private static partial void LogUnhandled(ILogger logger, string exceptionType, string traceId, string stackTrace);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "PermissionDenied audit event could not be recorded ({ExceptionType}, trace {TraceId})")]
+    private static partial void LogAuditFailure(ILogger logger, string exceptionType, string traceId);
 }

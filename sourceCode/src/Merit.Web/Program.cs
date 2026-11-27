@@ -14,11 +14,22 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
+if (string.Equals(builder.Configuration["Logging:Format"], "Json", StringComparison.OrdinalIgnoreCase))
+{
+    builder.Logging.AddJsonConsole(o =>
+    {
+        o.IncludeScopes = true;
+        o.TimestampFormat = "yyyy-MM-ddTHH:mm:ss.fffZ";
+        o.UseUtcTimestamp = true;
+    });
+}
+
 var services = builder.Services;
 
 // ---------------------------------------------------------------------------------------------- application layers
 services.AddHttpContextAccessor();
 services.AddScoped<ICurrentSession, WebCurrentSession>();
+services.AddScoped<IRequestAuditContext, WebRequestAuditContext>();
 services.AddScoped<SessionRenewal>();
 services.AddScoped<ScreenUsageRecorder>();
 services.AddScoped<ScreenVisitFilter>();
@@ -116,8 +127,28 @@ services.AddAuthentication(AuthSchemes.Session)
 
                 return Task.CompletedTask;
             },
-            OnRedirectToAccessDenied = ctx =>
+            OnRedirectToAccessDenied = async ctx =>
             {
+                ctx.HttpContext.Items[SecurityTelemetryMiddleware.AccessDeniedItem] = true;
+                if (ctx.HttpContext.User.Identity?.IsAuthenticated == true)
+                {
+                    try
+                    {
+                        var audit = ctx.HttpContext.RequestServices.GetService<AuditService>();
+                        if (audit is not null)
+                        {
+                            await audit.PermissionDeniedAsync(RequestTrace.EntityTypeFromRoute(ctx.HttpContext),
+                                RequestTrace.EntityIdFromRoute(ctx.HttpContext), CancellationToken.None).ConfigureAwait(false);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        var log = ctx.HttpContext.RequestServices.GetService<ILoggerFactory>()?.CreateLogger("Merit.Web.AccessDenied");
+                        log?.LogWarning("PermissionDenied audit event could not be recorded ({ExceptionType}, trace {TraceId})",
+                            ex.GetType().Name, RequestTrace.Id(ctx.HttpContext));
+                    }
+                }
+
                 ctx.Response.StatusCode = StatusCodes.Status403Forbidden;
                 if (ctx.Request.IsHtmx())
                 {
@@ -131,8 +162,6 @@ services.AddAuthentication(AuthSchemes.Session)
                 {
                     ctx.Response.Redirect(ctx.RedirectUri);
                 }
-
-                return Task.CompletedTask;
             },
             // Re-check the session scope every five minutes: sign-out, an assignment change or an MFA reset ends it.
             OnValidatePrincipal = async ctx =>
@@ -211,6 +240,7 @@ services.AddControllersWithViews(o =>
 {
     o.Filters.Add<MeritExceptionFilter>();
     o.Filters.Add(new AutoValidateAntiforgeryTokenAttribute());
+    o.Filters.Add<AntiforgeryTelemetryFilter>();
     o.Filters.Add<ScreenVisitFilter>();
 });
 services.AddProblemDetails();
@@ -287,6 +317,7 @@ app.UseStaticFiles(new StaticFileOptions
 
 app.UseRouting();
 app.UseAuthentication();
+app.UseMiddleware<SecurityTelemetryMiddleware>(); // structured 401/403/404/405/422/429 & antiforgery telemetry (#325)
 app.UseMiddleware<SessionExpiryMiddleware>();     // an idle session that ended in the browser is recorded once (issue #191)
 app.Use(async (http, next) =>
 {

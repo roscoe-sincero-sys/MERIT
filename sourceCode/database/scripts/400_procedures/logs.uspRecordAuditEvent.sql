@@ -13,7 +13,7 @@ CreateDate:   2026-10-24
 ========================================================================================================================
 Description:
 
-Writes one event to the tamper-evident audit ledger: a view, change, merge or export of a person, result or case. The user and root tenant come from the session, never from a parameter.
+Writes one event to the tamper-evident audit ledger: a view, change, merge, export, search or permission denial. The user, root tenant, session reference, acting tenant and view-as user come from the session, never from a parameter. Optional manifest record IDs are stored in logs.auditEventRecord (#326, #333).
 
 ========================================================================================================================
 Requirements and Key Dependencies:
@@ -50,6 +50,10 @@ CREATE OR ALTER PROCEDURE logs.uspRecordAuditEvent
       , @entityId      UNIQUEIDENTIFIER = NULL
       , @recordCount   INT = NULL
       , @clientAddress VARCHAR (45) = NULL
+      , @viewKind      VARCHAR (16) = NULL
+      , @filterJson    NVARCHAR (MAX) = NULL
+      , @recordIdsJson NVARCHAR (MAX) = NULL
+      , @traceId       VARCHAR (64) = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -109,9 +113,37 @@ BEGIN
             END;
         END;
 
-        INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, recordCount, clientAddress, owningTenantId)
-        VALUES (auth.udfSessionUserId (), auth.udfSessionRootTenantId (), @eventAction, @entityType, @entityId, @recordCount,
-                @clientAddress, @owner);
+        DECLARE @auditScope UNIQUEIDENTIFIER = TRY_CAST (SESSION_CONTEXT (N'scopeKey') AS UNIQUEIDENTIFIER);
+        DECLARE @auditSessionRef UNIQUEIDENTIFIER, @auditActingTenant UNIQUEIDENTIFIER, @auditViewAs UNIQUEIDENTIFIER;
+        SELECT @auditSessionRef = sessionReference, @auditActingTenant = actingTenantId, @auditViewAs = viewAsUserId
+          FROM auth.sessionScope
+         WHERE sessionScopeId = @auditScope AND revokedUtc IS NULL AND expiresUtc > SYSUTCDATETIME () AND isDeleted = 0;
+        DECLARE @auditClientAddress VARCHAR (45) = TRY_CAST (SESSION_CONTEXT (N'clientAddress') AS VARCHAR (45));
+        DECLARE @auditTraceId VARCHAR (64) = TRY_CAST (SESSION_CONTEXT (N'traceId') AS VARCHAR (64));
+        DECLARE @root UNIQUEIDENTIFIER = auth.udfSessionRootTenantId ();
+        DECLARE @resolvedAddress VARCHAR (45) = COALESCE (NULLIF (@clientAddress, ''), @auditClientAddress);
+        DECLARE @resolvedTrace VARCHAR (64) = COALESCE (NULLIF (@traceId, ''), @auditTraceId);
+
+        INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, recordCount, clientAddress, owningTenantId,
+                                sessionReference, traceId, actingTenantId, viewAsUserId, viewKind, filterJson)
+        VALUES (auth.udfSessionUserId (), @root, @eventAction, @entityType, @entityId, @recordCount,
+                @resolvedAddress, @owner, @auditSessionRef, @resolvedTrace, @auditActingTenant, @auditViewAs, @viewKind, @filterJson);
+
+        DECLARE @auditEventId BIGINT = SCOPE_IDENTITY ();
+
+        IF @recordIdsJson IS NOT NULL AND ISJSON (@recordIdsJson) = 1 AND @root IS NOT NULL
+        BEGIN
+            INSERT logs.auditEventRecord (auditEventRecordId, auditEventId, rootTenantId, entityType, entityId)
+            SELECT CAST (CAST (NEWID () AS BINARY (10)) + CAST (DATEDIFF_BIG (MILLISECOND, '19700101', SYSUTCDATETIME ()) AS BINARY (6)) AS UNIQUEIDENTIFIER), @auditEventId, @root, x.entityType, x.entityId
+              FROM (SELECT DISTINCT
+                           COALESCE (NULLIF (JSON_VALUE (j.[value], '$.entityType'), ''), @entityType) AS entityType,
+                           COALESCE (TRY_CAST (JSON_VALUE (j.[value], '$.entityId') AS UNIQUEIDENTIFIER),
+                                     TRY_CAST (j.[value] AS UNIQUEIDENTIFIER)) AS entityId
+                      FROM OPENJSON (@recordIdsJson) AS j) AS x
+             WHERE x.entityId IS NOT NULL;
+        END;
+
+        SELECT @auditEventId AS auditEventId;
 
         SET @Comments = N'Audit event recorded.';
 
@@ -196,7 +228,7 @@ EXEC util.uspSetObjectDescription
       @SchemaName  = N'logs'
     , @ObjectType  = N'PROCEDURE'
     , @ObjectName  = N'uspRecordAuditEvent'
-    , @Description = N'Writes one event to the tamper-evident audit ledger: a view, change, merge or export of a person, result or case. The user and root tenant come from the session, never from a parameter.';
+    , @Description = N'Writes one event to the tamper-evident audit ledger: a view, change, merge, export, search or permission denial. The user, root tenant, session reference, acting tenant and view-as user come from the session, never from a parameter. Optional manifest record IDs are stored in logs.auditEventRecord (#326, #333).';
 GO
 
 IF DATABASE_PRINCIPAL_ID (N'meritWebRole') IS NOT NULL

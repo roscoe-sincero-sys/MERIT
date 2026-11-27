@@ -26,6 +26,11 @@ BEGIN
         searchText                 NVARCHAR (400)    NOT NULL,
         resultCount                INT               NOT NULL,
         searchedUtc                DATETIME2 (3)     NOT NULL,
+        sessionReference           UNIQUEIDENTIFIER  NULL,
+        clientAddress              VARCHAR (45)      NULL,
+        actingTenantId             UNIQUEIDENTIFIER  NULL,
+        existsElsewhere            BIT               NULL,
+        searchSource               VARCHAR (30)      NULL,
 
         -- Standard audit columns. Soft delete only. Convention: DF_<schema>_<tableName>_<fieldName>.
         isDeleted       BIT             NOT NULL CONSTRAINT DF_logs_searchLog_isDeleted       DEFAULT (0),
@@ -45,6 +50,16 @@ GO
 -- 2. Additive columns. Each column is also added on its own when missing, so a table deployed by an
 --    earlier release converges on the current definition. A no-op on a fresh install.
 -- -------------------------------------------------------------------------------------------
+IF COL_LENGTH (N'logs.searchLog', N'sessionReference') IS NULL
+    ALTER TABLE logs.searchLog ADD sessionReference           UNIQUEIDENTIFIER  NULL;
+IF COL_LENGTH (N'logs.searchLog', N'clientAddress') IS NULL
+    ALTER TABLE logs.searchLog ADD clientAddress              VARCHAR (45)      NULL;
+IF COL_LENGTH (N'logs.searchLog', N'actingTenantId') IS NULL
+    ALTER TABLE logs.searchLog ADD actingTenantId             UNIQUEIDENTIFIER  NULL;
+IF COL_LENGTH (N'logs.searchLog', N'existsElsewhere') IS NULL
+    ALTER TABLE logs.searchLog ADD existsElsewhere            BIT               NULL;
+IF COL_LENGTH (N'logs.searchLog', N'searchSource') IS NULL
+    ALTER TABLE logs.searchLog ADD searchSource               VARCHAR (30)      NULL;
 GO
 
 -- -------------------------------------------------------------------------------------------
@@ -58,6 +73,15 @@ IF NOT EXISTS (SELECT 1
 BEGIN
     CREATE CLUSTERED INDEX IX_logs_searchLog_rootTenantId_searchLogId
         ON logs.searchLog (rootTenantId, searchLogId);
+END;
+GO
+IF NOT EXISTS (SELECT 1
+                 FROM sys.indexes
+                WHERE name      = N'IX_logs_searchLog_sessionReference_searchedUtc'
+                  AND object_id = OBJECT_ID (N'logs.searchLog'))
+BEGIN
+    CREATE INDEX IX_logs_searchLog_sessionReference_searchedUtc
+        ON logs.searchLog (sessionReference, searchedUtc);
 END;
 GO
 
@@ -151,6 +175,11 @@ EXEC util.uspSetObjectDescription @SchemaName = N'logs', @ObjectType = N'TABLE',
 EXEC util.uspSetObjectDescription @SchemaName = N'logs', @ObjectType = N'TABLE', @ObjectName = N'searchLog', @ColumnName = N'searchText', @Description = N'Text searched for.';
 EXEC util.uspSetObjectDescription @SchemaName = N'logs', @ObjectType = N'TABLE', @ObjectName = N'searchLog', @ColumnName = N'resultCount', @Description = N'Rows returned.';
 EXEC util.uspSetObjectDescription @SchemaName = N'logs', @ObjectType = N'TABLE', @ObjectName = N'searchLog', @ColumnName = N'searchedUtc', @Description = N'UTC time of the search.';
+EXEC util.uspSetObjectDescription @SchemaName = N'logs', @ObjectType = N'TABLE', @ObjectName = N'searchLog', @ColumnName = N'sessionReference', @Description = N'Non-secret logical sign-in session reference for cross-log correlation (#326).';
+EXEC util.uspSetObjectDescription @SchemaName = N'logs', @ObjectType = N'TABLE', @ObjectName = N'searchLog', @ColumnName = N'clientAddress', @Description = N'Client IP address after trusted forwarded headers (#326).';
+EXEC util.uspSetObjectDescription @SchemaName = N'logs', @ObjectType = N'TABLE', @ObjectName = N'searchLog', @ColumnName = N'actingTenantId', @Description = N'Working tenant active when the search ran (#326).';
+EXEC util.uspSetObjectDescription @SchemaName = N'logs', @ObjectType = N'TABLE', @ObjectName = N'searchLog', @ColumnName = N'existsElsewhere', @Description = N'1 when an exact name and DOB match existed outside the caller''s scope (#326).';
+EXEC util.uspSetObjectDescription @SchemaName = N'logs', @ObjectType = N'TABLE', @ObjectName = N'searchLog', @ColumnName = N'searchSource', @Description = N'Where the search ran: global, casePicker, or caseList (#331).';
 EXEC util.uspSetObjectDescription @SchemaName = N'logs', @ObjectType = N'TABLE', @ObjectName = N'searchLog', @ColumnName = N'isDeleted', @Description = N'Soft-delete flag. 1 = deleted, 0 = active. This database performs no hard deletes; all reads must filter isDeleted = 0.';
 EXEC util.uspSetObjectDescription @SchemaName = N'logs', @ObjectType = N'TABLE', @ObjectName = N'searchLog', @ColumnName = N'deletedBy', @Description = N'Login or application user that soft-deleted the row. Stamped by trg_au_updt_searchLog when isDeleted transitions 0 -> 1. Meaningful only when isDeleted = 1.';
 EXEC util.uspSetObjectDescription @SchemaName = N'logs', @ObjectType = N'TABLE', @ObjectName = N'searchLog', @ColumnName = N'deletedDateUtc', @Description = N'UTC timestamp of the soft delete, stamped by trg_au_updt_searchLog with the same instant as modifiedDateUtc. Meaningful only when isDeleted = 1.';

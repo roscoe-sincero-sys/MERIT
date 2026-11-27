@@ -555,7 +555,7 @@ BEGIN
     -- One value per fact, so StartDateUtc and the two audit timestamps cannot disagree by a millisecond and a
     -- reader cannot mistake three near-identical times for three separate events.
     DECLARE @Now   DATETIME2 (3)  = SYSUTCDATETIME ()
-          , @Actor NVARCHAR (255) = ORIGINAL_LOGIN ();
+          , @Actor NVARCHAR (255) = COALESCE (NULLIF (CAST (SESSION_CONTEXT (N'AppUser') AS NVARCHAR (255)), N''), ORIGINAL_LOGIN ());
 
     SET @StartDateUtc = ISNULL (@StartDateUtc, @Now);
 
@@ -798,7 +798,7 @@ BEGIN
         -- One value per fact.  EndDateUtc, ElapsedMilliseconds and modifiedDateUtc all derive from @Now, so the
         -- recorded end time and the recorded duration cannot contradict each other.
         DECLARE @Now   DATETIME2 (3)  = SYSUTCDATETIME ()
-              , @Actor NVARCHAR (255) = ORIGINAL_LOGIN ();
+              , @Actor NVARCHAR (255) = COALESCE (NULLIF (CAST (SESSION_CONTEXT (N'AppUser') AS NVARCHAR (255)), N''), ORIGINAL_LOGIN ());
 
         -- Stated as a fact, not as an accusation -- see "THE ORPHAN ROW IS NOT ALWAYS A DEFECT" in the header.
         DECLARE @NoStartRowPrefix NVARCHAR (200) =

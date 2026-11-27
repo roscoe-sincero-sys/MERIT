@@ -40,7 +40,9 @@ public sealed class CareService(ICareData data, IWorkData work, AuditService aud
             }
             if (rows.Count < 50) break;
         }
-        await audit.ExportedAsync("testingOutreach", null, all.Count, ct).ConfigureAwait(false);
+        var filter = new { query.DueFilter, query.PlanKind, query.AssignedToUserId, query.TaskStatus };
+        await audit.ExportedAsync("testingOutreach", null, all.Count, ct, filter,
+            all.Select(r => new AuditManifestEntry("person", r.PersonId))).ConfigureAwait(false);
         return all;
     }
     public async Task<CarePage> PageAsync(Guid personId, Guid? caseId, int activities, int documents, int notifications, CancellationToken ct)
@@ -133,7 +135,8 @@ public sealed class CareService(ICareData data, IWorkData work, AuditService aud
     {
         session.Require(Permissions.PersonView);
         var result = await Paging.ReadAsync(page, 50, p => data.NotificationsAsync(null, null, p, ct), r => r.TotalCount).ConfigureAwait(false);
-        await audit.ListedAsync("notificationObligation", result.Rows.Count, ct).ConfigureAwait(false);
+        await audit.ListedAsync("notificationObligation", result.Rows.Count, ct, new { page = result.Page },
+            result.Rows.Select(r => new AuditManifestEntry("person", r.PersonId))).ConfigureAwait(false);
         return (result.Rows, result.Page);
     }
     public async Task<IReadOnlyList<NotificationRow>> ExportAsync(CancellationToken ct)
@@ -150,7 +153,8 @@ public sealed class CareService(ICareData data, IWorkData work, AuditService aud
             }
             if (rows.Count < 50) break;
         }
-        await audit.ExportedAsync("notificationObligation", null, all.Count, ct).ConfigureAwait(false);
+        await audit.ExportedAsync("notificationObligation", null, all.Count, ct, null,
+            all.Select(r => new AuditManifestEntry("person", r.PersonId))).ConfigureAwait(false);
         return all;
     }
     public async Task<int> EvaluatePatientAsync(Guid personId, CancellationToken ct)

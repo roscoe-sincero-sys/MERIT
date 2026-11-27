@@ -458,7 +458,7 @@ public sealed class AccountController(AccountService accounts, EmailCodeService 
 
         // The change ended every session, this one included; this browser carries on in a fresh one.
         await sessions.SignInAsync(HttpContext, userId, ct);
-        mail.Enqueue(new PasswordChangedNoticeJob(userId, HttpContext.TraceIdentifier));
+        mail.Enqueue(new PasswordChangedNoticeJob(userId, RequestTrace.Id(HttpContext)));
         TempData[NoticeKey] = "Your password was changed. Your other MERIT sessions were signed out.";
         return RedirectToAction(nameof(SignInMethods));
     }
@@ -503,7 +503,7 @@ public sealed class AccountController(AccountService accounts, EmailCodeService 
         }
 
         await sessions.SignInAsync(HttpContext, userId, ct);
-        mail.Enqueue(new PasswordChangedNoticeJob(userId, HttpContext.TraceIdentifier));
+        mail.Enqueue(new PasswordChangedNoticeJob(userId, RequestTrace.Id(HttpContext)));
         return LocalRedirect(SafeReturn(model.ReturnUrl));
     }
 
@@ -529,7 +529,7 @@ public sealed class AccountController(AccountService accounts, EmailCodeService 
             return View(model);
         }
 
-        mail.Enqueue(new PasswordResetJob(model.UserName!.Trim(), ClientAddress(), baseUrl, HttpContext.TraceIdentifier));
+        mail.Enqueue(new PasswordResetJob(model.UserName!.Trim(), ClientAddress(), baseUrl, RequestTrace.Id(HttpContext)));
         return RedirectToAction(nameof(ForgotPasswordSent));
     }
 
@@ -591,7 +591,7 @@ public sealed class AccountController(AccountService accounts, EmailCodeService 
                 await HttpContext.SignOutAsync(AuthSchemes.PendingMfa);
                 if (result.AppUserId is Guid id)
                 {
-                    mail.Enqueue(new PasswordChangedNoticeJob(id, HttpContext.TraceIdentifier));
+                    mail.Enqueue(new PasswordChangedNoticeJob(id, RequestTrace.Id(HttpContext)));
                 }
 
                 return View(new ResetPasswordModel { Done = true });

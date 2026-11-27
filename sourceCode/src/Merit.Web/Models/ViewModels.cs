@@ -946,6 +946,8 @@ public sealed class AuditFilterModel
 
     public string? RecordType { get; set; }
 
+    public string? ViewKind { get; set; }
+
     /// <summary>First and last day, in the jurisdiction's dates.</summary>
     public DateOnly? From { get; set; }
 
@@ -953,7 +955,7 @@ public sealed class AuditFilterModel
 
     public int Page { get; set; } = 1;
 
-    public bool IsFiltered => UserId is not null || EntityId is not null || Action is not null || RecordType is not null || From is not null || To is not null;
+    public bool IsFiltered => UserId is not null || EntityId is not null || Action is not null || RecordType is not null || ViewKind is not null || From is not null || To is not null;
 
     /// <summary>The query string for this filter, at another page.</summary>
     public string Query(int? page = null)
@@ -972,6 +974,7 @@ public sealed class AuditFilterModel
         Add("entityId", EntityId?.ToString());
         Add("action", Action);
         Add("recordType", RecordType);
+        Add("viewKind", ViewKind);
         Add("from", From?.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture));
         Add("to", To?.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture));
         if ((page ?? 1) > 1)
