@@ -332,4 +332,5 @@ public sealed class AuditLedgerVerificationRow
     public string? DigestJson { get; init; }
     public DateTime VerifiedUtc { get; init; }
     public string Detail { get; init; } = string.Empty;
+    public bool HasAutomaticDigestStorage { get; init; }
 }

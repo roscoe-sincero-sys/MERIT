@@ -1212,6 +1212,7 @@ DECLARE @verified BIT = 0;
 DECLARE @lastBlockId BIGINT = NULL;
 DECLARE @detail NVARCHAR (500) = N'OK';
 DECLARE @now DATETIME2 (3) = SYSUTCDATETIME ();
+DECLARE @hasAutoDigest BIT = CASE WHEN EXISTS (SELECT 1 FROM sys.database_ledger_digest_locations) THEN 1 ELSE 0 END;
 
 BEGIN TRY
     IF @effectiveDigest IS NULL
@@ -1240,11 +1241,28 @@ BEGIN CATCH
     SET @detail = CONCAT (N'Ledger verification failed (error ', ERROR_NUMBER (), N').');
 END CATCH;
 
+-- I20: Surface verification failures as a critical platform security finding so /admin/security-alerts shows tampering.
+IF @verified = 0
+BEGIN
+    DECLARE @platform UNIQUEIDENTIFIER = CAST (HASHBYTES ('MD5', N'tenant:PLATFORM') AS UNIQUEIDENTIFIER);
+    DECLARE @fp VARCHAR (128) = CONCAT ('ledgerVerificationFailed|', CONVERT (VARCHAR (10), @now, 23));
+    IF NOT EXISTS (SELECT 1 FROM logs.securityFinding WHERE fingerprint = @fp AND isDeleted = 0)
+    BEGIN
+        INSERT logs.securityFinding (securityFindingId, rootTenantId, ruleCode, severity, title, detailJson,
+                                     windowStartUtc, windowEndUtc, detectedUtc, status, fingerprint)
+        VALUES (NEWID (), @platform, 'ledgerVerificationFailed', 'critical',
+                N'Audit ledger verification failed',
+                (SELECT @detail AS detail FOR JSON PATH, WITHOUT_ARRAY_WRAPPER),
+                @now, @now, @now, 'open', @fp);
+    END;
+END;
+
 SELECT @verified AS verified,
        @lastBlockId AS lastVerifiedBlockId,
        @effectiveDigest AS digestJson,
        @now AS verifiedUtc,
-       @detail AS detail;
+       @detail AS detail,
+       @hasAutoDigest AS hasAutomaticDigestStorage;
 """,
     },
     {

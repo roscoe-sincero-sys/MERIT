@@ -92,7 +92,12 @@ public sealed class AuditLedgerVerifierTests
             Assert.Contains("0xABCD", calls[1] ?? "", StringComparison.Ordinal);
             Assert.Null(calls[2]);
 
-            // Cycle 3: verification failure logs Error alert.
+            // Cycle 3: deleting an archived file logs an archive-shrinkage error alert (I20).
+            File.Delete(files[0]);
+            await verifier.RunVerificationCycleAsync(CancellationToken.None);
+            Assert.Contains(logger.Entries, e => e.Level == LogLevel.Error && e.Message.Contains("AUDIT LEDGER DIGEST ARCHIVE SHRANK", StringComparison.Ordinal));
+
+            // Cycle 4: verification failure logs Error alert.
             failNext = true;
             await verifier.RunVerificationCycleAsync(CancellationToken.None);
             Assert.Contains(logger.Entries, e => e.Level == LogLevel.Error && e.Message.Contains("AUDIT LEDGER VERIFICATION FAILED", StringComparison.Ordinal));
@@ -104,5 +109,28 @@ public sealed class AuditLedgerVerifierTests
                 Directory.Delete(tempDir, recursive: true);
             }
         }
+    }
+
+    [Fact]
+    public async Task WarnsWhenNoExternalOrAutomaticDigestStorageConfigured()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton(StubLedgerMonitoringProxy.Create(_ => new AuditLedgerVerificationRow
+        {
+            Verified = true,
+            LastVerifiedBlockId = 1,
+            DigestJson = "{}",
+            VerifiedUtc = DateTime.UtcNow,
+            Detail = "OK",
+            HasAutomaticDigestStorage = false,
+        }));
+        var provider = services.BuildServiceProvider();
+        var config = new ConfigurationBuilder().Build();
+        var logger = new CapturingLogger();
+        var verifier = new AuditLedgerVerifier(provider.GetRequiredService<IServiceScopeFactory>(), config, logger);
+
+        await verifier.RunVerificationCycleAsync(CancellationToken.None);
+
+        Assert.Contains(logger.Entries, e => e.Level == LogLevel.Warning && e.Message.Contains("not anchored outside SQL Server", StringComparison.Ordinal));
     }
 }

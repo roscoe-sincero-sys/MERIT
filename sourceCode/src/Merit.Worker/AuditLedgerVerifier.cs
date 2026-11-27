@@ -12,8 +12,11 @@ namespace Merit.Worker;
 public sealed partial class AuditLedgerVerifier(
     IServiceScopeFactory scopes,
     IConfiguration configuration,
-    ILogger<AuditLedgerVerifier> logger) : BackgroundService
+    ILogger<AuditLedgerVerifier> logger,
+    IHostEnvironment? environment = null) : BackgroundService
 {
+    private int _lastDigestFileCount;
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         await Task.Delay(TimeSpan.FromMinutes(2), stoppingToken).ConfigureAwait(false);
@@ -33,20 +36,25 @@ public sealed partial class AuditLedgerVerifier(
             var data = scope.ServiceProvider.GetRequiredService<ISecurityMonitoringData>();
             string? digestDir = configuration["LedgerVerification:DigestDirectory"];
 
-            // 1. If an external digest directory is configured and holds a prior digest, verify against it first
-            //    so any post-digest tampering is detected against the externally anchored hash.
+            // 1. If an external digest directory is configured, check for archive shrinkage (deletion/rollback)
+            //    and verify up to the last 3 archived digests against the database ledger (I20).
             if (!string.IsNullOrWhiteSpace(digestDir) && Directory.Exists(digestDir))
             {
-                string? latestPriorFile = Directory.EnumerateFiles(digestDir, "merit-ledger-digest-*.json")
+                var priorFiles = Directory.EnumerateFiles(digestDir, "merit-ledger-digest-*.json")
                     .OrderByDescending(Path.GetFileName, StringComparer.Ordinal)
-                    .FirstOrDefault();
-                if (latestPriorFile is not null)
+                    .ToList();
+                if (_lastDigestFileCount > 0 && priorFiles.Count < _lastDigestFileCount)
                 {
-                    string priorJson = await File.ReadAllTextAsync(latestPriorFile, Encoding.UTF8, ct).ConfigureAwait(false);
+                    DigestArchiveShrank(logger, _lastDigestFileCount, priorFiles.Count);
+                }
+
+                foreach (string priorFile in priorFiles.Take(3))
+                {
+                    string priorJson = await File.ReadAllTextAsync(priorFile, Encoding.UTF8, ct).ConfigureAwait(false);
                     var priorResult = await data.VerifyAuditLedgerAsync(priorJson, ct).ConfigureAwait(false);
                     if (!priorResult.Verified)
                     {
-                        LedgerVerificationFailed(logger, Path.GetFileName(latestPriorFile), priorResult.Detail);
+                        LedgerVerificationFailed(logger, Path.GetFileName(priorFile), priorResult.Detail);
                         return;
                     }
                 }
@@ -69,6 +77,12 @@ public sealed partial class AuditLedgerVerifier(
                 string fullPath = Path.Combine(digestDir, fileName);
                 await using var fs = new FileStream(fullPath, FileMode.CreateNew, FileAccess.Write, FileShare.None);
                 await fs.WriteAsync(utf8, ct).ConfigureAwait(false);
+                _lastDigestFileCount = Directory.EnumerateFiles(digestDir, "merit-ledger-digest-*.json").Count();
+            }
+            else if (!fresh.HasAutomaticDigestStorage
+                     && (environment is null || (!environment.IsDevelopment() && !environment.IsEnvironment("Testing"))))
+            {
+                DigestStorageUnconfigured(logger);
             }
 
             LedgerVerified(logger, fresh.LastVerifiedBlockId ?? -1, fresh.Detail);
@@ -84,6 +98,12 @@ public sealed partial class AuditLedgerVerifier(
 
     [LoggerMessage(Level = LogLevel.Error, Message = "AUDIT LEDGER VERIFICATION FAILED (digest={DigestSource}): {Detail}")]
     private static partial void LedgerVerificationFailed(ILogger logger, string digestSource, string detail);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Audit ledger digests are not anchored outside SQL Server: configure LedgerVerification:DigestDirectory on WORM storage or SQL Server automatic digest storage (#334).")]
+    private static partial void DigestStorageUnconfigured(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "AUDIT LEDGER DIGEST ARCHIVE SHRANK: expected at least {PreviousCount} file(s), found {CurrentCount}. Check WORM mount integrity.")]
+    private static partial void DigestArchiveShrank(ILogger logger, int previousCount, int currentCount);
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Audit ledger verification threw an unexpected exception ({ExceptionType})")]
     private static partial void LedgerVerificationError(ILogger logger, string exceptionType);
