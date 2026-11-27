@@ -188,7 +188,11 @@ BEGIN
             WHEN CHARINDEX ('.', e.clientAddress) > 0
                  THEN LEFT (e.clientAddress, LEN (e.clientAddress) - CHARINDEX ('.', REVERSE (e.clientAddress)))
             WHEN CHARINDEX (':', e.clientAddress) > 0
-                 THEN LEFT (e.clientAddress, 14)
+                 THEN COALESCE (
+                      LEFT (e.clientAddress, NULLIF (CHARINDEX (':', e.clientAddress,
+                            NULLIF (CHARINDEX (':', e.clientAddress,
+                            NULLIF (CHARINDEX (':', e.clientAddress), 0) + 1), 0) + 1), 0) - 1),
+                      e.clientAddress)
             ELSE e.clientAddress
         END) >= 3 THEN 'high' ELSE 'medium' END,
                e.appUserId, u.userName, u.displayName, NULL, e.sessionReference,
@@ -196,21 +200,33 @@ BEGIN
             WHEN CHARINDEX ('.', e.clientAddress) > 0
                  THEN LEFT (e.clientAddress, LEN (e.clientAddress) - CHARINDEX ('.', REVERSE (e.clientAddress)))
             WHEN CHARINDEX (':', e.clientAddress) > 0
-                 THEN LEFT (e.clientAddress, 14)
+                 THEN COALESCE (
+                      LEFT (e.clientAddress, NULLIF (CHARINDEX (':', e.clientAddress,
+                            NULLIF (CHARINDEX (':', e.clientAddress,
+                            NULLIF (CHARINDEX (':', e.clientAddress), 0) + 1), 0) + 1), 0) - 1),
+                      e.clientAddress)
             ELSE e.clientAddress
         END),
                CONCAT (N'Mid-session network change (', COUNT (DISTINCT CASE
             WHEN CHARINDEX ('.', e.clientAddress) > 0
                  THEN LEFT (e.clientAddress, LEN (e.clientAddress) - CHARINDEX ('.', REVERSE (e.clientAddress)))
             WHEN CHARINDEX (':', e.clientAddress) > 0
-                 THEN LEFT (e.clientAddress, 14)
+                 THEN COALESCE (
+                      LEFT (e.clientAddress, NULLIF (CHARINDEX (':', e.clientAddress,
+                            NULLIF (CHARINDEX (':', e.clientAddress,
+                            NULLIF (CHARINDEX (':', e.clientAddress), 0) + 1), 0) + 1), 0) - 1),
+                      e.clientAddress)
             ELSE e.clientAddress
         END), N' distinct network prefixes in one session)'),
                (SELECT COUNT (DISTINCT CASE
             WHEN CHARINDEX ('.', e.clientAddress) > 0
                  THEN LEFT (e.clientAddress, LEN (e.clientAddress) - CHARINDEX ('.', REVERSE (e.clientAddress)))
             WHEN CHARINDEX (':', e.clientAddress) > 0
-                 THEN LEFT (e.clientAddress, 14)
+                 THEN COALESCE (
+                      LEFT (e.clientAddress, NULLIF (CHARINDEX (':', e.clientAddress,
+                            NULLIF (CHARINDEX (':', e.clientAddress,
+                            NULLIF (CHARINDEX (':', e.clientAddress), 0) + 1), 0) + 1), 0) - 1),
+                      e.clientAddress)
             ELSE e.clientAddress
         END) AS distinctPrefixes, COUNT (DISTINCT e.clientAddress) AS distinctAddresses, COUNT (*) AS events FOR JSON PATH, WITHOUT_ARRAY_WRAPPER),
                MIN (e.eventUtc), MAX (e.eventUtc)
@@ -223,7 +239,11 @@ BEGIN
             WHEN CHARINDEX ('.', e.clientAddress) > 0
                  THEN LEFT (e.clientAddress, LEN (e.clientAddress) - CHARINDEX ('.', REVERSE (e.clientAddress)))
             WHEN CHARINDEX (':', e.clientAddress) > 0
-                 THEN LEFT (e.clientAddress, 14)
+                 THEN COALESCE (
+                      LEFT (e.clientAddress, NULLIF (CHARINDEX (':', e.clientAddress,
+                            NULLIF (CHARINDEX (':', e.clientAddress,
+                            NULLIF (CHARINDEX (':', e.clientAddress), 0) + 1), 0) + 1), 0) - 1),
+                      e.clientAddress)
             ELSE e.clientAddress
         END) > 1;
 

@@ -13,7 +13,7 @@ CreateDate:   2026-10-24
 ========================================================================================================================
 Description:
 
-Worker-only operational integrity check: counts recent logs.ExecutionLog failures and runs logs.uspDdlAuditVerify @ProblemsOnly = 1 under owner catalog visibility (#330, Codex #5).
+Worker-only operational integrity check: counts recent logs.ExecutionLog failures and runs logs.uspDdlAuditVerify @ProblemsOnly = 1 via ungranted owner helper (#330, Codex #5).
 
 ========================================================================================================================
 Requirements and Key Dependencies:
@@ -46,7 +46,6 @@ Description:	Initial version.
 ***********************************************************************************************************************/
 CREATE OR ALTER PROCEDURE logs.uspCheckOperationalIntegrity
       @minutes INT = 15
-WITH EXECUTE AS OWNER
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -85,7 +84,7 @@ BEGIN
           FROM logs.ExecutionLog
          WHERE isDeleted = 0 AND Successful = 0 AND StartDateUtc >= @since;
 
-        EXEC logs.uspDdlAuditVerify @ProblemsOnly = 1;
+        EXEC logs.uspDdlAuditVerifyInternal @ProblemsOnly = 1;
 
         -- =========================================================================================
         -- ===== End of the procedure's own work. ===================================================
@@ -124,7 +123,7 @@ EXEC util.uspSetObjectDescription
       @SchemaName  = N'logs'
     , @ObjectType  = N'PROCEDURE'
     , @ObjectName  = N'uspCheckOperationalIntegrity'
-    , @Description = N'Worker-only operational integrity check: counts recent logs.ExecutionLog failures and runs logs.uspDdlAuditVerify @ProblemsOnly = 1 under owner catalog visibility (#330, Codex #5).';
+    , @Description = N'Worker-only operational integrity check: counts recent logs.ExecutionLog failures and runs logs.uspDdlAuditVerify @ProblemsOnly = 1 via ungranted owner helper (#330, Codex #5).';
 GO
 
 IF DATABASE_PRINCIPAL_ID (N'meritWorkerRole') IS NOT NULL

@@ -68,10 +68,12 @@ public sealed class LoggingWave2UnitTests
             new HashSet<string> { "audit", "search" }, pseudonymize: true, batchSize: 1);
 
         Assert.Equal(3, count);
-        Assert.Single(auditData.RecordedAudits);
+        // Claude I9 / Codex #4: export records both 'started' (before bytes) and 'completed' (final count).
+        Assert.Equal(2, auditData.RecordedAudits.Count);
         Assert.Equal("export", auditData.RecordedAudits[0].Action);
         Assert.Equal("structuredLogExport", auditData.RecordedAudits[0].EntityType);
-        Assert.Equal(3, auditData.RecordedAudits[0].RecordCount);
+        Assert.Equal(0, auditData.RecordedAudits[0].RecordCount);
+        Assert.Equal(3, auditData.RecordedAudits[1].RecordCount);
 
         string text = Encoding.UTF8.GetString(ms.ToArray());
         var lines = text.Split('\n', StringSplitOptions.RemoveEmptyEntries);
@@ -160,7 +162,33 @@ public sealed class LoggingWave2UnitTests
         Assert.Contains("viewAsUserId", header, StringComparison.Ordinal);
         Assert.Contains("userAgent", header, StringComparison.Ordinal);
         Assert.Contains("lockoutEndUtc", header, StringComparison.Ordinal);
+        Assert.Contains("step", header, StringComparison.Ordinal);
+        Assert.Contains("method", header, StringComparison.Ordinal);
+        Assert.Contains("tabId", header, StringComparison.Ordinal);
+        Assert.Contains("profileId", header, StringComparison.Ordinal);
         Assert.Contains(viewAs.ToString(), csv, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task InterruptedStreamExportStillRecordsStartedAndInterruptedAuditEvents()
+    {
+        var userId = Guid.NewGuid();
+        var rootId = Guid.NewGuid();
+        var t1 = new DateTime(2026, 11, 1, 12, 0, 0, DateTimeKind.Utc);
+        var session = new FakeSession(userId, rootId, Permissions.AuditView);
+        var auditData = new RecordingWorkData();
+        var data = new FakeSecurityMonitoringData
+        {
+            AuditRows = [new AuditExportRow { AuditEventId = 1, EventUtc = t1, EventAction = "view", EntityType = "person", AppUserId = userId, RootTenantId = rootId }],
+            ThrowOnSecondBatch = true,
+        };
+        var svc = new StructuredLogExportService(data, new AuditService(auditData, new NullRequestAuditContext()), session);
+        using var ms = new MemoryStream();
+        await Assert.ThrowsAsync<IOException>(() =>
+            svc.WriteJsonlAsync(ms, t1.AddMinutes(-1), t1.AddMinutes(1), new HashSet<string> { "audit" }, pseudonymize: true, batchSize: 1));
+        Assert.Equal(2, auditData.RecordedAudits.Count);
+        Assert.Equal(0, auditData.RecordedAudits[0].RecordCount);
+        Assert.Equal(1, auditData.RecordedAudits[1].RecordCount);
     }
 
     private sealed class FakeSession(Guid userId, Guid rootId, params string[] perms) : ICurrentSession
@@ -210,6 +238,7 @@ public sealed class LoggingWave2UnitTests
     {
         public List<AuditExportRow> AuditRows { get; init; } = [];
         public List<SearchLogExportRow> SearchRows { get; init; } = [];
+        public bool ThrowOnSecondBatch { get; init; }
         public Task<int> PurgeSearchLogAsync(int retentionDays, CancellationToken ct = default) => Task.FromResult(0);
         public Task<IReadOnlyList<SearchLogSummaryRow>> GetSearchLogSummaryAsync(int days, Guid? appUserId = null, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<SearchLogSummaryRow>>([]);
         public Task<IReadOnlyList<SearchLogEventRow>> ListSearchLogEventsAsync(DateTime? fromUtc, DateTime? toUtc, Guid? appUserId, bool includeSearchText, int top = 200, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<SearchLogEventRow>>([]);
@@ -220,7 +249,10 @@ public sealed class LoggingWave2UnitTests
         public Task<IReadOnlyList<SecurityFindingRow>> ListSecurityFindingsAsync(int days = 30, string? status = null, string? severity = null, Guid? appUserId = null, int top = 200, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<SecurityFindingRow>>([]);
         public Task UpdateSecurityFindingStatusAsync(Guid securityFindingId, string status, CancellationToken ct = default) => Task.CompletedTask;
         public Task<IReadOnlyList<AuditExportRow>> ExportAuditEventsAsync(DateTime fromUtc, DateTime toUtc, DateTime? afterEventUtc, long? afterAuditEventId, int batchSize = 2000, CancellationToken ct = default)
-            => Task.FromResult<IReadOnlyList<AuditExportRow>>(AuditRows.Where(r => afterAuditEventId is null || r.AuditEventId > afterAuditEventId).Take(batchSize).ToList());
+        {
+            if (ThrowOnSecondBatch && afterAuditEventId is not null) throw new IOException("Simulated mid-stream failure");
+            return Task.FromResult<IReadOnlyList<AuditExportRow>>(AuditRows.Where(r => afterAuditEventId is null || r.AuditEventId > afterAuditEventId).Take(batchSize).ToList());
+        }
         public Task<IReadOnlyList<SignInExportRow>> ExportSignInEventsAsync(DateTime fromUtc, DateTime toUtc, DateTime? afterEventUtc, Guid? afterSignInEventId, int batchSize = 2000, CancellationToken ct = default)
             => Task.FromResult<IReadOnlyList<SignInExportRow>>([]);
         public Task<IReadOnlyList<ScreenVisitExportRow>> ExportScreenVisitsAsync(DateTime fromUtc, DateTime toUtc, DateTime? afterEventUtc, Guid? afterScreenVisitId, int batchSize = 2000, CancellationToken ct = default)

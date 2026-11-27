@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Json;
 using Merit.Application.Data;
 using Merit.Application.Security;
+using Merit.Domain.Ids;
 
 namespace Merit.Application.Services;
 
@@ -75,8 +76,17 @@ public sealed class StructuredLogExportService(ISecurityMonitoringData data, Aud
                                            CancellationToken ct = default)
     {
         AuthorizeStreams(streams);
+        Guid exportId = TimeOrderedId.New();
+        string[] orderedStreams = [.. streams.OrderBy(s => s)];
+        // Record export attempt BEFORE streaming any bytes so cancelled/interrupted downloads are always audited (Claude I9, Codex #4).
+        await audit.ExportedAsync("structuredLogExport", exportId, 0, ct,
+            new { phase = "started", format = "jsonl", streams = orderedStreams, pseudonymize, fromUtc = FormatUtc(fromUtc), toUtc = FormatUtc(toUtc) }).ConfigureAwait(false);
+
         var pseudo = pseudonymize ? new LogPseudonymizer(pseudonymKey) : null;
         int total = 0;
+        bool completed = false;
+        try
+        {
         await using var writer = new StreamWriter(output, new UTF8Encoding(false), bufferSize: 16384, leaveOpen: true);
 
         if (streams.Contains("audit"))
@@ -244,24 +254,37 @@ public sealed class StructuredLogExportService(ISecurityMonitoringData data, Aud
         }
 
         await writer.FlushAsync(ct).ConfigureAwait(false);
-        await audit.ExportedAsync("structuredLogExport", null, total, ct,
-            new { format = "jsonl", streams = streams.OrderBy(s => s).ToArray(), pseudonymize, fromUtc = FormatUtc(fromUtc), toUtc = FormatUtc(toUtc) }).ConfigureAwait(false);
+        completed = true;
         return total;
+        }
+        finally
+        {
+            await audit.ExportedAsync("structuredLogExport", exportId, total, CancellationToken.None,
+                new { phase = completed ? "completed" : "interrupted", format = "jsonl", streams = orderedStreams, pseudonymize, fromUtc = FormatUtc(fromUtc), toUtc = FormatUtc(toUtc) }).ConfigureAwait(false);
+        }
     }
 
     /// <summary>
     /// Streams canonical lossless CSV across the requested streams using unified envelope columns and cursor pagination.
-    /// Preserves all JSONL correlation and state fields (viewAsUserId, actorUserId, lockoutEndUtc, userAgent).
+    /// Preserves all JSONL correlation and state fields (step, method, tabId, profileId, viewAsUserId, actorUserId, lockoutEndUtc, userAgent).
     /// </summary>
     public async Task<int> WriteCsvAsync(Stream output, DateTime fromUtc, DateTime toUtc, IReadOnlySet<string> streams,
                                          bool pseudonymize, byte[]? pseudonymKey = null, int batchSize = 2000,
                                          CancellationToken ct = default)
     {
         AuthorizeStreams(streams);
+        Guid exportId = TimeOrderedId.New();
+        string[] orderedStreams = [.. streams.OrderBy(s => s)];
+        await audit.ExportedAsync("structuredLogExport", exportId, 0, ct,
+            new { phase = "started", format = "csv", streams = orderedStreams, pseudonymize, fromUtc = FormatUtc(fromUtc), toUtc = FormatUtc(toUtc) }).ConfigureAwait(false);
+
         var pseudo = pseudonymize ? new LogPseudonymizer(pseudonymKey) : null;
         int total = 0;
+        bool completed = false;
+        try
+        {
         await using var writer = new StreamWriter(output, new UTF8Encoding(false), bufferSize: 16384, leaveOpen: true);
-        await writer.WriteLineAsync("stream,eventId,eventUtc,actionOrType,entityOrScreen,entityId,recordCount,appUserId,userName,actorUserId,viewAsUserId,rootTenantId,owningTenantId,actingTenantId,sessionReference,traceId,attemptId,clientAddress,userAgent,lockoutEndUtc,detail").ConfigureAwait(false);
+        await writer.WriteLineAsync("stream,eventId,eventUtc,actionOrType,entityOrScreen,step,method,entityId,tabId,profileId,recordCount,appUserId,userName,actorUserId,viewAsUserId,rootTenantId,owningTenantId,actingTenantId,sessionReference,traceId,attemptId,clientAddress,userAgent,lockoutEndUtc,detail").ConfigureAwait(false);
 
         static string Csv(object? value)
         {
@@ -283,7 +306,7 @@ public sealed class StructuredLogExportService(ISecurityMonitoringData data, Aud
                 if (batch.Count == 0) break;
                 foreach (var r in batch)
                 {
-                    await WriteRow("auditEvent", r.AuditEventId, FormatUtc(r.EventUtc), r.EventAction, r.EntityType, r.EntityId, r.RecordCount,
+                    await WriteRow("auditEvent", r.AuditEventId, FormatUtc(r.EventUtc), r.EventAction, r.EntityType, null, null, r.EntityId, null, null, r.RecordCount,
                         pseudo is not null ? pseudo.PseudonymizeUser(r.AppUserId) : r.AppUserId?.ToString(),
                         pseudo is not null ? null : r.UserName,
                         null,
@@ -310,7 +333,7 @@ public sealed class StructuredLogExportService(ISecurityMonitoringData data, Aud
                 if (batch.Count == 0) break;
                 foreach (var r in batch)
                 {
-                    await WriteRow("signInEvent", r.SignInEventId, FormatUtc(r.EventUtc), r.EventType, r.Method ?? r.Step, null, r.FailedSignInCount,
+                    await WriteRow("signInEvent", r.SignInEventId, FormatUtc(r.EventUtc), r.EventType, null, r.Step, r.Method, null, null, null, r.FailedSignInCount,
                         pseudo is not null ? pseudo.PseudonymizeUser(r.AppUserId) : r.AppUserId?.ToString(),
                         pseudo is not null ? null : r.UserName,
                         pseudo is not null ? pseudo.PseudonymizeUser(r.ActorUserId) : r.ActorUserId?.ToString(),
@@ -337,7 +360,7 @@ public sealed class StructuredLogExportService(ISecurityMonitoringData data, Aud
                 if (batch.Count == 0) break;
                 foreach (var r in batch)
                 {
-                    await WriteRow("screenVisit", r.ScreenVisitId, FormatUtc(r.EventUtc), r.NavigationType, r.ScreenCode, r.PreviousVisitId, r.DurationMs,
+                    await WriteRow("screenVisit", r.ScreenVisitId, FormatUtc(r.EventUtc), r.NavigationType, r.ScreenCode, null, null, r.PreviousVisitId, r.TabId, r.ProfileId, r.DurationMs,
                         pseudo is not null ? pseudo.PseudonymizeUser(r.AppUserId) : r.AppUserId?.ToString(),
                         pseudo is not null ? null : r.UserName,
                         null,
@@ -362,7 +385,7 @@ public sealed class StructuredLogExportService(ISecurityMonitoringData data, Aud
                 if (batch.Count == 0) break;
                 foreach (var r in batch)
                 {
-                    await WriteRow("searchLog", r.SearchLogId, FormatUtc(r.SearchedUtc), r.SearchSource ?? "global", "searchLog", null, r.ResultCount,
+                    await WriteRow("searchLog", r.SearchLogId, FormatUtc(r.SearchedUtc), r.SearchSource ?? "global", "searchLog", null, null, null, null, null, r.ResultCount,
                         pseudo is not null ? pseudo.PseudonymizeUser(r.AppUserId) : r.AppUserId.ToString(),
                         pseudo is not null ? null : r.UserName,
                         null, null,
@@ -379,8 +402,13 @@ public sealed class StructuredLogExportService(ISecurityMonitoringData data, Aud
         }
 
         await writer.FlushAsync(ct).ConfigureAwait(false);
-        await audit.ExportedAsync("structuredLogExport", null, total, ct,
-            new { format = "csv", streams = streams.OrderBy(s => s).ToArray(), pseudonymize, fromUtc = FormatUtc(fromUtc), toUtc = FormatUtc(toUtc) }).ConfigureAwait(false);
+        completed = true;
         return total;
+        }
+        finally
+        {
+            await audit.ExportedAsync("structuredLogExport", exportId, total, CancellationToken.None,
+                new { phase = completed ? "completed" : "interrupted", format = "csv", streams = orderedStreams, pseudonymize, fromUtc = FormatUtc(fromUtc), toUtc = FormatUtc(toUtc) }).ConfigureAwait(false);
+        }
     }
 }

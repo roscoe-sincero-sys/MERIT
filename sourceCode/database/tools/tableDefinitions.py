@@ -1911,7 +1911,7 @@ TABLES += [{
     "indexes": [
         {"name": "IX_logs_securityFinding_rootTenantId_detectedUtc", "cols": "rootTenantId, detectedUtc", "filter": "isDeleted = 0"},
         {"name": "IX_logs_securityFinding_status_detectedUtc", "cols": "status, detectedUtc", "filter": "isDeleted = 0"},
-        {"name": "UX_logs_securityFinding_fingerprint", "cols": "fingerprint", "unique": True, "filter": "isDeleted = 0"},
+        {"name": "UX_logs_securityFinding_fingerprint", "cols": "fingerprint", "unique": True},
         {"name": "IX_logs_securityFinding_appUserId_detectedUtc", "cols": "appUserId, detectedUtc", "filter": "isDeleted = 0"},
     ],
 }]

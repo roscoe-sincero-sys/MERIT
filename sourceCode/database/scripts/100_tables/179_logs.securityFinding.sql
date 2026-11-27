@@ -138,7 +138,7 @@ IF NOT EXISTS (SELECT 1
 BEGIN
     CREATE UNIQUE INDEX UX_logs_securityFinding_fingerprint
         ON logs.securityFinding (fingerprint)
-        WHERE isDeleted = 0 AND isDeleted = 0;
+        WHERE isDeleted = 0;
 END;
 GO
 IF NOT EXISTS (SELECT 1

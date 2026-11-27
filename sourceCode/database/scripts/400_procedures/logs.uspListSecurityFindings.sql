@@ -112,8 +112,7 @@ BEGIN
            AND (@appUserId IS NULL OR f.appUserId = @appUserId)
            AND (@all = 1
                 OR f.owningTenantId IN (SELECT tenantId FROM @reviewTenants)
-                OR (f.owningTenantId IS NULL AND f.rootTenantId IN (SELECT rootTenantId FROM @wholeSecRoots))
-                OR (f.owningTenantId IS NULL AND f.appUserId IN (SELECT appUserId FROM @accounts)))
+                OR (f.owningTenantId IS NULL AND f.rootTenantId IN (SELECT rootTenantId FROM @wholeSecRoots)))
          ORDER BY CASE f.severity WHEN 'critical' THEN 1 WHEN 'high' THEN 2 WHEN 'medium' THEN 3 ELSE 4 END,
                   f.detectedUtc DESC;
 

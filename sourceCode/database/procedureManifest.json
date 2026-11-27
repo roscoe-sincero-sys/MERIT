@@ -7929,6 +7929,20 @@
   ]
  },
  {
+  "name": "logs.uspDdlAuditVerifyInternal",
+  "kind": "read",
+  "grants": [],
+  "permission": null,
+  "params": [
+   {
+    "name": "ProblemsOnly",
+    "type": "BIT",
+    "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
   "name": "logs.uspExportAuditEvents",
   "kind": "read",
   "grants": [

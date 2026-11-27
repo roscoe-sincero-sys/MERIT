@@ -13,7 +13,7 @@ CreateDate:   2026-10-24
 ========================================================================================================================
 Description:
 
-Platform-admin operational log summary: allowlisted logs.ExecutionLog failures (#338), recent logs.DdlChange events, and logs.uspDdlAuditVerify integrity posture (runs WITH EXECUTE AS OWNER after permission check so catalog metadata is visible identically to db_owner, #330, Codex #5).
+Platform-admin operational log summary: per-token allowlisted logs.ExecutionLog failures (#338), recent logs.DdlChange events, and logs.uspDdlAuditVerify integrity posture via ungranted owner helper (#330, B3).
 
 ========================================================================================================================
 Requirements and Key Dependencies:
@@ -49,7 +49,6 @@ Description:	Initial version.
 CREATE OR ALTER PROCEDURE logs.uspGetOperationalLogs
       @hours INT = 24
       , @top   INT = 100
-WITH EXECUTE AS OWNER
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -88,31 +87,36 @@ BEGIN
         DECLARE @since DATETIME2 (3) = DATEADD (HOUR, -CASE WHEN @hours BETWEEN 1 AND 720 THEN @hours ELSE 24 END, SYSUTCDATETIME ());
         DECLARE @limit INT = CASE WHEN @top BETWEEN 1 AND 500 THEN @top ELSE 100 END;
 
-        -- 1. Allowlisted ExecutionLog failure diagnostics (#338): project only validated key parameters, even on legacy rows.
+        -- 1. Allowlisted ExecutionLog failure diagnostics (#338, Claude I7): filter per token even on legacy rows.
         SELECT TOP (@limit)
-               ExecutionLogId, ProcedureName, StartDateUtc, EndDateUtc, ElapsedMilliseconds,
-               ReCreatedAfterRollback, ErrorNumber, ErrorLine, ErrorProcedure,
+               e.ExecutionLogId, e.ProcedureName, e.StartDateUtc, e.EndDateUtc, e.ElapsedMilliseconds,
+               e.ReCreatedAfterRollback, e.ErrorNumber, e.ErrorLine, e.ErrorProcedure,
                CASE
-                   WHEN KeyParameters IS NULL OR CHARINDEX (N'=', KeyParameters) = 0 THEN LEFT (KeyParameters, 200)
-                   WHEN EXISTS (
-                        SELECT 1
-                          FROM STRING_SPLIT (LEFT (KeyParameters, 500), N',') AS tok
-                         CROSS APPLY (SELECT LTRIM (RTRIM (LEFT (tok.value, NULLIF (CHARINDEX (N'=', tok.value), 0) - 1))) AS k) AS kv
-                         WHERE kv.k IS NULL
-                            OR (    kv.k NOT LIKE N'%Id' AND kv.k NOT LIKE N'%Count' AND kv.k NOT LIKE N'%Number'
-                                AND kv.k NOT LIKE N'%Days' AND kv.k NOT LIKE N'%Hours' AND kv.k NOT LIKE N'%Minutes'
-                                AND kv.k NOT LIKE N'%Size' AND kv.k NOT LIKE N'%Rows' AND kv.k NOT LIKE N'%Code'
-                                AND kv.k NOT LIKE N'%Type' AND kv.k NOT LIKE N'%Action' AND kv.k NOT LIKE N'%Kind'
-                                AND kv.k NOT LIKE N'%Source' AND kv.k NOT LIKE N'%Role' AND kv.k NOT LIKE N'%By'
-                                AND kv.k NOT LIKE N'%Only' AND kv.k NOT LIKE N'%Fips'
-                                AND kv.k NOT IN (N'top', N'page', N'hasDob', N'includeProtected', N'includeSearchText', N'assignedToMe', N'classification', N'closureReason', N'resultRowStatus', N'viewKind', N'from', N'to'))
-                   ) THEN N'[redacted: non-allowlisted diagnostic key]'
-                   ELSE LEFT (KeyParameters, 500)
+                   WHEN e.KeyParameters IS NULL OR CHARINDEX (N'=', e.KeyParameters) = 0 THEN LEFT (e.KeyParameters, 200)
+                   ELSE (SELECT LEFT (STRING_AGG (
+                            CASE
+                                WHEN kv.k IS NOT NULL AND (
+                                       kv.k LIKE N'%Id' OR kv.k LIKE N'%Count' OR kv.k LIKE N'%Number'
+                                    OR kv.k LIKE N'%Days' OR kv.k LIKE N'%Hours' OR kv.k LIKE N'%Minutes'
+                                    OR kv.k LIKE N'%Size' OR kv.k LIKE N'%Rows' OR kv.k LIKE N'%Code'
+                                    OR kv.k LIKE N'%Type' OR kv.k LIKE N'%Action' OR kv.k LIKE N'%Kind'
+                                    OR kv.k LIKE N'%Source' OR kv.k LIKE N'%Role' OR kv.k LIKE N'%By'
+                                    OR kv.k LIKE N'%Only' OR kv.k LIKE N'%Fips' OR kv.k LIKE N'%Status'
+                                    OR kv.k LIKE N'%Date' OR kv.k LIKE N'from%' OR kv.k LIKE N'to%'
+                                    OR kv.k LIKE N'effective%' OR kv.k LIKE N'period%' OR kv.k LIKE N'is%'
+                                    OR kv.k LIKE N'include%' OR kv.k LIKE N'has%'
+                                    OR kv.k IN (N'top', N'page', N'assignedToMe', N'classification', N'closureReason', N'viewKind',
+                                                N'workerName', N'settingKey', N'decision', N'population', N'sort', N'status', N'step', N'method'))
+                                THEN LTRIM (RTRIM (tok.value))
+                                ELSE N'[redacted]'
+                            END, N', '), 500)
+                           FROM STRING_SPLIT (LEFT (e.KeyParameters, 500), N',') AS tok
+                          CROSS APPLY (SELECT LTRIM (RTRIM (LEFT (tok.value, NULLIF (CHARINDEX (N'=', tok.value), 0) - 1))) AS k) AS kv)
                END AS KeyParameters,
-               createdBy
-          FROM logs.ExecutionLog
-         WHERE isDeleted = 0 AND Successful = 0 AND StartDateUtc >= @since
-         ORDER BY ExecutionLogId DESC;
+               e.createdBy
+          FROM logs.ExecutionLog AS e
+         WHERE e.isDeleted = 0 AND e.Successful = 0 AND e.StartDateUtc >= @since
+         ORDER BY e.ExecutionLogId DESC;
 
         -- 2. Recent DDL changes
         SELECT TOP (@limit)
@@ -122,8 +126,8 @@ BEGIN
          WHERE RecordedUtc >= @since
          ORDER BY ChangeId DESC;
 
-        -- 3. DDL audit integrity posture
-        EXEC logs.uspDdlAuditVerify;
+        -- 3. DDL audit integrity posture (called in owner context ONLY after caller-context security.investigate check above)
+        EXEC logs.uspDdlAuditVerifyInternal @ProblemsOnly = 0;
 
         -- =========================================================================================
         -- ===== End of the procedure's own work. ===================================================
@@ -162,7 +166,7 @@ EXEC util.uspSetObjectDescription
       @SchemaName  = N'logs'
     , @ObjectType  = N'PROCEDURE'
     , @ObjectName  = N'uspGetOperationalLogs'
-    , @Description = N'Platform-admin operational log summary: allowlisted logs.ExecutionLog failures (#338), recent logs.DdlChange events, and logs.uspDdlAuditVerify integrity posture (runs WITH EXECUTE AS OWNER after permission check so catalog metadata is visible identically to db_owner, #330, Codex #5).';
+    , @Description = N'Platform-admin operational log summary: per-token allowlisted logs.ExecutionLog failures (#338), recent logs.DdlChange events, and logs.uspDdlAuditVerify integrity posture via ungranted owner helper (#330, B3).';
 GO
 
 IF DATABASE_PRINCIPAL_ID (N'meritWebRole') IS NOT NULL

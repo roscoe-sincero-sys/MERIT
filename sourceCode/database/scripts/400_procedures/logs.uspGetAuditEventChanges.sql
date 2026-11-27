@@ -13,7 +13,7 @@ CreateDate:   2026-10-24
 ========================================================================================================================
 Description:
 
-Returns purgeable before/after change snapshots from logs.auditEventChange for an auditEventId within the caller's #270 audit review scope (#332).
+Returns purgeable before/after change snapshots from logs.auditEventChange for an auditEventId ONLY when the caller holds both #270 audit review scope AND identified clinical-record read permission on the underlying patient/result/case record (#332, Codex #1).
 
 ========================================================================================================================
 Requirements and Key Dependencies:
@@ -95,6 +95,10 @@ BEGIN
          WHERE EXISTS (SELECT 1 FROM @partRoots)
            AND (EXISTS (SELECT 1 FROM @auditScope AS s WHERE s.tenantId = u.homeTenantId)
                 OR EXISTS (SELECT 1 FROM auth.userAssignment AS ua JOIN @auditScope AS s ON s.tenantId = ua.tenantId WHERE ua.appUserId = u.appUserId AND ua.isDeleted = 0));
+        DECLARE @canPerson BIT = auth.udfHasPermission (N'person.view');
+        DECLARE @canResult BIT = auth.udfHasPermission (N'result.view');
+        DECLARE @canCase   BIT = auth.udfHasPermission (N'case.view');
+
         SELECT c.auditEventChangeId, c.auditEventId, c.rootTenantId, c.owningTenantId,
                c.entityType, c.entityId, c.changedUtc, c.beforeJson, c.afterJson
           FROM logs.auditEventChange AS c
@@ -105,6 +109,14 @@ BEGIN
                 AND ((e.owningTenantId IS NULL AND EXISTS (SELECT 1 FROM @auditUsers AS x WHERE x.appUserId = e.appUserId))
                      OR EXISTS (SELECT 1 FROM @auditScope AS s WHERE s.tenantId = e.owningTenantId)
                      OR (e.owningTenantId = e.rootTenantId AND e.entityType IN ('jurisdictionSetting', 'threshold', 'notificationRule')))))
+           AND (   (c.entityType = 'person' AND @canPerson = 1
+                    AND EXISTS (SELECT 1 FROM dbo.person AS p WHERE p.personId = c.entityId AND p.isDeleted = 0))
+                OR (c.entityType = 'labResult' AND @canResult = 1
+                    AND EXISTS (SELECT 1 FROM dbo.labResult AS r WHERE r.labResultId = c.entityId AND r.isDeleted = 0
+                                 AND auth.udfCanReadIdentified (r.owningTenantId, 'result.view', r.personId) = 1))
+                OR (c.entityType = 'exposureCase' AND @canCase = 1
+                    AND EXISTS (SELECT 1 FROM dbo.exposureCase AS ec WHERE ec.exposureCaseId = c.entityId AND ec.isDeleted = 0
+                                 AND auth.udfCanReadIdentified (ec.owningTenantId, 'case.view', NULL) = 1)))
          ORDER BY c.changedUtc, c.auditEventChangeId;
 
         -- =========================================================================================
@@ -144,7 +156,7 @@ EXEC util.uspSetObjectDescription
       @SchemaName  = N'logs'
     , @ObjectType  = N'PROCEDURE'
     , @ObjectName  = N'uspGetAuditEventChanges'
-    , @Description = N'Returns purgeable before/after change snapshots from logs.auditEventChange for an auditEventId within the caller''s #270 audit review scope (#332).';
+    , @Description = N'Returns purgeable before/after change snapshots from logs.auditEventChange for an auditEventId ONLY when the caller holds both #270 audit review scope AND identified clinical-record read permission on the underlying patient/result/case record (#332, Codex #1).';
 GO
 
 IF DATABASE_PRINCIPAL_ID (N'meritWebRole') IS NOT NULL

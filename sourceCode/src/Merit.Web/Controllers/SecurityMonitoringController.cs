@@ -62,7 +62,7 @@ public sealed class SecurityMonitoringController(
     }
 
     [HttpPost("security-alerts/{id:guid}/status")]
-    [Authorize(Policy = Permissions.TenantAdminister)]
+    [Authorize(Policy = Permissions.SecurityManage)]
     public async Task<IActionResult> UpdateFindingStatus(Guid id, string status, int hours = 24, int days = 30, CancellationToken ct = default)
     {
         await monitoring.UpdateFindingStatusAsync(id, status, ct);

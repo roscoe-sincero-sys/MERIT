@@ -269,19 +269,51 @@ public sealed class LoggingWave2IntegrationTests(MeritFixture fixture)
         using var usageFiltered = await admin.Http.GetAsync($"/admin/usage?days=30&userId={sup.appUserId}");
         Assert.Equal(HttpStatusCode.OK, usageFiltered.StatusCode);
 
-        // #338 (Codex #9): Shared log writer enforces true key-name allowlist (rejects arbitrary non-allowlisted key names like lastName=).
+        // #338 (Claude I7 / Codex #8): Per-token allowlist preserves allowed keys and redacts only disallowed tokens.
         var p = new DynamicParameters();
         p.Add("@ProcedureName", "[dbo].[uspSyntheticTest]");
-        p.Add("@KeyParameters", "lastName=SensitiveName");
+        p.Add("@KeyParameters", "exposureCaseId=123, lastName=SensitiveName, population=child");
         p.Add("@StartDateUtc", DateTime.UtcNow);
         p.Add("@ReCreatedAfterRollback", false);
         p.Add("@ExecutionLogId", dbType: DbType.Int64, direction: ParameterDirection.Output);
         await conn.ExecuteAsync("logs.uspStartExecutionLogging", p, commandType: CommandType.StoredProcedure);
         long execId = p.Get<long>("@ExecutionLogId");
         string? storedKey = await conn.ExecuteScalarAsync<string?>("SELECT KeyParameters FROM logs.ExecutionLog WHERE ExecutionLogId = @id", new { id = execId });
-        Assert.Equal("[redacted: disallowed diagnostic key]", storedKey);
+        Assert.Equal("exposureCaseId=123, [redacted], population=child", storedKey);
         Assert.DoesNotContain("SensitiveName", storedKey ?? string.Empty, StringComparison.Ordinal);
         await conn.ExecuteAsync("UPDATE logs.ExecutionLog SET isDeleted = 1 WHERE ExecutionLogId = @id", new { id = execId });
+
+        // Claude B3 / Codex #2: meritWeb with NO session context MUST get 51403 from logs.uspGetOperationalLogs!
+        await using (var webDeny = new SqlConnection(TestEnvironment.AdminConnectionString()))
+        {
+            await webDeny.OpenAsync();
+            await webDeny.ExecuteAsync("EXECUTE AS USER = 'meritWeb';");
+            var denyEx = await Assert.ThrowsAsync<SqlException>(() =>
+                webDeny.ExecuteAsync("logs.uspGetOperationalLogs", new { hours = 1, top = 1 }, commandType: CommandType.StoredProcedure));
+            Assert.Equal(51403, denyEx.Number);
+            await webDeny.ExecuteAsync("REVERT;");
+        }
+
+        // Claude I8 / Codex #5: Contended scanner lock returns 0 rows cleanly with NO error 266 and @@TRANCOUNT = 0.
+        await using (var holder = new SqlConnection(TestEnvironment.AdminConnectionString()))
+        await using (var contender = new SqlConnection(TestEnvironment.AdminConnectionString()))
+        {
+            await holder.OpenAsync();
+            await contender.OpenAsync();
+            await using var tx = await holder.BeginTransactionAsync();
+            await holder.ExecuteAsync("EXEC sys.sp_getapplock @Resource = N'MERIT.securityFindingScan', @LockMode = 'Exclusive', @LockOwner = 'Transaction', @LockTimeout = 5000;", transaction: tx);
+            var skipped = (await contender.QueryAsync<dynamic>("logs.uspRunSecurityFindingScan", new { hours = 24 }, commandType: CommandType.StoredProcedure)).ToList();
+            Assert.Empty(skipped);
+            Assert.Equal(0, await contender.ExecuteScalarAsync<int>("SELECT @@TRANCOUNT"));
+            await tx.RollbackAsync();
+        }
+
+        // Codex #6: Adding a 3rd network prefix to driftSession escalates existing medium finding to high and emits it once.
+        await conn.ExecuteAsync(
+            "INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, clientAddress, sessionReference) VALUES (@u, @r, 'view', 'person', '192.0.2.30', @s);",
+            new { u = sup.appUserId, r = sup.rootTenantId, s = driftSession });
+        var escalated = (await conn.QueryAsync<dynamic>("logs.uspRunSecurityFindingScan", new { hours = 24 }, commandType: CommandType.StoredProcedure)).ToList();
+        Assert.Contains(escalated, r => (Guid)r.securityFindingId == findingId && (string)r.severity == "high");
 
         // #330 (Codex #5): Worker-role execution of logs.uspCheckOperationalIntegrity sees healthy DDL audit (0 problems).
         await using (var workerCheck = new SqlConnection(TestEnvironment.AdminConnectionString()))

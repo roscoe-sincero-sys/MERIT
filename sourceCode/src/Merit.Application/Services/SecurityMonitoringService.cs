@@ -62,6 +62,8 @@ public sealed class SecurityMonitoringService(ISecurityMonitoringData data, Audi
     public async Task<IReadOnlyList<AuditEventChangeRow>> GetAuditEventChangesAsync(long auditEventId, CancellationToken ct = default)
     {
         session.RequireAny(Permissions.AuditView, Permissions.SecurityReview);
+        // Clinical row-change snapshots contain patient fields; audit-only reviewers without clinical read permission are refused (Codex #1).
+        session.RequireAny(Permissions.PersonView, Permissions.ResultView, Permissions.CaseView);
         var rows = await data.GetAuditEventChangesAsync(auditEventId, ct).ConfigureAwait(false);
         await audit.ListedAsync("auditEventChange", rows.Count, ct, new { auditEventId }).ConfigureAwait(false);
         return rows;

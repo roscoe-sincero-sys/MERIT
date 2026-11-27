@@ -52,8 +52,11 @@ public static class Permissions
     /// <summary>Policy (not a permission): log export and user-behavior review for audit, security, admin, or usage reviewers (#328/#330).</summary>
     public const string LogReview = "logReview";
 
+    /// <summary>Policy (not a permission): managing security findings (tenant.administer or security.investigate, #327).</summary>
+    public const string SecurityManage = "securityManage";
+
     /// <summary>Policies that accept any one of several permissions; each is registered in Merit.Web.</summary>
-    public static IReadOnlyList<string> CompositePolicies { get; } = [SecurityReports, ReceiptWrite, LogReview];
+    public static IReadOnlyList<string> CompositePolicies { get; } = [SecurityReports, ReceiptWrite, LogReview, SecurityManage];
 
     /// <summary>Policy for actions any signed-in user may take (their own account, sign-out).</summary>
     public const string SignedIn = "signedIn";

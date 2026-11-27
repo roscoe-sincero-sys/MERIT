@@ -103,9 +103,9 @@ BEGIN
             SELECT TOP (0) securityFindingId, rootTenantId, appUserId, ruleCode, severity, title, detailJson, detectedUtc
               FROM logs.securityFinding;
             SET @Comments = N'Another worker instance is running the scan.';
-            RETURN;
-        END;
-
+        END
+        ELSE
+        BEGIN
         DECLARE @winHours INT = CASE WHEN @hours BETWEEN 1 AND 168 THEN @hours ELSE 24 END;
         DECLARE @now DATETIME2 (3) = SYSUTCDATETIME ();
         DECLARE @since DATETIME2 (3) = DATEADD (HOUR, -@winHours, @now);
@@ -125,9 +125,11 @@ BEGIN
             fingerprint      VARCHAR (128) NOT NULL
         );
 
-        -- Rule 1: bulkViewVelocity
+        -- Rule 1: bulkViewVelocity (owningTenantId is set ONLY when all contributing events belong to one actingTenantId; NULL = root-wide, Codex #3)
         INSERT @candidates
-        SELECT COALESCE (e.rootTenantId, @platformRoot), MAX (e.actingTenantId), e.appUserId, NULL, e.sessionReference,
+        SELECT COALESCE (e.rootTenantId, @platformRoot),
+               CASE WHEN COUNT (DISTINCT e.actingTenantId) = 1 THEN MAX (e.actingTenantId) END,
+               e.appUserId, NULL, e.sessionReference,
                'bulkViewVelocity', CASE WHEN COUNT (DISTINCT e.entityId) >= @viewVelocityThreshold * 2 THEN 'high' ELSE 'medium' END,
                CONCAT (N'High distinct record view velocity (', COUNT (DISTINCT e.entityId), N' records in ', @winHours, N'h)'),
                (SELECT COUNT (DISTINCT e.entityId) AS distinctEntities, COUNT (*) AS totalViews FOR JSON PATH, WITHOUT_ARRAY_WRAPPER),
@@ -139,7 +141,9 @@ BEGIN
 
         -- Rule 2: bulkExportSpike
         INSERT @candidates
-        SELECT COALESCE (e.rootTenantId, @platformRoot), MAX (e.actingTenantId), e.appUserId, NULL, NULL,
+        SELECT COALESCE (e.rootTenantId, @platformRoot),
+               CASE WHEN COUNT (DISTINCT e.actingTenantId) = 1 THEN MAX (e.actingTenantId) END,
+               e.appUserId, NULL, NULL,
                'bulkExportSpike', CASE WHEN SUM (COALESCE (e.recordCount, 1)) >= @exportRowsThreshold * 2 OR COUNT (*) >= @exportSpikeThreshold * 2 THEN 'high' ELSE 'medium' END,
                CONCAT (N'Bulk export spike (', COUNT (*), N' exports, ', SUM (COALESCE (e.recordCount, 0)), N' rows)'),
                (SELECT COUNT (*) AS exportCount, SUM (COALESCE (e.recordCount, 0)) AS totalRows FOR JSON PATH, WITHOUT_ARRAY_WRAPPER),
@@ -151,7 +155,9 @@ BEGIN
 
         -- Rule 3: probingDeniedOrOutsideScope (handles NULL rootTenantId safely under platform-only scope, B1 / Codex #3)
         INSERT @candidates
-        SELECT COALESCE (e.rootTenantId, @platformRoot), MAX (e.actingTenantId), e.appUserId, MAX (e.clientAddress), NULL,
+        SELECT COALESCE (e.rootTenantId, @platformRoot),
+               CASE WHEN COUNT (DISTINCT e.actingTenantId) = 1 THEN MAX (e.actingTenantId) END,
+               e.appUserId, MAX (e.clientAddress), NULL,
                'probingDeniedOrOutsideScope', CASE WHEN COUNT (*) >= @probingThreshold * 2 THEN 'high' ELSE 'medium' END,
                CONCAT (N'Repeated permission-denied or outside-scope probing (', COUNT (*), N' events)'),
                (SELECT COUNT (*) AS events FOR JSON PATH, WITHOUT_ARRAY_WRAPPER),
@@ -163,7 +169,9 @@ BEGIN
 
         -- Rule 4: searchVelocitySpike
         INSERT @candidates
-        SELECT COALESCE (s.rootTenantId, @platformRoot), MAX (s.actingTenantId), s.appUserId, MAX (s.clientAddress), NULL,
+        SELECT COALESCE (s.rootTenantId, @platformRoot),
+               CASE WHEN COUNT (DISTINCT s.actingTenantId) = 1 THEN MAX (s.actingTenantId) END,
+               s.appUserId, MAX (s.clientAddress), NULL,
                'searchVelocitySpike', CASE WHEN COUNT (*) >= @searchVelocityThreshold * 2 THEN 'high' ELSE 'medium' END,
                CONCAT (N'High-velocity searching (', COUNT (*), N' queries)'),
                (SELECT COUNT (*) AS searches, SUM (CASE WHEN s.resultCount = 0 THEN 1 ELSE 0 END) AS zeroResults FOR JSON PATH, WITHOUT_ARRAY_WRAPPER),
@@ -173,28 +181,42 @@ BEGIN
          GROUP BY COALESCE (s.rootTenantId, @platformRoot), s.appUserId
         HAVING COUNT (*) >= @searchVelocityThreshold;
 
-        -- Rule 5: midSessionIpDrift (network prefix comparison, Claude I5)
+        -- Rule 5: midSessionIpDrift (network prefix comparison, Claude I5 / Codex #7)
         INSERT @candidates
-        SELECT COALESCE (e.rootTenantId, @platformRoot), MAX (e.actingTenantId), e.appUserId, NULL, e.sessionReference,
+        SELECT COALESCE (e.rootTenantId, @platformRoot),
+               CASE WHEN COUNT (DISTINCT e.actingTenantId) = 1 THEN MAX (e.actingTenantId) END,
+               e.appUserId, NULL, e.sessionReference,
                'midSessionIpDrift', CASE WHEN COUNT (DISTINCT CASE
             WHEN CHARINDEX ('.', e.clientAddress) > 0
                  THEN LEFT (e.clientAddress, LEN (e.clientAddress) - CHARINDEX ('.', REVERSE (e.clientAddress)))
             WHEN CHARINDEX (':', e.clientAddress) > 0
-                 THEN LEFT (e.clientAddress, 14)
+                 THEN COALESCE (
+                      LEFT (e.clientAddress, NULLIF (CHARINDEX (':', e.clientAddress,
+                            NULLIF (CHARINDEX (':', e.clientAddress,
+                            NULLIF (CHARINDEX (':', e.clientAddress), 0) + 1), 0) + 1), 0) - 1),
+                      e.clientAddress)
             ELSE e.clientAddress
         END) >= 3 THEN 'high' ELSE 'medium' END,
                CONCAT (N'Mid-session network change (', COUNT (DISTINCT CASE
             WHEN CHARINDEX ('.', e.clientAddress) > 0
                  THEN LEFT (e.clientAddress, LEN (e.clientAddress) - CHARINDEX ('.', REVERSE (e.clientAddress)))
             WHEN CHARINDEX (':', e.clientAddress) > 0
-                 THEN LEFT (e.clientAddress, 14)
+                 THEN COALESCE (
+                      LEFT (e.clientAddress, NULLIF (CHARINDEX (':', e.clientAddress,
+                            NULLIF (CHARINDEX (':', e.clientAddress,
+                            NULLIF (CHARINDEX (':', e.clientAddress), 0) + 1), 0) + 1), 0) - 1),
+                      e.clientAddress)
             ELSE e.clientAddress
         END), N' distinct network prefixes)'),
                (SELECT COUNT (DISTINCT CASE
             WHEN CHARINDEX ('.', e.clientAddress) > 0
                  THEN LEFT (e.clientAddress, LEN (e.clientAddress) - CHARINDEX ('.', REVERSE (e.clientAddress)))
             WHEN CHARINDEX (':', e.clientAddress) > 0
-                 THEN LEFT (e.clientAddress, 14)
+                 THEN COALESCE (
+                      LEFT (e.clientAddress, NULLIF (CHARINDEX (':', e.clientAddress,
+                            NULLIF (CHARINDEX (':', e.clientAddress,
+                            NULLIF (CHARINDEX (':', e.clientAddress), 0) + 1), 0) + 1), 0) - 1),
+                      e.clientAddress)
             ELSE e.clientAddress
         END) AS distinctPrefixes, COUNT (DISTINCT e.clientAddress) AS distinctAddresses, COUNT (*) AS events FOR JSON PATH, WITHOUT_ARRAY_WRAPPER),
                CONCAT ('midSessionIpDrift|', CONVERT (VARCHAR (36), e.sessionReference))
@@ -205,7 +227,11 @@ BEGIN
             WHEN CHARINDEX ('.', e.clientAddress) > 0
                  THEN LEFT (e.clientAddress, LEN (e.clientAddress) - CHARINDEX ('.', REVERSE (e.clientAddress)))
             WHEN CHARINDEX (':', e.clientAddress) > 0
-                 THEN LEFT (e.clientAddress, 14)
+                 THEN COALESCE (
+                      LEFT (e.clientAddress, NULLIF (CHARINDEX (':', e.clientAddress,
+                            NULLIF (CHARINDEX (':', e.clientAddress,
+                            NULLIF (CHARINDEX (':', e.clientAddress), 0) + 1), 0) + 1), 0) - 1),
+                      e.clientAddress)
             ELSE e.clientAddress
         END) > 1;
 
@@ -230,7 +256,9 @@ BEGIN
 
         -- Rule 7: privilegedActionBurst (Codex #6 parity)
         INSERT @candidates
-        SELECT COALESCE (e.rootTenantId, @platformRoot), MAX (e.actingTenantId), e.appUserId, MAX (e.clientAddress), NULL,
+        SELECT COALESCE (e.rootTenantId, @platformRoot),
+               CASE WHEN COUNT (DISTINCT e.actingTenantId) = 1 THEN MAX (e.actingTenantId) END,
+               e.appUserId, MAX (e.clientAddress), NULL,
                'privilegedActionBurst', 'high',
                CONCAT (N'Privileged security/configuration burst (', COUNT (*), N' actions)'),
                (SELECT COUNT (*) AS actions, @privBurstThreshold AS threshold FOR JSON PATH, WITHOUT_ARRAY_WRAPPER),
@@ -268,7 +296,9 @@ BEGIN
 
         -- Rule 10: apiOnlyNoScreenVisits (Codex #6 parity)
         INSERT @candidates
-        SELECT COALESCE (e.rootTenantId, @platformRoot), MAX (e.actingTenantId), e.appUserId, MAX (e.clientAddress), e.sessionReference,
+        SELECT COALESCE (e.rootTenantId, @platformRoot),
+               CASE WHEN COUNT (DISTINCT e.actingTenantId) = 1 THEN MAX (e.actingTenantId) END,
+               e.appUserId, MAX (e.clientAddress), e.sessionReference,
                'apiOnlyNoScreenVisits', 'medium',
                CONCAT (N'Data-access session with zero UI screen visits (', COUNT (*), N' reads)'),
                (SELECT COUNT (*) AS readEvents, COUNT (DISTINCT e.entityId) AS distinctEntities FOR JSON PATH, WITHOUT_ARRAY_WRAPPER),
@@ -296,7 +326,7 @@ BEGIN
         );
         INSERT @deduped
         SELECT rootTenantId, owningTenantId, appUserId, clientAddress, sessionReference, ruleCode, severity, title, detailJson, fingerprint
-          FROM (SELECT *, ROW_NUMBER () OVER (PARTITION BY fingerprint ORDER BY severity) AS rn FROM @candidates) AS x
+          FROM (SELECT *, ROW_NUMBER () OVER (PARTITION BY fingerprint ORDER BY CASE severity WHEN 'critical' THEN 1 WHEN 'high' THEN 2 WHEN 'medium' THEN 3 ELSE 4 END) AS rn FROM @candidates) AS x
          WHERE rn = 1;
 
         DECLARE @inserted TABLE (
@@ -309,6 +339,22 @@ BEGIN
             detailJson        NVARCHAR (2000),
             detectedUtc       DATETIME2 (3)
         );
+
+        -- Codex #6: Persist upward severity escalations on existing active findings and emit them once for notification.
+        UPDATE f
+           SET f.severity     = c.severity
+             , f.title        = c.title
+             , f.detailJson   = c.detailJson
+             , f.windowEndUtc = @now
+             , f.owningTenantId = CASE WHEN f.owningTenantId = c.owningTenantId THEN f.owningTenantId ELSE NULL END
+        OUTPUT INSERTED.securityFindingId, INSERTED.rootTenantId, INSERTED.appUserId, INSERTED.ruleCode,
+               INSERTED.severity, INSERTED.title, INSERTED.detailJson, INSERTED.detectedUtc
+          INTO @inserted
+          FROM logs.securityFinding AS f
+          JOIN @deduped AS c ON c.fingerprint = f.fingerprint
+         WHERE f.isDeleted = 0
+           AND (CASE c.severity WHEN 'critical' THEN 4 WHEN 'high' THEN 3 WHEN 'medium' THEN 2 ELSE 1 END)
+               > (CASE f.severity WHEN 'critical' THEN 4 WHEN 'high' THEN 3 WHEN 'medium' THEN 2 ELSE 1 END);
 
         INSERT logs.securityFinding (securityFindingId, rootTenantId, owningTenantId, appUserId, clientAddress, sessionReference,
                                      ruleCode, severity, title, detailJson, windowStartUtc, windowEndUtc, detectedUtc, status, fingerprint)
@@ -325,7 +371,8 @@ BEGIN
           FROM @inserted
          ORDER BY detectedUtc DESC;
 
-        SET @Comments = CONCAT (N'Inserted ', (SELECT COUNT (*) FROM @inserted), N' new security finding(s).');
+        SET @Comments = CONCAT (N'Persisted/escalated ', (SELECT COUNT (*) FROM @inserted), N' security finding(s).');
+        END;
 
         -- =========================================================================================
         -- ===== End of the procedure's own work. ===================================================
