@@ -1230,6 +1230,12 @@
     "type": "BIGINT",
     "hasDefault": true,
     "isOutput": false
+   },
+   {
+    "name": "afterAuditEventId",
+    "type": "BIGINT",
+    "hasDefault": true,
+    "isOutput": false
    }
   ]
  },
@@ -1265,6 +1271,12 @@
    },
    {
     "name": "maxAuditEventId",
+    "type": "BIGINT",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "afterAuditEventId",
     "type": "BIGINT",
     "hasDefault": true,
     "isOutput": false

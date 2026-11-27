@@ -317,12 +317,24 @@ def _export_body() -> str:
         lines.append(
             f"ELSE IF @tableName = N'{full}'\n"
             f"BEGIN\n"
-            f"    SELECT {col_list}\n"
-            f"      FROM {full}\n"
-            f"     WHERE rootTenantId = @rootTenantId\n"
-            f"       AND (@maxAuditEventId IS NULL OR auditEventId <= @maxAuditEventId)\n"
-            f"     ORDER BY auditEventId\n"
-            f"    OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY;\n"
+            f"    IF @afterAuditEventId IS NOT NULL\n"
+            f"    BEGIN\n"
+            f"        SELECT TOP (@limit) {col_list}\n"
+            f"          FROM {full}\n"
+            f"         WHERE rootTenantId = @rootTenantId\n"
+            f"           AND auditEventId <= @maxAuditEventId\n"
+            f"           AND auditEventId > @afterAuditEventId\n"
+            f"         ORDER BY auditEventId;\n"
+            f"    END\n"
+            f"    ELSE\n"
+            f"    BEGIN\n"
+            f"        SELECT {col_list}\n"
+            f"          FROM {full}\n"
+            f"         WHERE rootTenantId = @rootTenantId\n"
+            f"           AND auditEventId <= @maxAuditEventId\n"
+            f"         ORDER BY auditEventId\n"
+            f"        OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY;\n"
+            f"    END;\n"
             f"END"
         )
     lines.append("ELSE")
@@ -332,9 +344,29 @@ def _export_body() -> str:
     return "\n".join(lines)
 
 
+def _export_allowlist_sql() -> str:
+    """Returns T-SQL resolving @tableName to a canonical allowlisted table name before any ledger write."""
+    all_names = [f"{s}.{n}" for s, n, _ in ALL_MUTABLE_SPECS] + [f"{s}.{n}" for s, n in APPEND_ONLY_ROOT_TABLES]
+    values_sql = ", ".join(f"(N'{name}')" for name in all_names)
+    return f"""DECLARE @canonicalTableName NVARCHAR (128) = N'[manifest]';
+IF @tableName IS NOT NULL
+BEGIN
+    SELECT @canonicalTableName = v.tableName
+      FROM (VALUES {values_sql}) AS v (tableName)
+     WHERE v.tableName = @tableName;
+    IF @canonicalTableName = N'[manifest]'
+    BEGIN
+        ;THROW 51422, N'Unknown or non-tenant table name for root export.', 1;
+    END;
+    IF @canonicalTableName = N'logs.auditEvent' AND @maxAuditEventId IS NULL
+    BEGIN
+        ;THROW 51422, N'@maxAuditEventId from the export manifest is required when paging logs.auditEvent.', 1;
+    END;
+END;"""
+
+
 def _purge_body() -> str:
-    # S21: Rely on createdBy/modifiedBy (preserved by trg_au_updt_*) so live rows scrub in a single pass.
-    unscrubbed = "(isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge')"
+    unscrubbed = "(isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge')"
     lines = [
         "IF @dryRun IS NULL",
         "BEGIN",
@@ -474,11 +506,12 @@ PROCS = [
         "ticket": "346",
         "desc": "Ungranted owner-context helper for config.uspExportRootTenant: returns the 71-table manifest (including "
                 "active/soft-deleted counts and maxAuditEventId cutoff) or streams one table page without credential columns (#346, I17).",
-        "params": """@rootTenantId    UNIQUEIDENTIFIER
-, @tableName       NVARCHAR (128) = NULL
-, @pageNumber      INT = 1
-, @pageSize        INT = 1000
-, @maxAuditEventId BIGINT = NULL""",
+        "params": """@rootTenantId      UNIQUEIDENTIFIER
+, @tableName         NVARCHAR (128) = NULL
+, @pageNumber        INT = 1
+, @pageSize          INT = 1000
+, @maxAuditEventId   BIGINT = NULL
+, @afterAuditEventId BIGINT = NULL""",
         "key": "CONCAT (N'rootTenantId=', @rootTenantId, N', pageNumber=', @pageNumber, N', pageSize=', @pageSize)",
         "body": _export_body(),
     },
@@ -486,26 +519,30 @@ PROCS = [
         "schema": "config", "name": "uspExportRootTenant", "kind": "write", "no_tx": True, "require_standalone": True, "grants": BOTH, "ticket": "346",
         "permission_all": ["security.investigate", "tenant.create"],
         "desc": "Platform-only, audited per-root-tenant data export covering all 70 mutable tenant/auth tables plus "
-                "read-only logs.auditEvent (#346, I17). Must be called outside an enclosing transaction (preserves caller "
-                "transaction on rejection), commits its durable export audit event before streaming rows, and bounds "
-                "logs.auditEvent to @maxAuditEventId (returned by the manifest) so paging terminates cleanly.",
-        "params": """@rootTenantId    UNIQUEIDENTIFIER
-, @tableName       NVARCHAR (128) = NULL
-, @pageNumber      INT = 1
-, @pageSize        INT = 1000
-, @maxAuditEventId BIGINT = NULL""",
+                "read-only logs.auditEvent (#346, I17). Must be called standalone with IMPLICIT_TRANSACTIONS OFF and no "
+                "enclosing transaction (returns -100 without rolling back caller work). Validates and canonicalizes "
+                "@tableName before committing its durable export audit event, requires @maxAuditEventId from the manifest "
+                "when paging logs.auditEvent, and supports keyset paging via @afterAuditEventId.",
+        "params": """@rootTenantId      UNIQUEIDENTIFIER
+, @tableName         NVARCHAR (128) = NULL
+, @pageNumber        INT = 1
+, @pageSize          INT = 1000
+, @maxAuditEventId   BIGINT = NULL
+, @afterAuditEventId BIGINT = NULL""",
         "key": "CONCAT (N'rootTenantId=', @rootTenantId, N', pageNumber=', @pageNumber, N', pageSize=', @pageSize)",
         "validate": """IF NOT EXISTS (SELECT 1 FROM auth.tenant WHERE tenantId = @rootTenantId AND tenantId = rootTenantId)
 BEGIN
     ;THROW 51404, N'The root tenant was not found.', 1;
-END;""",
+END;
+""" + _export_allowlist_sql(),
         "body": f"""
 DECLARE @exportFilterJson NVARCHAR (MAX) = (
     SELECT @rootTenantId AS rootTenantId,
-           COALESCE (@tableName, N'[manifest]') AS tableName,
+           @canonicalTableName AS tableName,
            @pageNumber AS pageNumber,
            @pageSize AS pageSize,
-           @maxAuditEventId AS maxAuditEventId
+           @maxAuditEventId AS maxAuditEventId,
+           @afterAuditEventId AS afterAuditEventId
     FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
 );
 DECLARE @exportAudit TABLE (auditEventId BIGINT NOT NULL);
@@ -519,8 +556,10 @@ VALUES (auth.udfSessionUserId (), @rootTenantId, 'export', 'tenant', @rootTenant
 COMMIT TRANSACTION;
 
 DECLARE @effectiveMaxAuditEventId BIGINT = COALESCE (@maxAuditEventId, (SELECT TOP (1) auditEventId - 1 FROM @exportAudit));
-EXEC config.uspExportRootTenantInternal @rootTenantId = @rootTenantId, @tableName = @tableName,
-     @pageNumber = @pageNumber, @pageSize = @pageSize, @maxAuditEventId = @effectiveMaxAuditEventId;
+DECLARE @internalTableName NVARCHAR (128) = CASE WHEN @tableName IS NULL THEN NULL ELSE @canonicalTableName END;
+EXEC config.uspExportRootTenantInternal @rootTenantId = @rootTenantId, @tableName = @internalTableName,
+     @pageNumber = @pageNumber, @pageSize = @pageSize, @maxAuditEventId = @effectiveMaxAuditEventId,
+     @afterAuditEventId = @afterAuditEventId;
 SET @Comments = CONCAT (N'Root tenant export completed for ', @rootTenantId);
 """,
     },

@@ -109,6 +109,10 @@ BEGIN
         END;
 
         DECLARE @root UNIQUEIDENTIFIER = CAST (HASHBYTES ('MD5', CONCAT (N'tenant:', @tenantCode)) AS UNIQUEIDENTIFIER);
+        IF EXISTS (SELECT 1 FROM auth.tenant WHERE (tenantId = @root OR tenantCode = @tenantCode) AND (isDeleted = 1 OR isActive = 0))
+        BEGIN
+            ;THROW 51422, N'This root tenant is inactive or has been purged and cannot be reinstalled.', 1;
+        END;
         SET @effectiveFrom=COALESCE(@effectiveFrom,auth.udfSessionToday());
         DECLARE @parent UNIQUEIDENTIFIER;
         IF @parentTenantCode IS NOT NULL

@@ -209,10 +209,12 @@ def write_proc(p: dict) -> str:
 """
     standalone_guard = ""
     if p.get("require_standalone"):
-        standalone_guard = f"""    IF @@TRANCOUNT > 0
+        standalone_guard = f"""    IF @@TRANCOUNT > 0 OR (@@OPTIONS & 2) = 2
     BEGIN
-        RAISERROR (N'{full} must be called outside an enclosing transaction.', 16, 1);
-        RETURN -1;
+        -- Non-error return status (-100) preserves caller transactions even under XACT_ABORT ON + TRY/CATCH
+        -- and rejects IMPLICIT_TRANSACTIONS ON before any table write.
+        RAISERROR (N'{full} must be called standalone with IMPLICIT_TRANSACTIONS OFF and no enclosing transaction.', 10, 1);
+        RETURN -100;
     END;
 
 """
@@ -342,10 +344,12 @@ def read_proc(p: dict) -> str:
     validation = indent(p["validate"], 8) + "\n\n" if p.get("validate") else ""
     standalone_guard = ""
     if p.get("require_standalone"):
-        standalone_guard = f"""    IF @@TRANCOUNT > 0
+        standalone_guard = f"""    IF @@TRANCOUNT > 0 OR (@@OPTIONS & 2) = 2
     BEGIN
-        RAISERROR (N'{full} must be called outside an enclosing transaction.', 16, 1);
-        RETURN -1;
+        -- Non-error return status (-100) preserves caller transactions even under XACT_ABORT ON + TRY/CATCH
+        -- and rejects IMPLICIT_TRANSACTIONS ON before any table write.
+        RAISERROR (N'{full} must be called standalone with IMPLICIT_TRANSACTIONS OFF and no enclosing transaction.', 10, 1);
+        RETURN -100;
     END;
 
 """

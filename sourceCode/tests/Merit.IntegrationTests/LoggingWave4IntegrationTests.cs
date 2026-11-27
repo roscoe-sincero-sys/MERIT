@@ -276,20 +276,43 @@ public sealed class LoggingWave4IntegrationTests(MeritFixture fixture)
             Assert.NotNull(ledgerManifest.maxAuditEventId);
             Assert.True(ledgerManifest.totalRows >= 1);
 
-            // Codex round 2: Paging logs.auditEvent at pageSize = 1 with manifest maxAuditEventId terminates cleanly and matches manifest totalRows.
+            // Codex round 3: Rejects invalid @tableName BEFORE writing logs.auditEvent (raw text never enters ledger),
+            // and requires @maxAuditEventId when paging logs.auditEvent.
+            var badTableEx = await Assert.ThrowsAsync<SqlException>(() =>
+                conn.ExecuteAsync("config.uspExportRootTenant", new { rootTenantId = synRoot, tableName = "SECRET_INVALID_TABLE_346" }, commandType: CommandType.StoredProcedure));
+            Assert.Equal(51422, badTableEx.Number);
+            Assert.Equal(0, await conn.ExecuteScalarAsync<int>(
+                "SELECT COUNT (*) FROM logs.auditEvent WHERE rootTenantId = @r AND filterJson LIKE N'%SECRET_INVALID_TABLE_346%'", new { r = synRoot }));
+
+            var missingCutoffEx = await Assert.ThrowsAsync<SqlException>(() =>
+                conn.ExecuteAsync("config.uspExportRootTenant", new { rootTenantId = synRoot, tableName = "logs.auditEvent", pageNumber = 1, pageSize = 1 }, commandType: CommandType.StoredProcedure));
+            Assert.Equal(51422, missingCutoffEx.Number);
+
+            // Codex round 2 & 3: Keyset paging logs.auditEvent at pageSize = 1 with manifest maxAuditEventId terminates cleanly
+            // and matches manifest totalRows even when another audit event commits between pages.
             int exportedLedgerCount = 0;
+            long afterId = 0;
             for (int page = 1; page <= ledgerManifest.totalRows + 5; page++)
             {
+                if (page == 2)
+                {
+                    await conn.ExecuteAsync(
+                        "INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId) VALUES (@u, @r, 'view', 'person', @p);",
+                        new { u = synUser, r = synRoot, p = synPerson });
+                }
                 var ledgerPage = (await conn.QueryAsync<dynamic>(
                     "config.uspExportRootTenant",
-                    new { rootTenantId = synRoot, tableName = "logs.auditEvent", pageNumber = page, pageSize = 1, maxAuditEventId = ledgerManifest.maxAuditEventId },
+                    new { rootTenantId = synRoot, tableName = "logs.auditEvent", pageNumber = 1, pageSize = 1, maxAuditEventId = ledgerManifest.maxAuditEventId, afterAuditEventId = afterId },
                     commandType: CommandType.StoredProcedure)).ToList();
                 if (ledgerPage.Count == 0)
                 {
                     break;
                 }
                 Assert.Single(ledgerPage);
-                Assert.True((long)ledgerPage[0].auditEventId <= ledgerManifest.maxAuditEventId!.Value);
+                long rowId = (long)ledgerPage[0].auditEventId;
+                Assert.True(rowId > afterId);
+                Assert.True(rowId <= ledgerManifest.maxAuditEventId!.Value);
+                afterId = rowId;
                 exportedLedgerCount++;
             }
             Assert.Equal(ledgerManifest.totalRows, exportedLedgerCount);
@@ -306,23 +329,64 @@ public sealed class LoggingWave4IntegrationTests(MeritFixture fixture)
             Assert.DoesNotContain("mfaSecretProtected", exportedUser.Keys, StringComparer.OrdinalIgnoreCase);
             Assert.DoesNotContain("securityStamp", exportedUser.Keys, StringComparer.OrdinalIgnoreCase);
 
-            // 2b. Export and Purge reject enclosing transactions while leaving caller transaction committable (@@TRANCOUNT = 1, XACT_STATE() = 1).
+            // 2b. Export and Purge return -100 on enclosing transactions (RPC and XACT_ABORT ON + TRY/CATCH)
+            //     and on IMPLICIT_TRANSACTIONS ON, leaving caller transactions committable (@@TRANCOUNT = 1, XACT_STATE() = 1).
             using (var tx = conn.BeginTransaction())
             {
-                await Assert.ThrowsAsync<SqlException>(() =>
-                    conn.ExecuteAsync("config.uspExportRootTenant", new { rootTenantId = synRoot }, transaction: tx, commandType: CommandType.StoredProcedure));
+                var expParams = new DynamicParameters(new { rootTenantId = synRoot });
+                expParams.Add("@ret", dbType: DbType.Int32, direction: ParameterDirection.ReturnValue);
+                await conn.ExecuteAsync("config.uspExportRootTenant", expParams, transaction: tx, commandType: CommandType.StoredProcedure);
+                Assert.Equal(-100, expParams.Get<int>("@ret"));
                 var txState1 = await conn.QuerySingleAsync<(int tranCount, int xactState)>("SELECT @@TRANCOUNT, XACT_STATE ()", transaction: tx);
                 Assert.Equal(1, txState1.tranCount);
                 Assert.Equal(1, txState1.xactState);
 
-                await Assert.ThrowsAsync<SqlException>(() =>
-                    conn.ExecuteAsync("config.uspPurgeRootTenant", new { rootTenantId = synRoot, confirmationCode = $"PURGE:{synCode}", backupRetentionDays = 35, dryRun = true }, transaction: tx, commandType: CommandType.StoredProcedure));
+                var purgeParams = new DynamicParameters(new { rootTenantId = synRoot, confirmationCode = $"PURGE:{synCode}", backupRetentionDays = 35, dryRun = true });
+                purgeParams.Add("@ret", dbType: DbType.Int32, direction: ParameterDirection.ReturnValue);
+                await conn.ExecuteAsync("config.uspPurgeRootTenant", purgeParams, transaction: tx, commandType: CommandType.StoredProcedure);
+                Assert.Equal(-100, purgeParams.Get<int>("@ret"));
                 var txState2 = await conn.QuerySingleAsync<(int tranCount, int xactState)>("SELECT @@TRANCOUNT, XACT_STATE ()", transaction: tx);
                 Assert.Equal(1, txState2.tranCount);
                 Assert.Equal(1, txState2.xactState);
 
                 tx.Rollback();
             }
+
+            // Verify XACT_ABORT ON + caller TRY/CATCH preserves committable transaction (XACT_STATE() = 1).
+            var tryCatchProbe = await conn.QuerySingleAsync<(int rc, int tc, int xs)>(
+                """
+                SET XACT_ABORT ON;
+                DECLARE @rc INT = 0, @tc INT = 0, @xs INT = 0;
+                BEGIN TRY
+                    BEGIN TRANSACTION;
+                    EXEC @rc = config.uspExportRootTenant @rootTenantId = @r;
+                    SET @tc = @@TRANCOUNT;
+                    SET @xs = XACT_STATE ();
+                    ROLLBACK TRANSACTION;
+                END TRY
+                BEGIN CATCH
+                    SET @tc = @@TRANCOUNT;
+                    SET @xs = XACT_STATE ();
+                    IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
+                END CATCH;
+                SELECT @rc AS rc, @tc AS tc, @xs AS xs;
+                """, new { r = synRoot });
+            Assert.Equal(-100, tryCatchProbe.rc);
+            Assert.Equal(1, tryCatchProbe.tc);
+            Assert.Equal(1, tryCatchProbe.xs);
+
+            // Verify IMPLICIT_TRANSACTIONS ON is rejected with -100 before opening a transaction.
+            var implicitProbe = await conn.QuerySingleAsync<(int rc, int tc)>(
+                """
+                SET IMPLICIT_TRANSACTIONS ON;
+                DECLARE @rc INT = 0, @tc INT = 0;
+                EXEC @rc = config.uspExportRootTenant @rootTenantId = @r;
+                SET @tc = @@TRANCOUNT;
+                SET IMPLICIT_TRANSACTIONS OFF;
+                SELECT @rc AS rc, @tc AS tc;
+                """, new { r = synRoot });
+            Assert.Equal(-100, implicitProbe.rc);
+            Assert.Equal(0, implicitProbe.tc);
 
             string? exportFilterJson = await conn.ExecuteScalarAsync<string?>(
                 "SELECT TOP (1) filterJson FROM logs.auditEvent WHERE rootTenantId = @r AND eventAction = 'export' AND entityType = 'tenant' ORDER BY auditEventId DESC",
@@ -381,10 +445,7 @@ public sealed class LoggingWave4IntegrationTests(MeritFixture fixture)
                 Assert.Equal("unknown", pRow.ethnicity);
                 Assert.Equal("MERIT tenant purge", pRow.createdBy);
                 Assert.Equal("MERIT tenant purge", pRow.modifiedBy);
-                if (pid == synDeletedPerson)
-                {
-                    Assert.Equal("MERIT tenant purge", pRow.deletedBy);
-                }
+                Assert.Equal("MERIT tenant purge", pRow.deletedBy);
             }
 
             // Verify previously soft-deleted queued job had its payload and actor fields scrubbed (Codex #4).
@@ -408,7 +469,22 @@ public sealed class LoggingWave4IntegrationTests(MeritFixture fixture)
             Assert.True(await conn.ExecuteScalarAsync<bool>("SELECT isDeleted FROM auth.sessionScopeRoot WHERE sessionScopeRootId = @id", new { id = crossRootScopeRoot }));
             Assert.True(await conn.ExecuteScalarAsync<bool>("SELECT isDeleted FROM auth.sessionScopeTenant WHERE sessionScopeTenantId = @id", new { id = crossRootScopeTenant }));
 
-            // Codex round 2: Once synRoot is purged, synRegion can be purged; afterward, installing a child root under the purged/inactive region is rejected (51422).
+            // Codex round 2 & 3: Once synRoot is purged:
+            // - Installing an ordinary child tenant under synRoot is rejected (51404).
+            // - Reinstalling synRoot with the same tenantCode is rejected (51422).
+            // - synRegion can now be purged, and afterward installing a child root under the purged region is rejected (51422).
+            var childUnderPurgedEx = await Assert.ThrowsAsync<SqlException>(() =>
+                conn.ExecuteAsync("config.uspInstallChildTenant",
+                    new { tenantCode = "PROG" + Guid.NewGuid().ToString("N")[..5].ToUpperInvariant(), tenantName = "Program Under Purged Root", tenantType = "program", parentTenantCode = synCode },
+                    commandType: CommandType.StoredProcedure));
+            Assert.Equal(51404, childUnderPurgedEx.Number);
+
+            var reinstallPurgedEx = await Assert.ThrowsAsync<SqlException>(() =>
+                conn.ExecuteAsync("config.uspInstallRootTenant",
+                    new { tenantCode = synCode, tenantName = "Reinstalled Purged Root", tenantType = "state" },
+                    commandType: CommandType.StoredProcedure));
+            Assert.Equal(51422, reinstallPurgedEx.Number);
+
             await conn.ExecuteAsync("config.uspPurgeRootTenant",
                 new { rootTenantId = synRegion, confirmationCode = $"PURGE:{synRegionCode}", backupRetentionDays = 35 },
                 commandType: CommandType.StoredProcedure);

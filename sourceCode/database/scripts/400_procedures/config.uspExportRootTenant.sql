@@ -13,7 +13,7 @@ CreateDate:   2026-10-24
 ========================================================================================================================
 Description:
 
-Platform-only, audited per-root-tenant data export covering all 70 mutable tenant/auth tables plus read-only logs.auditEvent (#346, I17). Must be called outside an enclosing transaction (preserves caller transaction on rejection), commits its durable export audit event before streaming rows, and bounds logs.auditEvent to @maxAuditEventId (returned by the manifest) so paging terminates cleanly.
+Platform-only, audited per-root-tenant data export covering all 70 mutable tenant/auth tables plus read-only logs.auditEvent (#346, I17). Must be called standalone with IMPLICIT_TRANSACTIONS OFF and no enclosing transaction (returns -100 without rolling back caller work). Validates and canonicalizes @tableName before committing its durable export audit event, requires @maxAuditEventId from the manifest when paging logs.auditEvent, and supports keyset paging via @afterAuditEventId.
 
 ========================================================================================================================
 Requirements and Key Dependencies:
@@ -45,18 +45,21 @@ Description:	Initial version.
 
 ***********************************************************************************************************************/
 CREATE OR ALTER PROCEDURE config.uspExportRootTenant
-      @rootTenantId    UNIQUEIDENTIFIER
-      , @tableName       NVARCHAR (128) = NULL
-      , @pageNumber      INT = 1
-      , @pageSize        INT = 1000
-      , @maxAuditEventId BIGINT = NULL
+      @rootTenantId      UNIQUEIDENTIFIER
+      , @tableName         NVARCHAR (128) = NULL
+      , @pageNumber        INT = 1
+      , @pageSize          INT = 1000
+      , @maxAuditEventId   BIGINT = NULL
+      , @afterAuditEventId BIGINT = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
-    IF @@TRANCOUNT > 0
+    IF @@TRANCOUNT > 0 OR (@@OPTIONS & 2) = 2
     BEGIN
-        RAISERROR (N'config.uspExportRootTenant must be called outside an enclosing transaction.', 16, 1);
-        RETURN -1;
+        -- Non-error return status (-100) preserves caller transactions even under XACT_ABORT ON + TRY/CATCH
+        -- and rejects IMPLICIT_TRANSACTIONS ON before any table write.
+        RAISERROR (N'config.uspExportRootTenant must be called standalone with IMPLICIT_TRANSACTIONS OFF and no enclosing transaction.', 10, 1);
+        RETURN -100;
     END;
 
     SET XACT_ABORT ON;
@@ -100,6 +103,21 @@ BEGIN
         BEGIN
             ;THROW 51404, N'The root tenant was not found.', 1;
         END;
+        DECLARE @canonicalTableName NVARCHAR (128) = N'[manifest]';
+        IF @tableName IS NOT NULL
+        BEGIN
+            SELECT @canonicalTableName = v.tableName
+              FROM (VALUES (N'auth.mfaRecoveryCode'), (N'auth.passwordReset'), (N'auth.mfaEmailChallenge'), (N'auth.userProfileGrant'), (N'auth.userProfile'), (N'auth.userAssignment'), (N'auth.sessionScopeTenant'), (N'auth.sessionScopePermission'), (N'auth.sessionScopeAdminTenant'), (N'auth.rolePermission'), (N'auth.tenantJurisdiction'), (N'auth.tenantClosure'), (N'logs.auditEventChange'), (N'logs.auditEventRecord'), (N'logs.securityFinding'), (N'logs.searchLog'), (N'logs.screenVisit'), (N'logs.signInEvent'), (N'dbo.contactCorrection'), (N'dbo.caseResultLink'), (N'dbo.notificationObligation'), (N'dbo.personDocument'), (N'dbo.personActivity'), (N'dbo.matchExclusion'), (N'dbo.extractRun'), (N'dbo.jobQueue'), (N'dbo.workTask'), (N'dbo.caseCluster'), (N'dbo.cluster'), (N'dbo.environmentalSample'), (N'dbo.investigationCase'), (N'dbo.investigation'), (N'dbo.exposureSource'), (N'dbo.caseActivity'), (N'dbo.exposureCase'), (N'dbo.stagingHoldReason'), (N'dbo.stagingRow'), (N'dbo.labResult'), (N'dbo.intakeBatch'), (N'dbo.intakeProfile'), (N'dbo.provider'), (N'dbo.product'), (N'dbo.employmentAnalyte'), (N'dbo.employment'), (N'dbo.personLocation'), (N'dbo.locationOwner'), (N'dbo.organizationSite'), (N'dbo.location'), (N'dbo.organizationType'), (N'dbo.organization'), (N'dbo.personRelationship'), (N'dbo.pregnancyEpisode'), (N'dbo.personIdentifier'), (N'dbo.personContactMethod'), (N'dbo.personRace'), (N'dbo.personAlias'), (N'dbo.personMatchKey'), (N'dbo.personAccess'), (N'dbo.person'), (N'config.workflowDefinition'), (N'config.notificationRule'), (N'config.environmentalStandard'), (N'config.threshold'), (N'config.jurisdictionSetting'), (N'config.subJurisdiction'), (N'auth.sessionScopeRoot'), (N'auth.sessionScope'), (N'auth.appUser'), (N'auth.role'), (N'auth.tenant'), (N'logs.auditEvent')) AS v (tableName)
+             WHERE v.tableName = @tableName;
+            IF @canonicalTableName = N'[manifest]'
+            BEGIN
+                ;THROW 51422, N'Unknown or non-tenant table name for root export.', 1;
+            END;
+            IF @canonicalTableName = N'logs.auditEvent' AND @maxAuditEventId IS NULL
+            BEGIN
+                ;THROW 51422, N'@maxAuditEventId from the export manifest is required when paging logs.auditEvent.', 1;
+            END;
+        END;
 
         -- =========================================================================================
         -- ===== The procedure's own work starts here. Everything above and below is boilerplate. ==
@@ -107,10 +125,11 @@ BEGIN
 
         DECLARE @exportFilterJson NVARCHAR (MAX) = (
             SELECT @rootTenantId AS rootTenantId,
-                   COALESCE (@tableName, N'[manifest]') AS tableName,
+                   @canonicalTableName AS tableName,
                    @pageNumber AS pageNumber,
                    @pageSize AS pageSize,
-                   @maxAuditEventId AS maxAuditEventId
+                   @maxAuditEventId AS maxAuditEventId,
+                   @afterAuditEventId AS afterAuditEventId
             FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
         );
         DECLARE @exportAudit TABLE (auditEventId BIGINT NOT NULL);
@@ -131,8 +150,10 @@ BEGIN
         COMMIT TRANSACTION;
 
         DECLARE @effectiveMaxAuditEventId BIGINT = COALESCE (@maxAuditEventId, (SELECT TOP (1) auditEventId - 1 FROM @exportAudit));
-        EXEC config.uspExportRootTenantInternal @rootTenantId = @rootTenantId, @tableName = @tableName,
-             @pageNumber = @pageNumber, @pageSize = @pageSize, @maxAuditEventId = @effectiveMaxAuditEventId;
+        DECLARE @internalTableName NVARCHAR (128) = CASE WHEN @tableName IS NULL THEN NULL ELSE @canonicalTableName END;
+        EXEC config.uspExportRootTenantInternal @rootTenantId = @rootTenantId, @tableName = @internalTableName,
+             @pageNumber = @pageNumber, @pageSize = @pageSize, @maxAuditEventId = @effectiveMaxAuditEventId,
+             @afterAuditEventId = @afterAuditEventId;
         SET @Comments = CONCAT (N'Root tenant export completed for ', @rootTenantId);
 
         -- =========================================================================================
@@ -211,7 +232,7 @@ EXEC util.uspSetObjectDescription
       @SchemaName  = N'config'
     , @ObjectType  = N'PROCEDURE'
     , @ObjectName  = N'uspExportRootTenant'
-    , @Description = N'Platform-only, audited per-root-tenant data export covering all 70 mutable tenant/auth tables plus read-only logs.auditEvent (#346, I17). Must be called outside an enclosing transaction (preserves caller transaction on rejection), commits its durable export audit event before streaming rows, and bounds logs.auditEvent to @maxAuditEventId (returned by the manifest) so paging terminates cleanly.';
+    , @Description = N'Platform-only, audited per-root-tenant data export covering all 70 mutable tenant/auth tables plus read-only logs.auditEvent (#346, I17). Must be called standalone with IMPLICIT_TRANSACTIONS OFF and no enclosing transaction (returns -100 without rolling back caller work). Validates and canonicalizes @tableName before committing its durable export audit event, requires @maxAuditEventId from the manifest when paging logs.auditEvent, and supports keyset paging via @afterAuditEventId.';
 GO
 
 IF DATABASE_PRINCIPAL_ID (N'meritWebRole') IS NOT NULL

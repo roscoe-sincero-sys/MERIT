@@ -45,11 +45,12 @@ Description:	Initial version.
 
 ***********************************************************************************************************************/
 CREATE OR ALTER PROCEDURE config.uspExportRootTenantInternal
-      @rootTenantId    UNIQUEIDENTIFIER
-      , @tableName       NVARCHAR (128) = NULL
-      , @pageNumber      INT = 1
-      , @pageSize        INT = 1000
-      , @maxAuditEventId BIGINT = NULL
+      @rootTenantId      UNIQUEIDENTIFIER
+      , @tableName         NVARCHAR (128) = NULL
+      , @pageNumber        INT = 1
+      , @pageSize          INT = 1000
+      , @maxAuditEventId   BIGINT = NULL
+      , @afterAuditEventId BIGINT = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -1083,12 +1084,24 @@ BEGIN
         END
         ELSE IF @tableName = N'logs.auditEvent'
         BEGIN
-            SELECT auditEventId, eventUtc, appUserId, rootTenantId, owningTenantId, eventAction, entityType, entityId, recordCount, clientAddress, userAgentHash, sessionReference, traceId, actingTenantId, viewAsUserId, viewKind, filterJson, administrationJson, createdBy, createdDateUtc
-              FROM logs.auditEvent
-             WHERE rootTenantId = @rootTenantId
-               AND (@maxAuditEventId IS NULL OR auditEventId <= @maxAuditEventId)
-             ORDER BY auditEventId
-            OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY;
+            IF @afterAuditEventId IS NOT NULL
+            BEGIN
+                SELECT TOP (@limit) auditEventId, eventUtc, appUserId, rootTenantId, owningTenantId, eventAction, entityType, entityId, recordCount, clientAddress, userAgentHash, sessionReference, traceId, actingTenantId, viewAsUserId, viewKind, filterJson, administrationJson, createdBy, createdDateUtc
+                  FROM logs.auditEvent
+                 WHERE rootTenantId = @rootTenantId
+                   AND auditEventId <= @maxAuditEventId
+                   AND auditEventId > @afterAuditEventId
+                 ORDER BY auditEventId;
+            END
+            ELSE
+            BEGIN
+                SELECT auditEventId, eventUtc, appUserId, rootTenantId, owningTenantId, eventAction, entityType, entityId, recordCount, clientAddress, userAgentHash, sessionReference, traceId, actingTenantId, viewAsUserId, viewKind, filterJson, administrationJson, createdBy, createdDateUtc
+                  FROM logs.auditEvent
+                 WHERE rootTenantId = @rootTenantId
+                   AND auditEventId <= @maxAuditEventId
+                 ORDER BY auditEventId
+                OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY;
+            END;
         END
         ELSE
         BEGIN

@@ -52,10 +52,12 @@ CREATE OR ALTER PROCEDURE config.uspPurgeRootTenant
 AS
 BEGIN
     SET NOCOUNT ON;
-    IF @@TRANCOUNT > 0
+    IF @@TRANCOUNT > 0 OR (@@OPTIONS & 2) = 2
     BEGIN
-        RAISERROR (N'config.uspPurgeRootTenant must be called outside an enclosing transaction.', 16, 1);
-        RETURN -1;
+        -- Non-error return status (-100) preserves caller transactions even under XACT_ABORT ON + TRY/CATCH
+        -- and rejects IMPLICIT_TRANSACTIONS ON before any table write.
+        RAISERROR (N'config.uspPurgeRootTenant must be called standalone with IMPLICIT_TRANSACTIONS OFF and no enclosing transaction.', 10, 1);
+        RETURN -100;
     END;
 
     SET XACT_ABORT ON;
