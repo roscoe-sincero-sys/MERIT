@@ -1200,7 +1200,7 @@ SET @Comments = CONCAT (N'Purged ', @total, N' ExecutionLog rows older than ', @
 """,
     },
     {
-        "schema": "logs", "name": "uspVerifyAuditLedgerInternal", "kind": "read", "grants": [], "ticket": "334",
+        "schema": "logs", "name": "uspVerifyAuditLedgerInternal", "kind": "read", "require_standalone": True, "grants": [], "ticket": "334",
         "execute_as_owner": True,
         "desc": "Ungranted owner-context helper for logs.uspVerifyAuditLedger: generates a SQL Server ledger digest "
                 "(when @digestJson is NULL) and runs sys.sp_verify_database_ledger (#334).",
@@ -1266,7 +1266,7 @@ SELECT @verified AS verified,
 """,
     },
     {
-        "schema": "logs", "name": "uspVerifyAuditLedger", "kind": "read", "grants": WORKER, "ticket": "334",
+        "schema": "logs", "name": "uspVerifyAuditLedger", "kind": "read", "require_standalone": True, "grants": WORKER, "ticket": "334",
         "desc": "Worker-only audit ledger digest generator and verifier (#334). Generates a fresh digest when "
                 "@digestJson is NULL or verifies a previously stored external digest against the database ledger.",
         "params": "@digestJson NVARCHAR (MAX) = NULL",
