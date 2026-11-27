@@ -420,7 +420,7 @@ BEGIN
         BEGIN
             BEGIN TRANSACTION;
             UPDATE TOP (5000) logs.securityFinding
-               SET appUserId = NULL, clientAddress = NULL, sessionReference = NULL, title = N'[purged]', detailJson = NULL, acknowledgedByUserId = NULL, acknowledgedUtc = NULL, webhookDeliveredUtc = NULL, webhookClaimToken = NULL, webhookLeaseUntilUtc = NULL, fingerprint = CONCAT ('purged|', CONVERT (VARCHAR (36), securityFindingId)), isDeleted = 1, createdBy = N'MERIT tenant purge', modifiedBy = N'MERIT tenant purge', deletedBy = N'MERIT tenant purge'
+               SET appUserId = NULL, clientAddress = NULL, sessionReference = NULL, title = N'[purged]', detailJson = NULL, acknowledgedByUserId = NULL, acknowledgedUtc = NULL, webhookDeliveredUtc = NULL, webhookClaimToken = NULL, webhookLeaseUntilUtc = NULL, webhookLastError = NULL, fingerprint = CONCAT ('purged|', CONVERT (VARCHAR (36), securityFindingId)), isDeleted = 1, createdBy = N'MERIT tenant purge', modifiedBy = N'MERIT tenant purge', deletedBy = N'MERIT tenant purge'
              WHERE (rootTenantId = @rootTenantId)
                AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge');
             SET @batch = @@ROWCOUNT;

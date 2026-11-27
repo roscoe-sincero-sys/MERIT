@@ -9021,6 +9021,40 @@
   ]
  },
  {
+  "name": "logs.uspRecordSecurityFindingWebhookFailure",
+  "kind": "write",
+  "grants": [
+   "meritWorkerRole"
+  ],
+  "permission": null,
+  "params": [
+   {
+    "name": "securityFindingId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "claimToken",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "backoffSeconds",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "lastError",
+    "type": "NVARCHAR (200)",
+    "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
   "name": "logs.uspRecordSignInEvent",
   "kind": "write",
   "grants": [

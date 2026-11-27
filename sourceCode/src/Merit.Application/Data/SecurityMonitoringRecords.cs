@@ -37,8 +37,9 @@ public interface ISecurityMonitoringData
     Task<LedgerVerificationStateRow> GetLedgerVerificationStateAsync(CancellationToken ct = default);
     Task<AuditLedgerVerificationRow> VerifyAuditLedgerAsync(string? digestJson = null, bool useAutomaticStorage = false, bool requireDigest = false, string? anchorSource = null, int? digestFileCount = null, CancellationToken ct = default);
     Task<LedgerVerificationOutcomeRow> RecordLedgerVerificationOutcomeAsync(string anchorSource, bool verified, long? lastVerifiedBlockId, int? digestFileCount, string detail, CancellationToken ct = default);
-    Task<IReadOnlyList<NewSecurityFindingRow>> ClaimPendingLedgerAlertsAsync(int batchSize = 10, int leaseSeconds = 300, CancellationToken ct = default);
-    Task MarkSecurityFindingWebhookDeliveredAsync(Guid securityFindingId, Guid? claimToken = null, CancellationToken ct = default);
+    Task<IReadOnlyList<NewSecurityFindingRow>> ClaimPendingLedgerAlertsAsync(int batchSize = 1, int leaseSeconds = 300, CancellationToken ct = default);
+    Task<bool> MarkSecurityFindingWebhookDeliveredAsync(Guid securityFindingId, Guid? claimToken = null, CancellationToken ct = default);
+    Task RecordSecurityFindingWebhookFailureAsync(Guid securityFindingId, Guid claimToken, int backoffSeconds = 900, string? lastError = null, CancellationToken ct = default);
 }
 
 public sealed record BehaviorAnomalyQuery(
@@ -102,6 +103,8 @@ public sealed class NewSecurityFindingRow
     public string? DetailJson { get; init; }
     public DateTime DetectedUtc { get; init; }
     public Guid? ClaimToken { get; init; }
+    public DateTime? LeaseUntilUtc { get; init; }
+    public int AttemptCount { get; init; }
 }
 
 public sealed class SearchLogSummaryRow

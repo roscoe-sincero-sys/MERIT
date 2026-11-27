@@ -1439,13 +1439,13 @@ SET @Comments = CONCAT (N'Recorded ledger verification outcome: ', @anchorSource
     {
         "schema": "logs", "name": "uspClaimPendingLedgerAlerts", "kind": "write", "grants": WORKER, "ticket": "354",
         "desc": "Worker-only atomic claim-and-lease procedure for open, undelivered critical ledgerVerificationFailed "
-                "findings (#354). Uses UPDLOCK/READPAST/ROWLOCK so concurrent drainers never send the same alert.",
-        "params": """@batchSize    INT = 10
+                "findings (#354). Uses UPDLOCK/READPAST/ROWLOCK and orders never-attempted rows ahead of failed rows.",
+        "params": """@batchSize    INT = 1
 , @leaseSeconds INT = 300""",
         "key": "CONCAT (N'batchSize=', @batchSize, N', leaseSeconds=', @leaseSeconds)",
         "body": """
-DECLARE @top INT = CASE WHEN @batchSize BETWEEN 1 AND 100 THEN @batchSize ELSE 10 END;
-DECLARE @lease INT = CASE WHEN @leaseSeconds BETWEEN 10 AND 3600 THEN @leaseSeconds ELSE 300 END;
+DECLARE @top INT = CASE WHEN @batchSize BETWEEN 1 AND 100 THEN @batchSize ELSE 1 END;
+DECLARE @lease INT = CASE WHEN @leaseSeconds BETWEEN 60 AND 3600 THEN @leaseSeconds ELSE 300 END;
 DECLARE @now DATETIME2 (3) = SYSUTCDATETIME ();
 DECLARE @leaseUntil DATETIME2 (3) = DATEADD (SECOND, @lease, @now);
 DECLARE @claimToken UNIQUEIDENTIFIER = NEWID ();
@@ -1461,7 +1461,7 @@ DECLARE @claimed TABLE (securityFindingId UNIQUEIDENTIFIER NOT NULL);
        AND f.status = 'open'
        AND f.webhookDeliveredUtc IS NULL
        AND (f.webhookLeaseUntilUtc IS NULL OR f.webhookLeaseUntilUtc < @now)
-     ORDER BY f.detectedUtc ASC
+     ORDER BY f.webhookAttemptCount ASC, f.detectedUtc ASC
 )
 UPDATE f
    SET webhookClaimToken    = @claimToken,
@@ -1471,10 +1471,11 @@ OUTPUT inserted.securityFindingId INTO @claimed
   JOIN candidate AS c ON c.securityFindingId = f.securityFindingId;
 
 SELECT f.securityFindingId, f.rootTenantId, f.appUserId, f.ruleCode, f.severity, f.title, f.detailJson,
-       f.detectedUtc, f.webhookClaimToken AS claimToken
+       f.detectedUtc, f.webhookClaimToken AS claimToken, f.webhookLeaseUntilUtc AS leaseUntilUtc,
+       f.webhookAttemptCount AS attemptCount
   FROM logs.securityFinding AS f
   JOIN @claimed AS c ON c.securityFindingId = f.securityFindingId
- ORDER BY f.detectedUtc ASC;
+ ORDER BY f.webhookAttemptCount ASC, f.detectedUtc ASC;
 
 SET @Comments = CONCAT ((SELECT COUNT (*) FROM @claimed), N' pending ledger alert(s) claimed.');
 """,
@@ -1490,13 +1491,50 @@ SET @Comments = CONCAT ((SELECT COUNT (*) FROM @claimed), N' pending ledger aler
 UPDATE logs.securityFinding
    SET webhookDeliveredUtc  = SYSUTCDATETIME (),
        webhookClaimToken    = NULL,
-       webhookLeaseUntilUtc = NULL
+       webhookLeaseUntilUtc = NULL,
+       webhookLastError     = NULL
  WHERE securityFindingId = @securityFindingId
    AND isDeleted = 0
    AND webhookDeliveredUtc IS NULL
    AND (@claimToken IS NULL OR webhookClaimToken = @claimToken);
 
+SELECT @@ROWCOUNT AS updated;
 SET @Comments = CONCAT (N'Marked webhook delivered for securityFindingId=', @securityFindingId);
+""",
+    },
+    {
+        "schema": "logs", "name": "uspRecordSecurityFindingWebhookFailure", "kind": "write", "grants": WORKER, "ticket": "354",
+        "desc": "Worker-only recorder for failed webhook delivery cycles (#354). Increments webhookAttemptCount, "
+                "applies bounded exponential backoff to webhookLeaseUntilUtc so newer alerts are not starved, and "
+                "records sanitized webhookLastError.",
+        "params": """@securityFindingId UNIQUEIDENTIFIER
+, @claimToken        UNIQUEIDENTIFIER
+, @backoffSeconds    INT = 900
+, @lastError         NVARCHAR (200) = NULL""",
+        "key": "CONCAT (N'securityFindingId=', @securityFindingId)",
+        "body": """
+DECLARE @baseBackoff INT = CASE WHEN @backoffSeconds BETWEEN 60 AND 14400 THEN @backoffSeconds ELSE 900 END;
+DECLARE @now DATETIME2 (3) = SYSUTCDATETIME ();
+
+UPDATE logs.securityFinding
+   SET webhookAttemptCount  = webhookAttemptCount + 1,
+       webhookLastError     = LEFT (COALESCE (NULLIF (@lastError, N''), N'Webhook delivery failed.'), 200),
+       webhookClaimToken    = NULL,
+       webhookLeaseUntilUtc = DATEADD (
+           SECOND,
+           CASE
+               WHEN webhookAttemptCount >= 4 THEN 14400
+               WHEN @baseBackoff * POWER (2, webhookAttemptCount) > 14400 THEN 14400
+               ELSE @baseBackoff * POWER (2, webhookAttemptCount)
+           END,
+           @now)
+ WHERE securityFindingId = @securityFindingId
+   AND isDeleted = 0
+   AND webhookDeliveredUtc IS NULL
+   AND webhookClaimToken = @claimToken;
+
+SELECT @@ROWCOUNT AS updated;
+SET @Comments = CONCAT (N'Recorded webhook delivery failure for securityFindingId=', @securityFindingId);
 """,
     },
 ]

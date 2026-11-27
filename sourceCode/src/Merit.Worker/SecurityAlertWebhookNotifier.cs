@@ -127,9 +127,11 @@ public sealed partial class SecurityAlertWebhookNotifier : ISecurityAlertNotifie
     }
 
     /// <summary>
-    /// Atomically claims a bounded batch of open, undelivered <c>ledgerVerificationFailed</c> findings via
-    /// <c>logs.uspClaimPendingLedgerAlerts</c> (UPDLOCK/READPAST/ROWLOCK lease), posts each to the webhook, and marks
-    /// delivery with its claim token only after HTTP 2xx (#354). Safe under concurrent drainers and worker replicas.
+    /// Drains up to <paramref name="batchSize"/> open, undelivered <c>ledgerVerificationFailed</c> findings by claiming
+    /// ONE row immediately before its own send (<c>logs.uspClaimPendingLedgerAlerts</c> with UPDLOCK/READPAST/ROWLOCK),
+    /// ensuring the lease covers the full retry + acknowledgement budget for that row (#354). On failure, records
+    /// bounded exponential backoff via <c>logs.uspRecordSecurityFindingWebhookFailure</c> so failing rows cannot starve
+    /// newer critical alerts.
     /// </summary>
     internal static async Task<int> DrainPendingLedgerAlertsAsync(
         ISecurityMonitoringData data,
@@ -137,23 +139,53 @@ public sealed partial class SecurityAlertWebhookNotifier : ISecurityAlertNotifie
         ILogger logger,
         int batchSize = 10,
         int leaseSeconds = 300,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        Func<DateTime>? utcNow = null)
     {
         if (notifier is null)
         {
             return 0;
         }
 
+        int maxItems = Math.Clamp(batchSize, 1, 100);
+        // Single-row worst-case retry budget is ~34s (3 x 10s timeout + 1s + 3s backoff); enforce >= 60s lease floor.
+        int effectiveLeaseSeconds = Math.Clamp(leaseSeconds, 60, 3600);
+        Func<DateTime> clock = utcNow ?? (() => DateTime.UtcNow);
         int deliveredCount = 0;
+
         try
         {
-            var claimed = await data.ClaimPendingLedgerAlertsAsync(batchSize, leaseSeconds, ct).ConfigureAwait(false);
-            foreach (var finding in claimed)
+            for (int i = 0; i < maxItems; i++)
             {
+                ct.ThrowIfCancellationRequested();
+                var claimed = await data.ClaimPendingLedgerAlertsAsync(batchSize: 1, leaseSeconds: effectiveLeaseSeconds, ct: ct).ConfigureAwait(false);
+                if (claimed.Count == 0)
+                {
+                    break;
+                }
+
+                var finding = claimed[0];
+                // Never start a new HTTP POST if the claim lease has already expired (e.g. process pause / clock skew).
+                if (finding.LeaseUntilUtc is { } leaseUntil && clock() >= leaseUntil.AddSeconds(-5))
+                {
+                    continue;
+                }
+
                 if (await notifier.NotifyAsync([finding], ct).ConfigureAwait(false))
                 {
-                    await data.MarkSecurityFindingWebhookDeliveredAsync(finding.SecurityFindingId, finding.ClaimToken, CancellationToken.None).ConfigureAwait(false);
-                    deliveredCount++;
+                    if (await data.MarkSecurityFindingWebhookDeliveredAsync(finding.SecurityFindingId, finding.ClaimToken, CancellationToken.None).ConfigureAwait(false))
+                    {
+                        deliveredCount++;
+                    }
+                }
+                else if (finding.ClaimToken is { } token)
+                {
+                    await data.RecordSecurityFindingWebhookFailureAsync(
+                        finding.SecurityFindingId,
+                        token,
+                        backoffSeconds: 900,
+                        lastError: "Webhook delivery failed after bounded retries.",
+                        ct: CancellationToken.None).ConfigureAwait(false);
                 }
             }
         }

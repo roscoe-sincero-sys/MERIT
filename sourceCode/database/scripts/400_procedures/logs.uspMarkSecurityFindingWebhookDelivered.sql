@@ -91,12 +91,14 @@ BEGIN
         UPDATE logs.securityFinding
            SET webhookDeliveredUtc  = SYSUTCDATETIME (),
                webhookClaimToken    = NULL,
-               webhookLeaseUntilUtc = NULL
+               webhookLeaseUntilUtc = NULL,
+               webhookLastError     = NULL
          WHERE securityFindingId = @securityFindingId
            AND isDeleted = 0
            AND webhookDeliveredUtc IS NULL
            AND (@claimToken IS NULL OR webhookClaimToken = @claimToken);
 
+        SELECT @@ROWCOUNT AS updated;
         SET @Comments = CONCAT (N'Marked webhook delivered for securityFindingId=', @securityFindingId);
 
         -- =========================================================================================

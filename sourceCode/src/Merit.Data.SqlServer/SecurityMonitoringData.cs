@@ -162,9 +162,12 @@ public sealed class SecurityMonitoringData(Db db) : ISecurityMonitoringData
         => db.QuerySingleAsync<LedgerVerificationOutcomeRow>("logs.uspRecordLedgerVerificationOutcome",
             new { anchorSource, verified, lastVerifiedBlockId, digestFileCount, detail }, ct)!;
 
-    public Task<IReadOnlyList<NewSecurityFindingRow>> ClaimPendingLedgerAlertsAsync(int batchSize = 10, int leaseSeconds = 300, CancellationToken ct = default)
+    public Task<IReadOnlyList<NewSecurityFindingRow>> ClaimPendingLedgerAlertsAsync(int batchSize = 1, int leaseSeconds = 300, CancellationToken ct = default)
         => db.QueryAsync<NewSecurityFindingRow>("logs.uspClaimPendingLedgerAlerts", new { batchSize, leaseSeconds }, ct);
 
-    public Task MarkSecurityFindingWebhookDeliveredAsync(Guid securityFindingId, Guid? claimToken = null, CancellationToken ct = default)
-        => db.ExecuteAsync("logs.uspMarkSecurityFindingWebhookDelivered", new { securityFindingId, claimToken }, ct);
+    public async Task<bool> MarkSecurityFindingWebhookDeliveredAsync(Guid securityFindingId, Guid? claimToken = null, CancellationToken ct = default)
+        => await db.QuerySingleAsync<int>("logs.uspMarkSecurityFindingWebhookDelivered", new { securityFindingId, claimToken }, ct).ConfigureAwait(false) > 0;
+
+    public Task RecordSecurityFindingWebhookFailureAsync(Guid securityFindingId, Guid claimToken, int backoffSeconds = 900, string? lastError = null, CancellationToken ct = default)
+        => db.ExecuteAsync("logs.uspRecordSecurityFindingWebhookFailure", new { securityFindingId, claimToken, backoffSeconds, lastError }, ct);
 }

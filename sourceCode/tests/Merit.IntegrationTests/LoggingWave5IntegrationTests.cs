@@ -70,10 +70,11 @@ public sealed class LoggingWave5IntegrationTests
         var recordedRunIds = new List<Guid>();
         Guid? createdFindingId = null;
 
-        // Clean up ONLY a stale synthetic finding from an aborted prior test run; never delete a genuine finding.
-        var existingToday = await adminConn.QueryFirstOrDefaultAsync<(Guid securityFindingId, string? detailJson)?>(
-            "SELECT TOP (1) securityFindingId, detailJson FROM logs.securityFinding WHERE ruleCode = 'ledgerVerificationFailed' AND isDeleted = 0 AND fingerprint = CONCAT ('ledgerVerificationFailed|', CONVERT (CHAR (10), SYSUTCDATETIME (), 126));");
-        if (existingToday is { } existing)
+        // Clean up ONLY stale synthetic findings from an aborted prior test run; fail safely if ANY real
+        // open, undelivered ledgerVerificationFailed finding exists so claim calls never lease unrelated rows.
+        var existingOpen = (await adminConn.QueryAsync<(Guid securityFindingId, string? detailJson)>(
+            "SELECT securityFindingId, detailJson FROM logs.securityFinding WHERE ruleCode = 'ledgerVerificationFailed' AND isDeleted = 0 AND (status = 'open' AND webhookDeliveredUtc IS NULL OR fingerprint = CONCAT ('ledgerVerificationFailed|', CONVERT (CHAR (10), SYSUTCDATETIME (), 126)));")).ToList();
+        foreach (var existing in existingOpen)
         {
             if (existing.detailJson?.Contains("Synthetic #354", StringComparison.Ordinal) == true
                 || existing.detailJson?.Contains("non-empty external digest JSON payload is required", StringComparison.Ordinal) == true)
@@ -82,7 +83,7 @@ public sealed class LoggingWave5IntegrationTests
             }
             else
             {
-                Assert.Fail($"Pre-existing non-synthetic ledgerVerificationFailed finding {existing.securityFindingId} owns today's UTC fingerprint; refusing to delete it.");
+                Assert.Fail($"Pre-existing non-synthetic ledgerVerificationFailed finding {existing.securityFindingId} exists in the outbox or today's fingerprint; refusing to delete or lease it.");
             }
         }
 
@@ -141,31 +142,37 @@ public sealed class LoggingWave5IntegrationTests
                 Assert.Null(emptyReq.nativeBlockId);
                 Assert.True(emptyReq.outcomeRecorded);
 
-                // #354: Claim pending ledger alert atomically as meritWorker, verify second concurrent claim gets nothing,
-                // verify wrong claimToken cannot mark delivered, and matching claimToken marks delivered cleanly.
+                // #354: Claim pending ledger alert atomically (batchSize=1) as meritWorker, verify second immediate claim
+                // gets nothing, verify wrong claimToken returns 0, and matching claimToken returns 1.
                 var claimed1 = (await workerConn.QueryAsync<NewSecurityFindingRow>(
-                    "logs.uspClaimPendingLedgerAlerts", new { batchSize = 10, leaseSeconds = 300 }, commandType: CommandType.StoredProcedure)).ToList();
-                var claimedFinding = Assert.Single(claimed1, p => p.RuleCode == "ledgerVerificationFailed" && p.Severity == "critical");
+                    "logs.uspClaimPendingLedgerAlerts", new { batchSize = 1, leaseSeconds = 300 }, commandType: CommandType.StoredProcedure)).ToList();
+                var claimedFinding = Assert.Single(claimed1);
+                Assert.Equal("ledgerVerificationFailed", claimedFinding.RuleCode);
+                Assert.Equal("critical", claimedFinding.Severity);
+                Assert.Contains("non-empty external digest JSON payload is required", claimedFinding.DetailJson ?? "", StringComparison.Ordinal);
                 Assert.NotEqual(Guid.Empty, claimedFinding.SecurityFindingId);
                 Assert.NotEqual(Guid.Empty, claimedFinding.RootTenantId);
                 Assert.NotNull(claimedFinding.ClaimToken);
+                Assert.NotNull(claimedFinding.LeaseUntilUtc);
                 createdFindingId = claimedFinding.SecurityFindingId;
 
                 var claimed2 = (await workerConn.QueryAsync<NewSecurityFindingRow>(
-                    "logs.uspClaimPendingLedgerAlerts", new { batchSize = 10, leaseSeconds = 300 }, commandType: CommandType.StoredProcedure)).ToList();
-                Assert.DoesNotContain(claimed2, p => p.SecurityFindingId == createdFindingId);
+                    "logs.uspClaimPendingLedgerAlerts", new { batchSize = 1, leaseSeconds = 300 }, commandType: CommandType.StoredProcedure)).ToList();
+                Assert.Empty(claimed2);
 
-                // Wrong claimToken must NOT mark delivered.
-                await workerConn.ExecuteAsync(
+                // Wrong claimToken must NOT mark delivered (returns 0 updated rows).
+                int wrongUpdated = await workerConn.QuerySingleAsync<int>(
                     "logs.uspMarkSecurityFindingWebhookDelivered",
                     new { securityFindingId = createdFindingId.Value, claimToken = Guid.NewGuid() },
                     commandType: CommandType.StoredProcedure);
+                Assert.Equal(0, wrongUpdated);
 
-                // Matching claimToken marks delivered and clears the lease.
-                await workerConn.ExecuteAsync(
+                // Matching claimToken marks delivered (returns 1) and clears the lease.
+                int matchedUpdated = await workerConn.QuerySingleAsync<int>(
                     "logs.uspMarkSecurityFindingWebhookDelivered",
                     new { securityFindingId = createdFindingId.Value, claimToken = claimedFinding.ClaimToken },
                     commandType: CommandType.StoredProcedure);
+                Assert.Equal(1, matchedUpdated);
 
                 // Second failure on the same UTC day deduplicates cleanly (no second finding created).
                 var repeatFail = await workerConn.QuerySingleAsync<(Guid ledgerVerificationRunId, bool findingCreated, Guid? securityFindingId, Guid? rootTenantId, DateTime detectedUtc)>(

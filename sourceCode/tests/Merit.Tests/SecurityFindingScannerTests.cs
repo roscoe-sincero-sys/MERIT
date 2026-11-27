@@ -33,7 +33,8 @@ public sealed class SecurityFindingScannerTests
     {
         public Func<IReadOnlyList<NewSecurityFindingRow>> OnRunScan { get; set; } = () => [];
         public Func<int, int, IReadOnlyList<NewSecurityFindingRow>> OnClaimPendingLedgerAlerts { get; set; } = (_, _) => [];
-        public Action<Guid, Guid?> OnMarkDelivered { get; set; } = (_, _) => { };
+        public Func<Guid, Guid?, bool> OnMarkDelivered { get; set; } = (_, _) => true;
+        public Action<Guid, Guid, int, string?> OnRecordFailure { get; set; } = (_, _, _, _) => { };
 
         protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
         {
@@ -47,7 +48,11 @@ public sealed class SecurityFindingScannerTests
             }
             if (targetMethod?.Name == nameof(ISecurityMonitoringData.MarkSecurityFindingWebhookDeliveredAsync))
             {
-                OnMarkDelivered((Guid)args![0]!, (Guid?)args[1]);
+                return Task.FromResult(OnMarkDelivered((Guid)args![0]!, (Guid?)args[1]));
+            }
+            if (targetMethod?.Name == nameof(ISecurityMonitoringData.RecordSecurityFindingWebhookFailureAsync))
+            {
+                OnRecordFailure((Guid)args![0]!, (Guid)args[1]!, (int)args[2]!, (string?)args[3]);
                 return Task.CompletedTask;
             }
 
@@ -57,13 +62,15 @@ public sealed class SecurityFindingScannerTests
         public static ISecurityMonitoringData Create(
             Func<IReadOnlyList<NewSecurityFindingRow>> onRunScan,
             Func<int, int, IReadOnlyList<NewSecurityFindingRow>>? onClaimPendingLedgerAlerts = null,
-            Action<Guid, Guid?>? onMarkDelivered = null)
+            Func<Guid, Guid?, bool>? onMarkDelivered = null,
+            Action<Guid, Guid, int, string?>? onRecordFailure = null)
         {
             var proxy = DispatchProxy.Create<ISecurityMonitoringData, StubSecurityMonitoringProxy>();
             var impl = (StubSecurityMonitoringProxy)(object)proxy;
             impl.OnRunScan = onRunScan;
             if (onClaimPendingLedgerAlerts is not null) impl.OnClaimPendingLedgerAlerts = onClaimPendingLedgerAlerts;
             if (onMarkDelivered is not null) impl.OnMarkDelivered = onMarkDelivered;
+            if (onRecordFailure is not null) impl.OnRecordFailure = onRecordFailure;
             return proxy;
         }
     }
@@ -96,7 +103,7 @@ public sealed class SecurityFindingScannerTests
         var services = new ServiceCollection();
         services.AddSingleton(StubSecurityMonitoringProxy.Create(
             () => findings,
-            onMarkDelivered: (id, token) => delivered.Add((id, token))));
+            onMarkDelivered: (id, token) => { delivered.Add((id, token)); return true; }));
         var provider = services.BuildServiceProvider();
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -175,18 +182,18 @@ public sealed class SecurityFindingScannerTests
 
         // 2. Dedicated LedgerAlertOutboxWorker drains pending ledger alerts even if behavior scans are failing.
         bool claimedOnce = false;
-        int requestedBatchSize = 0;
+        var claimBatchSizes = new List<int>();
         var services = new ServiceCollection();
         services.AddSingleton(StubSecurityMonitoringProxy.Create(
             onRunScan: () => throw new InvalidOperationException("Behavior scan unavailable"),
             onClaimPendingLedgerAlerts: (batchSize, _) =>
             {
-                requestedBatchSize = batchSize;
+                claimBatchSizes.Add(batchSize);
                 if (claimedOnce) return [];
                 claimedOnce = true;
                 return [pendingLedger];
             },
-            onMarkDelivered: (id, token) => delivered.Add((id, token))));
+            onMarkDelivered: (id, token) => { delivered.Add((id, token)); return true; }));
         var provider = services.BuildServiceProvider();
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -210,7 +217,8 @@ public sealed class SecurityFindingScannerTests
 
         int count = await outboxWorker.RunDrainCycleAsync(CancellationToken.None);
         Assert.Equal(1, count);
-        Assert.Equal(7, requestedBatchSize);
+        // Per-row claim guarantees each row receives a full lease right before its own HTTP send.
+        Assert.All(claimBatchSizes, b => Assert.Equal(1, b));
         Assert.Single(postedBodies);
         Assert.Contains("ledgerVerificationFailed", postedBodies[0], StringComparison.Ordinal);
         Assert.Single(delivered);

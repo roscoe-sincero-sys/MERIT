@@ -13,7 +13,7 @@ CreateDate:   2026-10-24
 ========================================================================================================================
 Description:
 
-Worker-only atomic claim-and-lease procedure for open, undelivered critical ledgerVerificationFailed findings (#354). Uses UPDLOCK/READPAST/ROWLOCK so concurrent drainers never send the same alert.
+Worker-only atomic claim-and-lease procedure for open, undelivered critical ledgerVerificationFailed findings (#354). Uses UPDLOCK/READPAST/ROWLOCK and orders never-attempted rows ahead of failed rows.
 
 ========================================================================================================================
 Requirements and Key Dependencies:
@@ -45,7 +45,7 @@ Description:	Initial version.
 
 ***********************************************************************************************************************/
 CREATE OR ALTER PROCEDURE logs.uspClaimPendingLedgerAlerts
-      @batchSize    INT = 10
+      @batchSize    INT = 1
       , @leaseSeconds INT = 300
 AS
 BEGIN
@@ -88,8 +88,8 @@ BEGIN
         -- ===== The procedure's own work starts here. Everything above and below is boilerplate. ==
         -- =========================================================================================
 
-        DECLARE @top INT = CASE WHEN @batchSize BETWEEN 1 AND 100 THEN @batchSize ELSE 10 END;
-        DECLARE @lease INT = CASE WHEN @leaseSeconds BETWEEN 10 AND 3600 THEN @leaseSeconds ELSE 300 END;
+        DECLARE @top INT = CASE WHEN @batchSize BETWEEN 1 AND 100 THEN @batchSize ELSE 1 END;
+        DECLARE @lease INT = CASE WHEN @leaseSeconds BETWEEN 60 AND 3600 THEN @leaseSeconds ELSE 300 END;
         DECLARE @now DATETIME2 (3) = SYSUTCDATETIME ();
         DECLARE @leaseUntil DATETIME2 (3) = DATEADD (SECOND, @lease, @now);
         DECLARE @claimToken UNIQUEIDENTIFIER = NEWID ();
@@ -105,7 +105,7 @@ BEGIN
                AND f.status = 'open'
                AND f.webhookDeliveredUtc IS NULL
                AND (f.webhookLeaseUntilUtc IS NULL OR f.webhookLeaseUntilUtc < @now)
-             ORDER BY f.detectedUtc ASC
+             ORDER BY f.webhookAttemptCount ASC, f.detectedUtc ASC
         )
         UPDATE f
            SET webhookClaimToken    = @claimToken,
@@ -115,10 +115,11 @@ BEGIN
           JOIN candidate AS c ON c.securityFindingId = f.securityFindingId;
 
         SELECT f.securityFindingId, f.rootTenantId, f.appUserId, f.ruleCode, f.severity, f.title, f.detailJson,
-               f.detectedUtc, f.webhookClaimToken AS claimToken
+               f.detectedUtc, f.webhookClaimToken AS claimToken, f.webhookLeaseUntilUtc AS leaseUntilUtc,
+               f.webhookAttemptCount AS attemptCount
           FROM logs.securityFinding AS f
           JOIN @claimed AS c ON c.securityFindingId = f.securityFindingId
-         ORDER BY f.detectedUtc ASC;
+         ORDER BY f.webhookAttemptCount ASC, f.detectedUtc ASC;
 
         SET @Comments = CONCAT ((SELECT COUNT (*) FROM @claimed), N' pending ledger alert(s) claimed.');
 
@@ -203,7 +204,7 @@ EXEC util.uspSetObjectDescription
       @SchemaName  = N'logs'
     , @ObjectType  = N'PROCEDURE'
     , @ObjectName  = N'uspClaimPendingLedgerAlerts'
-    , @Description = N'Worker-only atomic claim-and-lease procedure for open, undelivered critical ledgerVerificationFailed findings (#354). Uses UPDLOCK/READPAST/ROWLOCK so concurrent drainers never send the same alert.';
+    , @Description = N'Worker-only atomic claim-and-lease procedure for open, undelivered critical ledgerVerificationFailed findings (#354). Uses UPDLOCK/READPAST/ROWLOCK and orders never-attempted rows ahead of failed rows.';
 GO
 
 IF DATABASE_PRINCIPAL_ID (N'meritWorkerRole') IS NOT NULL

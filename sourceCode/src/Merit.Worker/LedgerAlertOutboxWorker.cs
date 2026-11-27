@@ -32,7 +32,7 @@ public sealed class LedgerAlertOutboxWorker(
     internal async Task<int> RunDrainCycleAsync(CancellationToken ct)
     {
         int batchSize = Math.Clamp(configuration.GetValue("SecurityAlerts:OutboxBatchSize", DefaultBatchSize), 1, 100);
-        int leaseSeconds = Math.Clamp(configuration.GetValue("SecurityAlerts:OutboxLeaseSeconds", DefaultLeaseSeconds), 10, 3600);
+        int leaseSeconds = Math.Clamp(configuration.GetValue("SecurityAlerts:OutboxLeaseSeconds", DefaultLeaseSeconds), 60, 3600);
         using var scope = scopes.CreateScope();
         var data = scope.ServiceProvider.GetRequiredService<ISecurityMonitoringData>();
         return await SecurityAlertWebhookNotifier.DrainPendingLedgerAlertsAsync(data, notifier, logger, batchSize, leaseSeconds, ct).ConfigureAwait(false);

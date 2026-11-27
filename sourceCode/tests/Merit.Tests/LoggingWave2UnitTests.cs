@@ -275,9 +275,11 @@ public sealed class LoggingWave2UnitTests
             => Task.FromResult(new AuditLedgerVerificationRow { Verified = true });
         public Task<LedgerVerificationOutcomeRow> RecordLedgerVerificationOutcomeAsync(string anchorSource, bool verified, long? lastVerifiedBlockId, int? digestFileCount, string detail, CancellationToken ct = default)
             => Task.FromResult(new LedgerVerificationOutcomeRow { LedgerVerificationRunId = Guid.NewGuid() });
-        public Task<IReadOnlyList<NewSecurityFindingRow>> ClaimPendingLedgerAlertsAsync(int batchSize = 10, int leaseSeconds = 300, CancellationToken ct = default)
+        public Task<IReadOnlyList<NewSecurityFindingRow>> ClaimPendingLedgerAlertsAsync(int batchSize = 1, int leaseSeconds = 300, CancellationToken ct = default)
             => Task.FromResult<IReadOnlyList<NewSecurityFindingRow>>([]);
-        public Task MarkSecurityFindingWebhookDeliveredAsync(Guid securityFindingId, Guid? claimToken = null, CancellationToken ct = default)
+        public Task<bool> MarkSecurityFindingWebhookDeliveredAsync(Guid securityFindingId, Guid? claimToken = null, CancellationToken ct = default)
+            => Task.FromResult(true);
+        public Task RecordSecurityFindingWebhookFailureAsync(Guid securityFindingId, Guid claimToken, int backoffSeconds = 900, string? lastError = null, CancellationToken ct = default)
             => Task.CompletedTask;
     }
 }
