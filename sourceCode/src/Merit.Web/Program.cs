@@ -28,6 +28,7 @@ var services = builder.Services;
 
 // ---------------------------------------------------------------------------------------------- application layers
 services.AddHttpContextAccessor();
+services.AddSingleton<IUserAgentHasher, UserAgentHasher>();
 services.AddScoped<ICurrentSession, WebCurrentSession>();
 services.AddScoped<IRequestAuditContext, WebRequestAuditContext>();
 services.AddScoped<SessionRenewal>();

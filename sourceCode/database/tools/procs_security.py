@@ -1165,4 +1165,96 @@ SELECT COUNT (*) AS failureCount,
 EXEC logs.uspDdlAuditVerifyInternal @ProblemsOnly = 1;
 """,
     },
+    {
+        "schema": "logs", "name": "uspPurgeExecutionLog", "kind": "write", "no_tx": True, "grants": WORKER, "ticket": "334",
+        "desc": "Worker-only batched retention purger for logs.ExecutionLog (#334). Hard-deletes internal execution "
+                "instrumentation rows older than @retentionDays (30..3650, default 90) in independently committed "
+                "5,000-row batches with a 50 ms yield between full batches (documented exception to no-hard-delete).",
+        "params": "@retentionDays INT = 90",
+        "key": "CONCAT (N'retentionDays=', @retentionDays)",
+        "validate": """IF @retentionDays IS NULL OR @retentionDays NOT BETWEEN 30 AND 3650
+BEGIN
+    ;THROW 51422, N'ExecutionLog retention must be between 30 and 3650 days.', 1;
+END;""",
+        "body": """
+DECLARE @cutoff DATETIME2 (3) = DATEADD (DAY, -@retentionDays, SYSUTCDATETIME ());
+DECLARE @total INT = 0, @batch INT = 1;
+
+WHILE @batch > 0
+BEGIN
+    BEGIN TRANSACTION;
+    DELETE TOP (5000)
+      FROM logs.ExecutionLog
+     WHERE StartDateUtc < @cutoff;
+    SET @batch = @@ROWCOUNT;
+    COMMIT TRANSACTION;
+    SET @total += @batch;
+    IF @batch = 5000
+    BEGIN
+        WAITFOR DELAY '00:00:00.050';
+    END;
+END;
+
+SELECT @total AS purged;
+SET @Comments = CONCAT (N'Purged ', @total, N' ExecutionLog rows older than ', @retentionDays, N' days.');
+""",
+    },
+    {
+        "schema": "logs", "name": "uspVerifyAuditLedgerInternal", "kind": "read", "grants": [], "ticket": "334",
+        "execute_as_owner": True,
+        "desc": "Ungranted owner-context helper for logs.uspVerifyAuditLedger: generates a SQL Server ledger digest "
+                "(when @digestJson is NULL) and runs sys.sp_verify_database_ledger (#334).",
+        "params": "@digestJson NVARCHAR (MAX) = NULL",
+        "key": "N'verifyAuditLedger=1'",
+        "body": """
+DECLARE @effectiveDigest NVARCHAR (MAX) = NULLIF (LTRIM (RTRIM (@digestJson)), N'');
+DECLARE @verified BIT = 0;
+DECLARE @lastBlockId BIGINT = NULL;
+DECLARE @detail NVARCHAR (500) = N'OK';
+DECLARE @now DATETIME2 (3) = SYSUTCDATETIME ();
+
+BEGIN TRY
+    IF @effectiveDigest IS NULL
+    BEGIN
+        DECLARE @gen TABLE (latest_digest NVARCHAR (MAX));
+        INSERT @gen (latest_digest)
+        EXEC sys.sp_generate_database_ledger_digest;
+        SELECT TOP (1) @effectiveDigest = latest_digest FROM @gen;
+    END;
+
+    IF @effectiveDigest IS NULL
+    BEGIN
+        SET @detail = N'No database ledger digest was returned.';
+    END
+    ELSE
+    BEGIN
+        -- sys.sp_verify_database_ledger cannot run inside INSERT ... EXEC (error 574); call directly.
+        EXEC sys.sp_verify_database_ledger @digest_locations = @effectiveDigest;
+        SET @lastBlockId = (SELECT MAX (block_id) FROM sys.database_ledger_blocks);
+        SET @verified = 1;
+        SET @detail = CONCAT (N'Ledger verified up to block ', COALESCE (CAST (@lastBlockId AS NVARCHAR (30)), N'unknown'), N'.');
+    END;
+END TRY
+BEGIN CATCH
+    SET @verified = 0;
+    SET @detail = CONCAT (N'Ledger verification failed (error ', ERROR_NUMBER (), N').');
+END CATCH;
+
+SELECT @verified AS verified,
+       @lastBlockId AS lastVerifiedBlockId,
+       @effectiveDigest AS digestJson,
+       @now AS verifiedUtc,
+       @detail AS detail;
+""",
+    },
+    {
+        "schema": "logs", "name": "uspVerifyAuditLedger", "kind": "read", "grants": WORKER, "ticket": "334",
+        "desc": "Worker-only audit ledger digest generator and verifier (#334). Generates a fresh digest when "
+                "@digestJson is NULL or verifies a previously stored external digest against the database ledger.",
+        "params": "@digestJson NVARCHAR (MAX) = NULL",
+        "key": "N'verifyAuditLedger=1'",
+        "body": """
+EXEC logs.uspVerifyAuditLedgerInternal @digestJson = @digestJson;
+""",
+    },
 ]

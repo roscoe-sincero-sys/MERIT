@@ -31,6 +31,10 @@ public interface ISecurityMonitoringData
     Task<UserBehaviorSummary?> GetUserBehaviorSummaryAsync(Guid appUserId, int days = 30, CancellationToken ct = default);
     Task<OperationalLogsReport> GetOperationalLogsAsync(int hours = 24, int top = 100, CancellationToken ct = default);
     Task<OperationalIntegrityCheck> CheckOperationalIntegrityAsync(int minutes = 15, CancellationToken ct = default);
+
+    // #334 ExecutionLog retention & audit ledger digest verification
+    Task<int> PurgeExecutionLogAsync(int retentionDays, CancellationToken ct = default);
+    Task<AuditLedgerVerificationRow> VerifyAuditLedgerAsync(string? digestJson = null, CancellationToken ct = default);
 }
 
 public sealed record BehaviorAnomalyQuery(
@@ -320,3 +324,12 @@ public sealed class ExecutionFailureSpikeRow
 public sealed record OperationalIntegrityCheck(
     ExecutionFailureSpikeRow ExecutionSummary,
     IReadOnlyList<DdlAuditVerifyRow> DdlProblems);
+
+public sealed class AuditLedgerVerificationRow
+{
+    public bool Verified { get; init; }
+    public long? LastVerifiedBlockId { get; init; }
+    public string? DigestJson { get; init; }
+    public DateTime VerifiedUtc { get; init; }
+    public string Detail { get; init; } = string.Empty;
+}

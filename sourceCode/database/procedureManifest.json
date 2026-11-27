@@ -8694,6 +8694,22 @@
   ]
  },
  {
+  "name": "logs.uspPurgeExecutionLog",
+  "kind": "write",
+  "grants": [
+   "meritWorkerRole"
+  ],
+  "permission": null,
+  "params": [
+   {
+    "name": "retentionDays",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
   "name": "logs.uspPurgeScreenVisits",
   "kind": "write",
   "grants": [
@@ -9154,6 +9170,36 @@
     "name": "status",
     "type": "VARCHAR (20)",
     "hasDefault": false,
+    "isOutput": false
+   }
+  ]
+ },
+ {
+  "name": "logs.uspVerifyAuditLedger",
+  "kind": "read",
+  "grants": [
+   "meritWorkerRole"
+  ],
+  "permission": null,
+  "params": [
+   {
+    "name": "digestJson",
+    "type": "NVARCHAR (MAX)",
+    "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
+  "name": "logs.uspVerifyAuditLedgerInternal",
+  "kind": "read",
+  "grants": [],
+  "permission": null,
+  "params": [
+   {
+    "name": "digestJson",
+    "type": "NVARCHAR (MAX)",
+    "hasDefault": true,
     "isOutput": false
    }
   ]

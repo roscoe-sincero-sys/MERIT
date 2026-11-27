@@ -101,4 +101,23 @@ public sealed class SecurityMonitoringData(Db db) : ISecurityMonitoringData
             var problems = (await g.ReadAsync<DdlAuditVerifyRow>().ConfigureAwait(false)).AsList();
             return new OperationalIntegrityCheck(summary, problems);
         }, ct);
+
+    public Task<int> PurgeExecutionLogAsync(int retentionDays, CancellationToken ct = default)
+        => db.QuerySingleAsync<int>("logs.uspPurgeExecutionLog", new { retentionDays }, ct)!;
+
+    public Task<AuditLedgerVerificationRow> VerifyAuditLedgerAsync(string? digestJson = null, CancellationToken ct = default)
+        => db.MultipleAsync("logs.uspVerifyAuditLedger", new { digestJson }, async g =>
+        {
+            // sys.sp_verify_database_ledger emits a first result set (last_verified_block_id) on success before our summary row.
+            AuditLedgerVerificationRow? summary = null;
+            while (!g.IsConsumed)
+            {
+                var row = await g.ReadFirstOrDefaultAsync<AuditLedgerVerificationRow>().ConfigureAwait(false);
+                if (row is not null)
+                {
+                    summary = row;
+                }
+            }
+            return summary ?? new AuditLedgerVerificationRow { Verified = false, Detail = "No verification result returned." };
+        }, ct);
 }

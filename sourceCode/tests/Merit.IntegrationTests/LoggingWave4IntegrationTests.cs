@@ -547,6 +547,8 @@ public sealed class LoggingWave4IntegrationTests(MeritFixture fixture)
                 Assert.True(drySummary.isDryRun);
                 Assert.Equal(0, drySummary.totalRemainingUnscrubbed);
                 Assert.True(drySummary.totalRowsPurged > 0);
+                // #352: Single-pass live-row scrub (SESSION_CONTEXT AppUser = 'MERIT tenant purge') avoids double-updating ~430k live rows.
+                Assert.True(drySummary.totalRowsPurged < 550000, $"Expected single-pass purge count (<550k), got {drySummary.totalRowsPurged}");
             }
             int mdLiveAfterDryRun = await conn.ExecuteScalarAsync<int>(
                 "SELECT COUNT (*) FROM dbo.person WHERE rootTenantId = @r AND isDeleted = 0", new { r = mdRoot.tenantId });

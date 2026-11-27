@@ -437,6 +437,16 @@ def _purge_body() -> str:
         "UPDATE dbo.jobQueue SET jobStatus = 'failed', modifiedBy = N'MERIT tenant fence' WHERE rootTenantId = @rootTenantId AND jobStatus IN ('queued', 'running');",
         "COMMIT TRANSACTION;",
         "",
+        "-- #352: When SESSION_CONTEXT (N'AppUser') is unset (operator runbook), set it to the purge marker for Step 2",
+        "-- so trg_au_updt_* stamps deletedBy = N'MERIT tenant purge' in a single pass instead of updating live rows twice.",
+        "DECLARE @setPurgeAppUser BIT = 0;",
+        "IF SESSION_CONTEXT (N'AppUser') IS NULL",
+        "BEGIN",
+        "    EXEC sys.sp_set_session_context @key = N'AppUser', @value = N'MERIT tenant purge', @read_only = 0;",
+        "    SET @setPurgeAppUser = 1;",
+        "END;",
+        "",
+        "BEGIN TRY",
         "-- Step 2 (B4, I16): Scrub and soft-delete all 70 mutable tenant/auth tables in independently committed 5,000-row batches.",
     ]
     for s, n, pred in ALL_MUTABLE_SPECS:
@@ -461,6 +471,18 @@ def _purge_body() -> str:
             f"END;\n"
             f"INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'{full}', @n, 0, 'scrubbedAndSoftDeleted');"
         )
+    lines.append("END TRY")
+    lines.append("BEGIN CATCH")
+    lines.append("    IF @setPurgeAppUser = 1")
+    lines.append("    BEGIN")
+    lines.append("        EXEC sys.sp_set_session_context @key = N'AppUser', @value = NULL, @read_only = 0;")
+    lines.append("    END;")
+    lines.append("    ;THROW;")
+    lines.append("END CATCH;")
+    lines.append("IF @setPurgeAppUser = 1")
+    lines.append("BEGIN")
+    lines.append("    EXEC sys.sp_set_session_context @key = N'AppUser', @value = NULL, @read_only = 0;")
+    lines.append("END;")
     lines.append("")
     lines.append("-- Step 3 (I18, Codex #2/#4): Final verification pass over all 70 mutable tables after fencing and purging.")
     for s, n, pred in ALL_MUTABLE_SPECS:
