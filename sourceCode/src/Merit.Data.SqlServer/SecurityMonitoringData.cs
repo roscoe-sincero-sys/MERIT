@@ -91,7 +91,8 @@ public sealed class SecurityMonitoringData(Db db) : ISecurityMonitoringData
             var failures = (await g.ReadAsync<ExecutionLogFailureRow>().ConfigureAwait(false)).AsList();
             var ddl = (await g.ReadAsync<DdlChangeRow>().ConfigureAwait(false)).AsList();
             var verify = (await g.ReadAsync<DdlAuditVerifyRow>().ConfigureAwait(false)).AsList();
-            return new OperationalLogsReport(failures, ddl, verify);
+            var ledger = await g.ReadSingleOrDefaultAsync<AuditLedgerStatusRow>().ConfigureAwait(false);
+            return new OperationalLogsReport(failures, ddl, verify, ledger);
         }, ct);
 
     public Task<OperationalIntegrityCheck> CheckOperationalIntegrityAsync(int minutes = 15, CancellationToken ct = default)
@@ -104,6 +105,9 @@ public sealed class SecurityMonitoringData(Db db) : ISecurityMonitoringData
 
     public Task<int> PurgeExecutionLogAsync(int retentionDays, CancellationToken ct = default)
         => db.QuerySingleAsync<int>("logs.uspPurgeExecutionLog", new { retentionDays }, ct)!;
+
+    public Task<LedgerVerificationStateRow> GetLedgerVerificationStateAsync(CancellationToken ct = default)
+        => db.QuerySingleAsync<LedgerVerificationStateRow>("logs.uspGetLedgerVerificationState", null, ct)!;
 
     public Task<AuditLedgerVerificationRow> VerifyAuditLedgerAsync(string? digestJson = null, bool useAutomaticStorage = false, bool requireDigest = false, CancellationToken ct = default)
         => db.MultipleAsync("logs.uspVerifyAuditLedger", new { digestJson, useAutomaticStorage, requireDigest }, async g =>
@@ -121,7 +125,7 @@ public sealed class SecurityMonitoringData(Db db) : ISecurityMonitoringData
             return summary ?? new AuditLedgerVerificationRow { Verified = false, Detail = "No verification result returned." };
         }, ct);
 
-    public Task<int?> RecordLedgerVerificationOutcomeAsync(string anchorSource, bool verified, long? lastVerifiedBlockId, int? digestFileCount, string detail, CancellationToken ct = default)
-        => db.QuerySingleAsync<int?>("logs.uspRecordLedgerVerificationOutcome",
-            new { anchorSource, verified, lastVerifiedBlockId, digestFileCount, detail }, ct);
+    public Task<Guid> RecordLedgerVerificationOutcomeAsync(string anchorSource, bool verified, long? lastVerifiedBlockId, int? digestFileCount, string detail, CancellationToken ct = default)
+        => db.QuerySingleAsync<Guid>("logs.uspRecordLedgerVerificationOutcome",
+            new { anchorSource, verified, lastVerifiedBlockId, digestFileCount, detail }, ct)!;
 }

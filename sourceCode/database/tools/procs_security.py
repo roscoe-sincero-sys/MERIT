@@ -1143,37 +1143,36 @@ SELECT TOP (@limit)
  WHERE RecordedUtc >= @since
  ORDER BY ChangeId DESC;
 
--- 3. DDL audit integrity posture + latest audit-ledger verification outcome (#330, #334)
-DECLARE @checks TABLE (
-    CheckName NVARCHAR (200) NOT NULL,
-    Status    NVARCHAR (40)  NOT NULL,
-    Detail    NVARCHAR (MAX) NULL
-);
-INSERT @checks (CheckName, Status, Detail)
+-- 3. DDL audit integrity posture (called in owner context ONLY after caller-context security.investigate check above)
 EXEC logs.uspDdlAuditVerifyInternal @ProblemsOnly = 0;
 
-INSERT @checks (CheckName, Status, Detail)
-SELECT TOP (1)
-       N'auditLedgerVerification',
-       CASE
-           WHEN r.verified = 0 THEN N'FAIL'
-           WHEN r.anchorSource = 'unanchored' THEN N'WARN'
-           ELSE N'OK'
-       END,
-       LEFT (CONCAT (CONVERT (VARCHAR (23), r.verifiedUtc, 126), N'Z [', r.anchorSource,
-                     CASE WHEN r.lastVerifiedBlockId IS NOT NULL THEN CONCAT (N', block ', r.lastVerifiedBlockId) ELSE N'' END,
-                     N']: ', r.detail), 500)
-  FROM logs.ledgerVerificationRun AS r
- WHERE r.isDeleted = 0
- ORDER BY r.verifiedUtc DESC;
-
-IF @@ROWCOUNT = 0
+-- 4. Latest audit-ledger verification run (#334 — separate from DDL checks so exports keep ddlAuditVerify distinct)
+IF EXISTS (SELECT 1 FROM logs.ledgerVerificationRun WHERE isDeleted = 0)
 BEGIN
-    INSERT @checks (CheckName, Status, Detail)
-    VALUES (N'auditLedgerVerification', N'WARN', N'No scheduled audit-ledger verification run has been recorded yet.');
+    SELECT TOP (1)
+           verifiedUtc,
+           anchorSource,
+           CASE
+               WHEN verified = 0 THEN N'FAIL'
+               WHEN anchorSource = 'unanchored' THEN N'WARN'
+               ELSE N'OK'
+           END AS status,
+           lastVerifiedBlockId,
+           digestFileCount,
+           detail
+      FROM logs.ledgerVerificationRun
+     WHERE isDeleted = 0
+     ORDER BY verifiedUtc DESC;
+END
+ELSE
+BEGIN
+    SELECT CAST (NULL AS DATETIME2 (3)) AS verifiedUtc,
+           'unanchored' AS anchorSource,
+           N'WARN' AS status,
+           CAST (NULL AS BIGINT) AS lastVerifiedBlockId,
+           CAST (NULL AS INT) AS digestFileCount,
+           N'No scheduled audit-ledger verification run has been recorded yet.' AS detail;
 END;
-
-SELECT CheckName, Status, Detail FROM @checks;
 """,
     },
     {
@@ -1249,16 +1248,29 @@ DECLARE @hasAutoDigest BIT = CASE WHEN EXISTS (SELECT 1 FROM sys.database_ledger
 BEGIN TRY
     IF @useAutomaticStorage = 1
     BEGIN
-        IF @hasAutoDigest = 0
+        DECLARE @autoLocations NVARCHAR (MAX) = (
+            SELECT path, last_digest_block_id, is_current
+              FROM sys.database_ledger_digest_locations
+             FOR JSON AUTO, ROOT ('locations')
+        );
+        IF @hasAutoDigest = 0 OR @autoLocations IS NULL
         BEGIN
             SET @detail = N'No active automatic ledger digest storage endpoint is configured.';
         END
         ELSE
         BEGIN
-            EXEC sys.sp_verify_database_ledger_from_digest_storage @digest_locations = NULL;
-            SET @lastBlockId = (SELECT MAX (block_id) FROM sys.database_ledger_blocks);
-            SET @verified = 1;
-            SET @detail = CONCAT (N'Automatic digest storage verified up to block ', COALESCE (CAST (@lastBlockId AS NVARCHAR (30)), N'unknown'), N'.');
+            DECLARE @autoRc INT = 0;
+            EXEC @autoRc = sys.sp_verify_database_ledger_from_digest_storage @digest_locations = @autoLocations;
+            IF @autoRc = 0
+            BEGIN
+                SET @lastBlockId = (SELECT MAX (block_id) FROM sys.database_ledger_blocks);
+                SET @verified = 1;
+                SET @detail = CONCAT (N'Automatic digest storage verified up to block ', COALESCE (CAST (@lastBlockId AS NVARCHAR (30)), N'unknown'), N'.');
+            END
+            ELSE
+            BEGIN
+                SET @detail = CONCAT (N'Automatic digest storage verification returned status ', @autoRc, N'.');
+            END;
         END;
     END
     ELSE IF @requireDigest = 1 AND @effectiveDigest IS NULL
@@ -1332,10 +1344,35 @@ EXEC logs.uspVerifyAuditLedgerInternal @digestJson = @digestJson,
 """,
     },
     {
+        "schema": "logs", "name": "uspGetLedgerVerificationStateInternal", "kind": "read", "grants": [], "ticket": "334",
+        "execute_as_owner": True,
+        "desc": "Ungranted owner-context metadata reader for logs.uspGetLedgerVerificationState: reports whether active "
+                "SQL Server automatic digest storage is configured and the durable last-known-good digestFileCount (#334).",
+        "params": "",
+        "key": "N'getLedgerState=1'",
+        "body": """
+SELECT CASE WHEN EXISTS (SELECT 1 FROM sys.database_ledger_digest_locations WHERE is_current = 1)
+            THEN CAST (1 AS BIT) ELSE CAST (0 AS BIT) END AS hasAutomaticDigestStorage,
+       (SELECT MAX (digestFileCount)
+          FROM logs.ledgerVerificationRun
+         WHERE isDeleted = 0 AND anchorSource = 'digestDirectory' AND verified = 1 AND digestFileCount IS NOT NULL) AS lastGoodDigestFileCount;
+""",
+    },
+    {
+        "schema": "logs", "name": "uspGetLedgerVerificationState", "kind": "read", "grants": WORKER, "ticket": "334",
+        "desc": "Worker-only metadata reader returning active automatic digest storage state and durable last-known-good "
+                "digestFileCount before a verification cycle generates or publishes any digest (#334).",
+        "params": "",
+        "key": "N'getLedgerState=1'",
+        "body": """
+EXEC logs.uspGetLedgerVerificationStateInternal;
+""",
+    },
+    {
         "schema": "logs", "name": "uspRecordLedgerVerificationOutcome", "kind": "write", "grants": WORKER, "ticket": "334",
-        "desc": "Worker-only recorder for end-to-end audit-ledger verification runs (#334). Persists outcome in "
-                "logs.ledgerVerificationRun (surfaced in logs.uspGetOperationalLogs), returns the prior recorded "
-                "digestFileCount for cross-restart shrinkage checks, and raises a critical logs.securityFinding on failure.",
+        "desc": "Worker-only recorder for end-to-end audit-ledger verification runs (#334). Persists one terminal "
+                "outcome per cycle in logs.ledgerVerificationRun (surfaced in logs.uspGetOperationalLogs) and raises "
+                "a critical logs.securityFinding on any SQL or archive failure.",
         "params": """@anchorSource        VARCHAR (30)
 , @verified            BIT
 , @lastVerifiedBlockId BIGINT = NULL
@@ -1352,15 +1389,10 @@ BEGIN
 END;""",
         "body": """
 DECLARE @now DATETIME2 (3) = SYSUTCDATETIME ();
-DECLARE @prevCount INT = (
-    SELECT TOP (1) digestFileCount
-      FROM logs.ledgerVerificationRun
-     WHERE isDeleted = 0 AND anchorSource = 'digestDirectory' AND digestFileCount IS NOT NULL
-     ORDER BY verifiedUtc DESC
-);
+DECLARE @runId UNIQUEIDENTIFIER = NEWID ();
 
 INSERT logs.ledgerVerificationRun (ledgerVerificationRunId, verifiedUtc, anchorSource, verified, lastVerifiedBlockId, digestFileCount, detail)
-VALUES (NEWID (), @now, @anchorSource, @verified, @lastVerifiedBlockId, @digestFileCount, LEFT (COALESCE (@detail, N''), 500));
+VALUES (@runId, @now, @anchorSource, @verified, @lastVerifiedBlockId, @digestFileCount, LEFT (COALESCE (@detail, N''), 500));
 
 IF @verified = 0
 BEGIN
@@ -1377,7 +1409,7 @@ BEGIN
     END;
 END;
 
-SELECT @prevCount AS previousDigestFileCount;
+SELECT @runId AS ledgerVerificationRunId;
 SET @Comments = CONCAT (N'Recorded ledger verification outcome: ', @anchorSource, N' verified=', @verified);
 """,
     },

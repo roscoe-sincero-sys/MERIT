@@ -131,37 +131,36 @@ BEGIN
          WHERE RecordedUtc >= @since
          ORDER BY ChangeId DESC;
 
-        -- 3. DDL audit integrity posture + latest audit-ledger verification outcome (#330, #334)
-        DECLARE @checks TABLE (
-            CheckName NVARCHAR (200) NOT NULL,
-            Status    NVARCHAR (40)  NOT NULL,
-            Detail    NVARCHAR (MAX) NULL
-        );
-        INSERT @checks (CheckName, Status, Detail)
+        -- 3. DDL audit integrity posture (called in owner context ONLY after caller-context security.investigate check above)
         EXEC logs.uspDdlAuditVerifyInternal @ProblemsOnly = 0;
 
-        INSERT @checks (CheckName, Status, Detail)
-        SELECT TOP (1)
-               N'auditLedgerVerification',
-               CASE
-                   WHEN r.verified = 0 THEN N'FAIL'
-                   WHEN r.anchorSource = 'unanchored' THEN N'WARN'
-                   ELSE N'OK'
-               END,
-               LEFT (CONCAT (CONVERT (VARCHAR (23), r.verifiedUtc, 126), N'Z [', r.anchorSource,
-                             CASE WHEN r.lastVerifiedBlockId IS NOT NULL THEN CONCAT (N', block ', r.lastVerifiedBlockId) ELSE N'' END,
-                             N']: ', r.detail), 500)
-          FROM logs.ledgerVerificationRun AS r
-         WHERE r.isDeleted = 0
-         ORDER BY r.verifiedUtc DESC;
-
-        IF @@ROWCOUNT = 0
+        -- 4. Latest audit-ledger verification run (#334 — separate from DDL checks so exports keep ddlAuditVerify distinct)
+        IF EXISTS (SELECT 1 FROM logs.ledgerVerificationRun WHERE isDeleted = 0)
         BEGIN
-            INSERT @checks (CheckName, Status, Detail)
-            VALUES (N'auditLedgerVerification', N'WARN', N'No scheduled audit-ledger verification run has been recorded yet.');
+            SELECT TOP (1)
+                   verifiedUtc,
+                   anchorSource,
+                   CASE
+                       WHEN verified = 0 THEN N'FAIL'
+                       WHEN anchorSource = 'unanchored' THEN N'WARN'
+                       ELSE N'OK'
+                   END AS status,
+                   lastVerifiedBlockId,
+                   digestFileCount,
+                   detail
+              FROM logs.ledgerVerificationRun
+             WHERE isDeleted = 0
+             ORDER BY verifiedUtc DESC;
+        END
+        ELSE
+        BEGIN
+            SELECT CAST (NULL AS DATETIME2 (3)) AS verifiedUtc,
+                   'unanchored' AS anchorSource,
+                   N'WARN' AS status,
+                   CAST (NULL AS BIGINT) AS lastVerifiedBlockId,
+                   CAST (NULL AS INT) AS digestFileCount,
+                   N'No scheduled audit-ledger verification run has been recorded yet.' AS detail;
         END;
-
-        SELECT CheckName, Status, Detail FROM @checks;
 
         -- =========================================================================================
         -- ===== End of the procedure's own work. ===================================================

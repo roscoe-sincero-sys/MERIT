@@ -44,16 +44,16 @@ public sealed partial class AuditLedgerVerifier(
         {
             using var scope = scopes.CreateScope();
             var data = scope.ServiceProvider.GetRequiredService<ISecurityMonitoringData>();
+            var state = await data.GetLedgerVerificationStateAsync(ct).ConfigureAwait(false);
 
             if (hasDigestDir)
             {
-                await RunDigestDirectoryCycleAsync(data, digestDir!, ct).ConfigureAwait(false);
+                await RunDigestDirectoryCycleAsync(data, digestDir!, state.LastGoodDigestFileCount, ct).ConfigureAwait(false);
                 return;
             }
 
-            // No DigestDirectory configured: probe SQL for active automatic digest storage first.
-            var probe = await data.VerifyAuditLedgerAsync(null, useAutomaticStorage: false, requireDigest: false, ct).ConfigureAwait(false);
-            if (probe.HasAutomaticDigestStorage)
+            // No DigestDirectory configured: select automatic storage directly from metadata without a redundant verify.
+            if (state.HasAutomaticDigestStorage)
             {
                 anchorSource = "automaticStorage";
                 var autoResult = await data.VerifyAuditLedgerAsync(null, useAutomaticStorage: true, requireDigest: false, ct).ConfigureAwait(false);
@@ -69,10 +69,11 @@ public sealed partial class AuditLedgerVerifier(
             }
 
             // Unanchored (neither DigestDirectory nor active automatic digest storage configured).
-            await data.RecordLedgerVerificationOutcomeAsync("unanchored", probe.Verified, probe.LastVerifiedBlockId, null, probe.Detail, ct).ConfigureAwait(false);
-            if (!probe.Verified)
+            var unanchored = await data.VerifyAuditLedgerAsync(null, useAutomaticStorage: false, requireDigest: false, ct).ConfigureAwait(false);
+            await data.RecordLedgerVerificationOutcomeAsync("unanchored", unanchored.Verified, unanchored.LastVerifiedBlockId, null, unanchored.Detail, ct).ConfigureAwait(false);
+            if (!unanchored.Verified)
             {
-                LedgerVerificationFailed(logger, "unanchored", probe.Detail);
+                LedgerVerificationFailed(logger, "unanchored", unanchored.Detail);
                 return;
             }
 
@@ -81,7 +82,7 @@ public sealed partial class AuditLedgerVerifier(
                 DigestStorageUnconfigured(logger);
             }
 
-            LedgerVerified(logger, probe.LastVerifiedBlockId ?? -1, probe.Detail);
+            LedgerVerified(logger, unanchored.LastVerifiedBlockId ?? -1, unanchored.Detail);
         }
         catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
@@ -90,14 +91,14 @@ public sealed partial class AuditLedgerVerifier(
         }
     }
 
-    private async Task RunDigestDirectoryCycleAsync(ISecurityMonitoringData data, string digestDir, CancellationToken ct)
+    private async Task RunDigestDirectoryCycleAsync(ISecurityMonitoringData data, string digestDir, int? durableLastGoodCount, CancellationToken ct)
     {
         // Never auto-create a missing provisioned mount — treat disappearance as a visible archive failure.
         if (!Directory.Exists(digestDir))
         {
             const string msg = "Configured ledger digest directory is missing or unmounted.";
             LedgerVerificationFailed(logger, "digestDirectory", msg);
-            await data.RecordLedgerVerificationOutcomeAsync("digestDirectory", false, null, 0, msg, ct).ConfigureAwait(false);
+            await data.RecordLedgerVerificationOutcomeAsync("digestDirectory", false, null, null, msg, ct).ConfigureAwait(false);
             return;
         }
 
@@ -105,10 +106,12 @@ public sealed partial class AuditLedgerVerifier(
             .OrderByDescending(Path.GetFileName, StringComparer.Ordinal)
             .ToList();
 
-        if (_lastDigestFileCount > 0 && priorFiles.Count < _lastDigestFileCount)
+        // Check durable last-known-good baseline (preserved across failures and restarts) BEFORE generating or publishing.
+        int expectedMinCount = Math.Max(_lastDigestFileCount, durableLastGoodCount ?? 0);
+        if (expectedMinCount > 0 && priorFiles.Count < expectedMinCount)
         {
-            string msg = $"Digest archive shrank from {_lastDigestFileCount} to {priorFiles.Count} file(s).";
-            DigestArchiveShrank(logger, _lastDigestFileCount, priorFiles.Count);
+            string msg = $"Digest archive shrank from {expectedMinCount} to {priorFiles.Count} file(s); refusing to publish replacement digest.";
+            DigestArchiveShrank(logger, expectedMinCount, priorFiles.Count);
             await data.RecordLedgerVerificationOutcomeAsync("digestDirectory", false, null, priorFiles.Count, msg, ct).ConfigureAwait(false);
             return;
         }
@@ -145,17 +148,8 @@ public sealed partial class AuditLedgerVerifier(
         await PublishDigestAtomicallyAsync(digestDir, fresh, ct).ConfigureAwait(false);
 
         int newCount = Directory.EnumerateFiles(digestDir, "merit-ledger-digest-*.json").Count();
-        int? persistedPrevCount = await data.RecordLedgerVerificationOutcomeAsync(
-            "digestDirectory", true, fresh.LastVerifiedBlockId, newCount, fresh.Detail, ct).ConfigureAwait(false);
-        if (persistedPrevCount is > 0 && priorFiles.Count < persistedPrevCount.Value)
-        {
-            string msg = $"Digest archive shrank across restart from {persistedPrevCount.Value} to {priorFiles.Count} file(s).";
-            DigestArchiveShrank(logger, persistedPrevCount.Value, priorFiles.Count);
-            await data.RecordLedgerVerificationOutcomeAsync("digestDirectory", false, fresh.LastVerifiedBlockId, newCount, msg, ct).ConfigureAwait(false);
-            return;
-        }
-
-        _lastDigestFileCount = Math.Max(newCount, persistedPrevCount ?? 0);
+        _lastDigestFileCount = Math.Max(newCount, expectedMinCount);
+        await data.RecordLedgerVerificationOutcomeAsync("digestDirectory", true, fresh.LastVerifiedBlockId, newCount, fresh.Detail, ct).ConfigureAwait(false);
         LedgerVerified(logger, fresh.LastVerifiedBlockId ?? -1, fresh.Detail);
     }
 

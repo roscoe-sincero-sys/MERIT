@@ -8,8 +8,9 @@ using Microsoft.Extensions.Logging;
 namespace Merit.Tests;
 
 /// <summary>
-/// Unit tests for <see cref="AuditLedgerVerifier"/> covering WORM directory verification, missing/malformed archive
-/// failures, atomic publish cancellation, automatic-storage mode, and outcome recording (#334).
+/// Unit tests for <see cref="AuditLedgerVerifier"/> covering WORM directory verification, durable baseline survival
+/// across restarts and failed zero-count runs, missing/malformed archive failures, atomic publish cancellation,
+/// automatic-storage mode via metadata, and outcome recording (#334).
 /// </summary>
 public sealed class AuditLedgerVerifierTests
 {
@@ -27,11 +28,16 @@ public sealed class AuditLedgerVerifierTests
 
     public class StubLedgerMonitoringProxy : DispatchProxy
     {
+        public Func<LedgerVerificationStateRow> OnGetState { get; set; } = () => new LedgerVerificationStateRow();
         public Func<VerifyCall, AuditLedgerVerificationRow> OnVerify { get; set; } = _ => new AuditLedgerVerificationRow();
-        public Func<OutcomeRecord, int?> OnRecord { get; set; } = _ => null;
+        public Func<OutcomeRecord, Guid> OnRecord { get; set; } = _ => Guid.NewGuid();
 
         protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
         {
+            if (targetMethod?.Name == nameof(ISecurityMonitoringData.GetLedgerVerificationStateAsync))
+            {
+                return Task.FromResult(OnGetState());
+            }
             if (targetMethod?.Name == nameof(ISecurityMonitoringData.VerifyAuditLedgerAsync))
             {
                 var call = new VerifyCall((string?)args?[0], (bool)(args?[1] ?? false), (bool)(args?[2] ?? false));
@@ -47,32 +53,38 @@ public sealed class AuditLedgerVerifierTests
         }
 
         public static ISecurityMonitoringData Create(
+            Func<LedgerVerificationStateRow> onGetState,
             Func<VerifyCall, AuditLedgerVerificationRow> onVerify,
-            Func<OutcomeRecord, int?>? onRecord = null)
+            Func<OutcomeRecord, Guid> onRecord)
         {
             var proxy = DispatchProxy.Create<ISecurityMonitoringData, StubLedgerMonitoringProxy>();
             var impl = (StubLedgerMonitoringProxy)(object)proxy;
+            impl.OnGetState = onGetState;
             impl.OnVerify = onVerify;
-            if (onRecord is not null) impl.OnRecord = onRecord;
+            impl.OnRecord = onRecord;
             return proxy;
         }
     }
 
     private static (AuditLedgerVerifier verifier, CapturingLogger logger, List<VerifyCall> verifyCalls, List<OutcomeRecord> outcomes)
-        CreateVerifier(string? digestDir, Func<VerifyCall, AuditLedgerVerificationRow> onVerify)
+        CreateVerifier(string? digestDir, Func<VerifyCall, AuditLedgerVerificationRow> onVerify,
+                       bool hasAutomaticStorage = false, int? initialGoodCount = null)
     {
         var verifyCalls = new List<VerifyCall>();
         var outcomes = new List<OutcomeRecord>();
-        int? lastRecordedCount = null;
+        int? durableLastGoodCount = initialGoodCount;
         var services = new ServiceCollection();
         services.AddSingleton(StubLedgerMonitoringProxy.Create(
+            () => new LedgerVerificationStateRow { HasAutomaticDigestStorage = hasAutomaticStorage, LastGoodDigestFileCount = durableLastGoodCount },
             call => { verifyCalls.Add(call); return onVerify(call); },
             rec =>
             {
                 outcomes.Add(rec);
-                int? prev = lastRecordedCount;
-                if (rec.AnchorSource == "digestDirectory" && rec.FileCount is not null) lastRecordedCount = rec.FileCount;
-                return prev;
+                if (rec.AnchorSource == "digestDirectory" && rec.Verified && rec.FileCount is not null)
+                {
+                    durableLastGoodCount = Math.Max(durableLastGoodCount ?? 0, rec.FileCount.Value);
+                }
+                return Guid.NewGuid();
             }));
         var provider = services.BuildServiceProvider();
         var dict = new Dictionary<string, string?>();
@@ -110,7 +122,8 @@ public sealed class AuditLedgerVerifierTests
             var files = Directory.GetFiles(tempDir, "merit-ledger-digest-*.json");
             Assert.Single(files);
             Assert.Empty(Directory.GetFiles(tempDir, ".tmp-*.part"));
-            Assert.Contains(outcomes, o => o.AnchorSource == "digestDirectory" && o.Verified);
+            Assert.Single(outcomes);
+            Assert.True(outcomes[0].Verified);
 
             // Cycle 2: verifies prior archived digest with requireDigest=true, then generates next digest.
             await verifier.RunVerificationCycleAsync(CancellationToken.None);
@@ -118,18 +131,60 @@ public sealed class AuditLedgerVerifierTests
             Assert.True(calls[1].RequireDigest);
             Assert.Contains("0xABCD", calls[1].DigestJson ?? "", StringComparison.Ordinal);
 
-            // Cycle 3: SQL verification failure logs Error and records failure outcome.
+            // Cycle 3: SQL verification failure logs Error and records one failure outcome.
             failNext = true;
             await verifier.RunVerificationCycleAsync(CancellationToken.None);
             Assert.Contains(logger.Entries, e => e.Level == LogLevel.Error && e.Message.Contains("AUDIT LEDGER VERIFICATION FAILED", StringComparison.Ordinal));
             Assert.False(outcomes[^1].Verified);
 
-            // Cycle 4: deleting an archived file fails visibly and records failure outcome.
+            // Cycle 4: deleting an archived file fails visibly without publishing a replacement.
             failNext = false;
+            int countBeforeDelete = Directory.GetFiles(tempDir, "merit-ledger-digest-*.json").Length;
             File.Delete(files[0]);
             await verifier.RunVerificationCycleAsync(CancellationToken.None);
             Assert.Contains(logger.Entries, e => e.Level == LogLevel.Error && e.Message.Contains("AUDIT LEDGER DIGEST ARCHIVE SHRANK", StringComparison.Ordinal));
             Assert.False(outcomes[^1].Verified);
+            Assert.Equal(countBeforeDelete - 1, Directory.GetFiles(tempDir, "merit-ledger-digest-*.json").Length);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task RestartAfterMissingArchiveAndEmptyRemount_RefusesToPublishReplacement_AndStaysFailed()
+    {
+        string tempDir = Path.Combine(Path.GetTempPath(), "merit-ledger-restart-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            // Simulate persisted durable last-known-good count = 2, missing directory on cycle 1,
+            // then worker restart with an empty remounted directory on cycle 2.
+            var (verifier1, _, calls1, outcomes1) = CreateVerifier(tempDir, _ => new AuditLedgerVerificationRow { Verified = true }, initialGoodCount: 2);
+            await verifier1.RunVerificationCycleAsync(CancellationToken.None);
+            Assert.Single(outcomes1);
+            Assert.False(outcomes1[0].Verified);
+            Assert.Empty(calls1);
+
+            // Fresh verifier instance (simulates worker restart) with empty remounted directory:
+            Directory.CreateDirectory(tempDir);
+            var (verifier2, logger2, calls2, outcomes2) = CreateVerifier(tempDir, _ => new AuditLedgerVerificationRow
+            {
+                Verified = true,
+                LastVerifiedBlockId = 9,
+                DigestJson = """{"database_name":"MERIT_IT","block_id":9,"hash":"0x9999"}""",
+                VerifiedUtc = DateTime.UtcNow,
+                Detail = "OK",
+            }, initialGoodCount: 2);
+
+            await verifier2.RunVerificationCycleAsync(CancellationToken.None);
+
+            // Must NOT generate or publish a replacement digest, and must record a terminal failure.
+            Assert.Empty(calls2);
+            Assert.Empty(Directory.GetFiles(tempDir, "merit-ledger-digest-*.json"));
+            Assert.Single(outcomes2);
+            Assert.False(outcomes2[0].Verified);
+            Assert.Contains(logger2.Entries, e => e.Level == LogLevel.Error && e.Message.Contains("AUDIT LEDGER DIGEST ARCHIVE SHRANK", StringComparison.Ordinal));
         }
         finally
         {
@@ -206,23 +261,23 @@ public sealed class AuditLedgerVerifierTests
     }
 
     [Fact]
-    public async Task AutomaticStorageOnlyMode_CallsAutomaticVerificationAndRecordsAutomaticSource()
+    public async Task AutomaticStorageOnlyMode_SelectsFromMetadataWithoutRedundantVerify()
     {
         var (verifier, _, calls, outcomes) = CreateVerifier(null, call => new AuditLedgerVerificationRow
         {
             Verified = true,
             LastVerifiedBlockId = 12,
-            DigestJson = call.UseAutomaticStorage ? null : "{}",
+            DigestJson = null,
             VerifiedUtc = DateTime.UtcNow,
-            Detail = call.UseAutomaticStorage ? "Automatic digest storage verified up to block 12." : "OK",
+            Detail = "Automatic digest storage verified up to block 12.",
             HasAutomaticDigestStorage = true,
-        });
+        }, hasAutomaticStorage: true);
 
         await verifier.RunVerificationCycleAsync(CancellationToken.None);
 
-        Assert.Equal(2, calls.Count);
-        Assert.False(calls[0].UseAutomaticStorage);
-        Assert.True(calls[1].UseAutomaticStorage);
+        // Exactly ONE verify call directly in automatic-storage mode (selected from metadata).
+        Assert.Single(calls);
+        Assert.True(calls[0].UseAutomaticStorage);
         Assert.Single(outcomes);
         Assert.Equal("automaticStorage", outcomes[0].AnchorSource);
         Assert.True(outcomes[0].Verified);
@@ -239,7 +294,7 @@ public sealed class AuditLedgerVerifierTests
             VerifiedUtc = DateTime.UtcNow,
             Detail = "OK",
             HasAutomaticDigestStorage = false,
-        });
+        }, hasAutomaticStorage: false);
 
         await verifier.RunVerificationCycleAsync(CancellationToken.None);
 

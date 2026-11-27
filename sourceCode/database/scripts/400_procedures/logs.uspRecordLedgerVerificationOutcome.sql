@@ -13,7 +13,7 @@ CreateDate:   2026-10-24
 ========================================================================================================================
 Description:
 
-Worker-only recorder for end-to-end audit-ledger verification runs (#334). Persists outcome in logs.ledgerVerificationRun (surfaced in logs.uspGetOperationalLogs), returns the prior recorded digestFileCount for cross-restart shrinkage checks, and raises a critical logs.securityFinding on failure.
+Worker-only recorder for end-to-end audit-ledger verification runs (#334). Persists one terminal outcome per cycle in logs.ledgerVerificationRun (surfaced in logs.uspGetOperationalLogs) and raises a critical logs.securityFinding on any SQL or archive failure.
 
 ========================================================================================================================
 Requirements and Key Dependencies:
@@ -101,15 +101,10 @@ BEGIN
         -- =========================================================================================
 
         DECLARE @now DATETIME2 (3) = SYSUTCDATETIME ();
-        DECLARE @prevCount INT = (
-            SELECT TOP (1) digestFileCount
-              FROM logs.ledgerVerificationRun
-             WHERE isDeleted = 0 AND anchorSource = 'digestDirectory' AND digestFileCount IS NOT NULL
-             ORDER BY verifiedUtc DESC
-        );
+        DECLARE @runId UNIQUEIDENTIFIER = NEWID ();
 
         INSERT logs.ledgerVerificationRun (ledgerVerificationRunId, verifiedUtc, anchorSource, verified, lastVerifiedBlockId, digestFileCount, detail)
-        VALUES (NEWID (), @now, @anchorSource, @verified, @lastVerifiedBlockId, @digestFileCount, LEFT (COALESCE (@detail, N''), 500));
+        VALUES (@runId, @now, @anchorSource, @verified, @lastVerifiedBlockId, @digestFileCount, LEFT (COALESCE (@detail, N''), 500));
 
         IF @verified = 0
         BEGIN
@@ -126,7 +121,7 @@ BEGIN
             END;
         END;
 
-        SELECT @prevCount AS previousDigestFileCount;
+        SELECT @runId AS ledgerVerificationRunId;
         SET @Comments = CONCAT (N'Recorded ledger verification outcome: ', @anchorSource, N' verified=', @verified);
 
         -- =========================================================================================
@@ -210,7 +205,7 @@ EXEC util.uspSetObjectDescription
       @SchemaName  = N'logs'
     , @ObjectType  = N'PROCEDURE'
     , @ObjectName  = N'uspRecordLedgerVerificationOutcome'
-    , @Description = N'Worker-only recorder for end-to-end audit-ledger verification runs (#334). Persists outcome in logs.ledgerVerificationRun (surfaced in logs.uspGetOperationalLogs), returns the prior recorded digestFileCount for cross-restart shrinkage checks, and raises a critical logs.securityFinding on failure.';
+    , @Description = N'Worker-only recorder for end-to-end audit-ledger verification runs (#334). Persists one terminal outcome per cycle in logs.ledgerVerificationRun (surfaced in logs.uspGetOperationalLogs) and raises a critical logs.securityFinding on any SQL or archive failure.';
 GO
 
 IF DATABASE_PRINCIPAL_ID (N'meritWorkerRole') IS NOT NULL

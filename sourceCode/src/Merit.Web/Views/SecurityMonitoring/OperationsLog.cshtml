@@ -26,6 +26,25 @@
     </table></div>
 </section>
 
+@if (Model.Report.LedgerVerification is { } lv)
+{
+<section aria-labelledby="ledger-verify">
+    <h2 id="ledger-verify">Audit ledger verification (<code>logs.ledgerVerificationRun</code>)</h2>
+    <div class="merit-table-wrap" tabindex="0" role="region" aria-label="Audit ledger verification"><table class="usa-table usa-table--borderless usa-table--compact">
+        <thead><tr><th scope="col">When (UTC)</th><th scope="col">Anchor source</th><th scope="col">Status</th><th scope="col">Block</th><th scope="col">Detail</th></tr></thead>
+        <tbody>
+            <tr>
+                <td class="merit-nowrap">@(lv.VerifiedUtc is { } t ? Options.Date(t) : "—")</td>
+                <td><code>@lv.AnchorSource</code></td>
+                <td>@lv.Status</td>
+                <td>@(lv.LastVerifiedBlockId?.ToString() ?? "—")</td>
+                <td>@lv.Detail</td>
+            </tr>
+        </tbody>
+    </table></div>
+</section>
+}
+
 <section aria-labelledby="exec-failures">
     <h2 id="exec-failures">SQL execution failures (allowlisted diagnostics)</h2>
     @if (Model.Report.ExecutionFailures.Count == 0) { <p>No execution failures in this window.</p> }

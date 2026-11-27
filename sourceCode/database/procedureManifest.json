@@ -8391,6 +8391,22 @@
   ]
  },
  {
+  "name": "logs.uspGetLedgerVerificationState",
+  "kind": "read",
+  "grants": [
+   "meritWorkerRole"
+  ],
+  "permission": null,
+  "params": []
+ },
+ {
+  "name": "logs.uspGetLedgerVerificationStateInternal",
+  "kind": "read",
+  "grants": [],
+  "permission": null,
+  "params": []
+ },
+ {
   "name": "logs.uspGetOperationalLogs",
   "kind": "read",
   "grants": [

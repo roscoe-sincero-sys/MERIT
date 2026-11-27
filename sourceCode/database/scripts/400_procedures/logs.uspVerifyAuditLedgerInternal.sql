@@ -97,16 +97,29 @@ BEGIN
         BEGIN TRY
             IF @useAutomaticStorage = 1
             BEGIN
-                IF @hasAutoDigest = 0
+                DECLARE @autoLocations NVARCHAR (MAX) = (
+                    SELECT path, last_digest_block_id, is_current
+                      FROM sys.database_ledger_digest_locations
+                     FOR JSON AUTO, ROOT ('locations')
+                );
+                IF @hasAutoDigest = 0 OR @autoLocations IS NULL
                 BEGIN
                     SET @detail = N'No active automatic ledger digest storage endpoint is configured.';
                 END
                 ELSE
                 BEGIN
-                    EXEC sys.sp_verify_database_ledger_from_digest_storage @digest_locations = NULL;
-                    SET @lastBlockId = (SELECT MAX (block_id) FROM sys.database_ledger_blocks);
-                    SET @verified = 1;
-                    SET @detail = CONCAT (N'Automatic digest storage verified up to block ', COALESCE (CAST (@lastBlockId AS NVARCHAR (30)), N'unknown'), N'.');
+                    DECLARE @autoRc INT = 0;
+                    EXEC @autoRc = sys.sp_verify_database_ledger_from_digest_storage @digest_locations = @autoLocations;
+                    IF @autoRc = 0
+                    BEGIN
+                        SET @lastBlockId = (SELECT MAX (block_id) FROM sys.database_ledger_blocks);
+                        SET @verified = 1;
+                        SET @detail = CONCAT (N'Automatic digest storage verified up to block ', COALESCE (CAST (@lastBlockId AS NVARCHAR (30)), N'unknown'), N'.');
+                    END
+                    ELSE
+                    BEGIN
+                        SET @detail = CONCAT (N'Automatic digest storage verification returned status ', @autoRc, N'.');
+                    END;
                 END;
             END
             ELSE IF @requireDigest = 1 AND @effectiveDigest IS NULL
