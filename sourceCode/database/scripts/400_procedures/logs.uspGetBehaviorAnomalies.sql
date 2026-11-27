@@ -97,6 +97,10 @@ BEGIN
         DECLARE @all BIT = auth.udfHasPermission (N'security.investigate');
         DECLARE @accounts TABLE (appUserId UNIQUEIDENTIFIER PRIMARY KEY);
         INSERT @accounts SELECT appUserId FROM auth.tvfReviewAccounts ('security.review');
+        DECLARE @secTenants TABLE (tenantId UNIQUEIDENTIFIER PRIMARY KEY);
+        INSERT @secTenants SELECT tenantId FROM auth.tvfReviewTenants ('security.review');
+        DECLARE @wholeSecRoots TABLE (rootTenantId UNIQUEIDENTIFIER PRIMARY KEY);
+        INSERT @wholeSecRoots SELECT t.tenantId FROM auth.tenant AS t JOIN @secTenants AS r ON r.tenantId = t.tenantId WHERE t.tenantId = t.rootTenantId;
 
         DECLARE @findings TABLE (
             ruleCode         VARCHAR (50),
@@ -113,7 +117,7 @@ BEGIN
             lastUtc          DATETIME2 (3)
         );
 
-        -- Rule 1: Bulk patient/result/case viewing velocity
+        -- Rule 1: Bulk patient/result/case viewing velocity (event-level tenant scope, Codex #2)
         INSERT @findings
         SELECT 'bulkViewVelocity',
                CASE WHEN COUNT (DISTINCT e.entityId) >= @viewVelocityThreshold * 2 THEN 'high' ELSE 'medium' END,
@@ -125,27 +129,31 @@ BEGIN
           FROM logs.auditEvent AS e
           LEFT JOIN auth.appUser AS u ON u.appUserId = e.appUserId
          WHERE e.eventUtc >= @since AND e.eventAction = 'view' AND e.entityId IS NOT NULL
-           AND (@all = 1 OR e.appUserId IN (SELECT appUserId FROM @accounts))
+           AND (@all = 1 OR e.rootTenantId IN (SELECT rootTenantId FROM @wholeSecRoots)
+                OR e.owningTenantId IN (SELECT tenantId FROM @secTenants)
+                OR (e.owningTenantId IS NULL AND e.actingTenantId IN (SELECT tenantId FROM @secTenants)))
          GROUP BY e.appUserId, u.userName, u.displayName, e.sessionReference
         HAVING COUNT (DISTINCT e.entityId) >= @viewVelocityThreshold;
 
-        -- Rule 2: Bulk or unusual data exports (count logical exports by entityId/auditEventId so started+completed pairs count once, Claude I12)
+        -- Rule 2: Bulk or unusual data exports (structuredLogExport paired by entityId; single-entry downloads by auditEventId, I13 / Codex #3)
         INSERT @findings
         SELECT 'bulkExportSpike',
                CASE WHEN SUM (COALESCE (e.recordCount, 1)) >= @exportRowsThreshold * 2
-                         OR COUNT (DISTINCT COALESCE (CAST (e.entityId AS VARCHAR (36)), CAST (e.auditEventId AS VARCHAR (20)))) >= @exportSpikeThreshold * 2
+                         OR COUNT (DISTINCT CASE WHEN e.entityType = 'structuredLogExport' AND e.entityId IS NOT NULL THEN CAST (e.entityId AS VARCHAR (36)) ELSE CAST (e.auditEventId AS VARCHAR (20)) END) >= @exportSpikeThreshold * 2
                     THEN 'high' ELSE 'medium' END,
                e.appUserId, u.userName, u.displayName, NULL, NULL,
-               COUNT (DISTINCT COALESCE (CAST (e.entityId AS VARCHAR (36)), CAST (e.auditEventId AS VARCHAR (20)))),
-               CONCAT (N'Bulk export spike (', COUNT (DISTINCT COALESCE (CAST (e.entityId AS VARCHAR (36)), CAST (e.auditEventId AS VARCHAR (20)))), N' exports, ', SUM (COALESCE (e.recordCount, 0)), N' rows)'),
-               (SELECT COUNT (DISTINCT COALESCE (CAST (e.entityId AS VARCHAR (36)), CAST (e.auditEventId AS VARCHAR (20)))) AS exportCount, SUM (COALESCE (e.recordCount, 0)) AS totalRows, @exportSpikeThreshold AS countThreshold, @exportRowsThreshold AS rowsThreshold FOR JSON PATH, WITHOUT_ARRAY_WRAPPER),
+               COUNT (DISTINCT CASE WHEN e.entityType = 'structuredLogExport' AND e.entityId IS NOT NULL THEN CAST (e.entityId AS VARCHAR (36)) ELSE CAST (e.auditEventId AS VARCHAR (20)) END),
+               CONCAT (N'Bulk export spike (', COUNT (DISTINCT CASE WHEN e.entityType = 'structuredLogExport' AND e.entityId IS NOT NULL THEN CAST (e.entityId AS VARCHAR (36)) ELSE CAST (e.auditEventId AS VARCHAR (20)) END), N' exports, ', SUM (COALESCE (e.recordCount, 0)), N' rows)'),
+               (SELECT COUNT (DISTINCT CASE WHEN e.entityType = 'structuredLogExport' AND e.entityId IS NOT NULL THEN CAST (e.entityId AS VARCHAR (36)) ELSE CAST (e.auditEventId AS VARCHAR (20)) END) AS exportCount, SUM (COALESCE (e.recordCount, 0)) AS totalRows, @exportSpikeThreshold AS countThreshold, @exportRowsThreshold AS rowsThreshold FOR JSON PATH, WITHOUT_ARRAY_WRAPPER),
                MIN (e.eventUtc), MAX (e.eventUtc)
           FROM logs.auditEvent AS e
           LEFT JOIN auth.appUser AS u ON u.appUserId = e.appUserId
          WHERE e.eventUtc >= @since AND e.eventAction = 'export'
-           AND (@all = 1 OR e.appUserId IN (SELECT appUserId FROM @accounts))
+           AND (@all = 1 OR e.rootTenantId IN (SELECT rootTenantId FROM @wholeSecRoots)
+                OR e.owningTenantId IN (SELECT tenantId FROM @secTenants)
+                OR (e.owningTenantId IS NULL AND e.actingTenantId IN (SELECT tenantId FROM @secTenants)))
          GROUP BY e.appUserId, u.userName, u.displayName
-        HAVING COUNT (DISTINCT COALESCE (CAST (e.entityId AS VARCHAR (36)), CAST (e.auditEventId AS VARCHAR (20)))) >= @exportSpikeThreshold
+        HAVING COUNT (DISTINCT CASE WHEN e.entityType = 'structuredLogExport' AND e.entityId IS NOT NULL THEN CAST (e.entityId AS VARCHAR (36)) ELSE CAST (e.auditEventId AS VARCHAR (20)) END) >= @exportSpikeThreshold
             OR SUM (COALESCE (e.recordCount, 0)) >= @exportRowsThreshold;
 
         -- Rule 3: Repeated permissionDenied or outside-scope probing
@@ -163,7 +171,9 @@ BEGIN
           LEFT JOIN auth.appUser AS u ON u.appUserId = e.appUserId
          WHERE e.eventUtc >= @since
            AND (e.eventAction = 'permissionDenied' OR e.entityType = 'personOutsideScope')
-           AND (@all = 1 OR e.appUserId IN (SELECT appUserId FROM @accounts))
+           AND (@all = 1 OR e.rootTenantId IN (SELECT rootTenantId FROM @wholeSecRoots)
+                OR e.owningTenantId IN (SELECT tenantId FROM @secTenants)
+                OR (e.owningTenantId IS NULL AND e.actingTenantId IN (SELECT tenantId FROM @secTenants)))
          GROUP BY e.appUserId, u.userName, u.displayName
         HAVING COUNT (*) >= @probingThreshold;
 
@@ -326,23 +336,25 @@ BEGIN
          GROUP BY e.appUserId, u.userName, u.displayName
         HAVING COUNT (*) >= @distributedFailThreshold AND COUNT (DISTINCT e.clientAddress) >= 4;
 
-        -- Rule 10: API-only data access with zero screen visits (machine-speed / automated scraping)
+        -- Rule 10: API-only data access with zero screen visits (logical count aligns with bulkExportSpike, Codex #3)
         INSERT @findings
         SELECT 'apiOnlyNoScreenVisits', 'medium',
                e.appUserId, u.userName, u.displayName, MAX (e.clientAddress), e.sessionReference,
-               COUNT (*),
-               CONCAT (N'Data-access session with zero UI screen visits (', COUNT (*), N' reads)'),
-               (SELECT COUNT (*) AS readEvents, COUNT (DISTINCT e.entityId) AS distinctEntities FOR JSON PATH, WITHOUT_ARRAY_WRAPPER),
+               COUNT (DISTINCT CASE WHEN e.entityType = 'structuredLogExport' AND e.entityId IS NOT NULL THEN CAST (e.entityId AS VARCHAR (36)) ELSE CAST (e.auditEventId AS VARCHAR (20)) END),
+               CONCAT (N'Data-access session with zero UI screen visits (', COUNT (DISTINCT CASE WHEN e.entityType = 'structuredLogExport' AND e.entityId IS NOT NULL THEN CAST (e.entityId AS VARCHAR (36)) ELSE CAST (e.auditEventId AS VARCHAR (20)) END), N' reads)'),
+               (SELECT COUNT (DISTINCT CASE WHEN e.entityType = 'structuredLogExport' AND e.entityId IS NOT NULL THEN CAST (e.entityId AS VARCHAR (36)) ELSE CAST (e.auditEventId AS VARCHAR (20)) END) AS readEvents, COUNT (DISTINCT e.entityId) AS distinctEntities FOR JSON PATH, WITHOUT_ARRAY_WRAPPER),
                MIN (e.eventUtc), MAX (e.eventUtc)
           FROM logs.auditEvent AS e
           LEFT JOIN auth.appUser AS u ON u.appUserId = e.appUserId
          WHERE e.eventUtc >= @since AND e.sessionReference IS NOT NULL
            AND e.eventAction IN ('view', 'list', 'export')
-           AND (@all = 1 OR e.appUserId IN (SELECT appUserId FROM @accounts))
+           AND (@all = 1 OR e.rootTenantId IN (SELECT rootTenantId FROM @wholeSecRoots)
+                OR e.owningTenantId IN (SELECT tenantId FROM @secTenants)
+                OR (e.owningTenantId IS NULL AND e.actingTenantId IN (SELECT tenantId FROM @secTenants)))
            AND NOT EXISTS (SELECT 1 FROM logs.screenVisit AS v
                             WHERE v.sessionReference = e.sessionReference AND v.isDeleted = 0)
          GROUP BY e.appUserId, u.userName, u.displayName, e.sessionReference
-        HAVING COUNT (*) >= 25;
+        HAVING COUNT (DISTINCT CASE WHEN e.entityType = 'structuredLogExport' AND e.entityId IS NOT NULL THEN CAST (e.entityId AS VARCHAR (36)) ELSE CAST (e.auditEventId AS VARCHAR (20)) END) >= 25;
 
         SELECT ruleCode, severity, appUserId, userName, displayName, clientAddress, sessionReference,
                eventCount, title, detailJson, firstUtc, lastUtc

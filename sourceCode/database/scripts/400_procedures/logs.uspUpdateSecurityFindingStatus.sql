@@ -106,24 +106,26 @@ BEGIN
         DECLARE @wholeAdminRoots TABLE (rootTenantId UNIQUEIDENTIFIER PRIMARY KEY);
         INSERT @wholeAdminRoots SELECT t.tenantId FROM auth.tenant AS t JOIN @adminTenants AS a ON a.tenantId = t.tenantId WHERE t.tenantId = t.rootTenantId;
 
-        DECLARE @root UNIQUEIDENTIFIER, @owner UNIQUEIDENTIFIER;
-        SELECT @root = f.rootTenantId, @owner = f.owningTenantId
-          FROM logs.securityFinding AS f
-         WHERE f.securityFindingId = @securityFindingId AND f.isDeleted = 0
-           AND (@all = 1
-                OR f.owningTenantId IN (SELECT tenantId FROM @adminTenants)
-                OR (f.owningTenantId IS NULL AND f.rootTenantId IN (SELECT rootTenantId FROM @wholeAdminRoots)));
-
-        IF @root IS NULL
-        BEGIN
-            ;THROW 51404, N'The security finding was not found, or you do not have permission to update it.', 1;
-        END;
+        -- Codex #1: Enforce owner/root scope atomically in the UPDATE statement itself and capture post-update root/owner via OUTPUT.
+        DECLARE @updated TABLE (rootTenantId UNIQUEIDENTIFIER NOT NULL, owningTenantId UNIQUEIDENTIFIER NULL);
 
         UPDATE logs.securityFinding
            SET status = @status,
                acknowledgedByUserId = auth.udfSessionUserId (),
                acknowledgedUtc = SYSUTCDATETIME ()
-         WHERE securityFindingId = @securityFindingId AND isDeleted = 0;
+        OUTPUT INSERTED.rootTenantId, INSERTED.owningTenantId INTO @updated
+         WHERE securityFindingId = @securityFindingId AND isDeleted = 0
+           AND (@all = 1
+                OR owningTenantId IN (SELECT tenantId FROM @adminTenants)
+                OR (owningTenantId IS NULL AND rootTenantId IN (SELECT rootTenantId FROM @wholeAdminRoots)));
+
+        IF NOT EXISTS (SELECT 1 FROM @updated)
+        BEGIN
+            ;THROW 51404, N'The security finding was not found, or you do not have permission to update it.', 1;
+        END;
+
+        DECLARE @root UNIQUEIDENTIFIER, @owner UNIQUEIDENTIFIER;
+        SELECT TOP (1) @root = rootTenantId, @owner = owningTenantId FROM @updated;
 
         DECLARE @auditScope UNIQUEIDENTIFIER = TRY_CAST (SESSION_CONTEXT (N'scopeKey') AS UNIQUEIDENTIFIER);
         DECLARE @auditSessionRef UNIQUEIDENTIFIER, @auditActingTenant UNIQUEIDENTIFIER, @auditViewAs UNIQUEIDENTIFIER;

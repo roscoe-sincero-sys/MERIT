@@ -125,10 +125,10 @@ BEGIN
             fingerprint      VARCHAR (128) NOT NULL
         );
 
-        -- Rule 1: bulkViewVelocity (owningTenantId is set ONLY when all contributing events belong to one actingTenantId; NULL = root-wide, Codex #3)
+        -- Rule 1: bulkViewVelocity (owningTenantId derived from source event ownership + acting tenant, NULL when mixed, Codex #2)
         INSERT @candidates
         SELECT COALESCE (e.rootTenantId, @platformRoot),
-               CASE WHEN COUNT (DISTINCT e.actingTenantId) = 1 THEN MAX (e.actingTenantId) END,
+               CASE WHEN COUNT (DISTINCT COALESCE (e.owningTenantId, e.actingTenantId)) = 1 AND COUNT (DISTINCT e.actingTenantId) <= 1 THEN MAX (COALESCE (e.owningTenantId, e.actingTenantId)) END,
                e.appUserId, NULL, e.sessionReference,
                'bulkViewVelocity', CASE WHEN COUNT (DISTINCT e.entityId) >= @viewVelocityThreshold * 2 THEN 'high' ELSE 'medium' END,
                CONCAT (N'High distinct record view velocity (', COUNT (DISTINCT e.entityId), N' records in ', @winHours, N'h)'),
@@ -139,28 +139,28 @@ BEGIN
          GROUP BY COALESCE (e.rootTenantId, @platformRoot), e.appUserId, e.sessionReference
         HAVING COUNT (DISTINCT e.entityId) >= @viewVelocityThreshold;
 
-        -- Rule 2: bulkExportSpike (count logical exports so started+completed pairs count once, Claude I12)
+        -- Rule 2: bulkExportSpike (structuredLogExport paired by entityId; single-entry downloads by auditEventId, I13 / Codex #3)
         INSERT @candidates
         SELECT COALESCE (e.rootTenantId, @platformRoot),
-               CASE WHEN COUNT (DISTINCT e.actingTenantId) = 1 THEN MAX (e.actingTenantId) END,
+               CASE WHEN COUNT (DISTINCT COALESCE (e.owningTenantId, e.actingTenantId)) = 1 AND COUNT (DISTINCT e.actingTenantId) <= 1 THEN MAX (COALESCE (e.owningTenantId, e.actingTenantId)) END,
                e.appUserId, NULL, NULL,
                'bulkExportSpike',
                CASE WHEN SUM (COALESCE (e.recordCount, 1)) >= @exportRowsThreshold * 2
-                         OR COUNT (DISTINCT COALESCE (CAST (e.entityId AS VARCHAR (36)), CAST (e.auditEventId AS VARCHAR (20)))) >= @exportSpikeThreshold * 2
+                         OR COUNT (DISTINCT CASE WHEN e.entityType = 'structuredLogExport' AND e.entityId IS NOT NULL THEN CAST (e.entityId AS VARCHAR (36)) ELSE CAST (e.auditEventId AS VARCHAR (20)) END) >= @exportSpikeThreshold * 2
                     THEN 'high' ELSE 'medium' END,
-               CONCAT (N'Bulk export spike (', COUNT (DISTINCT COALESCE (CAST (e.entityId AS VARCHAR (36)), CAST (e.auditEventId AS VARCHAR (20)))), N' exports, ', SUM (COALESCE (e.recordCount, 0)), N' rows)'),
-               (SELECT COUNT (DISTINCT COALESCE (CAST (e.entityId AS VARCHAR (36)), CAST (e.auditEventId AS VARCHAR (20)))) AS exportCount, SUM (COALESCE (e.recordCount, 0)) AS totalRows FOR JSON PATH, WITHOUT_ARRAY_WRAPPER),
+               CONCAT (N'Bulk export spike (', COUNT (DISTINCT CASE WHEN e.entityType = 'structuredLogExport' AND e.entityId IS NOT NULL THEN CAST (e.entityId AS VARCHAR (36)) ELSE CAST (e.auditEventId AS VARCHAR (20)) END), N' exports, ', SUM (COALESCE (e.recordCount, 0)), N' rows)'),
+               (SELECT COUNT (DISTINCT CASE WHEN e.entityType = 'structuredLogExport' AND e.entityId IS NOT NULL THEN CAST (e.entityId AS VARCHAR (36)) ELSE CAST (e.auditEventId AS VARCHAR (20)) END) AS exportCount, SUM (COALESCE (e.recordCount, 0)) AS totalRows FOR JSON PATH, WITHOUT_ARRAY_WRAPPER),
                CONCAT ('bulkExportSpike|', CONVERT (VARCHAR (36), COALESCE (e.rootTenantId, @platformRoot)), '|', COALESCE (CONVERT (VARCHAR (36), e.appUserId), 'none'), '|', @dayBucket)
           FROM logs.auditEvent AS e
          WHERE e.eventUtc >= @since AND e.eventAction = 'export'
          GROUP BY COALESCE (e.rootTenantId, @platformRoot), e.appUserId
-        HAVING COUNT (DISTINCT COALESCE (CAST (e.entityId AS VARCHAR (36)), CAST (e.auditEventId AS VARCHAR (20)))) >= @exportSpikeThreshold
+        HAVING COUNT (DISTINCT CASE WHEN e.entityType = 'structuredLogExport' AND e.entityId IS NOT NULL THEN CAST (e.entityId AS VARCHAR (36)) ELSE CAST (e.auditEventId AS VARCHAR (20)) END) >= @exportSpikeThreshold
             OR SUM (COALESCE (e.recordCount, 0)) >= @exportRowsThreshold;
 
         -- Rule 3: probingDeniedOrOutsideScope (handles NULL rootTenantId safely under platform-only scope, B1 / Codex #3)
         INSERT @candidates
         SELECT COALESCE (e.rootTenantId, @platformRoot),
-               CASE WHEN COUNT (DISTINCT e.actingTenantId) = 1 THEN MAX (e.actingTenantId) END,
+               CASE WHEN COUNT (DISTINCT COALESCE (e.owningTenantId, e.actingTenantId)) = 1 AND COUNT (DISTINCT e.actingTenantId) <= 1 THEN MAX (COALESCE (e.owningTenantId, e.actingTenantId)) END,
                e.appUserId, MAX (e.clientAddress), NULL,
                'probingDeniedOrOutsideScope', CASE WHEN COUNT (*) >= @probingThreshold * 2 THEN 'high' ELSE 'medium' END,
                CONCAT (N'Repeated permission-denied or outside-scope probing (', COUNT (*), N' events)'),
@@ -302,14 +302,14 @@ BEGIN
          GROUP BY COALESCE (e.rootTenantId, @platformRoot), e.appUserId
         HAVING COUNT (*) >= @distributedFailThreshold AND COUNT (DISTINCT e.clientAddress) >= 4;
 
-        -- Rule 10: apiOnlyNoScreenVisits (Codex #6 parity)
+        -- Rule 10: apiOnlyNoScreenVisits (Codex #3 logical event count + #2 source ownership)
         INSERT @candidates
         SELECT COALESCE (e.rootTenantId, @platformRoot),
-               CASE WHEN COUNT (DISTINCT e.actingTenantId) = 1 THEN MAX (e.actingTenantId) END,
+               CASE WHEN COUNT (DISTINCT COALESCE (e.owningTenantId, e.actingTenantId)) = 1 AND COUNT (DISTINCT e.actingTenantId) <= 1 THEN MAX (COALESCE (e.owningTenantId, e.actingTenantId)) END,
                e.appUserId, MAX (e.clientAddress), e.sessionReference,
                'apiOnlyNoScreenVisits', 'medium',
-               CONCAT (N'Data-access session with zero UI screen visits (', COUNT (*), N' reads)'),
-               (SELECT COUNT (*) AS readEvents, COUNT (DISTINCT e.entityId) AS distinctEntities FOR JSON PATH, WITHOUT_ARRAY_WRAPPER),
+               CONCAT (N'Data-access session with zero UI screen visits (', COUNT (DISTINCT CASE WHEN e.entityType = 'structuredLogExport' AND e.entityId IS NOT NULL THEN CAST (e.entityId AS VARCHAR (36)) ELSE CAST (e.auditEventId AS VARCHAR (20)) END), N' reads)'),
+               (SELECT COUNT (DISTINCT CASE WHEN e.entityType = 'structuredLogExport' AND e.entityId IS NOT NULL THEN CAST (e.entityId AS VARCHAR (36)) ELSE CAST (e.auditEventId AS VARCHAR (20)) END) AS readEvents, COUNT (DISTINCT e.entityId) AS distinctEntities FOR JSON PATH, WITHOUT_ARRAY_WRAPPER),
                CONCAT ('apiOnlyNoScreenVisits|', CONVERT (VARCHAR (36), e.sessionReference))
           FROM logs.auditEvent AS e
          WHERE e.eventUtc >= @since AND e.sessionReference IS NOT NULL
@@ -317,7 +317,7 @@ BEGIN
            AND NOT EXISTS (SELECT 1 FROM logs.screenVisit AS v
                             WHERE v.sessionReference = e.sessionReference AND v.isDeleted = 0)
          GROUP BY COALESCE (e.rootTenantId, @platformRoot), e.appUserId, e.sessionReference
-        HAVING COUNT (*) >= 25;
+        HAVING COUNT (DISTINCT CASE WHEN e.entityType = 'structuredLogExport' AND e.entityId IS NOT NULL THEN CAST (e.entityId AS VARCHAR (36)) ELSE CAST (e.auditEventId AS VARCHAR (20)) END) >= 25;
 
         -- Deduplicate candidates by fingerprint within this scan batch before inserting against the unique index.
         DECLARE @deduped TABLE (

@@ -100,6 +100,7 @@ BEGIN
                                      AND kv.k NOT LIKE N'%password%' AND kv.k NOT LIKE N'%secret%' AND kv.k NOT LIKE N'%token%'
                                      AND kv.k NOT LIKE N'%birth%' AND kv.k NOT LIKE N'%phone%' AND kv.k NOT LIKE N'%email%'
                                      AND kv.k NOT LIKE N'%street%' AND kv.k NOT LIKE N'%zip%' AND kv.k NOT LIKE N'%ssn%'
+                                     AND kv.k NOT LIKE N'%postal%' AND kv.k NOT LIKE N'%address%' AND kv.k NOT LIKE N'%accession%' AND kv.k NOT LIKE N'%medicalRecord%'
                                      AND (   kv.k LIKE N'%Id' OR kv.k LIKE N'%Count' OR kv.k LIKE N'%Number'
                                           OR kv.k LIKE N'%Days' OR kv.k LIKE N'%Hours' OR kv.k LIKE N'%Minutes'
                                           OR kv.k LIKE N'%Size' OR kv.k LIKE N'%Rows' OR kv.k LIKE N'%Code'

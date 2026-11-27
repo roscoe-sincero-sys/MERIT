@@ -150,7 +150,7 @@ public sealed class LoggingWave2UnitTests
         var t1 = new DateTime(2026, 11, 1, 12, 0, 0, DateTimeKind.Utc);
         var data = new FakeSecurityMonitoringData
         {
-            AuditRows = [new AuditExportRow { AuditEventId = 10, EventUtc = t1, EventAction = "view", EntityType = "person", AppUserId = userId, ViewAsUserId = viewAs, RootTenantId = rootId }],
+            AuditRows = [new AuditExportRow { AuditEventId = 10, EventUtc = t1, EventAction = "export", EntityType = "structuredLogExport", AppUserId = userId, ViewAsUserId = viewAs, RootTenantId = rootId, FilterJson = "{\"phase\":\"completed\"}" }],
         };
         var session = new FakeSession(userId, rootId, Permissions.AuditView);
         var svc = new StructuredLogExportService(data, new AuditService(new RecordingWorkData(), new NullRequestAuditContext()), session);
@@ -166,7 +166,13 @@ public sealed class LoggingWave2UnitTests
         Assert.Contains("method", header, StringComparison.Ordinal);
         Assert.Contains("tabId", header, StringComparison.Ordinal);
         Assert.Contains("profileId", header, StringComparison.Ordinal);
+        Assert.Contains("filterJson", header, StringComparison.Ordinal);
         Assert.Contains(viewAs.ToString(), csv, StringComparison.Ordinal);
+        Assert.Contains("completed", csv, StringComparison.Ordinal);
+
+        using var msPseudo = new MemoryStream();
+        await svc.WriteCsvAsync(msPseudo, t1.AddMinutes(-1), t1.AddMinutes(1), new HashSet<string> { "audit" }, pseudonymize: true);
+        Assert.DoesNotContain("completed", Encoding.UTF8.GetString(msPseudo.ToArray()), StringComparison.Ordinal);
     }
 
     [Fact]
