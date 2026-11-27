@@ -115,7 +115,7 @@ public sealed class ScreenUsageTests
         public bool Throw { get; set; }
         public Task<bool> RecordAsync(ScreenVisitInput v, CancellationToken ct = default) { if (Throw) throw new InvalidOperationException("secret must not be logged"); Visits.Add(v); return Task.FromResult(false); }
         public Task DurationAsync(Guid id, int ms, CancellationToken ct = default) => Throw ? Task.FromException(new InvalidOperationException()) : Task.CompletedTask;
-        public Task<ScreenUsageReport> ReportAsync(int days, CancellationToken ct = default) => throw new NotSupportedException();
+        public Task<ScreenUsageReport> ReportAsync(int days, Guid? appUserId = null, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<ScreenSessionReport> SessionAsync(Guid reference, int days, int page, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<int> PurgeAsync(int days, CancellationToken ct = default) => throw new NotSupportedException();
     }

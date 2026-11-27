@@ -139,6 +139,7 @@ BEGIN
             auth.udfSessionUserId ());
 END;
 
+DECLARE @supBeforeJson NVARCHAR (MAX) = NULL;
 IF @supersedesLabResultId IS NOT NULL
 BEGIN
     IF @intakeBatchId IS NOT NULL AND @originalRowVersion IS NULL
@@ -150,6 +151,7 @@ BEGIN
     BEGIN
         ;THROW 51422, N'A correction reason is required.', 1;
     END;
+    SET @supBeforeJson = (SELECT resultRowStatus, correctionReason FROM dbo.labResult WHERE labResultId = @supersedesLabResultId FOR JSON PATH, WITHOUT_ARRAY_WRAPPER);
     UPDATE dbo.labResult SET resultRowStatus = 'superseded', correctionReason=@correctionReason,
         correctionByUserId=auth.udfSessionUserId(), correctionUtc=SYSUTCDATETIME()
      WHERE labResultId = @supersedesLabResultId AND personId=@personId AND resultRowStatus = 'valid' AND isDeleted = 0
@@ -180,10 +182,34 @@ VALUES (@labResultId, @root, @root, @personId, @analyteSpecimenId, @collectedDat
         @ageAtCollectionMonths, @population, @isIndeterminate, @resultRowStatus, @intakeBatchId);
 
 {AUDIT_SESSION_VARS}
+DECLARE @resultAuditOwner UNIQUEIDENTIFIER = dbo.udfPatientWorkOwner (@personId);
+DECLARE @resultAfterJson NVARCHAR (MAX) = (
+    SELECT labResultId, personId, collectedDate, resultStatus, resultRowStatus, operator, valueReported, unitReported,
+           valueCanonical, unitCanonical, sampleType, supersedesLabResultId, correctionReason
+      FROM dbo.labResult WHERE labResultId = @labResultId
+       FOR JSON PATH, WITHOUT_ARRAY_WRAPPER);
 INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, clientAddress, owningTenantId,
                         sessionReference, traceId, actingTenantId, viewAsUserId)
 VALUES (auth.udfSessionUserId (), @root, 'create', 'labResult', @labResultId, @auditClientAddress,
-        dbo.udfPatientWorkOwner (@personId), @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs);
+        @resultAuditOwner, @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs);
+DECLARE @resultAuditEventId BIGINT = SCOPE_IDENTITY ();
+INSERT logs.auditEventChange (auditEventChangeId, auditEventId, rootTenantId, owningTenantId, entityType, entityId,
+                              beforeJson, afterJson)
+VALUES ({NEWID}, @resultAuditEventId, @root, @resultAuditOwner, 'labResult', @labResultId, NULL, @resultAfterJson);
+
+IF @supersedesLabResultId IS NOT NULL
+BEGIN
+    INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, clientAddress, owningTenantId,
+                            sessionReference, traceId, actingTenantId, viewAsUserId)
+    VALUES (auth.udfSessionUserId (), @root, 'update', 'labResult', @supersedesLabResultId, @auditClientAddress,
+            @resultAuditOwner, @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs);
+    DECLARE @supAuditEventId BIGINT = SCOPE_IDENTITY ();
+    INSERT logs.auditEventChange (auditEventChangeId, auditEventId, rootTenantId, owningTenantId, entityType, entityId,
+                                  beforeJson, afterJson)
+    VALUES ({NEWID}, @supAuditEventId, @root, @resultAuditOwner, 'labResult', @supersedesLabResultId,
+            @supBeforeJson,
+            (SELECT resultRowStatus, correctionReason FROM dbo.labResult WHERE labResultId = @supersedesLabResultId FOR JSON PATH, WITHOUT_ARRAY_WRAPPER));
+END;
 
 SELECT @labResultId AS labResultId, @intakeBatchId AS intakeBatchId;
 

@@ -510,5 +510,6 @@ public sealed partial class EndpointTests(MeritFixture fixture, ITestOutputHelpe
            || pattern.Contains("{episodeId", StringComparison.Ordinal)
            || pattern.EndsWith("/edit", StringComparison.Ordinal) && (pattern.Contains("/places/", StringComparison.Ordinal)
                || pattern.Contains("/samples/", StringComparison.Ordinal) || pattern.Contains("/employment/", StringComparison.Ordinal) || pattern.Contains("/sources/", StringComparison.Ordinal))
-           || pattern.EndsWith(".csv", StringComparison.Ordinal);   // file downloads, not pages
+           || pattern.EndsWith(".csv", StringComparison.Ordinal) || pattern.EndsWith(".jsonl", StringComparison.Ordinal)
+           || pattern.EndsWith("/download", StringComparison.Ordinal);   // file downloads, not pages
 }

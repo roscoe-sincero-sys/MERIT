@@ -226,6 +226,12 @@ services.AddAuthorization(o =>
     // Receipt-quality missing-information completion: person.edit or intake.upload (#300).
     o.AddPolicy(Permissions.ReceiptWrite, p => p.AddAuthenticationSchemes(AuthSchemes.Session).RequireAuthenticatedUser()
         .RequireClaim(MeritClaims.Permission, Permissions.PersonEdit, Permissions.IntakeUpload));
+    // Structured log export & unified user behavior summary (#328/#330).
+    o.AddPolicy(Permissions.LogReview, p => p.AddAuthenticationSchemes(AuthSchemes.Session).RequireAuthenticatedUser()
+        .RequireClaim(MeritClaims.Permission, Permissions.AuditView, Permissions.SecurityReview, Permissions.TenantAdminister, Permissions.UsageView));
+    // Managing security findings: write-capable admins or platform investigators only (Claude S5 / Codex #4).
+    o.AddPolicy(Permissions.SecurityManage, p => p.AddAuthenticationSchemes(AuthSchemes.Session).RequireAuthenticatedUser()
+        .RequireClaim(MeritClaims.Permission, Permissions.TenantAdminister, Permissions.SecurityInvestigate));
 });
 
 // ---------------------------------------------------------------------------------------------- MVC, API, antiforgery

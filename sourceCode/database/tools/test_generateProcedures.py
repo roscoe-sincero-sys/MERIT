@@ -95,6 +95,17 @@ class ManifestTests(unittest.TestCase):
         for name in gp.HANDWRITTEN:
             self.assertTrue((gp.OUT / f"{name}.sql").exists(), f"Handwritten procedure {name}.sql missing")
 
+    def test_key_parameters_follow_allowlisted_diagnostic_schema(self):
+        # #338: Ensure no generated procedure logs disallowed sensitive/PHI parameters in @KeyParameters.
+        violations = []
+        for mod_name in gp.MODULES:
+            for p in importlib.import_module(mod_name).PROCS:
+                key_expr = p.get("key") or ""
+                for disallowed in gp.DISALLOWED_DIAGNOSTIC_PARAMS:
+                    if re.search(rf"{re.escape(disallowed)}\b", key_expr, flags=re.IGNORECASE):
+                        violations.append(f"{p['schema']}.{p['name']} references {disallowed}")
+        self.assertEqual([], violations, f"Disallowed diagnostic parameters in @KeyParameters: {violations}")
+
 
 if __name__ == "__main__":
     unittest.main()

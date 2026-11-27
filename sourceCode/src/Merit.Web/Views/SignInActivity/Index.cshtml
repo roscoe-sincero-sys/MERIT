@@ -44,11 +44,11 @@
     {
         <div class="merit-table-wrap" tabindex="0" role="region" aria-label="Accounts tried from many addresses; scroll sideways for more columns"><table class="usa-table usa-table--borderless usa-table--compact">
             <caption class="usa-sr-only">Accounts tried from many addresses</caption>
-            <thead><tr><th scope="col">Account</th><th scope="col">Addresses</th><th scope="col">Failures</th><th scope="col">Last</th></tr></thead>
+            <thead><tr><th scope="col">Account</th><th scope="col">Addresses</th><th scope="col">Failures</th><th scope="col">First</th><th scope="col">Last</th></tr></thead>
             <tbody>@foreach (var r in a.Stuffing)
             {
                 <tr><td>@if (r.AppUserId is Guid id) { <a class="usa-link" href="/admin/users/@id">@r.DisplayName</a> <span class="merit-meta">@r.UserName</span> } else { <span>Unknown name <code>@SignInEventText.ShortHash(r.AttemptedNameHash)</code></span> }</td>
-                    <td>@r.Addresses</td><td>@r.Failures</td><td class="merit-nowrap">@Options.Date(r.LastUtc)</td></tr>
+                    <td>@r.Addresses</td><td>@r.Failures</td><td class="merit-nowrap">@Options.Date(r.FirstUtc)</td><td class="merit-nowrap">@Options.Date(r.LastUtc)</td></tr>
             }</tbody>
         </table></div>
     }
@@ -75,8 +75,8 @@
     {
         <div class="merit-table-wrap" tabindex="0" role="region" aria-label="Failures by address; scroll sideways for more columns"><table class="usa-table usa-table--borderless usa-table--compact">
             <caption class="usa-sr-only">Failures by address</caption>
-            <thead><tr><th scope="col">Address</th><th scope="col">Failures</th><th scope="col">Accounts</th><th scope="col">Unknown names</th><th scope="col">Lockouts</th><th scope="col">Refused (rate limit)</th><th scope="col">Last</th></tr></thead>
-            <tbody>@foreach (var r in a.ByAddress) { <tr><td>@r.ClientAddress</td><td>@r.Failures</td><td>@r.DistinctAccounts</td><td>@r.DistinctUnknownNames</td><td>@r.Lockouts</td><td>@r.RateLimited</td><td class="merit-nowrap">@Options.Date(r.LastUtc)</td></tr> }</tbody>
+            <thead><tr><th scope="col">Address</th><th scope="col">Failures</th><th scope="col">Accounts</th><th scope="col">Unknown names</th><th scope="col">Lockouts</th><th scope="col">Refused (rate limit)</th><th scope="col">First</th><th scope="col">Last</th></tr></thead>
+            <tbody>@foreach (var r in a.ByAddress) { <tr><td>@r.ClientAddress</td><td>@r.Failures</td><td>@r.DistinctAccounts</td><td>@r.DistinctUnknownNames</td><td>@r.Lockouts</td><td>@r.RateLimited</td><td class="merit-nowrap">@Options.Date(r.FirstUtc)</td><td class="merit-nowrap">@Options.Date(r.LastUtc)</td></tr> }</tbody>
         </table></div>
     }
 </section>
@@ -88,8 +88,8 @@
     {
         <div class="merit-table-wrap" tabindex="0" role="region" aria-label="Failures by account; scroll sideways for more columns"><table class="usa-table usa-table--borderless usa-table--compact">
             <caption class="usa-sr-only">Failures by account</caption>
-            <thead><tr><th scope="col">Account</th><th scope="col">Failures</th><th scope="col">Addresses</th><th scope="col">Lockouts</th><th scope="col">Last</th></tr></thead>
-            <tbody>@foreach (var r in a.ByAccount) { <tr><td><a class="usa-link" href="/admin/users/@r.AppUserId">@r.DisplayName</a> <span class="merit-meta">@r.UserName</span></td><td>@r.Failures</td><td>@r.DistinctAddresses</td><td>@r.Lockouts</td><td class="merit-nowrap">@Options.Date(r.LastUtc)</td></tr> }</tbody>
+            <thead><tr><th scope="col">Account</th><th scope="col">Failures</th><th scope="col">Addresses</th><th scope="col">Lockouts</th><th scope="col">First</th><th scope="col">Last</th></tr></thead>
+            <tbody>@foreach (var r in a.ByAccount) { <tr><td><a class="usa-link" href="/admin/users/@r.AppUserId">@r.DisplayName</a> <span class="merit-meta">@r.UserName</span></td><td>@r.Failures</td><td>@r.DistinctAddresses</td><td>@r.Lockouts</td><td class="merit-nowrap">@Options.Date(r.FirstUtc)</td><td class="merit-nowrap">@Options.Date(r.LastUtc)</td></tr> }</tbody>
         </table></div>
     }
 </section>

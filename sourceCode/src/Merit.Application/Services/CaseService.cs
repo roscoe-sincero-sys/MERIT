@@ -73,7 +73,7 @@ public sealed class CaseService(IClock clock, ICaseData cases, IWorkData work, I
     {
         session.Require(Permissions.CaseEdit);
         await cases.UpdateCaseAsync(exposureCaseId, assignedToUserId, exposureCategory, caseStatus, rowVersion, ct).ConfigureAwait(false);
-        await audit.ChangedAsync("exposureCase", exposureCaseId, ct).ConfigureAwait(false);
+        // Audited with before/after snapshot inside dbo.uspUpdateExposureCase's transaction (#332/#335).
     }
 
     /// <summary>Staff can override a classification with a required reason; the computed value is kept beside it.</summary>
@@ -86,7 +86,7 @@ public sealed class CaseService(IClock clock, ICaseData cases, IWorkData work, I
             .When(population is not ("child" or "adult" or "pregnant"), "Population", "Choose a population.")
             .ThrowIfInvalid();
         await cases.OverrideClassificationAsync(exposureCaseId, classification, population, reason!.Trim(), rowVersion, ct).ConfigureAwait(false);
-        await audit.ChangedAsync("exposureCase", exposureCaseId, ct).ConfigureAwait(false);
+        // Audited with before/after snapshot inside dbo.uspOverrideCaseClassification's transaction (#332/#335).
     }
 
     /// <summary>Logs an activity; after the configured number of failed contact attempts a letter task is queued.</summary>
@@ -147,7 +147,7 @@ public sealed class CaseService(IClock clock, ICaseData cases, IWorkData work, I
             .When(!confirmed, "transferConfirmed", "Confirm that the receiving jurisdiction takes over this case.")
             .When(rowVersion.Length != 8, "RowVersion", "Reload the case before transferring it.").ThrowIfInvalid();
         await cases.TransferCaseAsync(id, toTenantId!.Value, reason!.Trim(), rowVersion, ct).ConfigureAwait(false);
-        await audit.ChangedAsync("exposureCase", id, ct).ConfigureAwait(false);
+        // Audited with before/after snapshot inside dbo.uspTransferExposureCase's transaction (#332/#335).
     }
 
     public async Task ReopenAsync(Guid id, string? reason, byte[] rowVersion, CancellationToken ct = default)
@@ -156,7 +156,7 @@ public sealed class CaseService(IClock clock, ICaseData cases, IWorkData work, I
         new Validator().Required("Reason", reason, "Reason").MaxLength("Reason", reason, 2000, "Reason")
             .When(rowVersion.Length != 8, "RowVersion", "Reload the case before reopening.").ThrowIfInvalid();
         await cases.ReopenCaseAsync(id, reason!.Trim(), rowVersion, ct).ConfigureAwait(false);
-        await audit.ChangedAsync("exposureCase", id, ct).ConfigureAwait(false);
+        // Audited with before/after snapshot inside dbo.uspReopenCase's transaction (#332/#335).
     }
 
     public async Task CloseAsync(Guid exposureCaseId, string? closureReason, DateOnly? closedDate, string? note, byte[] rowVersion,
@@ -168,7 +168,7 @@ public sealed class CaseService(IClock clock, ICaseData cases, IWorkData work, I
             .When(closedDate > clock.Today, "ClosedDate", "The date cannot be in the future.")
             .ThrowIfInvalid();
         await cases.CloseCaseAsync(exposureCaseId, closureReason!, closedDate!.Value, note, rowVersion, ct, closureReviewToken, closureReviewConfirmed).ConfigureAwait(false);
-        await audit.ChangedAsync("exposureCase", exposureCaseId, ct).ConfigureAwait(false);
+        // Audited with before/after snapshot inside dbo.uspCloseExposureCase's transaction (#332/#335).
     }
 
     /// <summary>Before creating an investigation the system offers any open investigation of the same target.</summary>

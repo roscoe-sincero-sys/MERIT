@@ -1,0 +1,111 @@
+@model Merit.Web.Controllers.SecurityAlertsPage
+@{
+    ViewData["Title"] = "Security alerts & behavioral anomalies";
+}
+<h1>Security alerts &amp; behavioral anomalies</h1>
+<p>
+    <a class="usa-button usa-button--outline" href="/admin/security-alerts.csv?hours=@Model.Hours&amp;days=@Model.Days&amp;status=@Model.Status" download>Export CSV</a>
+    <a class="usa-button usa-button--outline" href="/admin/security-alerts.jsonl?hours=@Model.Hours&amp;days=@Model.Days&amp;status=@Model.Status" download>Export JSONL</a>
+    <a class="usa-button usa-button--outline" href="/admin/log-export">Structured log export</a>
+</p>
+<form class="usa-form merit-form-row" method="get" action="/admin/security-alerts">
+    <label class="usa-label" for="hours">Live anomaly window</label>
+    <select class="usa-select" id="hours" name="hours">
+        @foreach (var h in new[] { 1, 24, 168, 720 }) { <option value="@h" selected="@(h == Model.Hours)">Last @h hours</option> }
+    </select>
+    <label class="usa-label" for="days">Persisted findings</label>
+    <select class="usa-select" id="days" name="days">
+        @foreach (var d in new[] { 7, 30, 90, 365 }) { <option value="@d" selected="@(d == Model.Days)">Last @d days</option> }
+    </select>
+    <label class="usa-label" for="status">Status</label>
+    <select class="usa-select" id="status" name="status">
+        <option value="" selected="@(string.IsNullOrEmpty(Model.Status))">All</option>
+        @foreach (var s in new[] { "open", "acknowledged", "resolved", "falsePositive" }) { <option value="@s" selected="@(s == Model.Status)">@s</option> }
+    </select>
+    <button class="usa-button usa-button--outline" type="submit">Show</button>
+</form>
+
+<section aria-labelledby="live-anomalies">
+    <h2 id="live-anomalies">Live behavioral anomalies (last @Model.Hours hours)</h2>
+    @if (Model.Anomalies.Count == 0) { <p>None detected in this window.</p> }
+    else
+    {
+        <div class="merit-table-wrap" tabindex="0" role="region" aria-label="Live behavioral anomalies"><table class="usa-table usa-table--borderless usa-table--compact">
+            <thead><tr><th scope="col">Severity</th><th scope="col">Rule</th><th scope="col">Account</th><th scope="col">Summary</th><th scope="col">Events</th><th scope="col">Last (UTC)</th></tr></thead>
+            <tbody>@foreach (var a in Model.Anomalies)
+            {
+                <tr>
+                    <td>@a.Severity</td>
+                    <td><code>@a.RuleCode</code></td>
+                    <td>@if (a.AppUserId is Guid uid) { <a class="usa-link" href="/admin/users/@uid/activity">@(a.DisplayName ?? a.UserName ?? uid.ToString())</a> } else { <span>—</span> }</td>
+                    <td>@a.Title</td>
+                    <td>@a.EventCount</td>
+                    <td class="merit-nowrap">@Options.Date(a.LastUtc)</td>
+                </tr>
+            }</tbody>
+        </table></div>
+    }
+</section>
+
+<section aria-labelledby="persisted-findings">
+    <h2 id="persisted-findings">Persisted security findings (last @Model.Days days)</h2>
+    @if (Model.Findings.Count == 0) { <p>No persisted findings.</p> }
+    else
+    {
+        <div class="merit-table-wrap" tabindex="0" role="region" aria-label="Persisted security findings"><table class="usa-table usa-table--borderless usa-table--compact">
+            <thead><tr><th scope="col">Severity</th><th scope="col">Rule</th><th scope="col">Account</th><th scope="col">Summary</th><th scope="col">Status</th><th scope="col">Detected (UTC)</th><th scope="col">Action</th></tr></thead>
+            <tbody>@foreach (var f in Model.Findings)
+            {
+                <tr>
+                    <td>@f.Severity</td>
+                    <td><code>@f.RuleCode</code></td>
+                    <td>@if (f.AppUserId is Guid uid) { <a class="usa-link" href="/admin/users/@uid/activity">@(f.DisplayName ?? f.UserName ?? uid.ToString())</a> } else { <span>—</span> }</td>
+                    <td>@f.Title</td>
+                    <td>@f.Status</td>
+                    <td class="merit-nowrap">@Options.Date(f.DetectedUtc)</td>
+                    <td>
+                        @if (Model.CanEditFindings)
+                        {
+                            <form method="post" action="/admin/security-alerts/@f.SecurityFindingId/status">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="hours" value="@Model.Hours" />
+                                <input type="hidden" name="days" value="@Model.Days" />
+                                <select name="status" aria-label="Status for @f.RuleCode">
+                                    @foreach (var s in new[] { "open", "acknowledged", "resolved", "falsePositive" }) { <option value="@s" selected="@(s == f.Status)">@s</option> }
+                                </select>
+                                <button class="usa-button usa-button--unstyled" type="submit">Save</button>
+                            </form>
+                        }
+                        else
+                        {
+                            <span>Read-only</span>
+                        }
+                    </td>
+                </tr>
+            }</tbody>
+        </table></div>
+    }
+</section>
+
+<section aria-labelledby="search-summary">
+    <h2 id="search-summary">Search volume summary (last @Model.Days days)</h2>
+    <p class="merit-meta">Aggregated from <code>logs.searchLog</code> without exposing raw search text.</p>
+    @if (Model.SearchSummary.Count == 0) { <p>No search activity in this window.</p> }
+    else
+    {
+        <div class="merit-table-wrap" tabindex="0" role="region" aria-label="Search volume summary"><table class="usa-table usa-table--borderless usa-table--compact">
+            <thead><tr><th scope="col">Account</th><th scope="col">Searches</th><th scope="col">Zero-result</th><th scope="col">Outside scope</th><th scope="col">Sessions</th><th scope="col">Last (UTC)</th></tr></thead>
+            <tbody>@foreach (var s in Model.SearchSummary)
+            {
+                <tr>
+                    <td><a class="usa-link" href="/admin/users/@s.AppUserId/activity">@(s.DisplayName ?? s.UserName ?? s.AppUserId.ToString())</a></td>
+                    <td>@s.TotalSearches</td>
+                    <td>@s.ZeroResultSearches</td>
+                    <td>@s.OutsideScopeHits</td>
+                    <td>@s.DistinctSessions</td>
+                    <td class="merit-nowrap">@Options.Date(s.LastUtc)</td>
+                </tr>
+            }</tbody>
+        </table></div>
+    }
+</section>

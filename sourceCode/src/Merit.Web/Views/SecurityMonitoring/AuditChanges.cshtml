@@ -1,0 +1,23 @@
+@model Merit.Web.Controllers.AuditChangesPage
+@{
+    ViewData["Title"] = $"Audit event #{Model.AuditEventId} change detail";
+}
+<h1>Audit event #@Model.AuditEventId — change detail</h1>
+<p><a class="usa-link" href="/admin/audit">Back to audit log</a></p>
+@if (Model.Changes.Count == 0)
+{
+    <p>No purgeable before/after change snapshots are recorded for this audit event within your scope (or they have aged out under the records schedule).</p>
+}
+else
+{
+    @foreach (var c in Model.Changes)
+    {
+        <section class="merit-section">
+            <h2><code>@c.EntityType</code> <code>@c.EntityId</code> (@Options.Date(c.ChangedUtc))</h2>
+            <h3>Before</h3>
+            <pre>@(c.BeforeJson ?? "(created)")</pre>
+            <h3>After</h3>
+            <pre>@(c.AfterJson ?? "(none)")</pre>
+        </section>
+    }
+}

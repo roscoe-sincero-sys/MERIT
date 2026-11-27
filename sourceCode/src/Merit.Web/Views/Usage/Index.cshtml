@@ -11,8 +11,10 @@
     <select class="usa-select" id="usage-days" name="days">
         @foreach (var days in new[] { 1, 7, 30, 90 }) { <option value="@days" selected="@(Model.Days == days)">Last @days days</option> }
     </select>
+    <label class="usa-label" for="usage-user">Filter by user ID (optional)</label>
+    <input class="usa-input" id="usage-user" name="userId" value="@Model.UserId" placeholder="00000000-0000-0000-0000-000000000000" />
     <button class="usa-button" type="submit">Show usage</button>
-    <a class="usa-button usa-button--outline" href="/admin/usage/summary.csv?days=@Model.Days">Download summary CSV</a>
+    <a class="usa-button usa-button--outline" href="/admin/usage/summary.csv?days=@Model.Days@(Model.UserId is Guid uid ? $"&userId={uid}" : "")">Download summary CSV</a>
 </form>
 <p class="usa-hint">Usage is best effort. Visible time is optional, browser-reported focused time capped at 30 minutes per visit. It is not proof of attention, productivity, clinical work or notification. Missing time means unknown.</p>
 <section class="merit-section" aria-labelledby="usage-screens">

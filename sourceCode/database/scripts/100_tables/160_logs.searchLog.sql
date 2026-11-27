@@ -84,6 +84,16 @@ BEGIN
         ON logs.searchLog (sessionReference, searchedUtc);
 END;
 GO
+IF NOT EXISTS (SELECT 1
+                 FROM sys.indexes
+                WHERE name      = N'IX_logs_searchLog_searchedUtc_searchLogId'
+                  AND object_id = OBJECT_ID (N'logs.searchLog'))
+BEGIN
+    CREATE INDEX IX_logs_searchLog_searchedUtc_searchLogId
+        ON logs.searchLog (searchedUtc, searchLogId)
+        WHERE isDeleted = 0;
+END;
+GO
 
 -- -------------------------------------------------------------------------------------------
 -- 5. The audit trigger. Not optional: a DEFAULT fires on INSERT only, so without it every UPDATE

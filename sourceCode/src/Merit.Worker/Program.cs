@@ -37,6 +37,10 @@ builder.Services.AddHostedService<ClusterScheduler>();
 builder.Services.AddHostedService<SignInLogPurger>();
 builder.Services.AddHostedService<ScreenVisitPurger>();
 builder.Services.AddHostedService<AuditEventRecordPurger>();
+builder.Services.AddHostedService<AuditEventChangePurger>();
+builder.Services.AddHostedService<SearchLogPurger>();
+builder.Services.AddHostedService<SecurityFindingScanner>();
+builder.Services.AddHostedService<OperationalIntegrityMonitor>();
 builder.Services.AddHealthChecks().AddCheck<QueueHealthCheck>("queues");
 
 var app = builder.Build();

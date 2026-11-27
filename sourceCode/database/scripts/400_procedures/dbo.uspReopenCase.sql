@@ -102,7 +102,10 @@ BEGIN
         -- =========================================================================================
 
         DECLARE @person UNIQUEIDENTIFIER, @analyte UNIQUEIDENTIFIER, @root UNIQUEIDENTIFIER, @owner UNIQUEIDENTIFIER;
-        SELECT @person = personId, @analyte = analyteId, @root = rootTenantId, @owner = owningTenantId FROM dbo.exposureCase WITH (UPDLOCK, HOLDLOCK) WHERE exposureCaseId = @exposureCaseId;
+        DECLARE @beforeReopenJson NVARCHAR (MAX);
+        SELECT @person = personId, @analyte = analyteId, @root = rootTenantId, @owner = owningTenantId,
+               @beforeReopenJson = (SELECT caseStatus, closedDate, closureReason FROM dbo.exposureCase WHERE exposureCaseId = @exposureCaseId FOR JSON PATH, WITHOUT_ARRAY_WRAPPER)
+          FROM dbo.exposureCase WITH (UPDLOCK, HOLDLOCK) WHERE exposureCaseId = @exposureCaseId;
         IF EXISTS (SELECT 1 FROM dbo.exposureCase WITH (UPDLOCK, HOLDLOCK) WHERE personId = @person AND analyteId = @analyte AND caseStatus <> 'closed' AND isDeleted = 0)
         BEGIN
             ;THROW 51422, N'An open case already exists for this person and analyte.', 1;
@@ -117,6 +120,21 @@ BEGIN
         VALUES (CAST (CAST (NEWID () AS BINARY (10)) + CAST (DATEDIFF_BIG (MILLISECOND, '19700101', SYSUTCDATETIME ()) AS BINARY (6)) AS UNIQUEIDENTIFIER), @root, @owner, @exposureCaseId, 'statusChange', auth.udfSessionToday (), auth.udfSessionUserId (), CONCAT (N'Reopened: ', @reason), 'reopened');
         INSERT dbo.workTask (workTaskId, rootTenantId, owningTenantId, queueCode, title, exposureCaseId, personId)
         VALUES (CAST (CAST (NEWID () AS BINARY (10)) + CAST (DATEDIFF_BIG (MILLISECOND, '19700101', SYSUTCDATETIME ()) AS BINARY (6)) AS UNIQUEIDENTIFIER), @root, @owner, 'caseFollowUp', N'Review reopened case', @exposureCaseId, @person);
+        DECLARE @auditScope UNIQUEIDENTIFIER = TRY_CAST (SESSION_CONTEXT (N'scopeKey') AS UNIQUEIDENTIFIER);
+        DECLARE @auditSessionRef UNIQUEIDENTIFIER, @auditActingTenant UNIQUEIDENTIFIER, @auditViewAs UNIQUEIDENTIFIER;
+        SELECT @auditSessionRef = sessionReference, @auditActingTenant = actingTenantId, @auditViewAs = viewAsUserId
+          FROM auth.sessionScope
+         WHERE sessionScopeId = @auditScope AND revokedUtc IS NULL AND expiresUtc > SYSUTCDATETIME () AND isDeleted = 0;
+        DECLARE @auditClientAddress VARCHAR (45) = TRY_CAST (SESSION_CONTEXT (N'clientAddress') AS VARCHAR (45));
+        DECLARE @auditTraceId VARCHAR (64) = TRY_CAST (SESSION_CONTEXT (N'traceId') AS VARCHAR (64));
+        INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, clientAddress, owningTenantId,
+                                sessionReference, traceId, actingTenantId, viewAsUserId)
+        VALUES (auth.udfSessionUserId (), @root, 'update', 'exposureCase', @exposureCaseId, @auditClientAddress, @owner,
+                @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs);
+        DECLARE @reopenAuditId BIGINT = SCOPE_IDENTITY ();
+        INSERT logs.auditEventChange (auditEventChangeId, auditEventId, rootTenantId, owningTenantId, entityType, entityId, beforeJson, afterJson)
+        VALUES (CAST (CAST (NEWID () AS BINARY (10)) + CAST (DATEDIFF_BIG (MILLISECOND, '19700101', SYSUTCDATETIME ()) AS BINARY (6)) AS UNIQUEIDENTIFIER), @reopenAuditId, @root, @owner, 'exposureCase', @exposureCaseId, @beforeReopenJson,
+                (SELECT caseStatus, closedDate, closureReason FROM dbo.exposureCase WHERE exposureCaseId = @exposureCaseId FOR JSON PATH, WITHOUT_ARRAY_WRAPPER));
         SET @Comments = N'Case reopened with review task.';
 
         -- =========================================================================================
@@ -138,8 +156,8 @@ BEGIN
                  , ElapsedMilliseconds = CAST (LEAST (DATEDIFF_BIG (MILLISECOND, @StartTimeUtc, @EndTimeUtc)
                                                     , CAST (2147483647 AS BIGINT)) AS INT)
                  , Successful          = 1
-                 , Comments            = @Comments
-                 , modifiedBy          = ORIGINAL_LOGIN ()
+                 , Comments            = LEFT (@Comments, 500)
+                 , modifiedBy          = COALESCE (NULLIF (CAST (SESSION_CONTEXT (N'AppUser') AS NVARCHAR (255)), N''), ORIGINAL_LOGIN ())
                  , modifiedDateUtc     = @EndTimeUtc
              WHERE ExecutionLogId = @ExecutionId;
         END;

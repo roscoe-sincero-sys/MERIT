@@ -127,11 +127,21 @@ UPDATE logs.screenVisit SET durationMs = @durationMs
     },
     {
         "schema": "logs", "name": "uspGetScreenUsage", "kind": "read", "grants": WEB, "ticket": "227",
-        "permission": "usage.view", "params": "@days INT = 30", "key": "CONCAT (N'days=', @days)",
+        "permission": "usage.view", "params": "@days INT = 30\n, @appUserId UNIQUEIDENTIFIER = NULL",
+        "key": "CONCAT (N'days=', @days, N', appUserId=', @appUserId)",
         "desc": "Scoped usage aggregates, five paths into manual result entry, back-and-forth loops, strict observed "
-                "search/person/entry/saved elapsed flow and the latest 100 sessions. Counts cover the full period; "
-                "only the displayed session list is capped. Predecessors outside the reader's scope are not exposed.",
-        "body": DAYS + VISIBLE + """
+                "search/person/entry/saved elapsed flow and the latest 100 sessions (optionally filtered to one user, #330). "
+                "Counts cover the full period; only the displayed session list is capped. Predecessors outside the reader's scope are not exposed.",
+        "body": DAYS + """
+DECLARE @from DATETIME2 (3) = DATEADD (DAY, -@days, SYSUTCDATETIME ());
+DECLARE @review TABLE (tenantId UNIQUEIDENTIFIER PRIMARY KEY);
+INSERT @review SELECT tenantId FROM auth.tvfReviewTenants ('usage.view');
+SELECT v.* INTO #visits
+  FROM logs.screenVisit AS v
+ WHERE v.isDeleted = 0 AND v.eventUtc >= @from
+   AND (@appUserId IS NULL OR v.appUserId = @appUserId)
+   AND EXISTS (SELECT 1 FROM @review AS r WHERE r.tenantId = v.actingTenantId);
+ALTER TABLE #visits ADD PRIMARY KEY CLUSTERED (screenVisitId);""" + """
 SELECT v.screenCode, CAST (NULL AS VARCHAR (1000)) AS roleCode, COUNT (*) AS visits,
        COUNT (DISTINCT v.sessionReference) AS sessions, COUNT (v.durationMs) AS timedVisits,
        AVG (CAST (v.durationMs AS FLOAT)) AS averageVisibleMs

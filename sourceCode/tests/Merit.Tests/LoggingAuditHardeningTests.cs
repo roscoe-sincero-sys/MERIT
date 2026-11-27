@@ -238,6 +238,13 @@ public sealed class LoggingAuditHardeningTests
             "SignInActivityController.ActivityCsv", // audited: SignInLogService.ExportActivityAsync
             "SignInActivityController.UnknownNames", // audited: SignInLogService.UnknownNamesAsync (#331)
             "SignInActivityController.Export", // audited: SignInLogService.ExportUnknownNamesAsync
+            "SecurityMonitoringController.Alerts", // audited: SecurityMonitoringService (#327)
+            "SecurityMonitoringController.AlertsCsv", // audited: audit.ExportedAsync (#327)
+            "SecurityMonitoringController.AlertsJsonl", // audited: audit.ExportedAsync (#327)
+            "SecurityMonitoringController.OperationsLog", // audited: SecurityMonitoringService (#330)
+            "SecurityMonitoringController.OperationsLogCsv", // audited: audit.ExportedAsync (#330)
+            "SecurityMonitoringController.OperationsLogJsonl", // audited: audit.ExportedAsync (#330)
+            "SecurityMonitoringController.AuditChanges", // audited: SecurityMonitoringService.GetAuditEventChangesAsync (#332)
         };
 
         var webAssembly = typeof(Merit.Web.Controllers.AdminController).Assembly;
@@ -276,6 +283,7 @@ public sealed class LoggingAuditHardeningTests
 
         string[] requiredAuditedProcs =
         [
+            "dbo.uspSavePerson.sql",
             "dbo.uspSavePersonLocations.sql",
             "dbo.uspSaveStagingCorrection.sql",
             "dbo.uspCorrectHeldGroup.sql",
@@ -283,7 +291,13 @@ public sealed class LoggingAuditHardeningTests
             "dbo.uspRejectStagingRows.sql",
             "dbo.uspOpenExposureCase.sql",
             "dbo.uspAttachResultToCase.sql",
+            "dbo.uspUpdateExposureCase.sql",
+            "dbo.uspOverrideCaseClassification.sql",
+            "dbo.uspCloseExposureCase.sql",
+            "dbo.uspReopenCase.sql",
+            "dbo.uspTransferExposureCase.sql",
             "dbo.uspSaveLabResult.sql",
+            "logs.uspUpdateSecurityFindingStatus.sql",
         ];
 
         foreach (string file in requiredAuditedProcs)

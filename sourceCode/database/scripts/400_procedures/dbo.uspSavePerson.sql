@@ -113,6 +113,7 @@ BEGIN
         DECLARE @root UNIQUEIDENTIFIER = auth.udfSessionRootTenantId ();
         DECLARE @acting UNIQUEIDENTIFIER = auth.udfSessionActingTenantId ();
         DECLARE @isNew BIT = 0, @dobChanged BIT = 0, @deceasedChanged BIT = 0;
+        DECLARE @beforeJson NVARCHAR (MAX) = NULL, @afterJson NVARCHAR (MAX) = NULL;
 
         IF @dob IS NOT NULL AND @dob > auth.udfSessionToday ()
         BEGIN
@@ -127,7 +128,11 @@ BEGIN
             END;
 
             SELECT @dobChanged      = IIF (dob IS DISTINCT FROM @dob, 1, 0),
-                   @deceasedChanged = IIF (deceasedDate IS NULL AND @deceasedDate IS NOT NULL, 1, 0)
+                   @deceasedChanged = IIF (deceasedDate IS NULL AND @deceasedDate IS NOT NULL, 1, 0),
+                   @beforeJson      = (SELECT lastName, firstName, middleName, dob, dobVerified, sex, ethnicity,
+                                              preferredLanguage, deceasedDate
+                                         FROM dbo.person WHERE personId = @personId
+                                          FOR JSON PATH, WITHOUT_ARRAY_WRAPPER)
               FROM dbo.person WHERE personId = @personId;
 
             UPDATE dbo.person
@@ -186,6 +191,28 @@ BEGIN
             INSERT (personMatchKeyId, rootTenantId, personId, lastNameKey, firstNameKey, dob)
             VALUES (CAST (CAST (NEWID () AS BINARY (10)) + CAST (DATEDIFF_BIG (MILLISECOND, '19700101', SYSUTCDATETIME ()) AS BINARY (6)) AS UNIQUEIDENTIFIER), @root, @personId, @lastNameKey, @firstNameKey, @dob);
 
+        SELECT @afterJson = (SELECT lastName, firstName, middleName, dob, dobVerified, sex, ethnicity,
+                                    preferredLanguage, deceasedDate
+                               FROM dbo.person WHERE personId = @personId
+                                FOR JSON PATH, WITHOUT_ARRAY_WRAPPER);
+
+        DECLARE @auditScope UNIQUEIDENTIFIER = TRY_CAST (SESSION_CONTEXT (N'scopeKey') AS UNIQUEIDENTIFIER);
+        DECLARE @auditSessionRef UNIQUEIDENTIFIER, @auditActingTenant UNIQUEIDENTIFIER, @auditViewAs UNIQUEIDENTIFIER;
+        SELECT @auditSessionRef = sessionReference, @auditActingTenant = actingTenantId, @auditViewAs = viewAsUserId
+          FROM auth.sessionScope
+         WHERE sessionScopeId = @auditScope AND revokedUtc IS NULL AND expiresUtc > SYSUTCDATETIME () AND isDeleted = 0;
+        DECLARE @auditClientAddress VARCHAR (45) = TRY_CAST (SESSION_CONTEXT (N'clientAddress') AS VARCHAR (45));
+        DECLARE @auditTraceId VARCHAR (64) = TRY_CAST (SESSION_CONTEXT (N'traceId') AS VARCHAR (64));
+        DECLARE @personAuditOwner UNIQUEIDENTIFIER = COALESCE (dbo.udfPatientWorkOwner (@personId), @acting, @root);
+        INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, clientAddress, owningTenantId,
+                                sessionReference, traceId, actingTenantId, viewAsUserId)
+        VALUES (auth.udfSessionUserId (), @root, IIF (@isNew = 1, 'create', 'update'), 'person', @personId, @auditClientAddress,
+                @personAuditOwner, @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs);
+        DECLARE @personAuditEventId BIGINT = SCOPE_IDENTITY ();
+        INSERT logs.auditEventChange (auditEventChangeId, auditEventId, rootTenantId, owningTenantId, entityType, entityId,
+                                      beforeJson, afterJson)
+        VALUES (CAST (CAST (NEWID () AS BINARY (10)) + CAST (DATEDIFF_BIG (MILLISECOND, '19700101', SYSUTCDATETIME ()) AS BINARY (6)) AS UNIQUEIDENTIFIER), @personAuditEventId, @root, @personAuditOwner, 'person', @personId, @beforeJson, @afterJson);
+
         SELECT personId, rowVersion, @isNew AS isNew, @dobChanged AS dobChanged, @deceasedChanged AS deceasedChanged
           FROM dbo.person WHERE personId = @personId;
 
@@ -210,8 +237,8 @@ BEGIN
                  , ElapsedMilliseconds = CAST (LEAST (DATEDIFF_BIG (MILLISECOND, @StartTimeUtc, @EndTimeUtc)
                                                     , CAST (2147483647 AS BIGINT)) AS INT)
                  , Successful          = 1
-                 , Comments            = @Comments
-                 , modifiedBy          = ORIGINAL_LOGIN ()
+                 , Comments            = LEFT (@Comments, 500)
+                 , modifiedBy          = COALESCE (NULLIF (CAST (SESSION_CONTEXT (N'AppUser') AS NVARCHAR (255)), N''), ORIGINAL_LOGIN ())
                  , modifiedDateUtc     = @EndTimeUtc
              WHERE ExecutionLogId = @ExecutionId;
         END;

@@ -202,7 +202,7 @@ public sealed class PersonService(
             MatchKeys.IsPlaceholderName(firstName), input.Dob, input.DobVerified, input.Sex, input.Ethnicity,
             Clean(input.PreferredLanguage), input.DeceasedDate, input.RowVersion, CountyFips(input.ResidenceCountyFips)), ct).ConfigureAwait(false);
         await data.SaveRacesAsync(id, input.RaceCodes, ct).ConfigureAwait(false);
-        await (saved.IsNew ? audit.CreatedAsync("person", id, ct) : audit.ChangedAsync("person", id, ct)).ConfigureAwait(false);
+        // create/update person and row-change snapshot are audited inside dbo.uspSavePerson's transaction (#332/#335).
 
         var changes = new List<string>();
         if (saved.DobChanged)

@@ -1,0 +1,76 @@
+@model Merit.Web.Controllers.UserActivityPage
+@{
+    var o = Model.Summary.Overview;
+    ViewData["Title"] = $"User activity: {o.DisplayName}";
+}
+<h1>User activity: @o.DisplayName <span class="merit-meta">(@o.UserName)</span></h1>
+<p>
+    <a class="usa-button usa-button--outline" href="/admin/users/@o.AppUserId/activity.csv?days=@Model.Days" download>Export CSV</a>
+    <a class="usa-button usa-button--outline" href="/admin/users/@o.AppUserId/activity.jsonl?days=@Model.Days" download>Export JSONL</a>
+    <a class="usa-link" href="/admin/users/@o.AppUserId">Account details</a> |
+    <a class="usa-link" href="/admin/audit?userId=@o.AppUserId">Audit log</a> |
+    <a class="usa-link" href="/admin/usage?userId=@o.AppUserId">Usage sessions</a>
+</p>
+<form class="usa-form merit-form-row" method="get" action="/admin/users/@o.AppUserId/activity">
+    <label class="usa-label" for="days">Window</label>
+    <select class="usa-select" id="days" name="days">
+        @foreach (var d in new[] { 7, 30, 90, 365 }) { <option value="@d" selected="@(d == Model.Days)">Last @d days</option> }
+    </select>
+    <button class="usa-button usa-button--outline" type="submit">Show</button>
+</form>
+
+<section aria-labelledby="user-overview">
+    <h2 id="user-overview">Sign-in &amp; activity posture (last @Model.Days days)</h2>
+    <dl>
+        <dt>Status</dt><dd>@(o.IsActive ? "Active" : "Inactive"), MFA @(o.MfaEnabled ? "enabled" : "not enabled")</dd>
+        <dt>Active sessions</dt><dd>@o.ActiveSessions</dd>
+        <dt>Sign-ins</dt><dd>@o.SignInSuccesses succeeded, @o.SignInFailures failed, @o.Lockouts lockouts across @o.DistinctAddresses distinct address(es)</dd>
+        <dt>Searches</dt><dd>@o.TotalSearches total (@o.ZeroResultSearches zero-result, @o.OutsideScopeSearches outside-scope)</dd>
+        <dt>Screen usage</dt><dd>@o.ScreenVisits visits across @o.UsageSessions session(s)</dd>
+    </dl>
+</section>
+
+<section aria-labelledby="user-audit">
+    <h2 id="user-audit">Audit ledger actions</h2>
+    @if (Model.Summary.AuditActions.Count == 0) { <p>No audit actions in this window.</p> }
+    else
+    {
+        <div class="merit-table-wrap" tabindex="0" role="region" aria-label="Audit actions"><table class="usa-table usa-table--borderless usa-table--compact">
+            <thead><tr><th scope="col">Action</th><th scope="col">Entity</th><th scope="col">Events</th><th scope="col">Records</th><th scope="col">Last (UTC)</th></tr></thead>
+            <tbody>@foreach (var a in Model.Summary.AuditActions)
+            {
+                <tr><td><code>@a.EventAction</code></td><td><code>@a.EntityType</code></td><td>@a.EventCount</td><td>@a.TotalRecords</td><td class="merit-nowrap">@Options.Date(a.LastUtc)</td></tr>
+            }</tbody>
+        </table></div>
+    }
+</section>
+
+<section aria-labelledby="user-findings">
+    <h2 id="user-findings">Security findings</h2>
+    @if (Model.Summary.Findings.Count == 0) { <p>No security findings in this window.</p> }
+    else
+    {
+        <div class="merit-table-wrap" tabindex="0" role="region" aria-label="Security findings"><table class="usa-table usa-table--borderless usa-table--compact">
+            <thead><tr><th scope="col">Severity</th><th scope="col">Rule</th><th scope="col">Summary</th><th scope="col">Status</th><th scope="col">Detected (UTC)</th></tr></thead>
+            <tbody>@foreach (var f in Model.Summary.Findings)
+            {
+                <tr><td>@f.Severity</td><td><code>@f.RuleCode</code></td><td>@f.Title</td><td>@f.Status</td><td class="merit-nowrap">@Options.Date(f.DetectedUtc)</td></tr>
+            }</tbody>
+        </table></div>
+    }
+</section>
+
+<section aria-labelledby="user-sessions">
+    <h2 id="user-sessions">Recent usage sessions</h2>
+    @if (Model.Summary.UsageSessions.Count == 0) { <p>No screen-usage sessions in this window.</p> }
+    else
+    {
+        <div class="merit-table-wrap" tabindex="0" role="region" aria-label="Usage sessions"><table class="usa-table usa-table--borderless usa-table--compact">
+            <thead><tr><th scope="col">Session</th><th scope="col">First (UTC)</th><th scope="col">Last (UTC)</th><th scope="col">Visits</th></tr></thead>
+            <tbody>@foreach (var s in Model.Summary.UsageSessions)
+            {
+                <tr><td><a class="usa-link" href="/admin/usage/sessions/@s.SessionReference">@s.SessionReference</a></td><td class="merit-nowrap">@Options.Date(s.FirstUtc)</td><td class="merit-nowrap">@Options.Date(s.LastUtc)</td><td>@s.Visits</td></tr>
+            }</tbody>
+        </table></div>
+    }
+</section>

@@ -555,7 +555,37 @@ BEGIN
     -- One value per fact, so StartDateUtc and the two audit timestamps cannot disagree by a millisecond and a
     -- reader cannot mistake three near-identical times for three separate events.
     DECLARE @Now   DATETIME2 (3)  = SYSUTCDATETIME ()
-          , @Actor NVARCHAR (255) = COALESCE (NULLIF (CAST (SESSION_CONTEXT (N'AppUser') AS NVARCHAR (255)), N''), ORIGINAL_LOGIN ());
+          , @Actor NVARCHAR (255) = COALESCE (NULLIF (CAST (SESSION_CONTEXT (N'AppUser') AS NVARCHAR (255)), N''), ORIGINAL_LOGIN ())
+          , @SafeKeyParameters NVARCHAR (500) = LEFT (@KeyParameters, 500);
+
+    -- #338 allowlisted execution diagnostics (per-token filtering, deny-first, ordinal-preserving, Claude I10 / S9).
+    IF @SafeKeyParameters IS NOT NULL AND CHARINDEX (N'=', @SafeKeyParameters) > 0
+    BEGIN
+        SELECT @SafeKeyParameters = LEFT (STRING_AGG (
+            CASE
+                WHEN kv.k IS NOT NULL
+                     AND kv.k NOT IN (N'token', N'secret', N'ssn', N'firstName', N'lastName', N'middleName', N'searchText', N'attemptedName')
+                     AND kv.k NOT LIKE N'%password%' AND kv.k NOT LIKE N'%secret%' AND kv.k NOT LIKE N'%token%'
+                     AND kv.k NOT LIKE N'%birth%' AND kv.k NOT LIKE N'%phone%' AND kv.k NOT LIKE N'%email%'
+                     AND kv.k NOT LIKE N'%street%' AND kv.k NOT LIKE N'%zip%' AND kv.k NOT LIKE N'%ssn%'
+                     AND kv.k NOT LIKE N'%postal%' AND kv.k NOT LIKE N'%address%' AND kv.k NOT LIKE N'%accession%' AND kv.k NOT LIKE N'%medicalRecord%'
+                     AND (   kv.k LIKE N'%Id' OR kv.k LIKE N'%Count' OR kv.k LIKE N'%Number'
+                          OR kv.k LIKE N'%Days' OR kv.k LIKE N'%Hours' OR kv.k LIKE N'%Minutes'
+                          OR kv.k LIKE N'%Size' OR kv.k LIKE N'%Rows' OR kv.k LIKE N'%Code'
+                          OR kv.k LIKE N'%Type' OR kv.k LIKE N'%Action' OR kv.k LIKE N'%Kind'
+                          OR kv.k LIKE N'%Source' OR kv.k LIKE N'%Role' OR kv.k LIKE N'%By'
+                          OR kv.k LIKE N'%Only' OR kv.k LIKE N'%Fips' OR kv.k LIKE N'%Status'
+                          OR kv.k IN (N'fromDate', N'toDate', N'fromUtc', N'toUtc', N'asOfDate', N'effectiveFrom', N'effectiveTo',
+                                      N'periodStart', N'periodEnd', N'isActive', N'isMember', N'isDeleted', N'includeHistory',
+                                      N'includeProtected', N'includeSearchText', N'hasDob', N'top', N'page', N'assignedToMe',
+                                      N'classification', N'closureReason', N'viewKind', N'workerName', N'settingKey',
+                                      N'decision', N'population', N'sort', N'status', N'step', N'method'))
+                THEN LTRIM (RTRIM (tok.value))
+                ELSE N'[redacted]'
+            END, N', ') WITHIN GROUP (ORDER BY tok.ordinal), 500)
+          FROM STRING_SPLIT (@SafeKeyParameters, N',', 1) AS tok
+         CROSS APPLY (SELECT LTRIM (RTRIM (LEFT (tok.value, NULLIF (CHARINDEX (N'=', tok.value), 0) - 1))) AS k) AS kv;
+    END;
 
     SET @StartDateUtc = ISNULL (@StartDateUtc, @Now);
 
@@ -569,7 +599,7 @@ BEGIN
     )
     VALUES
     (
-        @ProcedureName, @KeyParameters, @StartDateUtc, ISNULL (@ReCreatedAfterRollback, 0),
+        @ProcedureName, @SafeKeyParameters, @StartDateUtc, ISNULL (@ReCreatedAfterRollback, 0),
         @Actor, @Now, @Actor, @Now
     );
 
@@ -798,7 +828,40 @@ BEGIN
         -- One value per fact.  EndDateUtc, ElapsedMilliseconds and modifiedDateUtc all derive from @Now, so the
         -- recorded end time and the recorded duration cannot contradict each other.
         DECLARE @Now   DATETIME2 (3)  = SYSUTCDATETIME ()
-              , @Actor NVARCHAR (255) = COALESCE (NULLIF (CAST (SESSION_CONTEXT (N'AppUser') AS NVARCHAR (255)), N''), ORIGINAL_LOGIN ());
+              , @Actor NVARCHAR (255) = COALESCE (NULLIF (CAST (SESSION_CONTEXT (N'AppUser') AS NVARCHAR (255)), N''), ORIGINAL_LOGIN ())
+              , @SafeKeyParameters NVARCHAR (500) = LEFT (@KeyParameters, 500)
+              , @SafeErrorMessage  NVARCHAR (1000) = LEFT (@ErrorMessage, 1000)
+              , @SafeContext       NVARCHAR (500) = LEFT (@ContextMessage, 500)
+              , @SafeDynamicSql    NVARCHAR (100) = CASE WHEN @DynamicSql IS NULL THEN NULL ELSE N'[omitted by diagnostic minimization]' END;
+
+        -- #338 allowlisted execution diagnostics (per-token filtering, deny-first, ordinal-preserving) in the shared error writer.
+        IF @SafeKeyParameters IS NOT NULL AND CHARINDEX (N'=', @SafeKeyParameters) > 0
+        BEGIN
+            SELECT @SafeKeyParameters = LEFT (STRING_AGG (
+                CASE
+                    WHEN kv.k IS NOT NULL
+                         AND kv.k NOT IN (N'token', N'secret', N'ssn', N'firstName', N'lastName', N'middleName', N'searchText', N'attemptedName')
+                         AND kv.k NOT LIKE N'%password%' AND kv.k NOT LIKE N'%secret%' AND kv.k NOT LIKE N'%token%'
+                         AND kv.k NOT LIKE N'%birth%' AND kv.k NOT LIKE N'%phone%' AND kv.k NOT LIKE N'%email%'
+                         AND kv.k NOT LIKE N'%street%' AND kv.k NOT LIKE N'%zip%' AND kv.k NOT LIKE N'%ssn%'
+                         AND kv.k NOT LIKE N'%postal%' AND kv.k NOT LIKE N'%address%' AND kv.k NOT LIKE N'%accession%' AND kv.k NOT LIKE N'%medicalRecord%'
+                         AND (   kv.k LIKE N'%Id' OR kv.k LIKE N'%Count' OR kv.k LIKE N'%Number'
+                              OR kv.k LIKE N'%Days' OR kv.k LIKE N'%Hours' OR kv.k LIKE N'%Minutes'
+                              OR kv.k LIKE N'%Size' OR kv.k LIKE N'%Rows' OR kv.k LIKE N'%Code'
+                              OR kv.k LIKE N'%Type' OR kv.k LIKE N'%Action' OR kv.k LIKE N'%Kind'
+                              OR kv.k LIKE N'%Source' OR kv.k LIKE N'%Role' OR kv.k LIKE N'%By'
+                              OR kv.k LIKE N'%Only' OR kv.k LIKE N'%Fips' OR kv.k LIKE N'%Status'
+                              OR kv.k IN (N'fromDate', N'toDate', N'fromUtc', N'toUtc', N'asOfDate', N'effectiveFrom', N'effectiveTo',
+                                          N'periodStart', N'periodEnd', N'isActive', N'isMember', N'isDeleted', N'includeHistory',
+                                          N'includeProtected', N'includeSearchText', N'hasDob', N'top', N'page', N'assignedToMe',
+                                          N'classification', N'closureReason', N'viewKind', N'workerName', N'settingKey',
+                                          N'decision', N'population', N'sort', N'status', N'step', N'method'))
+                    THEN LTRIM (RTRIM (tok.value))
+                    ELSE N'[redacted]'
+                END, N', ') WITHIN GROUP (ORDER BY tok.ordinal), 500)
+              FROM STRING_SPLIT (@SafeKeyParameters, N',', 1) AS tok
+             CROSS APPLY (SELECT LTRIM (RTRIM (LEFT (tok.value, NULLIF (CHARINDEX (N'=', tok.value), 0) - 1))) AS k) AS kv;
+        END;
 
         -- Stated as a fact, not as an accusation -- see "THE ORPHAN ROW IS NOT ALWAYS A DEFECT" in the header.
         DECLARE @NoStartRowPrefix NVARCHAR (200) =
@@ -817,12 +880,12 @@ BEGIN
                 , T.ElapsedMilliseconds   = CAST (LEAST (DATEDIFF_BIG (MILLISECOND, T.StartDateUtc, @Now)
                                                        , CAST (2147483647 AS BIGINT)) AS INT)
                 , T.Successful            = 0
-                , T.ErrorMessage          = @ErrorMessage
+                , T.ErrorMessage          = @SafeErrorMessage
                 , T.ErrorProcedure        = @ErrorProcedure
                 , T.ErrorNumber           = @ErrorNumber
                 , T.ErrorLine             = @ErrorLine
-                , T.DynamicSql            = @DynamicSql
-                , T.ContextMessage        = @ContextMessage
+                , T.DynamicSql            = @SafeDynamicSql
+                , T.ContextMessage        = @SafeContext
                   -- Written explicitly because the DEFAULT fires on INSERT only.  SKILL.md rule 1: an UPDATE that does
                   -- not set auditModified* leaves the row claiming it was last touched when it was created.
                 , T.modifiedBy       = @Actor
@@ -839,24 +902,24 @@ BEGIN
                   -- groups by ProcedureName, attributed the failure to the wrong procedure.  @ErrorProcedure is still
                   -- recorded, in its own column, where it belongs.
                     COALESCE (@ProcedureName, @ErrorProcedure, N'[unknown].[unknown]')
-                  , @KeyParameters
+                  , @SafeKeyParameters
                   -- No start row means no start time.  @Now is the only honest value available, and ElapsedMilliseconds
                   -- is therefore 0 rather than a duration invented from it.
                   , @Now
                   , @Now
                   , 0
                   , 0
-                  , @NoStartRowPrefix + ISNULL (@ErrorMessage, N'')
+                  , LEFT (@NoStartRowPrefix + ISNULL (@SafeErrorMessage, N''), 1000)
                   , @ErrorProcedure
                   , @ErrorNumber
                   , @ErrorLine
-                  , @DynamicSql
+                  , @SafeDynamicSql
                   -- CONCAT_WS drops NULLs, so a caller that passed no @ContextMessage gets just the ExecutionLogId
                   -- note, and one that did -- every error-only read does -- keeps its own text first.
-                  , CONCAT_WS (N'; '
-                             , @ContextMessage
-                             , N'ExecutionLogId passed by the caller: '
-                               + ISNULL (CONVERT (NVARCHAR (20), @ExecutionLogId), N'NULL'))
+                  , LEFT (CONCAT_WS (N'; '
+                                   , @SafeContext
+                                   , N'ExecutionLogId passed by the caller: '
+                                     + ISNULL (CONVERT (NVARCHAR (20), @ExecutionLogId), N'NULL')), 500)
                   , @Actor
                   , @Now
                   , @Actor

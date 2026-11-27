@@ -1,0 +1,427 @@
+using System.Data;
+using System.Net;
+using System.Text.Json;
+using Dapper;
+using Merit.Domain.Ids;
+using Microsoft.Data.SqlClient;
+using Xunit;
+
+namespace Merit.IntegrationTests;
+
+/// <summary>
+/// End-to-end SQL + HTTP integration tests covering issues #327, #328, #329, #330, #332 (row history), #335, #337, and #338.
+/// </summary>
+[Collection(MeritCollection.Name)]
+public sealed class LoggingWave2IntegrationTests(MeritFixture fixture)
+{
+    [SqlFact]
+    public async Task Issue332And335_DataWriteAndAuditCommitOrRollbackTogetherWithRowHistory()
+    {
+        var supervisor = await fixture.SignedInAsync("supervisor");
+
+        // 1. Successful create commits dbo.person + logs.auditEvent + logs.auditEventChange together.
+        string newPersonPage = await supervisor.Http.GetStringAsync("/people/new");
+        using var createResp = await supervisor.NoRedirect.PostAsync("/people/new",
+            MeritClient.Form(newPersonPage,
+                ("LastName", "TxGuarantee"),
+                ("FirstName", "WaveTwo"),
+                ("Dob", "2022-04-15"),
+                ("Sex", "female"),
+                ("Ethnicity", "unknown")));
+        Assert.Equal(HttpStatusCode.Redirect, createResp.StatusCode);
+        string location = createResp.Headers.Location!.ToString();
+        Guid createdPersonId = Guid.Parse(location.Split('/', StringSplitOptions.RemoveEmptyEntries)[^1]);
+
+        await using var conn = new SqlConnection(TestEnvironment.AdminConnectionString());
+        await conn.OpenAsync();
+
+        var createdAudit = await conn.QuerySingleOrDefaultAsync<(long auditEventId, string? beforeJson, string? afterJson)>(
+            """
+            SELECT TOP (1) e.auditEventId, c.beforeJson, c.afterJson
+              FROM logs.auditEvent AS e
+              JOIN logs.auditEventChange AS c ON c.auditEventId = e.auditEventId AND c.isDeleted = 0
+             WHERE e.entityType = 'person' AND e.entityId = @id AND e.eventAction = 'create'
+             ORDER BY e.auditEventId DESC
+            """, new { id = createdPersonId });
+        Assert.True(createdAudit.auditEventId > 0);
+        Assert.Null(createdAudit.beforeJson);
+        Assert.NotNull(createdAudit.afterJson);
+        Assert.Contains("TxGuarantee", createdAudit.afterJson, StringComparison.Ordinal);
+
+        // S2: Row history is reachable via /admin/audit/{id}/changes.
+        using (var changesResp = await supervisor.Http.GetAsync($"/admin/audit/{createdAudit.auditEventId}/changes"))
+        {
+            Assert.Equal(HttpStatusCode.OK, changesResp.StatusCode);
+            Assert.Contains("TxGuarantee", await changesResp.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+        }
+
+        // 2. Rolled-back write (future DOB triggers THROW 51422 inside dbo.uspSavePerson) leaves ZERO person and ZERO audit rows.
+        Guid failedPersonId = TimeOrderedId.New();
+        var supSession = await conn.QuerySingleAsync<(Guid appUserId, Guid rootTenantId, Guid scopeId)>(
+            """
+            SELECT TOP (1) s.appUserId, s.rootTenantId, s.sessionScopeId
+              FROM auth.sessionScope AS s
+              JOIN auth.appUser AS u ON u.appUserId = s.appUserId
+             WHERE u.userName = 'supervisor' AND s.revokedUtc IS NULL AND s.expiresUtc > SYSUTCDATETIME ()
+             ORDER BY s.createdDateUtc DESC
+            """);
+        await conn.ExecuteAsync("EXEC sys.sp_set_session_context @key = N'scopeKey', @value = @v;", new { v = supSession.scopeId.ToString() });
+        await conn.ExecuteAsync("EXEC sys.sp_set_session_context @key = N'AppUser', @value = N'supervisor';");
+
+        var ex = await Assert.ThrowsAsync<SqlException>(() => conn.ExecuteAsync("dbo.uspSavePerson", new
+        {
+            personId = failedPersonId,
+            lastName = "ShouldRollback",
+            firstName = "NeverSaved",
+            lastNameKey = "SHOULDROLLBACK",
+            firstNameKey = "NEVERSAVED",
+            dob = DateTime.UtcNow.Date.AddYears(1),
+        }, commandType: CommandType.StoredProcedure));
+        Assert.Equal(51422, ex.Number);
+
+        Assert.Equal(0, await conn.ExecuteScalarAsync<int>("SELECT COUNT (*) FROM dbo.person WHERE personId = @id", new { id = failedPersonId }));
+        Assert.Equal(0, await conn.ExecuteScalarAsync<int>("SELECT COUNT (*) FROM logs.auditEvent WHERE entityId = @id", new { id = failedPersonId }));
+        Assert.Equal(0, await conn.ExecuteScalarAsync<int>("SELECT COUNT (*) FROM logs.auditEventChange WHERE entityId = @id", new { id = failedPersonId }));
+
+        // 3. Purge of logs.auditEventChange scrubs expired snapshot and preserves fresh snapshot.
+        Guid oldChangeId = TimeOrderedId.New();
+        await conn.ExecuteAsync(
+            """
+            INSERT logs.auditEventChange (auditEventChangeId, auditEventId, rootTenantId, owningTenantId, entityType, entityId, changedUtc, beforeJson, afterJson)
+            VALUES (@id, @auditId, @root, @root, 'person', @personId, DATEADD (DAY, -400, SYSUTCDATETIME ()), N'{"lastName":"Old"}', N'{"lastName":"Older"}');
+            """, new { id = oldChangeId, auditId = createdAudit.auditEventId, root = supSession.rootTenantId, personId = createdPersonId });
+
+        int purged = await conn.ExecuteScalarAsync<int>("logs.uspPurgeAuditEventChanges", new { retentionDays = 365 }, commandType: CommandType.StoredProcedure);
+        Assert.True(purged >= 1);
+        var oldRow = await conn.QuerySingleAsync<(bool isDeleted, string? beforeJson, string? afterJson)>(
+            "SELECT isDeleted, beforeJson, afterJson FROM logs.auditEventChange WHERE auditEventChangeId = @id", new { id = oldChangeId });
+        Assert.True(oldRow.isDeleted);
+        Assert.Null(oldRow.beforeJson);
+        Assert.Null(oldRow.afterJson);
+    }
+
+    [SqlFact]
+    public async Task Issue329_SearchLogPurgerScrubsExpiredRowsAndSummaryHidesSearchText()
+    {
+        await using var conn = new SqlConnection(TestEnvironment.AdminConnectionString());
+        await conn.OpenAsync();
+        var user = await conn.QuerySingleAsync<(Guid appUserId, Guid rootTenantId)>(
+            "SELECT TOP (1) appUserId, rootTenantId FROM auth.appUser WHERE userName = 'supervisor' AND isDeleted = 0");
+
+        Guid oldId = TimeOrderedId.New();
+        Guid freshId = TimeOrderedId.New();
+        await conn.ExecuteAsync(
+            """
+            INSERT logs.searchLog (searchLogId, appUserId, rootTenantId, searchText, resultCount, searchedUtc, clientAddress, existsElsewhere, searchSource)
+            VALUES (@oldId, @u, @r, N'Sensitive Patient Name 1999', 0, DATEADD (DAY, -120, SYSUTCDATETIME ()), '198.51.100.10', 1, 'global'),
+                   (@freshId, @u, @r, N'Fresh Search Query', 2, SYSUTCDATETIME (), '198.51.100.11', 0, 'global');
+            """, new { oldId, freshId, u = user.appUserId, r = user.rootTenantId });
+
+        int purged = await conn.ExecuteScalarAsync<int>("logs.uspPurgeSearchLog", new { retentionDays = 90 }, commandType: CommandType.StoredProcedure);
+        Assert.True(purged >= 1);
+
+        var oldAfter = await conn.QuerySingleAsync<(bool isDeleted, string searchText, string? clientAddress)>(
+            "SELECT isDeleted, searchText, clientAddress FROM logs.searchLog WHERE searchLogId = @id", new { id = oldId });
+        Assert.True(oldAfter.isDeleted);
+        Assert.Equal(string.Empty, oldAfter.searchText);
+        Assert.Null(oldAfter.clientAddress);
+
+        var freshAfter = await conn.QuerySingleAsync<(bool isDeleted, string searchText)>(
+            "SELECT isDeleted, searchText FROM logs.searchLog WHERE searchLogId = @id", new { id = freshId });
+        Assert.False(freshAfter.isDeleted);
+        Assert.Equal("Fresh Search Query", freshAfter.searchText);
+    }
+
+    [SqlFact]
+    public async Task Issue337_SignInActivityEvaluatesPrecedingHourAcrossWindowBoundaryAndUsesMatchingEventTimestamps()
+    {
+        var admin = await fixture.SignedInAsync("admin");
+        await using var conn = new SqlConnection(TestEnvironment.AdminConnectionString());
+        await conn.OpenAsync();
+
+        var targetUser = await conn.QuerySingleAsync<(Guid appUserId, Guid rootTenantId)>(
+            "SELECT TOP (1) appUserId, rootTenantId FROM auth.appUser WHERE userName = 'epi' AND isDeleted = 0");
+        string testIp = "198.51.100.237";
+        DateTime now = DateTime.UtcNow;
+        DateTime failTime = now.AddMinutes(-75);
+        DateTime failInWindow = now.AddMinutes(-40);
+        DateTime successNearBoundary = now.AddMinutes(-50);
+        DateTime laterSuccess = now.AddMinutes(-5);
+
+        await conn.ExecuteAsync(
+            """
+            INSERT logs.signInEvent (signInEventId, eventUtc, eventType, appUserId, rootTenantId, clientAddress)
+            VALUES (NEWID (), @f1, 'passwordFailed', @u, @r, @ip),
+                   (NEWID (), DATEADD (SECOND, 10, @f1), 'passwordFailed', @u, @r, @ip),
+                   (NEWID (), DATEADD (SECOND, 20, @f1), 'passwordFailed', @u, @r, @ip),
+                   (NEWID (), @s1, 'sessionStarted', @u, @r, @ip),
+                   (NEWID (), @f2, 'passwordFailed', @u, @r, @ip),
+                   (NEWID (), @s2, 'sessionStarted', @u, @r, @ip);
+            """, new { f1 = failTime, s1 = successNearBoundary, f2 = failInWindow, s2 = laterSuccess, u = targetUser.appUserId, r = targetUser.rootTenantId, ip = testIp });
+
+        using var csvResp = await admin.Http.GetAsync("/admin/sign-in-activity/activity.csv?hours=1");
+        Assert.Equal(HttpStatusCode.OK, csvResp.StatusCode);
+        string csv = await csvResp.Content.ReadAsStringAsync();
+
+        Assert.Contains($"\"Signed in after failures\",\"{testIp}\"", csv, StringComparison.Ordinal);
+
+        string addrLine = csv.Split('\n').First(l => l.StartsWith($"\"Failures by address\",\"{testIp}\",", StringComparison.Ordinal));
+        Assert.Contains(failInWindow.ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.InvariantCulture), addrLine, StringComparison.Ordinal);
+        Assert.DoesNotContain(laterSuccess.ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.InvariantCulture), addrLine, StringComparison.Ordinal);
+
+        await conn.ExecuteAsync("UPDATE logs.signInEvent SET isDeleted = 1 WHERE clientAddress = @ip", new { ip = testIp });
+    }
+
+    [SqlFact]
+    public async Task Issue327And328And330And338_AnomaliesStructuredExportUserActivityAndOperationalDiagnostics()
+    {
+        var admin = await fixture.SignedInAsync("admin");
+        await using var conn = new SqlConnection(TestEnvironment.AdminConnectionString());
+        await conn.OpenAsync();
+
+        var sup = await conn.QuerySingleAsync<(Guid appUserId, Guid rootTenantId)>(
+            "SELECT TOP (1) appUserId, rootTenantId FROM auth.appUser WHERE userName = 'supervisor' AND isDeleted = 0");
+
+        // #327 (B1 / Codex #3 + I5): Seed 10 NULL-root permissionDenied rows (must NOT crash the scan),
+        // plus two distinct /24 prefixes on one sessionReference (triggers medium midSessionIpDrift).
+        Guid driftSession = TimeOrderedId.New();
+        await conn.ExecuteAsync(
+            """
+            INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, clientAddress, sessionReference)
+            VALUES (@u, @r, 'view', 'person', '203.0.113.10', @s),
+                   (@u, @r, 'view', 'person', '198.51.100.20', @s),
+                   (NULL, NULL, 'permissionDenied', 'auditEvent', NULL, NULL),
+                   (NULL, NULL, 'permissionDenied', 'auditEvent', NULL, NULL),
+                   (NULL, NULL, 'permissionDenied', 'auditEvent', NULL, NULL),
+                   (NULL, NULL, 'permissionDenied', 'auditEvent', NULL, NULL),
+                   (NULL, NULL, 'permissionDenied', 'auditEvent', NULL, NULL),
+                   (NULL, NULL, 'permissionDenied', 'auditEvent', NULL, NULL),
+                   (NULL, NULL, 'permissionDenied', 'auditEvent', NULL, NULL),
+                   (NULL, NULL, 'permissionDenied', 'auditEvent', NULL, NULL),
+                   (NULL, NULL, 'permissionDenied', 'auditEvent', NULL, NULL),
+                   (NULL, NULL, 'permissionDenied', 'auditEvent', NULL, NULL);
+            """, new { u = sup.appUserId, r = sup.rootTenantId, s = driftSession });
+
+        var firstScan = (await conn.QueryAsync<dynamic>("logs.uspRunSecurityFindingScan", new { hours = 24 }, commandType: CommandType.StoredProcedure)).ToList();
+        Guid findingId = await conn.ExecuteScalarAsync<Guid>(
+            "SELECT securityFindingId FROM logs.securityFinding WHERE ruleCode = 'midSessionIpDrift' AND sessionReference = @s AND isDeleted = 0",
+            new { s = driftSession });
+        Assert.Contains(firstScan, r => (Guid)r.securityFindingId == findingId && (string)r.severity == "medium");
+
+        using var alertsHtml = await admin.Http.GetAsync("/admin/security-alerts?hours=24");
+        Assert.Equal(HttpStatusCode.OK, alertsHtml.StatusCode);
+        string alertsBody = await alertsHtml.Content.ReadAsStringAsync();
+        Assert.Contains("midSessionIpDrift", alertsBody, StringComparison.Ordinal);
+
+        // Codex #4: Authorized admin can update finding status via antiforgery-protected POST; read-only reviewer cannot.
+        using (var statusPost = await admin.NoRedirect.PostAsync($"/admin/security-alerts/{findingId}/status",
+            MeritClient.Form(alertsBody, ("status", "acknowledged"), ("hours", "24"), ("days", "30"))))
+        {
+            Assert.Equal(HttpStatusCode.Redirect, statusPost.StatusCode);
+        }
+        string updatedStatus = await conn.ExecuteScalarAsync<string>("SELECT status FROM logs.securityFinding WHERE securityFindingId = @id", new { id = findingId }) ?? "";
+        Assert.Equal("acknowledged", updatedStatus);
+
+        var epi = await fixture.SignedInAsync("epi");
+        using (var deniedPost = await epi.NoRedirect.PostAsync($"/admin/security-alerts/{findingId}/status",
+            MeritClient.Form(alertsBody, ("status", "resolved"))))
+        {
+            Assert.True(deniedPost.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.BadRequest or HttpStatusCode.Redirect);
+        }
+
+        using var alertsJsonl = await admin.Http.GetAsync("/admin/security-alerts.jsonl?hours=24");
+        Assert.Equal(HttpStatusCode.OK, alertsJsonl.StatusCode);
+        Assert.Contains("midSessionIpDrift", await alertsJsonl.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+
+        // #328 (Codex #2 + #8): Real SQL DbType.DateTime2 cursor paging across adjacent millisecond timestamps (.001, .002, .003) and midnight boundary.
+        await conn.ExecuteAsync(
+            """
+            INSERT logs.signInEvent (signInEventId, eventUtc, eventType, appUserId, rootTenantId, clientAddress)
+            VALUES (NEWID (), CAST ('2026-11-20T12:00:00.001' AS DATETIME2 (3)), 'passwordSucceeded', @u, @r, '192.0.2.1'),
+                   (NEWID (), CAST ('2026-11-20T12:00:00.002' AS DATETIME2 (3)), 'passwordSucceeded', @u, @r, '192.0.2.1'),
+                   (NEWID (), CAST ('2026-11-20T12:00:00.003' AS DATETIME2 (3)), 'passwordSucceeded', @u, @r, '192.0.2.1'),
+                   (NEWID (), CAST ('2026-11-21T00:00:00.000' AS DATETIME2 (3)), 'passwordSucceeded', @u, @r, '192.0.2.1');
+            """, new { u = sup.appUserId, r = sup.rootTenantId });
+
+        var today = DateOnly.FromDateTime(DateTime.UtcNow).ToString("yyyy-MM-dd");
+        using var exportResp = await admin.Http.GetAsync($"/admin/log-export/download?format=jsonl&streams=audit,signin,search&from={today}&to={today}&pseudonymize=true");
+        Assert.Equal(HttpStatusCode.OK, exportResp.StatusCode);
+        string ndjson = await exportResp.Content.ReadAsStringAsync();
+        var lines = ndjson.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        Assert.NotEmpty(lines);
+        using var sample = JsonDocument.Parse(lines[0]);
+        Assert.True(sample.RootElement.TryGetProperty("stream", out _));
+        Assert.DoesNotContain("203.0.113.10", ndjson, StringComparison.Ordinal);
+
+        // Verify identified export mode (pseudonymize=false) preserves exact ms timestamps and excludes next-day midnight (half-open range).
+        using var identifiedResp = await admin.Http.GetAsync($"/admin/log-export/download?format=csv&streams=signin&from=2026-11-20&to=2026-11-20&pseudonymize=false");
+        Assert.Equal(HttpStatusCode.OK, identifiedResp.StatusCode);
+        string identifiedCsv = await identifiedResp.Content.ReadAsStringAsync();
+        Assert.Contains("2026-11-20T12:00:00.001Z", identifiedCsv, StringComparison.Ordinal);
+        Assert.Contains("2026-11-20T12:00:00.002Z", identifiedCsv, StringComparison.Ordinal);
+        Assert.Contains("2026-11-20T12:00:00.003Z", identifiedCsv, StringComparison.Ordinal);
+        Assert.DoesNotContain("2026-11-21T00:00:00.000Z", identifiedCsv, StringComparison.Ordinal);
+        await conn.ExecuteAsync("UPDATE logs.signInEvent SET isDeleted = 1 WHERE clientAddress = '192.0.2.1'");
+
+        // #330: Unified per-user activity summary + per-user usage filter + operational logs.
+        using var userAct = await admin.Http.GetAsync($"/admin/users/{sup.appUserId}/activity?days=30");
+        Assert.Equal(HttpStatusCode.OK, userAct.StatusCode);
+        Assert.Contains("User activity:", await userAct.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+
+        using var usageFiltered = await admin.Http.GetAsync($"/admin/usage?days=30&userId={sup.appUserId}");
+        Assert.Equal(HttpStatusCode.OK, usageFiltered.StatusCode);
+
+        // #338 (Claude I10 / S9): Deny-first per-token allowlist preserves order & allowed keys, redacts token/birthDate/phoneNumber/zipCode/lastName.
+        var p = new DynamicParameters();
+        p.Add("@ProcedureName", "[dbo].[uspSyntheticTest]");
+        p.Add("@KeyParameters", "exposureCaseId=123, birthDate=2019-04-02, token=abc123secret, phoneNumber=4105551212, zipCode=21201, lastName=SensitiveName, population=child");
+        p.Add("@StartDateUtc", DateTime.UtcNow);
+        p.Add("@ReCreatedAfterRollback", false);
+        p.Add("@ExecutionLogId", dbType: DbType.Int64, direction: ParameterDirection.Output);
+        await conn.ExecuteAsync("logs.uspStartExecutionLogging", p, commandType: CommandType.StoredProcedure);
+        long execId = p.Get<long>("@ExecutionLogId");
+        string? storedKey = await conn.ExecuteScalarAsync<string?>("SELECT KeyParameters FROM logs.ExecutionLog WHERE ExecutionLogId = @id", new { id = execId });
+        Assert.Equal("exposureCaseId=123, [redacted], [redacted], [redacted], [redacted], [redacted], population=child", storedKey);
+        await conn.ExecuteAsync("UPDATE logs.ExecutionLog SET isDeleted = 1 WHERE ExecutionLogId = @id", new { id = execId });
+
+        // Claude B3 / Codex #2: meritWeb with NO session context MUST get 51403 from logs.uspGetOperationalLogs!
+        await using (var webDeny = new SqlConnection(TestEnvironment.AdminConnectionString()))
+        {
+            await webDeny.OpenAsync();
+            await webDeny.ExecuteAsync("EXECUTE AS USER = 'meritWeb';");
+            var denyEx = await Assert.ThrowsAsync<SqlException>(() =>
+                webDeny.ExecuteAsync("logs.uspGetOperationalLogs", new { hours = 1, top = 1 }, commandType: CommandType.StoredProcedure));
+            Assert.Equal(51403, denyEx.Number);
+            await webDeny.ExecuteAsync("REVERT;");
+        }
+
+        // Claude I8 / Codex #5: Contended scanner lock returns 0 rows cleanly with NO error 266 and @@TRANCOUNT = 0.
+        await using (var holder = new SqlConnection(TestEnvironment.AdminConnectionString()))
+        await using (var contender = new SqlConnection(TestEnvironment.AdminConnectionString()))
+        {
+            await holder.OpenAsync();
+            await contender.OpenAsync();
+            await using var tx = await holder.BeginTransactionAsync();
+            await holder.ExecuteAsync("EXEC sys.sp_getapplock @Resource = N'MERIT.securityFindingScan', @LockMode = 'Exclusive', @LockOwner = 'Transaction', @LockTimeout = 5000;", transaction: tx);
+            var skipped = (await contender.QueryAsync<dynamic>("logs.uspRunSecurityFindingScan", new { hours = 24 }, commandType: CommandType.StoredProcedure)).ToList();
+            Assert.Empty(skipped);
+            Assert.Equal(0, await contender.ExecuteScalarAsync<int>("SELECT @@TRANCOUNT"));
+            await tx.RollbackAsync();
+        }
+
+        // Codex #6: Adding a 3rd network prefix to driftSession escalates existing medium finding to high and emits it once.
+        await conn.ExecuteAsync(
+            "INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, clientAddress, sessionReference) VALUES (@u, @r, 'view', 'person', '192.0.2.30', @s);",
+            new { u = sup.appUserId, r = sup.rootTenantId, s = driftSession });
+        var escalated = (await conn.QueryAsync<dynamic>("logs.uspRunSecurityFindingScan", new { hours = 24 }, commandType: CommandType.StoredProcedure)).ToList();
+        Assert.Contains(escalated, r => (Guid)r.securityFindingId == findingId && (string)r.severity == "high");
+
+        // #330 (Codex #5): Worker-role execution of logs.uspCheckOperationalIntegrity sees healthy DDL audit (0 problems).
+        await using (var workerCheck = new SqlConnection(TestEnvironment.AdminConnectionString()))
+        {
+            await workerCheck.OpenAsync();
+            await workerCheck.ExecuteAsync("EXECUTE AS USER = 'meritWorker';");
+            using var grid = await workerCheck.QueryMultipleAsync("logs.uspCheckOperationalIntegrity", new { minutes = 15 }, commandType: CommandType.StoredProcedure);
+            _ = await grid.ReadSingleAsync<dynamic>();
+            var ddlProblems = (await grid.ReadAsync<dynamic>()).ToList();
+            await workerCheck.ExecuteAsync("REVERT;");
+            Assert.Empty(ddlProblems);
+        }
+
+        // #330: Platform-admin operational logs & DDL integrity check.
+        var platform = await fixture.SignedInAsync("platform");
+        using var opsResp = await platform.Http.GetAsync("/admin/operations-log?hours=24");
+        Assert.Equal(HttpStatusCode.OK, opsResp.StatusCode);
+        string opsHtml = await opsResp.Content.ReadAsStringAsync();
+        Assert.Contains("DDL audit integrity", opsHtml, StringComparison.Ordinal);
+        Assert.Contains("SYSTEM_VERSIONING", opsHtml, StringComparison.Ordinal);
+    }
+
+    [SqlFact]
+    public async Task Issue327_SecurityFindingIdentityIsolatesRootsAndCountyToRootTransitions()
+    {
+        await using var conn = new SqlConnection(TestEnvironment.AdminConnectionString());
+        await conn.OpenAsync();
+
+        var sup = await conn.QuerySingleAsync<(Guid appUserId, Guid rootTenantId)>(
+            "SELECT TOP (1) appUserId, rootTenantId FROM auth.appUser WHERE userName = 'supervisor' AND isDeleted = 0");
+        var roots = (await conn.QueryAsync<Guid>(
+            "SELECT TOP (2) tenantId FROM auth.tenant WHERE tenantId = rootTenantId AND isDeleted = 0 ORDER BY tenantId")).ToList();
+        Guid rootA = roots[0];
+        Guid rootB = roots.Count > 1 ? roots[1] : TimeOrderedId.New();
+
+        var counties = (await conn.QueryAsync<Guid>(
+            "SELECT TOP (2) tenantId FROM auth.tenant WHERE rootTenantId = @r AND tenantId <> rootTenantId AND isDeleted = 0 ORDER BY tenantId",
+            new { r = sup.rootTenantId })).ToList();
+        Assert.NotEmpty(counties);
+        Guid countyA = counties[0];
+        Guid countyB = counties.Count > 1 ? counties[1] : TimeOrderedId.New();
+
+        // 1. Two distinct data roots sharing the same sessionReference produce two independent findings;
+        // escalating one root updates only that root's finding.
+        Guid sharedSession = TimeOrderedId.New();
+        await conn.ExecuteAsync(
+            """
+            INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, clientAddress, sessionReference)
+            VALUES (@u, @rA, 'view', 'person', '203.0.113.10', @s),
+                   (@u, @rA, 'view', 'person', '198.51.100.20', @s),
+                   (@u, @rB, 'view', 'person', '203.0.113.11', @s),
+                   (@u, @rB, 'view', 'person', '198.51.100.21', @s);
+            """, new { u = sup.appUserId, rA = rootA, rB = rootB, s = sharedSession });
+
+        var initial = (await conn.QueryAsync<dynamic>("logs.uspRunSecurityFindingScan", new { hours = 24 }, commandType: CommandType.StoredProcedure)).ToList();
+        var rootRows = (await conn.QueryAsync<(Guid securityFindingId, Guid rootTenantId, string severity)>(
+            "SELECT securityFindingId, rootTenantId, severity FROM logs.securityFinding WHERE ruleCode = 'midSessionIpDrift' AND sessionReference = @s AND isDeleted = 0",
+            new { s = sharedSession })).ToList();
+        Assert.Equal(2, rootRows.Count);
+        var findingA = Assert.Single(rootRows, r => r.rootTenantId == rootA);
+        var findingB = Assert.Single(rootRows, r => r.rootTenantId == rootB);
+        Assert.Contains(initial, r => (Guid)r.securityFindingId == findingA.securityFindingId);
+        Assert.Contains(initial, r => (Guid)r.securityFindingId == findingB.securityFindingId);
+
+        // Escalate only rootA; rootB must remain medium and untouched.
+        await conn.ExecuteAsync(
+            "INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, clientAddress, sessionReference) VALUES (@u, @rA, 'view', 'person', '192.0.2.30', @s);",
+            new { u = sup.appUserId, rA = rootA, s = sharedSession });
+        var afterEscalation = (await conn.QueryAsync<dynamic>("logs.uspRunSecurityFindingScan", new { hours = 24 }, commandType: CommandType.StoredProcedure)).ToList();
+        Assert.Contains(afterEscalation, r => (Guid)r.securityFindingId == findingA.securityFindingId && (string)r.severity == "high");
+        Assert.DoesNotContain(afterEscalation, r => (Guid)r.securityFindingId == findingB.securityFindingId);
+        string rootBSeverity = await conn.ExecuteScalarAsync<string>("SELECT severity FROM logs.securityFinding WHERE securityFindingId = @id", new { id = findingB.securityFindingId }) ?? "";
+        Assert.Equal("medium", rootBSeverity);
+
+        // 2. County-to-root transition: marking a county-owned finding falsePositive must NOT suppress a newly root-scoped finding.
+        Guid transitionSession = TimeOrderedId.New();
+        await conn.ExecuteAsync(
+            """
+            INSERT logs.auditEvent (appUserId, rootTenantId, owningTenantId, actingTenantId, eventAction, entityType, clientAddress, sessionReference)
+            VALUES (@u, @r, @cA, @cA, 'view', 'person', '203.0.113.40', @s),
+                   (@u, @r, @cA, @cA, 'view', 'person', '198.51.100.40', @s);
+            """, new { u = sup.appUserId, r = sup.rootTenantId, cA = countyA, s = transitionSession });
+
+        _ = (await conn.QueryAsync<dynamic>("logs.uspRunSecurityFindingScan", new { hours = 24 }, commandType: CommandType.StoredProcedure)).ToList();
+        var countyFinding = await conn.QuerySingleAsync<(Guid securityFindingId, Guid? owningTenantId)>(
+            "SELECT securityFindingId, owningTenantId FROM logs.securityFinding WHERE ruleCode = 'midSessionIpDrift' AND sessionReference = @s AND isDeleted = 0",
+            new { s = transitionSession });
+        Assert.Equal(countyA, countyFinding.owningTenantId);
+
+        await conn.ExecuteAsync(
+            "UPDATE logs.securityFinding SET status = 'falsePositive' WHERE securityFindingId = @id",
+            new { id = countyFinding.securityFindingId });
+
+        // Adding an event in a second county widens the session to root-scoped; a new open root finding must be emitted.
+        await conn.ExecuteAsync(
+            "INSERT logs.auditEvent (appUserId, rootTenantId, owningTenantId, actingTenantId, eventAction, entityType, clientAddress, sessionReference) VALUES (@u, @r, @cB, @cB, 'view', 'person', '192.0.2.40', @s);",
+            new { u = sup.appUserId, r = sup.rootTenantId, cB = countyB, s = transitionSession });
+
+        var widened = (await conn.QueryAsync<dynamic>("logs.uspRunSecurityFindingScan", new { hours = 24 }, commandType: CommandType.StoredProcedure)).ToList();
+        var transitionFindings = (await conn.QueryAsync<(Guid securityFindingId, Guid? owningTenantId, string status, string severity)>(
+            "SELECT securityFindingId, owningTenantId, status, severity FROM logs.securityFinding WHERE ruleCode = 'midSessionIpDrift' AND sessionReference = @s AND isDeleted = 0",
+            new { s = transitionSession })).ToList();
+        Assert.Equal(2, transitionFindings.Count);
+        var rootFinding = Assert.Single(transitionFindings, f => f.owningTenantId is null);
+        Assert.Equal("open", rootFinding.status);
+        Assert.Equal("high", rootFinding.severity);
+        Assert.Contains(widened, r => (Guid)r.securityFindingId == rootFinding.securityFindingId);
+        Assert.Equal("falsePositive", transitionFindings.Single(f => f.securityFindingId == countyFinding.securityFindingId).status);
+    }
+}

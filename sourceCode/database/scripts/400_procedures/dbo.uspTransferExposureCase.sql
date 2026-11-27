@@ -204,6 +204,23 @@ BEGIN
 
         EXEC dbo.uspRefreshPersonAccess @personId = @person;
 
+        DECLARE @auditScope UNIQUEIDENTIFIER = TRY_CAST (SESSION_CONTEXT (N'scopeKey') AS UNIQUEIDENTIFIER);
+        DECLARE @auditSessionRef UNIQUEIDENTIFIER, @auditActingTenant UNIQUEIDENTIFIER, @auditViewAs UNIQUEIDENTIFIER;
+        SELECT @auditSessionRef = sessionReference, @auditActingTenant = actingTenantId, @auditViewAs = viewAsUserId
+          FROM auth.sessionScope
+         WHERE sessionScopeId = @auditScope AND revokedUtc IS NULL AND expiresUtc > SYSUTCDATETIME () AND isDeleted = 0;
+        DECLARE @auditClientAddress VARCHAR (45) = TRY_CAST (SESSION_CONTEXT (N'clientAddress') AS VARCHAR (45));
+        DECLARE @auditTraceId VARCHAR (64) = TRY_CAST (SESSION_CONTEXT (N'traceId') AS VARCHAR (64));
+        INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, clientAddress, owningTenantId,
+                                sessionReference, traceId, actingTenantId, viewAsUserId)
+        VALUES (auth.udfSessionUserId (), @root, 'update', 'exposureCase', @exposureCaseId, @auditClientAddress, @toTenantId,
+                @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs);
+        DECLARE @transferAuditId BIGINT = SCOPE_IDENTITY ();
+        INSERT logs.auditEventChange (auditEventChangeId, auditEventId, rootTenantId, owningTenantId, entityType, entityId, beforeJson, afterJson)
+        VALUES (CAST (CAST (NEWID () AS BINARY (10)) + CAST (DATEDIFF_BIG (MILLISECOND, '19700101', SYSUTCDATETIME ()) AS BINARY (6)) AS UNIQUEIDENTIFIER), @transferAuditId, @root, @toTenantId, 'exposureCase', @exposureCaseId,
+                (SELECT @from AS owningTenantId FOR JSON PATH, WITHOUT_ARRAY_WRAPPER),
+                (SELECT @toTenantId AS owningTenantId, @reason AS transferReason FOR JSON PATH, WITHOUT_ARRAY_WRAPPER));
+
         SET @Comments = CONCAT (N'Case transferred; related rows moved=', @moved, N', investigations moved=', @investigations, N', shared kept=', @shared, N'.');
 
         -- =========================================================================================
@@ -225,8 +242,8 @@ BEGIN
                  , ElapsedMilliseconds = CAST (LEAST (DATEDIFF_BIG (MILLISECOND, @StartTimeUtc, @EndTimeUtc)
                                                     , CAST (2147483647 AS BIGINT)) AS INT)
                  , Successful          = 1
-                 , Comments            = @Comments
-                 , modifiedBy          = ORIGINAL_LOGIN ()
+                 , Comments            = LEFT (@Comments, 500)
+                 , modifiedBy          = COALESCE (NULLIF (CAST (SESSION_CONTEXT (N'AppUser') AS NVARCHAR (255)), N''), ORIGINAL_LOGIN ())
                  , modifiedDateUtc     = @EndTimeUtc
              WHERE ExecutionLogId = @ExecutionId;
         END;

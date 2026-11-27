@@ -1,0 +1,57 @@
+@model Merit.Web.Controllers.OperationsLogPage
+@{
+    ViewData["Title"] = "Operational logs & DDL integrity";
+}
+<h1>Operational logs &amp; DDL integrity</h1>
+<p>
+    <a class="usa-button usa-button--outline" href="/admin/operations-log.csv?hours=@Model.Hours" download>Export CSV</a>
+    <a class="usa-button usa-button--outline" href="/admin/operations-log.jsonl?hours=@Model.Hours" download>Export JSONL</a>
+</p>
+<form class="usa-form merit-form-row" method="get" action="/admin/operations-log">
+    <label class="usa-label" for="hours">Window</label>
+    <select class="usa-select" id="hours" name="hours">
+        @foreach (var h in new[] { 1, 24, 168, 720 }) { <option value="@h" selected="@(h == Model.Hours)">Last @h hours</option> }
+    </select>
+    <button class="usa-button usa-button--outline" type="submit">Show</button>
+</form>
+
+<section aria-labelledby="ddl-verify">
+    <h2 id="ddl-verify">DDL audit integrity (<code>logs.uspDdlAuditVerify</code>)</h2>
+    <div class="merit-table-wrap" tabindex="0" role="region" aria-label="DDL integrity checks"><table class="usa-table usa-table--borderless usa-table--compact">
+        <thead><tr><th scope="col">Check</th><th scope="col">Status</th><th scope="col">Detail</th></tr></thead>
+        <tbody>@foreach (var c in Model.Report.IntegrityChecks)
+        {
+            <tr><td>@c.CheckName</td><td>@c.Status</td><td>@c.Detail</td></tr>
+        }</tbody>
+    </table></div>
+</section>
+
+<section aria-labelledby="exec-failures">
+    <h2 id="exec-failures">SQL execution failures (allowlisted diagnostics)</h2>
+    @if (Model.Report.ExecutionFailures.Count == 0) { <p>No execution failures in this window.</p> }
+    else
+    {
+        <div class="merit-table-wrap" tabindex="0" role="region" aria-label="SQL execution failures"><table class="usa-table usa-table--borderless usa-table--compact">
+            <thead><tr><th scope="col">Id</th><th scope="col">When (UTC)</th><th scope="col">Procedure</th><th scope="col">Error #</th><th scope="col">Line</th><th scope="col">Key parameters</th><th scope="col">Actor</th></tr></thead>
+            <tbody>@foreach (var e in Model.Report.ExecutionFailures)
+            {
+                <tr><td>@e.ExecutionLogId</td><td class="merit-nowrap">@Options.Date(e.StartDateUtc)</td><td><code>@e.ProcedureName</code></td><td>@e.ErrorNumber</td><td>@e.ErrorLine</td><td>@e.KeyParameters</td><td>@e.CreatedBy</td></tr>
+            }</tbody>
+        </table></div>
+    }
+</section>
+
+<section aria-labelledby="ddl-changes">
+    <h2 id="ddl-changes">Recent DDL changes</h2>
+    @if (Model.Report.DdlChanges.Count == 0) { <p>No DDL changes in this window.</p> }
+    else
+    {
+        <div class="merit-table-wrap" tabindex="0" role="region" aria-label="Recent DDL changes"><table class="usa-table usa-table--borderless usa-table--compact">
+            <thead><tr><th scope="col">Id</th><th scope="col">When (UTC)</th><th scope="col">Event</th><th scope="col">Object</th><th scope="col">Type</th><th scope="col">Actor</th></tr></thead>
+            <tbody>@foreach (var d in Model.Report.DdlChanges)
+            {
+                <tr><td>@d.ChangeId</td><td class="merit-nowrap">@Options.Date(d.EventTimeUtc)</td><td>@d.EventType</td><td><code>@d.ObjectSchema.@d.ObjectName</code></td><td>@d.ObjectType</td><td>@(d.AppUser ?? d.LoginName)</td></tr>
+            }</tbody>
+        </table></div>
+    }
+</section>
