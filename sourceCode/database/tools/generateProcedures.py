@@ -35,7 +35,7 @@ OUT = HERE.parent / "scripts" / "400_procedures"
 AUTHOR = "MERIT build"
 CREATE_DATE = "2026-10-24"
 MODULES = ["procs_corrections", "procs_auth", "procs_config", "procs_person", "procs_places", "procs_results", "procs_cases",
-           "procs_work", "procs_intake", "procs_extracts", "procs_setup", "procs_review", "procs_mfa", "procs_password", "procs_signin", "procs_usage", "procs_care", "procs_receipt", "procs_testing", "procs_workflow", "procs_security"]
+           "procs_work", "procs_intake", "procs_extracts", "procs_setup", "procs_review", "procs_mfa", "procs_password", "procs_signin", "procs_usage", "procs_care", "procs_receipt", "procs_testing", "procs_workflow", "procs_security", "procs_tenant_lifecycle"]
 # #338: Disallowed sensitive/PHI parameter names in generated @KeyParameters expressions.
 DISALLOWED_DIAGNOSTIC_PARAMS = (
     "@password", "@passwordHash", "@secret", "@token", "@searchText", "@attemptedName",

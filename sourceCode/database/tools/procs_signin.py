@@ -284,14 +284,30 @@ BEGIN
 END;
 
 -- Idempotent batched cleanup for previously soft-deleted rows that still retain correlation IDs (#336, Codex #4).
+-- Split into two single-predicate loops so SQL Server seeks the filtered indexes (0 rows once backlog is cleared).
 SET @batch = 1;
 WHILE @batch > 0
 BEGIN
     BEGIN TRANSACTION;
     UPDATE TOP (5000) logs.signInEvent
        SET sessionReference = NULL, traceId = NULL
-     WHERE eventUtc < @cutoff AND isDeleted = 1
-       AND (sessionReference IS NOT NULL OR traceId IS NOT NULL);
+     WHERE eventUtc < @cutoff AND isDeleted = 1 AND sessionReference IS NOT NULL;
+    SET @batch = @@ROWCOUNT;
+    COMMIT TRANSACTION;
+    SET @deleted += @batch;
+    IF @batch = 5000
+    BEGIN
+        WAITFOR DELAY '00:00:00.050';
+    END;
+END;
+
+SET @batch = 1;
+WHILE @batch > 0
+BEGIN
+    BEGIN TRANSACTION;
+    UPDATE TOP (5000) logs.signInEvent
+       SET traceId = NULL
+     WHERE eventUtc < @cutoff AND isDeleted = 1 AND traceId IS NOT NULL;
     SET @batch = @@ROWCOUNT;
     COMMIT TRANSACTION;
     SET @deleted += @batch;

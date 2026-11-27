@@ -120,6 +120,21 @@ class ManifestTests(unittest.TestCase):
                             break
         self.assertEqual([], missing, f"Procedures declaring @auditUserAgentHash but omitting userAgentHash in INSERT logs.auditEvent: {missing}")
 
+    def test_root_tenant_lifecycle_inventory_covers_every_root_tenant_table(self):
+        # #346: Every table carrying rootTenantId (in tableDefinitions.py plus append-only logs.auditEvent) must be
+        # explicitly covered by config.uspExportRootTenant and config.uspPurgeRootTenant.
+        import procs_tenant_lifecycle as ptl
+        expected = {
+            f"{t['schema']}.{t['name']}"
+            for t in gt.TABLES
+            if any(c["name"] == "rootTenantId" for c in t["cols"])
+        } | {"logs.auditEvent"}
+        self.assertEqual(
+            expected,
+            ptl.ALL_ROOT_TABLES,
+            f"Root-tenant lifecycle inventory drift. Missing: {sorted(expected - ptl.ALL_ROOT_TABLES)}; Extra: {sorted(ptl.ALL_ROOT_TABLES - expected)}",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -182,8 +182,8 @@ public sealed class SecurityHardeningRegressionTests(MeritFixture fixture)
             ("@findings", invSecretFindings), ("@sampleNote", invSecretSampleNote));
         try
         {
-            // De-identified epidemiologist: list masks address; address search returns nothing; number search still works.
-            string epiInvList = await epi.Http.GetStringAsync("/investigations?openOnly=false");
+            // De-identified epidemiologist: list masks address; address search returns nothing; number search still works (#344: filter by invNumber so page size never hides it).
+            string epiInvList = await epi.Http.GetStringAsync($"/investigations?openOnly=false&q={invNumber}");
             Assert.Contains(invNumber, epiInvList, StringComparison.Ordinal);
             Assert.Contains("De-identified", epiInvList, StringComparison.Ordinal);
             Assert.DoesNotContain(invSecretAddress, epiInvList, StringComparison.OrdinalIgnoreCase);

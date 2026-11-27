@@ -71,9 +71,10 @@ BEGIN
      WHERE appUserId = @appUserId;
 END;
 
+-- #336: Omit full clientAddress from permanent append-only ledger sign-in rows; logs.signInEvent retains full
+-- clientAddress and forwardedFor under SignInLog:RetentionDays and scrubs them on expiry.
 INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, clientAddress)
-VALUES (@appUserId, @root, CASE WHEN @succeeded = 1 THEN 'signIn' ELSE 'signInFailed' END, 'appUser', @appUserId,
-        @clientAddress);
+VALUES (@appUserId, @root, CASE WHEN @succeeded = 1 THEN 'signIn' ELSE 'signInFailed' END, 'appUser', @appUserId, NULL);
 
 SET @Comments = CASE WHEN @succeeded = 1 THEN N'Sign-in succeeded.' ELSE N'Sign-in failed.' END;
 """,

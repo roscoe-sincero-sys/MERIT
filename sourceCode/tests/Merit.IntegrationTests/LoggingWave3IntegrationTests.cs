@@ -162,31 +162,35 @@ public sealed class LoggingWave3IntegrationTests(MeritFixture fixture)
             "SELECT COUNT (*) FROM logs.auditEvent WHERE eventAction = 'update' AND entityType = 'personRelationship' AND entityId IN (SELECT personRelationshipId FROM dbo.personRelationship WHERE personId = @id)",
             new { id = personId }));
 
-        // Codex #1: Verify task audit uses the task's actual owningTenantId (from linked case), NOT recomputed patient work owner.
-        var splitCase = await conn.QueryFirstOrDefaultAsync<(Guid exposureCaseId, Guid personId, Guid caseOwner)>(
+        // Codex #1: Always seed a split-owner case (case.owningTenantId <> dbo.udfPatientWorkOwner(personId)) so the
+        // task-owner audit regression runs deterministically on every database state.
+        Guid splitCaseId = TimeOrderedId.New();
+        Guid patientWorkOwner = await conn.ExecuteScalarAsync<Guid>("SELECT dbo.udfPatientWorkOwner (@p)", new { p = personId });
+        Guid distinctCaseOwner = patientWorkOwner == fixture.Ids.BaltimoreCityTenantId
+            ? fixture.Ids.BaltimoreCountyTenantId
+            : fixture.Ids.BaltimoreCityTenantId;
+        await conn.ExecuteAsync(
             """
-            SELECT TOP (1) c.exposureCaseId, c.personId, c.owningTenantId
-              FROM dbo.exposureCase AS c
-             WHERE c.isDeleted = 0 AND c.owningTenantId <> dbo.udfPatientWorkOwner (c.personId)
-             ORDER BY c.openedDate DESC
-            """);
-        if (splitCase.exposureCaseId != Guid.Empty)
+            INSERT dbo.exposureCase (exposureCaseId, rootTenantId, owningTenantId, personId, analyteId, population, classification, computedClassification, qualifyingLabResultId, workflowTemplate, caseNumber, caseStatus, openedDate)
+            SELECT @cid, @r, @owner, @p, analyteId, population, classification, computedClassification, qualifyingLabResultId, workflowTemplate, @num, 'open', CAST (SYSUTCDATETIME () AS DATE)
+              FROM dbo.exposureCase WHERE exposureCaseId = @srcCase;
+            """, new { cid = splitCaseId, r = admin.rootTenantId, owner = distinctCaseOwner, p = personId, srcCase = fixture.Ids.MiaCaseId, num = "W3-" + Guid.NewGuid().ToString("N")[..8].ToUpperInvariant() });
+
+        Guid taskId = TimeOrderedId.New();
+        await using (var taskConn = new SqlConnection(TestEnvironment.AdminConnectionString()))
         {
-            Guid taskId = TimeOrderedId.New();
-            await using (var taskConn = new SqlConnection(TestEnvironment.AdminConnectionString()))
-            {
-                await taskConn.OpenAsync();
-                await SetContextAsync(taskConn, scopeKey, admin.appUserId, "admin", admin.homeTenantId);
-                await taskConn.ExecuteAsync("dbo.uspCreateAdHocWork",
-                    new { workTaskId = taskId, personId = splitCase.personId, title = "Wave3 owner test", description = "Verify task audit owner", completionKind = "internal", exposureCaseId = splitCase.exposureCaseId, dueDate = DateTime.UtcNow.Date.AddDays(7) },
-                    commandType: CommandType.StoredProcedure);
-            }
-            var auditedOwner = await conn.ExecuteScalarAsync<Guid?>(
-                "SELECT TOP (1) owningTenantId FROM logs.auditEvent WHERE entityType = 'workTask' AND entityId = @tid ORDER BY auditEventId DESC",
-                new { tid = taskId });
-            Assert.Equal(splitCase.caseOwner, auditedOwner);
-            await conn.ExecuteAsync("UPDATE dbo.workTask SET isDeleted = 1 WHERE workTaskId = @tid;", new { tid = taskId });
+            await taskConn.OpenAsync();
+            await SetContextAsync(taskConn, scopeKey, admin.appUserId, "admin", admin.homeTenantId);
+            await taskConn.ExecuteAsync("dbo.uspCreateAdHocWork",
+                new { workTaskId = taskId, personId, title = "Wave3 owner test", description = "Verify task audit owner", completionKind = "internal", exposureCaseId = splitCaseId, dueDate = DateTime.UtcNow.Date.AddDays(7) },
+                commandType: CommandType.StoredProcedure);
         }
+        var auditedOwner = await conn.ExecuteScalarAsync<Guid?>(
+            "SELECT TOP (1) owningTenantId FROM logs.auditEvent WHERE entityType = 'workTask' AND entityId = @tid ORDER BY auditEventId DESC",
+            new { tid = taskId });
+        Assert.Equal(distinctCaseOwner, auditedOwner);
+        await conn.ExecuteAsync("UPDATE dbo.workTask SET isDeleted = 1 WHERE workTaskId = @tid; UPDATE dbo.exposureCase SET isDeleted = 1 WHERE exposureCaseId = @cid;",
+            new { tid = taskId, cid = splitCaseId });
 
         // Clean up synthetic person and scope.
         await conn.ExecuteAsync("UPDATE dbo.personRelationship SET isDeleted = 1 WHERE personId = @id; UPDATE dbo.personContactMethod SET isDeleted = 1 WHERE personId = @id; UPDATE dbo.person SET isDeleted = 1 WHERE personId = @id; UPDATE auth.sessionScope SET revokedUtc = SYSUTCDATETIME () WHERE sessionScopeId = @sk;",

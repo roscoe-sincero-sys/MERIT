@@ -59,7 +59,7 @@ public sealed partial class SecurityFindingScanner(
                 return;
             }
 
-            using var resp = await WebhookClient.PostAsJsonAsync(uri, new
+            object payload = new
             {
                 source = "MERIT",
                 eventType = "securityFinding.detected",
@@ -73,10 +73,37 @@ public sealed partial class SecurityFindingScanner(
                     f.Title,
                     f.DetectedUtc,
                 }),
-            }, ct).ConfigureAwait(false);
-            if (!resp.IsSuccessStatusCode)
+            };
+
+            // #347: Bounded retry (3 attempts: immediate, +1s, +3s) for transient 5xx/429/network errors.
+            TimeSpan[] delays = [TimeSpan.Zero, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(3)];
+            for (int attempt = 0; attempt < delays.Length; attempt++)
             {
-                WebhookFailed(logger, (int)resp.StatusCode);
+                if (delays[attempt] > TimeSpan.Zero)
+                {
+                    await Task.Delay(delays[attempt], ct).ConfigureAwait(false);
+                }
+
+                try
+                {
+                    using var resp = await WebhookClient.PostAsJsonAsync(uri, payload, ct).ConfigureAwait(false);
+                    if (resp.IsSuccessStatusCode)
+                    {
+                        return;
+                    }
+
+                    int code = (int)resp.StatusCode;
+                    bool transient = code == 429 || code >= 500;
+                    if (!transient || attempt == delays.Length - 1)
+                    {
+                        WebhookFailed(logger, code);
+                        return;
+                    }
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException && attempt < delays.Length - 1)
+                {
+                    // Retry transient transport/timeout errors up to delays.Length attempts.
+                }
             }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)

@@ -1193,6 +1193,49 @@
   ]
  },
  {
+  "name": "config.uspExportRootTenant",
+  "kind": "write",
+  "grants": [
+   "meritWebRole",
+   "meritWorkerRole"
+  ],
+  "permission": null,
+  "params": [
+   {
+    "name": "rootTenantId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "includePayloads",
+    "type": "BIT",
+    "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
+  "name": "config.uspExportRootTenantInternal",
+  "kind": "read",
+  "grants": [],
+  "permission": null,
+  "params": [
+   {
+    "name": "rootTenantId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "includePayloads",
+    "type": "BIT",
+    "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
   "name": "config.uspGetEnvironmentalStandards",
   "kind": "read",
   "grants": [
@@ -1505,6 +1548,55 @@
    {
     "name": "secondSampleCaseId",
     "type": "UNIQUEIDENTIFIER",
+    "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
+  "name": "config.uspPurgeRootTenant",
+  "kind": "write",
+  "grants": [
+   "meritWebRole",
+   "meritWorkerRole"
+  ],
+  "permission": null,
+  "params": [
+   {
+    "name": "rootTenantId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "confirmationCode",
+    "type": "NVARCHAR (60)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "backupRetentionDays",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
+  "name": "config.uspPurgeRootTenantInternal",
+  "kind": "write",
+  "grants": [],
+  "permission": null,
+  "params": [
+   {
+    "name": "rootTenantId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "backupRetentionDays",
+    "type": "INT",
     "hasDefault": true,
     "isOutput": false
    }

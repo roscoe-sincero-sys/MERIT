@@ -85,9 +85,28 @@ public sealed partial class Hl7IntakeTests
         }
         finally
         {
-            // Retire this test's cases: every imported patient shares the HL7 sample address, and open cases at one
-            // address are a cluster that ClusterDetectionTests would otherwise count.
-            await Execute(c, "UPDATE dbo.exposureCase SET isDeleted=1 WHERE personId IN (SELECT r.personId FROM dbo.labResult r JOIN dbo.intakeBatch b ON b.intakeBatchId=r.intakeBatchId WHERE b.submittedByUserId=(SELECT appUserId FROM auth.appUser WHERE userName='cmbalt') AND r.labResultId<>@id)", Guid.Empty);
+            // Retire this test's cases and investigations (#344): every imported patient shares the HL7 sample address,
+            // and leftover investigations accumulate across runs until they push older investigations off page 1.
+            await Execute(c, """
+                UPDATE dbo.investigation SET isDeleted=1
+                 WHERE investigationId IN (
+                     SELECT ic.investigationId FROM dbo.investigationCase ic
+                     JOIN dbo.exposureCase ec ON ec.exposureCaseId = ic.exposureCaseId
+                     WHERE ec.personId IN (
+                         SELECT r.personId FROM dbo.labResult r
+                         JOIN dbo.intakeBatch b ON b.intakeBatchId = r.intakeBatchId
+                         WHERE b.submittedByUserId = (SELECT appUserId FROM auth.appUser WHERE userName = 'cmbalt')
+                           AND r.labResultId <> @id));
+                UPDATE dbo.investigationCase SET isDeleted=1
+                 WHERE exposureCaseId IN (
+                     SELECT ec.exposureCaseId FROM dbo.exposureCase ec
+                     WHERE ec.personId IN (
+                         SELECT r.personId FROM dbo.labResult r
+                         JOIN dbo.intakeBatch b ON b.intakeBatchId = r.intakeBatchId
+                         WHERE b.submittedByUserId = (SELECT appUserId FROM auth.appUser WHERE userName = 'cmbalt')
+                           AND r.labResultId <> @id));
+                UPDATE dbo.exposureCase SET isDeleted=1 WHERE personId IN (SELECT r.personId FROM dbo.labResult r JOIN dbo.intakeBatch b ON b.intakeBatchId=r.intakeBatchId WHERE b.submittedByUserId=(SELECT appUserId FROM auth.appUser WHERE userName='cmbalt') AND r.labResultId<>@id);
+                """, Guid.Empty);
             await Execute(c, "UPDATE auth.userAssignment SET isDeleted=1 WHERE userAssignmentId=@id", grant);
         }
     }

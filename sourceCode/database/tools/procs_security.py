@@ -195,7 +195,8 @@ SELECT c.auditEventChangeId, c.auditEventId, c.rootTenantId, c.owningTenantId,
  WHERE c.auditEventId = @auditEventId AND c.isDeleted = 0
    AND {AUDIT_PREDICATE_270}
    AND (   (c.entityType = 'person' AND @canPerson = 1
-            AND EXISTS (SELECT 1 FROM dbo.person AS p WHERE p.personId = c.entityId AND p.isDeleted = 0))
+            AND EXISTS (SELECT 1 FROM dbo.person AS p WHERE p.personId = c.entityId AND p.isDeleted = 0
+                         AND auth.udfCanReadIdentified (p.owningTenantId, 'person.view', p.personId) = 1))
         OR (c.entityType = 'labResult' AND @canResult = 1
             AND EXISTS (SELECT 1 FROM dbo.labResult AS r WHERE r.labResultId = c.entityId AND r.isDeleted = 0
                          AND auth.udfCanReadIdentified (r.owningTenantId, 'result.view', r.personId) = 1))

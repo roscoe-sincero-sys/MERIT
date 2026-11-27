@@ -1649,7 +1649,9 @@ TABLES = [
         "indexes": [{"name": "IX_logs_signInEvent_eventUtc", "cols": "eventUtc"},
                     {"name": "IX_logs_signInEvent_appUserId_eventUtc", "cols": "appUserId, eventUtc"},
                     {"name": "IX_logs_signInEvent_clientAddress_eventUtc", "cols": "clientAddress, eventUtc"},
-                    {"name": "IX_logs_signInEvent_attemptedNameHash_eventUtc", "cols": "attemptedNameHash, eventUtc"}],
+                    {"name": "IX_logs_signInEvent_attemptedNameHash_eventUtc", "cols": "attemptedNameHash, eventUtc"},
+                    {"name": "IX_logs_signInEvent_legacySessionRef", "cols": "eventUtc", "filter": "isDeleted = 1 AND sessionReference IS NOT NULL"},
+                    {"name": "IX_logs_signInEvent_legacyTraceId", "cols": "eventUtc", "filter": "isDeleted = 1 AND traceId IS NOT NULL"}],
     },
     {
         "schema": "logs", "name": "screenVisit", "rls": None, "tenantKey": False,
