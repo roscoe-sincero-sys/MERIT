@@ -203,8 +203,10 @@ public sealed class LoggingWave2IntegrationTests(MeritFixture fixture)
             """, new { u = sup.appUserId, r = sup.rootTenantId, s = driftSession });
 
         var firstScan = (await conn.QueryAsync<dynamic>("logs.uspRunSecurityFindingScan", new { hours = 24 }, commandType: CommandType.StoredProcedure)).ToList();
-        Assert.Contains(firstScan, r => (string)r.ruleCode == "midSessionIpDrift" && (string)r.severity == "medium");
-        Guid findingId = (Guid)firstScan.First(r => (string)r.ruleCode == "midSessionIpDrift").securityFindingId;
+        Guid findingId = await conn.ExecuteScalarAsync<Guid>(
+            "SELECT securityFindingId FROM logs.securityFinding WHERE ruleCode = 'midSessionIpDrift' AND sessionReference = @s AND isDeleted = 0",
+            new { s = driftSession });
+        Assert.Contains(firstScan, r => (Guid)r.securityFindingId == findingId && (string)r.severity == "medium");
 
         using var alertsHtml = await admin.Http.GetAsync("/admin/security-alerts?hours=24");
         Assert.Equal(HttpStatusCode.OK, alertsHtml.StatusCode);

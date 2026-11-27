@@ -128,7 +128,7 @@ BEGIN
         -- Rule 1: bulkViewVelocity (owningTenantId derived from source event ownership + acting tenant, NULL when mixed, Codex #2)
         INSERT @candidates
         SELECT COALESCE (e.rootTenantId, @platformRoot),
-               CASE WHEN COUNT (DISTINCT COALESCE (e.owningTenantId, e.actingTenantId)) = 1 AND COUNT (DISTINCT e.actingTenantId) <= 1 THEN MAX (COALESCE (e.owningTenantId, e.actingTenantId)) END,
+               CASE WHEN SUM (CASE WHEN COALESCE (e.owningTenantId, e.actingTenantId) IS NULL THEN 1 ELSE 0 END) = 0 AND COUNT (DISTINCT COALESCE (e.owningTenantId, e.actingTenantId)) = 1 AND COUNT (DISTINCT e.actingTenantId) <= 1 THEN MAX (COALESCE (e.owningTenantId, e.actingTenantId)) END,
                e.appUserId, NULL, e.sessionReference,
                'bulkViewVelocity', CASE WHEN COUNT (DISTINCT e.entityId) >= @viewVelocityThreshold * 2 THEN 'high' ELSE 'medium' END,
                CONCAT (N'High distinct record view velocity (', COUNT (DISTINCT e.entityId), N' records in ', @winHours, N'h)'),
@@ -142,7 +142,7 @@ BEGIN
         -- Rule 2: bulkExportSpike (structuredLogExport paired by entityId; single-entry downloads by auditEventId, I13 / Codex #3)
         INSERT @candidates
         SELECT COALESCE (e.rootTenantId, @platformRoot),
-               CASE WHEN COUNT (DISTINCT COALESCE (e.owningTenantId, e.actingTenantId)) = 1 AND COUNT (DISTINCT e.actingTenantId) <= 1 THEN MAX (COALESCE (e.owningTenantId, e.actingTenantId)) END,
+               CASE WHEN SUM (CASE WHEN COALESCE (e.owningTenantId, e.actingTenantId) IS NULL THEN 1 ELSE 0 END) = 0 AND COUNT (DISTINCT COALESCE (e.owningTenantId, e.actingTenantId)) = 1 AND COUNT (DISTINCT e.actingTenantId) <= 1 THEN MAX (COALESCE (e.owningTenantId, e.actingTenantId)) END,
                e.appUserId, NULL, NULL,
                'bulkExportSpike',
                CASE WHEN SUM (COALESCE (e.recordCount, 1)) >= @exportRowsThreshold * 2
@@ -160,7 +160,7 @@ BEGIN
         -- Rule 3: probingDeniedOrOutsideScope (handles NULL rootTenantId safely under platform-only scope, B1 / Codex #3)
         INSERT @candidates
         SELECT COALESCE (e.rootTenantId, @platformRoot),
-               CASE WHEN COUNT (DISTINCT COALESCE (e.owningTenantId, e.actingTenantId)) = 1 AND COUNT (DISTINCT e.actingTenantId) <= 1 THEN MAX (COALESCE (e.owningTenantId, e.actingTenantId)) END,
+               CASE WHEN SUM (CASE WHEN COALESCE (e.owningTenantId, e.actingTenantId) IS NULL THEN 1 ELSE 0 END) = 0 AND COUNT (DISTINCT COALESCE (e.owningTenantId, e.actingTenantId)) = 1 AND COUNT (DISTINCT e.actingTenantId) <= 1 THEN MAX (COALESCE (e.owningTenantId, e.actingTenantId)) END,
                e.appUserId, MAX (e.clientAddress), NULL,
                'probingDeniedOrOutsideScope', CASE WHEN COUNT (*) >= @probingThreshold * 2 THEN 'high' ELSE 'medium' END,
                CONCAT (N'Repeated permission-denied or outside-scope probing (', COUNT (*), N' events)'),
@@ -171,10 +171,10 @@ BEGIN
          GROUP BY COALESCE (e.rootTenantId, @platformRoot), e.appUserId
         HAVING COUNT (*) >= @probingThreshold;
 
-        -- Rule 4: searchVelocitySpike
+        -- Rule 4: searchVelocitySpike (county-owned ONLY when every contributing row has the same non-NULL actingTenantId, Codex #3)
         INSERT @candidates
         SELECT COALESCE (s.rootTenantId, @platformRoot),
-               CASE WHEN COUNT (DISTINCT s.actingTenantId) = 1 THEN MAX (s.actingTenantId) END,
+               CASE WHEN SUM (CASE WHEN s.actingTenantId IS NULL THEN 1 ELSE 0 END) = 0 AND COUNT (DISTINCT s.actingTenantId) = 1 THEN MAX (s.actingTenantId) END,
                s.appUserId, MAX (s.clientAddress), NULL,
                'searchVelocitySpike', CASE WHEN COUNT (*) >= @searchVelocityThreshold * 2 THEN 'high' ELSE 'medium' END,
                CONCAT (N'High-velocity searching (', COUNT (*), N' queries)'),
@@ -185,10 +185,10 @@ BEGIN
          GROUP BY COALESCE (s.rootTenantId, @platformRoot), s.appUserId
         HAVING COUNT (*) >= @searchVelocityThreshold;
 
-        -- Rule 5: midSessionIpDrift (network prefix comparison, Claude I5 / Codex #7)
+        -- Rule 5: midSessionIpDrift (source-event ownership, Codex #1/#3; network prefix comparison, Claude I5 / I11)
         INSERT @candidates
         SELECT COALESCE (e.rootTenantId, @platformRoot),
-               CASE WHEN COUNT (DISTINCT e.actingTenantId) = 1 THEN MAX (e.actingTenantId) END,
+               CASE WHEN SUM (CASE WHEN COALESCE (e.owningTenantId, e.actingTenantId) IS NULL THEN 1 ELSE 0 END) = 0 AND COUNT (DISTINCT COALESCE (e.owningTenantId, e.actingTenantId)) = 1 AND COUNT (DISTINCT e.actingTenantId) <= 1 THEN MAX (COALESCE (e.owningTenantId, e.actingTenantId)) END,
                e.appUserId, NULL, e.sessionReference,
                'midSessionIpDrift', CASE WHEN COUNT (DISTINCT CASE
             WHEN CHARINDEX ('.', e.clientAddress) > 0
@@ -262,10 +262,10 @@ BEGIN
              OR e.userAgent LIKE N'%Go-http-client%')
          GROUP BY COALESCE (e.rootTenantId, @platformRoot), e.appUserId;
 
-        -- Rule 7: privilegedActionBurst (Codex #6 parity)
+        -- Rule 7: privilegedActionBurst (source-event ownership, Codex #1/#3)
         INSERT @candidates
         SELECT COALESCE (e.rootTenantId, @platformRoot),
-               CASE WHEN COUNT (DISTINCT e.actingTenantId) = 1 THEN MAX (e.actingTenantId) END,
+               CASE WHEN SUM (CASE WHEN COALESCE (e.owningTenantId, e.actingTenantId) IS NULL THEN 1 ELSE 0 END) = 0 AND COUNT (DISTINCT COALESCE (e.owningTenantId, e.actingTenantId)) = 1 AND COUNT (DISTINCT e.actingTenantId) <= 1 THEN MAX (COALESCE (e.owningTenantId, e.actingTenantId)) END,
                e.appUserId, MAX (e.clientAddress), NULL,
                'privilegedActionBurst', 'high',
                CONCAT (N'Privileged security/configuration burst (', COUNT (*), N' actions)'),
@@ -305,7 +305,7 @@ BEGIN
         -- Rule 10: apiOnlyNoScreenVisits (Codex #3 logical event count + #2 source ownership)
         INSERT @candidates
         SELECT COALESCE (e.rootTenantId, @platformRoot),
-               CASE WHEN COUNT (DISTINCT COALESCE (e.owningTenantId, e.actingTenantId)) = 1 AND COUNT (DISTINCT e.actingTenantId) <= 1 THEN MAX (COALESCE (e.owningTenantId, e.actingTenantId)) END,
+               CASE WHEN SUM (CASE WHEN COALESCE (e.owningTenantId, e.actingTenantId) IS NULL THEN 1 ELSE 0 END) = 0 AND COUNT (DISTINCT COALESCE (e.owningTenantId, e.actingTenantId)) = 1 AND COUNT (DISTINCT e.actingTenantId) <= 1 THEN MAX (COALESCE (e.owningTenantId, e.actingTenantId)) END,
                e.appUserId, MAX (e.clientAddress), e.sessionReference,
                'apiOnlyNoScreenVisits', 'medium',
                CONCAT (N'Data-access session with zero UI screen visits (', COUNT (DISTINCT CASE WHEN e.entityType = 'structuredLogExport' AND e.entityId IS NOT NULL THEN CAST (e.entityId AS VARCHAR (36)) ELSE CAST (e.auditEventId AS VARCHAR (20)) END), N' reads)'),
@@ -332,9 +332,15 @@ BEGIN
             detailJson       NVARCHAR (2000) NULL,
             fingerprint      VARCHAR (128) NOT NULL PRIMARY KEY
         );
+        -- Codex #2: Include effective ownership scope ('root' vs county GUID) in the deduplication fingerprint so a prior
+        -- county-level disposition (including falsePositive) can never suppress a newly root-scoped finding.
         INSERT @deduped
-        SELECT rootTenantId, owningTenantId, appUserId, clientAddress, sessionReference, ruleCode, severity, title, detailJson, fingerprint
-          FROM (SELECT *, ROW_NUMBER () OVER (PARTITION BY fingerprint ORDER BY CASE severity WHEN 'critical' THEN 1 WHEN 'high' THEN 2 WHEN 'medium' THEN 3 ELSE 4 END) AS rn FROM @candidates) AS x
+        SELECT rootTenantId, owningTenantId, appUserId, clientAddress, sessionReference, ruleCode, severity, title, detailJson, scopedFingerprint
+          FROM (SELECT *,
+                       LEFT (CONCAT (fingerprint, '|', COALESCE (CONVERT (VARCHAR (36), owningTenantId), 'root')), 128) AS scopedFingerprint,
+                       ROW_NUMBER () OVER (PARTITION BY LEFT (CONCAT (fingerprint, '|', COALESCE (CONVERT (VARCHAR (36), owningTenantId), 'root')), 128)
+                                               ORDER BY CASE severity WHEN 'critical' THEN 1 WHEN 'high' THEN 2 WHEN 'medium' THEN 3 ELSE 4 END) AS rn
+                  FROM @candidates) AS x
          WHERE rn = 1;
 
         DECLARE @inserted TABLE (

@@ -177,7 +177,7 @@ BEGIN
          GROUP BY e.appUserId, u.userName, u.displayName
         HAVING COUNT (*) >= @probingThreshold;
 
-        -- Rule 4: High-velocity searchLog querying
+        -- Rule 4: High-velocity searchLog querying (event-level tenant scope, Codex #1)
         INSERT @findings
         SELECT 'searchVelocitySpike',
                CASE WHEN COUNT (*) >= @searchVelocityThreshold * 2 THEN 'high' ELSE 'medium' END,
@@ -190,11 +190,12 @@ BEGIN
           FROM logs.searchLog AS s
           LEFT JOIN auth.appUser AS u ON u.appUserId = s.appUserId
          WHERE s.isDeleted = 0 AND s.searchedUtc >= @since
-           AND (@all = 1 OR s.appUserId IN (SELECT appUserId FROM @accounts))
+           AND (@all = 1 OR s.rootTenantId IN (SELECT rootTenantId FROM @wholeSecRoots)
+                OR s.actingTenantId IN (SELECT tenantId FROM @secTenants))
          GROUP BY s.appUserId, u.userName, u.displayName
         HAVING COUNT (*) >= @searchVelocityThreshold;
 
-        -- Rule 5: Mid-session network-prefix drift (compares /24 IPv4 or /48 IPv6 prefixes; medium unless >= 3 prefixes, Claude I5)
+        -- Rule 5: Mid-session network-prefix drift (event-level tenant scope, Codex #1)
         INSERT @findings
         SELECT 'midSessionIpDrift',
                CASE WHEN COUNT (DISTINCT CASE
@@ -250,7 +251,9 @@ BEGIN
           FROM logs.auditEvent AS e
           LEFT JOIN auth.appUser AS u ON u.appUserId = e.appUserId
          WHERE e.eventUtc >= @since AND e.sessionReference IS NOT NULL AND e.clientAddress IS NOT NULL
-           AND (@all = 1 OR e.appUserId IN (SELECT appUserId FROM @accounts))
+           AND (@all = 1 OR e.rootTenantId IN (SELECT rootTenantId FROM @wholeSecRoots)
+                OR e.owningTenantId IN (SELECT tenantId FROM @secTenants)
+                OR (e.owningTenantId IS NULL AND e.actingTenantId IN (SELECT tenantId FROM @secTenants)))
          GROUP BY e.appUserId, u.userName, u.displayName, e.sessionReference
         HAVING COUNT (DISTINCT CASE
             WHEN CHARINDEX ('.', e.clientAddress) > 0
@@ -287,7 +290,7 @@ BEGIN
            AND (@all = 1 OR e.appUserId IN (SELECT appUserId FROM @accounts))
          GROUP BY e.appUserId, u.userName, u.displayName;
 
-        -- Rule 7: Privileged / security-admin action bursts
+        -- Rule 7: Privileged / security-admin action bursts (event-level tenant scope, Codex #1)
         INSERT @findings
         SELECT 'privilegedActionBurst', 'high',
                e.appUserId, u.userName, u.displayName, MAX (e.clientAddress), NULL,
@@ -300,7 +303,9 @@ BEGIN
          WHERE e.eventUtc >= @since
            AND (   e.eventAction IN ('grant', 'revoke', 'deactivate', 'mfaResetByAdmin', 'passwordSetByAdmin')
                 OR (e.entityType IN ('threshold', 'jurisdictionSetting', 'userAssignment', 'role') AND e.eventAction IN ('create', 'update', 'delete')))
-           AND (@all = 1 OR e.appUserId IN (SELECT appUserId FROM @accounts))
+           AND (@all = 1 OR e.rootTenantId IN (SELECT rootTenantId FROM @wholeSecRoots)
+                OR e.owningTenantId IN (SELECT tenantId FROM @secTenants)
+                OR (e.owningTenantId IS NULL AND e.actingTenantId IN (SELECT tenantId FROM @secTenants)))
          GROUP BY e.appUserId, u.userName, u.displayName
         HAVING COUNT (*) >= @privBurstThreshold;
 

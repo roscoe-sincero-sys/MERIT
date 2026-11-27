@@ -46,7 +46,9 @@ END"""
 
 LOGICAL_EVENT_KEY = "CASE WHEN e.entityType = 'structuredLogExport' AND e.entityId IS NOT NULL THEN CAST (e.entityId AS VARCHAR (36)) ELSE CAST (e.auditEventId AS VARCHAR (20)) END"
 
-SINGLE_OWNER_EXPR = "CASE WHEN COUNT (DISTINCT COALESCE (e.owningTenantId, e.actingTenantId)) = 1 AND COUNT (DISTINCT e.actingTenantId) <= 1 THEN MAX (COALESCE (e.owningTenantId, e.actingTenantId)) END"
+SINGLE_OWNER_EXPR = "CASE WHEN SUM (CASE WHEN COALESCE (e.owningTenantId, e.actingTenantId) IS NULL THEN 1 ELSE 0 END) = 0 AND COUNT (DISTINCT COALESCE (e.owningTenantId, e.actingTenantId)) = 1 AND COUNT (DISTINCT e.actingTenantId) <= 1 THEN MAX (COALESCE (e.owningTenantId, e.actingTenantId)) END"
+
+SINGLE_SEARCH_OWNER_EXPR = "CASE WHEN SUM (CASE WHEN s.actingTenantId IS NULL THEN 1 ELSE 0 END) = 0 AND COUNT (DISTINCT s.actingTenantId) = 1 THEN MAX (s.actingTenantId) END"
 
 AUTOMATED_UA_PREDICATE = """(   e.userAgent LIKE N'%curl/%'
      OR e.userAgent LIKE N'%python-requests%'
@@ -326,7 +328,7 @@ SELECT 'probingDeniedOrOutsideScope',
  GROUP BY e.appUserId, u.userName, u.displayName
 HAVING COUNT (*) >= @probingThreshold;
 
--- Rule 4: High-velocity searchLog querying
+-- Rule 4: High-velocity searchLog querying (event-level tenant scope, Codex #1)
 INSERT @findings
 SELECT 'searchVelocitySpike',
        CASE WHEN COUNT (*) >= @searchVelocityThreshold * 2 THEN 'high' ELSE 'medium' END,
@@ -339,11 +341,12 @@ SELECT 'searchVelocitySpike',
   FROM logs.searchLog AS s
   LEFT JOIN auth.appUser AS u ON u.appUserId = s.appUserId
  WHERE s.isDeleted = 0 AND s.searchedUtc >= @since
-   AND (@all = 1 OR s.appUserId IN (SELECT appUserId FROM @accounts))
+   AND (@all = 1 OR s.rootTenantId IN (SELECT rootTenantId FROM @wholeSecRoots)
+        OR s.actingTenantId IN (SELECT tenantId FROM @secTenants))
  GROUP BY s.appUserId, u.userName, u.displayName
 HAVING COUNT (*) >= @searchVelocityThreshold;
 
--- Rule 5: Mid-session network-prefix drift (compares /24 IPv4 or /48 IPv6 prefixes; medium unless >= 3 prefixes, Claude I5)
+-- Rule 5: Mid-session network-prefix drift (event-level tenant scope, Codex #1)
 INSERT @findings
 SELECT 'midSessionIpDrift',
        CASE WHEN COUNT (DISTINCT {IP_PREFIX_EXPR}) >= 3 THEN 'high' ELSE 'medium' END,
@@ -355,7 +358,9 @@ SELECT 'midSessionIpDrift',
   FROM logs.auditEvent AS e
   LEFT JOIN auth.appUser AS u ON u.appUserId = e.appUserId
  WHERE e.eventUtc >= @since AND e.sessionReference IS NOT NULL AND e.clientAddress IS NOT NULL
-   AND (@all = 1 OR e.appUserId IN (SELECT appUserId FROM @accounts))
+   AND (@all = 1 OR e.rootTenantId IN (SELECT rootTenantId FROM @wholeSecRoots)
+        OR e.owningTenantId IN (SELECT tenantId FROM @secTenants)
+        OR (e.owningTenantId IS NULL AND e.actingTenantId IN (SELECT tenantId FROM @secTenants)))
  GROUP BY e.appUserId, u.userName, u.displayName, e.sessionReference
 HAVING COUNT (DISTINCT {IP_PREFIX_EXPR}) > 1;
 
@@ -374,7 +379,7 @@ SELECT 'automatedUserAgent', 'medium',
    AND (@all = 1 OR e.appUserId IN (SELECT appUserId FROM @accounts))
  GROUP BY e.appUserId, u.userName, u.displayName;
 
--- Rule 7: Privileged / security-admin action bursts
+-- Rule 7: Privileged / security-admin action bursts (event-level tenant scope, Codex #1)
 INSERT @findings
 SELECT 'privilegedActionBurst', 'high',
        e.appUserId, u.userName, u.displayName, MAX (e.clientAddress), NULL,
@@ -387,7 +392,9 @@ SELECT 'privilegedActionBurst', 'high',
  WHERE e.eventUtc >= @since
    AND (   e.eventAction IN ('grant', 'revoke', 'deactivate', 'mfaResetByAdmin', 'passwordSetByAdmin')
         OR (e.entityType IN ('threshold', 'jurisdictionSetting', 'userAssignment', 'role') AND e.eventAction IN ('create', 'update', 'delete')))
-   AND (@all = 1 OR e.appUserId IN (SELECT appUserId FROM @accounts))
+   AND (@all = 1 OR e.rootTenantId IN (SELECT rootTenantId FROM @wholeSecRoots)
+        OR e.owningTenantId IN (SELECT tenantId FROM @secTenants)
+        OR (e.owningTenantId IS NULL AND e.actingTenantId IN (SELECT tenantId FROM @secTenants)))
  GROUP BY e.appUserId, u.userName, u.displayName
 HAVING COUNT (*) >= @privBurstThreshold;
 
@@ -541,10 +548,10 @@ SELECT COALESCE (e.rootTenantId, @platformRoot),
  GROUP BY COALESCE (e.rootTenantId, @platformRoot), e.appUserId
 HAVING COUNT (*) >= @probingThreshold;
 
--- Rule 4: searchVelocitySpike
+-- Rule 4: searchVelocitySpike (county-owned ONLY when every contributing row has the same non-NULL actingTenantId, Codex #3)
 INSERT @candidates
 SELECT COALESCE (s.rootTenantId, @platformRoot),
-       CASE WHEN COUNT (DISTINCT s.actingTenantId) = 1 THEN MAX (s.actingTenantId) END,
+       {SINGLE_SEARCH_OWNER_EXPR},
        s.appUserId, MAX (s.clientAddress), NULL,
        'searchVelocitySpike', CASE WHEN COUNT (*) >= @searchVelocityThreshold * 2 THEN 'high' ELSE 'medium' END,
        CONCAT (N'High-velocity searching (', COUNT (*), N' queries)'),
@@ -555,10 +562,10 @@ SELECT COALESCE (s.rootTenantId, @platformRoot),
  GROUP BY COALESCE (s.rootTenantId, @platformRoot), s.appUserId
 HAVING COUNT (*) >= @searchVelocityThreshold;
 
--- Rule 5: midSessionIpDrift (network prefix comparison, Claude I5 / Codex #7)
+-- Rule 5: midSessionIpDrift (source-event ownership, Codex #1/#3; network prefix comparison, Claude I5 / I11)
 INSERT @candidates
 SELECT COALESCE (e.rootTenantId, @platformRoot),
-       CASE WHEN COUNT (DISTINCT e.actingTenantId) = 1 THEN MAX (e.actingTenantId) END,
+       {SINGLE_OWNER_EXPR},
        e.appUserId, NULL, e.sessionReference,
        'midSessionIpDrift', CASE WHEN COUNT (DISTINCT {IP_PREFIX_EXPR}) >= 3 THEN 'high' ELSE 'medium' END,
        CONCAT (N'Mid-session network change (', COUNT (DISTINCT {IP_PREFIX_EXPR}), N' distinct network prefixes)'),
@@ -581,10 +588,10 @@ SELECT COALESCE (e.rootTenantId, @platformRoot), NULL, e.appUserId, MAX (e.clien
    AND {AUTOMATED_UA_PREDICATE}
  GROUP BY COALESCE (e.rootTenantId, @platformRoot), e.appUserId;
 
--- Rule 7: privilegedActionBurst (Codex #6 parity)
+-- Rule 7: privilegedActionBurst (source-event ownership, Codex #1/#3)
 INSERT @candidates
 SELECT COALESCE (e.rootTenantId, @platformRoot),
-       CASE WHEN COUNT (DISTINCT e.actingTenantId) = 1 THEN MAX (e.actingTenantId) END,
+       {SINGLE_OWNER_EXPR},
        e.appUserId, MAX (e.clientAddress), NULL,
        'privilegedActionBurst', 'high',
        CONCAT (N'Privileged security/configuration burst (', COUNT (*), N' actions)'),
@@ -651,9 +658,15 @@ DECLARE @deduped TABLE (
     detailJson       NVARCHAR (2000) NULL,
     fingerprint      VARCHAR (128) NOT NULL PRIMARY KEY
 );
+-- Codex #2: Include effective ownership scope ('root' vs county GUID) in the deduplication fingerprint so a prior
+-- county-level disposition (including falsePositive) can never suppress a newly root-scoped finding.
 INSERT @deduped
-SELECT rootTenantId, owningTenantId, appUserId, clientAddress, sessionReference, ruleCode, severity, title, detailJson, fingerprint
-  FROM (SELECT *, ROW_NUMBER () OVER (PARTITION BY fingerprint ORDER BY CASE severity WHEN 'critical' THEN 1 WHEN 'high' THEN 2 WHEN 'medium' THEN 3 ELSE 4 END) AS rn FROM @candidates) AS x
+SELECT rootTenantId, owningTenantId, appUserId, clientAddress, sessionReference, ruleCode, severity, title, detailJson, scopedFingerprint
+  FROM (SELECT *,
+               LEFT (CONCAT (fingerprint, '|', COALESCE (CONVERT (VARCHAR (36), owningTenantId), 'root')), 128) AS scopedFingerprint,
+               ROW_NUMBER () OVER (PARTITION BY LEFT (CONCAT (fingerprint, '|', COALESCE (CONVERT (VARCHAR (36), owningTenantId), 'root')), 128)
+                                       ORDER BY CASE severity WHEN 'critical' THEN 1 WHEN 'high' THEN 2 WHEN 'medium' THEN 3 ELSE 4 END) AS rn
+          FROM @candidates) AS x
  WHERE rn = 1;
 
 DECLARE @inserted TABLE (
