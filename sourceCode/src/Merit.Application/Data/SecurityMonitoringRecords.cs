@@ -31,6 +31,12 @@ public interface ISecurityMonitoringData
     Task<UserBehaviorSummary?> GetUserBehaviorSummaryAsync(Guid appUserId, int days = 30, CancellationToken ct = default);
     Task<OperationalLogsReport> GetOperationalLogsAsync(int hours = 24, int top = 100, CancellationToken ct = default);
     Task<OperationalIntegrityCheck> CheckOperationalIntegrityAsync(int minutes = 15, CancellationToken ct = default);
+
+    // #334 ExecutionLog retention & audit ledger digest verification
+    Task<int> PurgeExecutionLogAsync(int retentionDays, CancellationToken ct = default);
+    Task<LedgerVerificationStateRow> GetLedgerVerificationStateAsync(CancellationToken ct = default);
+    Task<AuditLedgerVerificationRow> VerifyAuditLedgerAsync(string? digestJson = null, bool useAutomaticStorage = false, bool requireDigest = false, CancellationToken ct = default);
+    Task<Guid> RecordLedgerVerificationOutcomeAsync(string anchorSource, bool verified, long? lastVerifiedBlockId, int? digestFileCount, string detail, CancellationToken ct = default);
 }
 
 public sealed record BehaviorAnomalyQuery(
@@ -305,10 +311,27 @@ public sealed class DdlAuditVerifyRow
     public string? Detail { get; init; }
 }
 
+public sealed class AuditLedgerStatusRow
+{
+    public DateTime? VerifiedUtc { get; init; }
+    public string AnchorSource { get; init; } = "unanchored";
+    public string Status { get; init; } = "WARN";
+    public long? LastVerifiedBlockId { get; init; }
+    public int? DigestFileCount { get; init; }
+    public string Detail { get; init; } = string.Empty;
+}
+
 public sealed record OperationalLogsReport(
     IReadOnlyList<ExecutionLogFailureRow> ExecutionFailures,
     IReadOnlyList<DdlChangeRow> DdlChanges,
-    IReadOnlyList<DdlAuditVerifyRow> IntegrityChecks);
+    IReadOnlyList<DdlAuditVerifyRow> IntegrityChecks,
+    AuditLedgerStatusRow? LedgerVerification = null);
+
+public sealed class LedgerVerificationStateRow
+{
+    public bool HasAutomaticDigestStorage { get; init; }
+    public int? LastGoodDigestFileCount { get; init; }
+}
 
 public sealed class ExecutionFailureSpikeRow
 {
@@ -320,3 +343,13 @@ public sealed class ExecutionFailureSpikeRow
 public sealed record OperationalIntegrityCheck(
     ExecutionFailureSpikeRow ExecutionSummary,
     IReadOnlyList<DdlAuditVerifyRow> DdlProblems);
+
+public sealed class AuditLedgerVerificationRow
+{
+    public bool Verified { get; init; }
+    public long? LastVerifiedBlockId { get; init; }
+    public string? DigestJson { get; init; }
+    public DateTime VerifiedUtc { get; init; }
+    public string Detail { get; init; } = string.Empty;
+    public bool HasAutomaticDigestStorage { get; init; }
+}

@@ -827,6 +827,20 @@ public sealed class SecurityHardeningRegressionTests(MeritFixture fixture)
         Assert.Contains("SignInLog:NameHashKey", ex.ToString(), StringComparison.Ordinal);
 
         string validKey = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
+        using var noUaKeyFactory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+        {
+            builder.UseEnvironment("Production");
+            builder.UseSetting("ConnectionStrings:Merit", TestEnvironment.WebConnectionString);
+            builder.UseSetting("DataProtection:AllowUnencryptedKeys", "true");
+            builder.UseSetting("Email:Provider", "Disabled");
+            builder.UseSetting("EmailCodes:VerifierKey", "");
+            builder.UseSetting("SignInLog:NameHashKey", validKey);
+            builder.UseSetting("Merit:UserAgentHashKey", "");
+        });
+        var uaEx = Assert.ThrowsAny<Exception>(() => _ = noUaKeyFactory.CreateClient());
+        Assert.Contains("Merit:UserAgentHashKey", uaEx.ToString(), StringComparison.Ordinal);
+
+        string validUaKey = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
         using var okFactory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
         {
             builder.UseEnvironment("Production");
@@ -835,6 +849,7 @@ public sealed class SecurityHardeningRegressionTests(MeritFixture fixture)
             builder.UseSetting("Email:Provider", "Disabled");
             builder.UseSetting("EmailCodes:VerifierKey", "");
             builder.UseSetting("SignInLog:NameHashKey", validKey);
+            builder.UseSetting("Merit:UserAgentHashKey", validUaKey);
         });
 
         using var client = okFactory.CreateClient();

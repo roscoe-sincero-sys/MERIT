@@ -196,10 +196,13 @@ $r = Invoke-Sqlcmd2 -Database 'master' -Query $createDb
 if ($r.ExitCode -ne 0) { throw "Could not create database $DatabaseName.`n$($r.Output)" }
 Write-Step $r.Output.Trim()
 
-# Snapshot isolation for readers, so queue and dashboard polling never block writers. Converges.
+# Snapshot isolation for readers (so queue/dashboard polling never block writers) and for sys.sp_verify_database_ledger (#334).
 $rcsi = "IF EXISTS (SELECT 1 FROM sys.databases WHERE name = N'$DatabaseName' AND is_read_committed_snapshot_on = 0) ALTER DATABASE [$DatabaseName] SET READ_COMMITTED_SNAPSHOT ON WITH ROLLBACK IMMEDIATE;"
 $r = Invoke-Sqlcmd2 -Database 'master' -Query $rcsi
 if ($r.ExitCode -ne 0) { throw "Could not set READ_COMMITTED_SNAPSHOT.`n$($r.Output)" }
+$snap = "IF EXISTS (SELECT 1 FROM sys.databases WHERE name = N'$DatabaseName' AND snapshot_isolation_state = 0) ALTER DATABASE [$DatabaseName] SET ALLOW_SNAPSHOT_ISOLATION ON;"
+$r = Invoke-Sqlcmd2 -Database 'master' -Query $snap
+if ($r.ExitCode -ne 0) { throw "Could not set ALLOW_SNAPSHOT_ISOLATION.`n$($r.Output)" }
 
 # ----------------------------------------------------------------------------------------------- logins
 if ($CreateLogins) {

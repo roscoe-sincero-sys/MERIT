@@ -268,5 +268,12 @@ public sealed class LoggingWave2UnitTests
         public Task<UserBehaviorSummary?> GetUserBehaviorSummaryAsync(Guid appUserId, int days = 30, CancellationToken ct = default) => Task.FromResult<UserBehaviorSummary?>(null);
         public Task<OperationalLogsReport> GetOperationalLogsAsync(int hours = 24, int top = 100, CancellationToken ct = default) => Task.FromResult(new OperationalLogsReport([], [], []));
         public Task<OperationalIntegrityCheck> CheckOperationalIntegrityAsync(int minutes = 15, CancellationToken ct = default) => Task.FromResult(new OperationalIntegrityCheck(new ExecutionFailureSpikeRow(), []));
+        public Task<int> PurgeExecutionLogAsync(int retentionDays, CancellationToken ct = default) => Task.FromResult(0);
+        public Task<LedgerVerificationStateRow> GetLedgerVerificationStateAsync(CancellationToken ct = default)
+            => Task.FromResult(new LedgerVerificationStateRow());
+        public Task<AuditLedgerVerificationRow> VerifyAuditLedgerAsync(string? digestJson = null, bool useAutomaticStorage = false, bool requireDigest = false, CancellationToken ct = default)
+            => Task.FromResult(new AuditLedgerVerificationRow { Verified = true });
+        public Task<Guid> RecordLedgerVerificationOutcomeAsync(string anchorSource, bool verified, long? lastVerifiedBlockId, int? digestFileCount, string detail, CancellationToken ct = default)
+            => Task.FromResult(Guid.NewGuid());
     }
 }

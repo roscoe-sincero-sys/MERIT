@@ -24,6 +24,7 @@ GLOBAL_REFERENCE_TABLES: set[str] = {
     "config.actionCode",
     "config.extractLayout",
     "config.extractLayoutField",
+    "logs.ledgerVerificationRun",
 }
 
 # Tables linked to a root tenant via appUserId, tenantId, roleId, or sessionScopeId (no direct rootTenantId column).
@@ -437,6 +438,17 @@ def _purge_body() -> str:
         "UPDATE dbo.jobQueue SET jobStatus = 'failed', modifiedBy = N'MERIT tenant fence' WHERE rootTenantId = @rootTenantId AND jobStatus IN ('queued', 'running');",
         "COMMIT TRANSACTION;",
         "",
+        "-- #352 / Codex #3: Only set SESSION_CONTEXT (N'AppUser') = N'MERIT tenant purge' when the caller explicitly",
+        "-- opts in via @singlePassDedicatedConnection = 1 on a dedicated connection that is closed on timeout/attention.",
+        "-- Otherwise keep the safe two-pass path that never mutates session-wide AppUser.",
+        "DECLARE @setPurgeAppUser BIT = 0;",
+        "IF @singlePassDedicatedConnection = 1 AND SESSION_CONTEXT (N'AppUser') IS NULL",
+        "BEGIN",
+        "    EXEC sys.sp_set_session_context @key = N'AppUser', @value = N'MERIT tenant purge', @read_only = 0;",
+        "    SET @setPurgeAppUser = 1;",
+        "END;",
+        "",
+        "BEGIN TRY",
         "-- Step 2 (B4, I16): Scrub and soft-delete all 70 mutable tenant/auth tables in independently committed 5,000-row batches.",
     ]
     for s, n, pred in ALL_MUTABLE_SPECS:
@@ -461,6 +473,18 @@ def _purge_body() -> str:
             f"END;\n"
             f"INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'{full}', @n, 0, 'scrubbedAndSoftDeleted');"
         )
+    lines.append("END TRY")
+    lines.append("BEGIN CATCH")
+    lines.append("    IF @setPurgeAppUser = 1")
+    lines.append("    BEGIN")
+    lines.append("        EXEC sys.sp_set_session_context @key = N'AppUser', @value = NULL, @read_only = 0;")
+    lines.append("    END;")
+    lines.append("    ;THROW;")
+    lines.append("END CATCH;")
+    lines.append("IF @setPurgeAppUser = 1")
+    lines.append("BEGIN")
+    lines.append("    EXEC sys.sp_set_session_context @key = N'AppUser', @value = NULL, @read_only = 0;")
+    lines.append("END;")
     lines.append("")
     lines.append("-- Step 3 (I18, Codex #2/#4): Final verification pass over all 70 mutable tables after fencing and purging.")
     for s, n, pred in ALL_MUTABLE_SPECS:
@@ -571,9 +595,10 @@ SET @Comments = CONCAT (N'Root tenant export completed for ', @rootTenantId);
                 "and credential column across all 70 mutable tenant/auth tables (including previously soft-deleted rows) "
                 "in independently committed 5,000-row batches (or rolls back all work when @dryRun = 1), and runs a final "
                 "post-purge verification pass (#346, B4, B5, I16, I18).",
-        "params": """@rootTenantId        UNIQUEIDENTIFIER
-, @backupRetentionDays INT = 35
-, @dryRun              BIT = 0""",
+        "params": """@rootTenantId                  UNIQUEIDENTIFIER
+, @backupRetentionDays           INT = 35
+, @dryRun                        BIT = 0
+, @singlePassDedicatedConnection BIT = 0""",
         "key": "CONCAT (N'rootTenantId=', @rootTenantId, N', backupRetentionDays=', @backupRetentionDays, N', dryRun=', @dryRun)",
         "body": _purge_body(),
     },
@@ -585,10 +610,11 @@ SET @Comments = CONCAT (N'Root tenant export completed for ', @rootTenantId);
                 "(deactivates tenants, revokes sessions, fails queued/running jobs), scrubs and soft-deletes all 70 "
                 "mutable tenant/auth tables in 5,000-row batches (or rehearses inside a rolled-back transaction when "
                 "@dryRun = 1), verifies zero unscrubbed rows remain, and returns a purge report with backupAgeOutUtc.",
-        "params": """@rootTenantId        UNIQUEIDENTIFIER
-, @confirmationCode    NVARCHAR (60)
-, @backupRetentionDays INT = 35
-, @dryRun              BIT = 0""",
+        "params": """@rootTenantId                  UNIQUEIDENTIFIER
+, @confirmationCode              NVARCHAR (60)
+, @backupRetentionDays           INT = 35
+, @dryRun                        BIT = 0
+, @singlePassDedicatedConnection BIT = 0""",
         "key": "CONCAT (N'rootTenantId=', @rootTenantId, N', backupRetentionDays=', @backupRetentionDays, N', dryRun=', @dryRun)",
         "validate": """IF @dryRun IS NULL
 BEGIN
@@ -643,7 +669,8 @@ BEGIN
     COMMIT TRANSACTION;
 END;
 
-EXEC config.uspPurgeRootTenantInternal @rootTenantId = @rootTenantId, @backupRetentionDays = @backupRetentionDays, @dryRun = @dryRun;
+EXEC config.uspPurgeRootTenantInternal @rootTenantId = @rootTenantId, @backupRetentionDays = @backupRetentionDays,
+     @dryRun = @dryRun, @singlePassDedicatedConnection = @singlePassDedicatedConnection;
 SET @Comments = CONCAT (CASE WHEN @dryRun = 1 THEN N'Dry-run purge completed for ' ELSE N'Root tenant purge completed for ' END, @rootTenantId);
 """,
     },

@@ -1145,6 +1145,34 @@ SELECT TOP (@limit)
 
 -- 3. DDL audit integrity posture (called in owner context ONLY after caller-context security.investigate check above)
 EXEC logs.uspDdlAuditVerifyInternal @ProblemsOnly = 0;
+
+-- 4. Latest audit-ledger verification run (#334 — separate from DDL checks so exports keep ddlAuditVerify distinct)
+IF EXISTS (SELECT 1 FROM logs.ledgerVerificationRun WHERE isDeleted = 0)
+BEGIN
+    SELECT TOP (1)
+           verifiedUtc,
+           anchorSource,
+           CASE
+               WHEN verified = 0 THEN N'FAIL'
+               WHEN anchorSource = 'unanchored' THEN N'WARN'
+               ELSE N'OK'
+           END AS status,
+           lastVerifiedBlockId,
+           digestFileCount,
+           detail
+      FROM logs.ledgerVerificationRun
+     WHERE isDeleted = 0
+     ORDER BY verifiedUtc DESC;
+END
+ELSE
+BEGIN
+    SELECT CAST (NULL AS DATETIME2 (3)) AS verifiedUtc,
+           'unanchored' AS anchorSource,
+           N'WARN' AS status,
+           CAST (NULL AS BIGINT) AS lastVerifiedBlockId,
+           CAST (NULL AS INT) AS digestFileCount,
+           N'No scheduled audit-ledger verification run has been recorded yet.' AS detail;
+END;
 """,
     },
     {
@@ -1163,6 +1191,233 @@ SELECT COUNT (*) AS failureCount,
  WHERE isDeleted = 0 AND Successful = 0 AND StartDateUtc >= @since;
 
 EXEC logs.uspDdlAuditVerifyInternal @ProblemsOnly = 1;
+""",
+    },
+    {
+        "schema": "logs", "name": "uspPurgeExecutionLog", "kind": "write", "no_tx": True, "grants": WORKER, "ticket": "334",
+        "desc": "Worker-only batched retention purger for logs.ExecutionLog (#334). Hard-deletes internal execution "
+                "instrumentation rows older than @retentionDays (30..3650, default 90) in independently committed "
+                "5,000-row batches with a 50 ms yield between full batches (documented exception to no-hard-delete).",
+        "params": "@retentionDays INT = 90",
+        "key": "CONCAT (N'retentionDays=', @retentionDays)",
+        "validate": """IF @retentionDays IS NULL OR @retentionDays NOT BETWEEN 30 AND 3650
+BEGIN
+    ;THROW 51422, N'ExecutionLog retention must be between 30 and 3650 days.', 1;
+END;""",
+        "body": """
+DECLARE @cutoff DATETIME2 (3) = DATEADD (DAY, -@retentionDays, SYSUTCDATETIME ());
+DECLARE @total INT = 0, @batch INT = 1;
+
+WHILE @batch > 0
+BEGIN
+    BEGIN TRANSACTION;
+    DELETE TOP (5000)
+      FROM logs.ExecutionLog
+     WHERE StartDateUtc < @cutoff;
+    SET @batch = @@ROWCOUNT;
+    COMMIT TRANSACTION;
+    SET @total += @batch;
+    IF @batch = 5000
+    BEGIN
+        WAITFOR DELAY '00:00:00.050';
+    END;
+END;
+
+SELECT @total AS purged;
+SET @Comments = CONCAT (N'Purged ', @total, N' ExecutionLog rows older than ', @retentionDays, N' days.');
+""",
+    },
+    {
+        "schema": "logs", "name": "uspVerifyAuditLedgerInternal", "kind": "read", "require_standalone": True, "grants": [], "ticket": "334",
+        "execute_as_owner": True,
+        "desc": "Ungranted owner-context helper for logs.uspVerifyAuditLedger: verifies automatic digest storage via "
+                "sys.sp_verify_database_ledger_from_digest_storage when @useAutomaticStorage = 1, verifies a required "
+                "external digest when @requireDigest = 1, or generates and verifies a fresh digest (#334).",
+        "params": """@digestJson          NVARCHAR (MAX) = NULL
+, @useAutomaticStorage BIT = 0
+, @requireDigest       BIT = 0""",
+        "key": "CONCAT (N'useAutomaticStorage=', @useAutomaticStorage, N', requireDigest=', @requireDigest)",
+        "body": """
+DECLARE @effectiveDigest NVARCHAR (MAX) = NULLIF (LTRIM (RTRIM (@digestJson)), N'');
+DECLARE @verified BIT = 0;
+DECLARE @lastBlockId BIGINT = NULL;
+DECLARE @detail NVARCHAR (500) = N'OK';
+DECLARE @now DATETIME2 (3) = SYSUTCDATETIME ();
+DECLARE @hasAutoDigest BIT = CASE WHEN EXISTS (SELECT 1 FROM sys.database_ledger_digest_locations WHERE is_current = 1) THEN 1 ELSE 0 END;
+
+BEGIN TRY
+    IF @useAutomaticStorage = 1
+    BEGIN
+        DECLARE @autoLocations NVARCHAR (MAX) = (
+            SELECT path, last_digest_block_id, is_current
+              FROM sys.database_ledger_digest_locations
+             FOR JSON AUTO, INCLUDE_NULL_VALUES
+        );
+        IF @hasAutoDigest = 0 OR @autoLocations IS NULL
+        BEGIN
+            SET @detail = N'No active automatic ledger digest storage endpoint is configured.';
+        END
+        ELSE
+        BEGIN
+            DECLARE @autoRc INT = 0;
+            EXEC @autoRc = sys.sp_verify_database_ledger_from_digest_storage @digest_locations = @autoLocations;
+            IF @autoRc = 0
+            BEGIN
+                SET @verified = 1;
+                SET @detail = N'Automatic digest storage verified.';
+            END
+            ELSE
+            BEGIN
+                SET @detail = CONCAT (N'Automatic digest storage verification returned status ', @autoRc, N'.');
+            END;
+        END;
+    END
+    ELSE IF @requireDigest = 1 AND @effectiveDigest IS NULL
+    BEGIN
+        SET @detail = N'A non-empty external digest JSON payload is required.';
+    END
+    ELSE
+    BEGIN
+        IF @effectiveDigest IS NULL
+        BEGIN
+            DECLARE @gen TABLE (latest_digest NVARCHAR (MAX));
+            INSERT @gen (latest_digest)
+            EXEC sys.sp_generate_database_ledger_digest;
+            SELECT TOP (1) @effectiveDigest = latest_digest FROM @gen;
+        END;
+
+        IF @effectiveDigest IS NULL
+        BEGIN
+            SET @detail = N'No database ledger digest was returned.';
+        END
+        ELSE
+        BEGIN
+            -- sys.sp_verify_database_ledger cannot run inside INSERT ... EXEC (error 574); call directly
+            -- so the caller reads the engine's native last_verified_block_id result set.
+            DECLARE @manualRc INT = 0;
+            EXEC @manualRc = sys.sp_verify_database_ledger @digest_locations = @effectiveDigest;
+            IF @manualRc = 0
+            BEGIN
+                SET @verified = 1;
+                SET @detail = N'Ledger verified.';
+            END
+            ELSE
+            BEGIN
+                SET @detail = CONCAT (N'Ledger verification returned status ', @manualRc, N'.');
+            END;
+        END;
+    END;
+END TRY
+BEGIN CATCH
+    SET @verified = 0;
+    SET @detail = CONCAT (N'Ledger verification failed (error ', ERROR_NUMBER (), N').');
+END CATCH;
+
+-- I20: Surface SQL verification failures as a critical platform security finding so /admin/security-alerts shows tampering.
+IF @verified = 0
+BEGIN
+    DECLARE @platform UNIQUEIDENTIFIER = CAST (HASHBYTES ('MD5', N'tenant:PLATFORM') AS UNIQUEIDENTIFIER);
+    DECLARE @fp VARCHAR (128) = CONCAT ('ledgerVerificationFailed|', CONVERT (VARCHAR (10), @now, 23));
+    IF NOT EXISTS (SELECT 1 FROM logs.securityFinding WHERE fingerprint = @fp AND isDeleted = 0)
+    BEGIN
+        INSERT logs.securityFinding (securityFindingId, rootTenantId, ruleCode, severity, title, detailJson,
+                                     windowStartUtc, windowEndUtc, detectedUtc, status, fingerprint)
+        VALUES (NEWID (), @platform, 'ledgerVerificationFailed', 'critical',
+                N'Audit ledger verification failed',
+                (SELECT @detail AS detail FOR JSON PATH, WITHOUT_ARRAY_WRAPPER),
+                @now, @now, @now, 'open', @fp);
+    END;
+END;
+
+SELECT @verified AS verified,
+       @lastBlockId AS lastVerifiedBlockId,
+       @effectiveDigest AS digestJson,
+       @now AS verifiedUtc,
+       @detail AS detail,
+       @hasAutoDigest AS hasAutomaticDigestStorage;
+""",
+    },
+    {
+        "schema": "logs", "name": "uspVerifyAuditLedger", "kind": "read", "require_standalone": True, "grants": WORKER, "ticket": "334",
+        "desc": "Worker-only audit ledger digest generator and verifier (#334). Supports automatic digest storage "
+                "(@useAutomaticStorage = 1), required external digest verification (@requireDigest = 1), or fresh generation.",
+        "params": """@digestJson          NVARCHAR (MAX) = NULL
+, @useAutomaticStorage BIT = 0
+, @requireDigest       BIT = 0""",
+        "key": "CONCAT (N'useAutomaticStorage=', @useAutomaticStorage, N', requireDigest=', @requireDigest)",
+        "body": """
+EXEC logs.uspVerifyAuditLedgerInternal @digestJson = @digestJson,
+     @useAutomaticStorage = @useAutomaticStorage, @requireDigest = @requireDigest;
+""",
+    },
+    {
+        "schema": "logs", "name": "uspGetLedgerVerificationStateInternal", "kind": "read", "grants": [], "ticket": "334",
+        "execute_as_owner": True,
+        "desc": "Ungranted owner-context metadata reader for logs.uspGetLedgerVerificationState: reports whether active "
+                "SQL Server automatic digest storage is configured and the durable last-known-good digestFileCount (#334).",
+        "params": "",
+        "key": "N'getLedgerState=1'",
+        "body": """
+SELECT CASE WHEN EXISTS (SELECT 1 FROM sys.database_ledger_digest_locations WHERE is_current = 1)
+            THEN CAST (1 AS BIT) ELSE CAST (0 AS BIT) END AS hasAutomaticDigestStorage,
+       (SELECT MAX (digestFileCount)
+          FROM logs.ledgerVerificationRun
+         WHERE isDeleted = 0 AND anchorSource = 'digestDirectory' AND verified = 1 AND digestFileCount IS NOT NULL) AS lastGoodDigestFileCount;
+""",
+    },
+    {
+        "schema": "logs", "name": "uspGetLedgerVerificationState", "kind": "read", "grants": WORKER, "ticket": "334",
+        "desc": "Worker-only metadata reader returning active automatic digest storage state and durable last-known-good "
+                "digestFileCount before a verification cycle generates or publishes any digest (#334).",
+        "params": "",
+        "key": "N'getLedgerState=1'",
+        "body": """
+EXEC logs.uspGetLedgerVerificationStateInternal;
+""",
+    },
+    {
+        "schema": "logs", "name": "uspRecordLedgerVerificationOutcome", "kind": "write", "grants": WORKER, "ticket": "334",
+        "desc": "Worker-only recorder for end-to-end audit-ledger verification runs (#334). Persists one terminal "
+                "outcome per cycle in logs.ledgerVerificationRun (surfaced in logs.uspGetOperationalLogs) and raises "
+                "a critical logs.securityFinding on any SQL or archive failure.",
+        "params": """@anchorSource        VARCHAR (30)
+, @verified            BIT
+, @lastVerifiedBlockId BIGINT = NULL
+, @digestFileCount     INT = NULL
+, @detail              NVARCHAR (500)""",
+        "key": "CONCAT (N'anchorSource=', @anchorSource, N', verified=', @verified)",
+        "validate": """IF @anchorSource IS NULL OR @anchorSource NOT IN ('automaticStorage', 'digestDirectory', 'unanchored')
+BEGIN
+    ;THROW 51422, N'Invalid @anchorSource for ledger verification outcome.', 1;
+END;
+IF @verified IS NULL
+BEGIN
+    ;THROW 51422, N'@verified is required.', 1;
+END;""",
+        "body": """
+DECLARE @now DATETIME2 (3) = SYSUTCDATETIME ();
+DECLARE @runId UNIQUEIDENTIFIER = NEWID ();
+
+INSERT logs.ledgerVerificationRun (ledgerVerificationRunId, verifiedUtc, anchorSource, verified, lastVerifiedBlockId, digestFileCount, detail)
+VALUES (@runId, @now, @anchorSource, @verified, @lastVerifiedBlockId, @digestFileCount, LEFT (COALESCE (@detail, N''), 500));
+
+IF @verified = 0
+BEGIN
+    DECLARE @platform UNIQUEIDENTIFIER = CAST (HASHBYTES ('MD5', N'tenant:PLATFORM') AS UNIQUEIDENTIFIER);
+    DECLARE @fp VARCHAR (128) = CONCAT ('ledgerVerificationFailed|', CONVERT (VARCHAR (10), @now, 23));
+    IF NOT EXISTS (SELECT 1 FROM logs.securityFinding WHERE fingerprint = @fp AND isDeleted = 0)
+    BEGIN
+        INSERT logs.securityFinding (securityFindingId, rootTenantId, ruleCode, severity, title, detailJson,
+                                     windowStartUtc, windowEndUtc, detectedUtc, status, fingerprint)
+        VALUES (NEWID (), @platform, 'ledgerVerificationFailed', 'critical',
+                N'Audit ledger verification failed',
+                (SELECT @anchorSource AS anchorSource, LEFT (COALESCE (@detail, N''), 500) AS detail FOR JSON PATH, WITHOUT_ARRAY_WRAPPER),
+                @now, @now, @now, 'open', @fp);
+    END;
+END;
+
+SELECT @runId AS ledgerVerificationRunId;
+SET @Comments = CONCAT (N'Recorded ledger verification outcome: ', @anchorSource, N' verified=', @verified);
 """,
     },
 ]

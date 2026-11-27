@@ -17,18 +17,74 @@ public interface IRequestAuditContext
 
     string? UserAgent { get; }
 
-    /// <summary>First 16 uppercase hex chars of SHA-256 over the sanitized User-Agent for mid-session UA drift (#327).</summary>
-    string? UserAgentHash => ComputeUserAgentHash(UserAgent);
+    /// <summary>First 16 uppercase hex chars of keyed HMAC-SHA256 over the normalized User-Agent family (#327, #350).</summary>
+    string? UserAgentHash => null;
 
     /// <summary>Normalized route pattern (never raw query string or patient values).</summary>
     string? RouteTemplate { get; }
 
-    static string? ComputeUserAgentHash(string? userAgent)
+    /// <summary>
+    /// Normalizes a raw User-Agent into a version-free client family (<c>client|platform|device</c>) so browser
+    /// background updates do not trigger Rule 11 (<c>midSessionUserAgentDrift</c>) while real client switches do (#350).
+    /// </summary>
+    static string? NormalizeUserAgentFamily(string? userAgent)
     {
         if (string.IsNullOrWhiteSpace(userAgent)) return null;
-        byte[] hash = SHA256.HashData(Encoding.UTF8.GetBytes(userAgent.Trim()));
+        string ua = userAgent.Trim().ToLowerInvariant();
+
+        // Automated / CLI / headless clients first (keep distinct from interactive browsers).
+        if (ua.Contains("headlesschrome")) return "bot:headlesschrome|other|cli";
+        if (ua.Contains("playwright")) return "bot:playwright|other|cli";
+        if (ua.Contains("puppeteer")) return "bot:puppeteer|other|cli";
+        if (ua.Contains("selenium")) return "bot:selenium|other|cli";
+        if (ua.Contains("curl/")) return "bot:curl|other|cli";
+        if (ua.Contains("python-requests")) return "bot:python-requests|other|cli";
+        if (ua.Contains("python-urllib") || ua.Contains("python/")) return "bot:python|other|cli";
+        if (ua.Contains("powershell")) return "bot:powershell|other|cli";
+        if (ua.Contains("wget/")) return "bot:wget|other|cli";
+        if (ua.Contains("go-http-client")) return "bot:go-http|other|cli";
+        if (ua.Contains("httpie")) return "bot:httpie|other|cli";
+
+        string browser =
+            ua.Contains("edg/") || ua.Contains("edga/") || ua.Contains("edgios/") || ua.Contains("edge/") ? "edge" :
+            ua.Contains("opr/") || ua.Contains("opera") ? "opera" :
+            ua.Contains("firefox/") || ua.Contains("fxios/") ? "firefox" :
+            ua.Contains("chrome/") || ua.Contains("crios/") ? "chrome" :
+            ua.Contains("safari/") ? "safari" :
+            ua.Contains("trident/") || ua.Contains("msie") ? "ie" :
+            "other";
+
+        string platform =
+            ua.Contains("iphone") || ua.Contains("ipad") || ua.Contains("ipod") ? "ios" :
+            ua.Contains("android") ? "android" :
+            ua.Contains("windows") ? "windows" :
+            ua.Contains("cros") ? "cros" :
+            ua.Contains("mac os x") || ua.Contains("macintosh") ? "macos" :
+            ua.Contains("linux") ? "linux" :
+            "other";
+
+        string device =
+            ua.Contains("ipad") || ua.Contains("tablet") ? "tablet" :
+            ua.Contains("mobile") || ua.Contains("iphone") || ua.Contains("ipod") ? "mobile" :
+            "desktop";
+
+        return $"{browser}|{platform}|{device}";
+    }
+
+    /// <summary>Computes the 64-bit keyed HMAC-SHA256 hex prefix over the normalized User-Agent family (#350).</summary>
+    static string? ComputeKeyedUserAgentHash(string? userAgent, ReadOnlySpan<byte> key)
+    {
+        string? family = NormalizeUserAgentFamily(userAgent);
+        if (family is null) return null;
+        byte[] hash = HMACSHA256.HashData(key, Encoding.UTF8.GetBytes(family));
         return Convert.ToHexString(hash.AsSpan(0, 8));
     }
+}
+
+/// <summary>Keyed User-Agent family hasher backed by <c>Merit:UserAgentHashKey</c> (#350).</summary>
+public interface IUserAgentHasher
+{
+    string? Hash(string? userAgent);
 }
 
 public sealed class NullRequestAuditContext : IRequestAuditContext

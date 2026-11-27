@@ -77,14 +77,62 @@ public static class RequestTrace
     }
 }
 
-/// <summary>Per-request audit context populated from HttpContext (#326).</summary>
-public sealed class WebRequestAuditContext(IHttpContextAccessor accessor) : IRequestAuditContext
+/// <summary>
+/// Keyed HMAC-SHA256 hasher over normalized User-Agent families (#350). Uses <c>Merit:UserAgentHashKey</c>
+/// (base64, >= 32 bytes); fails fast outside Development/Testing if unconfigured.
+/// </summary>
+public sealed partial class UserAgentHasher : IUserAgentHasher
+{
+    public const string KeySetting = "Merit:UserAgentHashKey";
+    private readonly byte[] _key;
+
+    public UserAgentHasher(IConfiguration configuration, ILogger<UserAgentHasher> logger, IHostEnvironment? environment = null)
+    {
+        string? configured = configuration[KeySetting];
+        byte[]? decoded = null;
+        if (!string.IsNullOrWhiteSpace(configured))
+        {
+            try
+            {
+                decoded = Convert.FromBase64String(configured);
+            }
+            catch (FormatException)
+            {
+                decoded = null;
+            }
+        }
+
+        if (decoded is { Length: >= 32 })
+        {
+            _key = decoded;
+        }
+        else if (environment is not null && !environment.IsDevelopment() && !environment.IsEnvironment("Testing"))
+        {
+            throw new InvalidOperationException($"{KeySetting} must be configured as a base64 key of at least 32 bytes outside Development.");
+        }
+        else
+        {
+            _key = System.Security.Cryptography.RandomNumberGenerator.GetBytes(32);
+            EphemeralKey(logger, KeySetting);
+        }
+    }
+
+    public string? Hash(string? userAgent) => IRequestAuditContext.ComputeKeyedUserAgentHash(userAgent, _key);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "{Setting} is not configured; using an ephemeral per-process HMAC key for userAgentHash (Development/Testing only).")]
+    private static partial void EphemeralKey(ILogger logger, string setting);
+}
+
+/// <summary>Per-request audit context populated from HttpContext (#326, #350).</summary>
+public sealed class WebRequestAuditContext(IHttpContextAccessor accessor, IUserAgentHasher userAgentHasher) : IRequestAuditContext
 {
     public string? ClientAddress => accessor.HttpContext?.Connection.RemoteIpAddress?.ToString();
 
     public string? TraceId => RequestTrace.Id(accessor.HttpContext);
 
     public string? UserAgent => RequestTrace.SanitizeUserAgent(accessor.HttpContext?.Request.Headers.UserAgent.ToString());
+
+    public string? UserAgentHash => userAgentHasher.Hash(UserAgent);
 
     public string? RouteTemplate => RequestTrace.RouteTemplate(accessor.HttpContext);
 }

@@ -282,6 +282,10 @@ public sealed class SecurityMonitoringController(
             "ddlChange", d.ChangeId, Iso(d.EventTimeUtc), $"{d.ObjectSchema}.{d.ObjectName}", null, null, d.EventType, d.ObjectType, d.AppUser ?? d.LoginName]));
         rows.AddRange(r.IntegrityChecks.Select(c => (IReadOnlyList<object?>)[
             "ddlAuditVerify", null, null, c.CheckName, null, null, c.Status, c.Detail, null]));
+        if (r.LedgerVerification is { } l)
+        {
+            rows.Add(["ledgerVerification", l.LastVerifiedBlockId, l.VerifiedUtc is { } v ? Iso(v) : null, l.AnchorSource, null, null, l.Status, l.Detail, null]);
+        }
         await audit.ExportedAsync("operationalLog", null, rows.Count, ct, new { format = "csv", hours = h });
         return File(TabularExport.Csv(
             ["Kind", "Id", "EventUtc", "ObjectOrCheck", "ErrorNumber", "ErrorLine", "StatusOrType", "AllowlistedDetail", "Actor"],
@@ -298,7 +302,9 @@ public sealed class SecurityMonitoringController(
         foreach (var e in r.ExecutionFailures) sb.AppendLine(JsonSerializer.Serialize(new { kind = "executionFailure", e }));
         foreach (var d in r.DdlChanges) sb.AppendLine(JsonSerializer.Serialize(new { kind = "ddlChange", d }));
         foreach (var c in r.IntegrityChecks) sb.AppendLine(JsonSerializer.Serialize(new { kind = "ddlAuditVerify", c }));
-        await audit.ExportedAsync("operationalLog", null, r.ExecutionFailures.Count + r.DdlChanges.Count + r.IntegrityChecks.Count, ct, new { format = "jsonl", hours = h });
+        if (r.LedgerVerification is { } l) sb.AppendLine(JsonSerializer.Serialize(new { kind = "ledgerVerification", l }));
+        int count = r.ExecutionFailures.Count + r.DdlChanges.Count + r.IntegrityChecks.Count + (r.LedgerVerification is null ? 0 : 1);
+        await audit.ExportedAsync("operationalLog", null, count, ct, new { format = "jsonl", hours = h });
         return File(Encoding.UTF8.GetBytes(sb.ToString()), "application/x-ndjson", $"merit-operations-log-{clock.Today:yyyy-MM-dd}.jsonl");
     }
 }

@@ -134,6 +134,34 @@ BEGIN
         -- 3. DDL audit integrity posture (called in owner context ONLY after caller-context security.investigate check above)
         EXEC logs.uspDdlAuditVerifyInternal @ProblemsOnly = 0;
 
+        -- 4. Latest audit-ledger verification run (#334 — separate from DDL checks so exports keep ddlAuditVerify distinct)
+        IF EXISTS (SELECT 1 FROM logs.ledgerVerificationRun WHERE isDeleted = 0)
+        BEGIN
+            SELECT TOP (1)
+                   verifiedUtc,
+                   anchorSource,
+                   CASE
+                       WHEN verified = 0 THEN N'FAIL'
+                       WHEN anchorSource = 'unanchored' THEN N'WARN'
+                       ELSE N'OK'
+                   END AS status,
+                   lastVerifiedBlockId,
+                   digestFileCount,
+                   detail
+              FROM logs.ledgerVerificationRun
+             WHERE isDeleted = 0
+             ORDER BY verifiedUtc DESC;
+        END
+        ELSE
+        BEGIN
+            SELECT CAST (NULL AS DATETIME2 (3)) AS verifiedUtc,
+                   'unanchored' AS anchorSource,
+                   N'WARN' AS status,
+                   CAST (NULL AS BIGINT) AS lastVerifiedBlockId,
+                   CAST (NULL AS INT) AS digestFileCount,
+                   N'No scheduled audit-ledger verification run has been recorded yet.' AS detail;
+        END;
+
         -- =========================================================================================
         -- ===== End of the procedure's own work. ===================================================
         -- =========================================================================================

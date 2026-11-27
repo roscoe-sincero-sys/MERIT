@@ -28,6 +28,7 @@ var services = builder.Services;
 
 // ---------------------------------------------------------------------------------------------- application layers
 services.AddHttpContextAccessor();
+services.AddSingleton<IUserAgentHasher, UserAgentHasher>();
 services.AddScoped<ICurrentSession, WebCurrentSession>();
 services.AddScoped<IRequestAuditContext, WebRequestAuditContext>();
 services.AddScoped<SessionRenewal>();
@@ -349,8 +350,9 @@ if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi("/openapi/{documentName}.json").RequireAuthorization(Permissions.SignedIn);
 }
-// Validate sign-in log hash key eagerly at startup so misconfigured non-Development hosts fail fast before reporting ready.
+// Validate sign-in and User-Agent hash keys eagerly at startup so misconfigured non-Development hosts fail fast before reporting ready (#191, #350).
 _ = app.Services.GetRequiredService<IAttemptedNameProtection>();
+_ = app.Services.GetRequiredService<IUserAgentHasher>();
 
 app.MapHealthChecks("/health").AllowAnonymous();
 app.MapControllers();

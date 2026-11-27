@@ -1923,3 +1923,24 @@ TABLES += [{
         {"name": "IX_logs_securityFinding_appUserId_detectedUtc", "cols": "appUserId, detectedUtc", "filter": "isDeleted = 0"},
     ],
 }]
+
+TABLES += [{
+    "schema": "logs", "name": "ledgerVerificationRun", "rls": None, "tenantKey": False,
+    "desc": "Operational history of scheduled audit-ledger verification runs (#334). Records UTC time, anchor source "
+            "(automaticStorage, digestDirectory, or unanchored), verification status, covered block id, archive file "
+            "count, and sanitized detail so reviewers see ledger verification posture in the operational view.",
+    "cols": [
+        c("ledgerVerificationRunId", UUID, "Surrogate key.", null=False),
+        c("verifiedUtc", "DATETIME2 (3)", "UTC timestamp of the verification run.", null=False, default="SYSUTCDATETIME ()"),
+        c("anchorSource", "VARCHAR (30)", "automaticStorage, digestDirectory, or unanchored.", null=False,
+          check="anchorSource IN ('automaticStorage', 'digestDirectory', 'unanchored')"),
+        c("verified", "BIT", "1 when the verification cycle succeeded; 0 on SQL or archive failure.", null=False),
+        c("lastVerifiedBlockId", "BIGINT", "Highest verified database ledger block_id, when available."),
+        c("digestFileCount", "INT", "Count of archived digest files observed in DigestDirectory, when applicable."),
+        c("detail", "NVARCHAR (500)", "Sanitized outcome or failure reason (never PHI or secrets).", null=False),
+    ],
+    "fks": [],
+    "indexes": [
+        {"name": "IX_logs_ledgerVerificationRun_verifiedUtc", "cols": "verifiedUtc DESC", "filter": "isDeleted = 0"},
+    ],
+}]

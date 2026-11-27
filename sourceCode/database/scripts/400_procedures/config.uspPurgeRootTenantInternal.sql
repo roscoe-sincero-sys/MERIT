@@ -45,9 +45,10 @@ Description:	Initial version.
 
 ***********************************************************************************************************************/
 CREATE OR ALTER PROCEDURE config.uspPurgeRootTenantInternal
-      @rootTenantId        UNIQUEIDENTIFIER
-      , @backupRetentionDays INT = 35
-      , @dryRun              BIT = 0
+      @rootTenantId                  UNIQUEIDENTIFIER
+      , @backupRetentionDays           INT = 35
+      , @dryRun                        BIT = 0
+      , @singlePassDedicatedConnection BIT = 0
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -164,6 +165,17 @@ BEGIN
         UPDATE dbo.jobQueue SET jobStatus = 'failed', modifiedBy = N'MERIT tenant fence' WHERE rootTenantId = @rootTenantId AND jobStatus IN ('queued', 'running');
         COMMIT TRANSACTION;
 
+        -- #352 / Codex #3: Only set SESSION_CONTEXT (N'AppUser') = N'MERIT tenant purge' when the caller explicitly
+        -- opts in via @singlePassDedicatedConnection = 1 on a dedicated connection that is closed on timeout/attention.
+        -- Otherwise keep the safe two-pass path that never mutates session-wide AppUser.
+        DECLARE @setPurgeAppUser BIT = 0;
+        IF @singlePassDedicatedConnection = 1 AND SESSION_CONTEXT (N'AppUser') IS NULL
+        BEGIN
+            EXEC sys.sp_set_session_context @key = N'AppUser', @value = N'MERIT tenant purge', @read_only = 0;
+            SET @setPurgeAppUser = 1;
+        END;
+
+        BEGIN TRY
         -- Step 2 (B4, I16): Scrub and soft-delete all 70 mutable tenant/auth tables in independently committed 5,000-row batches.
         SET @batch = 1; SET @n = 0;
         WHILE @batch > 0
@@ -1355,6 +1367,18 @@ BEGIN
             END;
         END;
         INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'auth.tenant', @n, 0, 'scrubbedAndSoftDeleted');
+        END TRY
+        BEGIN CATCH
+            IF @setPurgeAppUser = 1
+            BEGIN
+                EXEC sys.sp_set_session_context @key = N'AppUser', @value = NULL, @read_only = 0;
+            END;
+            ;THROW;
+        END CATCH;
+        IF @setPurgeAppUser = 1
+        BEGIN
+            EXEC sys.sp_set_session_context @key = N'AppUser', @value = NULL, @read_only = 0;
+        END;
 
         -- Step 3 (I18, Codex #2/#4): Final verification pass over all 70 mutable tables after fencing and purging.
         UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM auth.mfaRecoveryCode WHERE (appUserId IN (SELECT appUserId FROM auth.appUser WHERE rootTenantId = @rootTenantId)) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge')) WHERE tableName = N'auth.mfaRecoveryCode';

@@ -39,6 +39,8 @@ builder.Services.AddHostedService<ScreenVisitPurger>();
 builder.Services.AddHostedService<AuditEventRecordPurger>();
 builder.Services.AddHostedService<AuditEventChangePurger>();
 builder.Services.AddHostedService<SearchLogPurger>();
+builder.Services.AddHostedService<ExecutionLogPurger>();
+builder.Services.AddHostedService<AuditLedgerVerifier>();
 builder.Services.AddHostedService<SecurityFindingScanner>();
 builder.Services.AddHostedService<OperationalIntegrityMonitor>();
 builder.Services.AddHealthChecks().AddCheck<QueueHealthCheck>("queues");
