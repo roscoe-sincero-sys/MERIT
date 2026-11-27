@@ -100,7 +100,7 @@ BEGIN
                 DECLARE @autoLocations NVARCHAR (MAX) = (
                     SELECT path, last_digest_block_id, is_current
                       FROM sys.database_ledger_digest_locations
-                     FOR JSON AUTO, ROOT ('locations')
+                     FOR JSON AUTO, INCLUDE_NULL_VALUES
                 );
                 IF @hasAutoDigest = 0 OR @autoLocations IS NULL
                 BEGIN
@@ -112,9 +112,8 @@ BEGIN
                     EXEC @autoRc = sys.sp_verify_database_ledger_from_digest_storage @digest_locations = @autoLocations;
                     IF @autoRc = 0
                     BEGIN
-                        SET @lastBlockId = (SELECT MAX (block_id) FROM sys.database_ledger_blocks);
                         SET @verified = 1;
-                        SET @detail = CONCAT (N'Automatic digest storage verified up to block ', COALESCE (CAST (@lastBlockId AS NVARCHAR (30)), N'unknown'), N'.');
+                        SET @detail = N'Automatic digest storage verified.';
                     END
                     ELSE
                     BEGIN
@@ -142,11 +141,19 @@ BEGIN
                 END
                 ELSE
                 BEGIN
-                    -- sys.sp_verify_database_ledger cannot run inside INSERT ... EXEC (error 574); call directly.
-                    EXEC sys.sp_verify_database_ledger @digest_locations = @effectiveDigest;
-                    SET @lastBlockId = (SELECT MAX (block_id) FROM sys.database_ledger_blocks);
-                    SET @verified = 1;
-                    SET @detail = CONCAT (N'Ledger verified up to block ', COALESCE (CAST (@lastBlockId AS NVARCHAR (30)), N'unknown'), N'.');
+                    -- sys.sp_verify_database_ledger cannot run inside INSERT ... EXEC (error 574); call directly
+                    -- so the caller reads the engine's native last_verified_block_id result set.
+                    DECLARE @manualRc INT = 0;
+                    EXEC @manualRc = sys.sp_verify_database_ledger @digest_locations = @effectiveDigest;
+                    IF @manualRc = 0
+                    BEGIN
+                        SET @verified = 1;
+                        SET @detail = N'Ledger verified.';
+                    END
+                    ELSE
+                    BEGIN
+                        SET @detail = CONCAT (N'Ledger verification returned status ', @manualRc, N'.');
+                    END;
                 END;
             END;
         END TRY

@@ -75,19 +75,27 @@ public sealed class LoggingWave5IntegrationTests
             await workerConn.ExecuteAsync("EXECUTE AS USER = 'meritWorker';");
             try
             {
-                static async Task<(bool verified, long? lastVerifiedBlockId, string? digestJson, DateTime verifiedUtc, string detail, bool hasAuto)>
+                static async Task<(bool verified, long? nativeBlockId, string? digestJson, DateTime verifiedUtc, string detail, bool hasAuto)>
                     RunVerifyAsync(SqlConnection c, string? digestJson, bool useAutomaticStorage = false, bool requireDigest = false)
                 {
                     using var grid = await c.QueryMultipleAsync(
                         "logs.uspVerifyAuditLedger", new { digestJson, useAutomaticStorage, requireDigest }, commandType: CommandType.StoredProcedure);
-                    (bool verified, long? lastVerifiedBlockId, string? digestJson, DateTime verifiedUtc, string detail, bool hasAuto) last = default;
+                    long? nativeBlockId = null;
+                    (bool verified, long? nativeBlockId, string? digestJson, DateTime verifiedUtc, string detail, bool hasAuto) last = default;
                     while (!grid.IsConsumed)
                     {
                         var rows = (await grid.ReadAsync<dynamic>()).ToList();
-                        if (rows.Count > 0 && ((IDictionary<string, object>)rows[0]).ContainsKey("verified"))
+                        if (rows.Count > 0 && rows[0] is IDictionary<string, object> dict)
                         {
-                            var r = rows[0];
-                            last = ((bool)r.verified, (long?)r.lastVerifiedBlockId, (string?)r.digestJson, (DateTime)r.verifiedUtc, (string)r.detail, (bool)r.hasAutomaticDigestStorage);
+                            if (dict.TryGetValue("last_verified_block_id", out object? nb) && nb is not null)
+                            {
+                                nativeBlockId = Convert.ToInt64(nb);
+                            }
+                            else if (dict.ContainsKey("verified"))
+                            {
+                                var r = rows[0];
+                                last = ((bool)r.verified, nativeBlockId, (string?)r.digestJson, (DateTime)r.verifiedUtc, (string)r.detail, (bool)r.hasAutomaticDigestStorage);
+                            }
                         }
                     }
                     return last;
@@ -100,21 +108,23 @@ public sealed class LoggingWave5IntegrationTests
 
                 var fresh = await RunVerifyAsync(workerConn, null);
                 Assert.True(fresh.verified, fresh.detail);
+                Assert.NotNull(fresh.nativeBlockId);
                 Assert.NotNull(fresh.digestJson);
                 Assert.Contains("MERIT_IT", fresh.digestJson, StringComparison.OrdinalIgnoreCase);
 
                 // Re-verify using the previously returned external digest JSON with requireDigest=true.
                 var recheck = await RunVerifyAsync(workerConn, fresh.digestJson, requireDigest: true);
                 Assert.True(recheck.verified, recheck.detail);
-                Assert.Equal(fresh.lastVerifiedBlockId, recheck.lastVerifiedBlockId);
+                Assert.Equal(fresh.nativeBlockId, recheck.nativeBlockId);
 
-                // Empty digest with requireDigest=true must fail rather than generating a fresh digest.
+                // Empty digest with requireDigest=true must fail rather than generating a fresh digest, with no native block.
                 var emptyReq = await RunVerifyAsync(workerConn, "", requireDigest: true);
                 Assert.False(emptyReq.verified);
+                Assert.Null(emptyReq.nativeBlockId);
 
-                // Record outcome as meritWorker and capture the exact synthetic run ID for scoped cleanup.
+                // Record outcome as meritWorker using the engine's native verified block id.
                 recordedRunId = await workerConn.QuerySingleAsync<Guid>("logs.uspRecordLedgerVerificationOutcome",
-                    new { anchorSource = "digestDirectory", verified = true, lastVerifiedBlockId = fresh.lastVerifiedBlockId, digestFileCount = 1, detail = fresh.detail },
+                    new { anchorSource = "digestDirectory", verified = true, lastVerifiedBlockId = fresh.nativeBlockId, digestFileCount = 1, detail = fresh.detail },
                     commandType: CommandType.StoredProcedure);
             }
             finally

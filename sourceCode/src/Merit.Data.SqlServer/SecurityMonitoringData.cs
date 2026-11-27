@@ -112,17 +112,48 @@ public sealed class SecurityMonitoringData(Db db) : ISecurityMonitoringData
     public Task<AuditLedgerVerificationRow> VerifyAuditLedgerAsync(string? digestJson = null, bool useAutomaticStorage = false, bool requireDigest = false, CancellationToken ct = default)
         => db.MultipleAsync("logs.uspVerifyAuditLedger", new { digestJson, useAutomaticStorage, requireDigest }, async g =>
         {
-            // sys.sp_verify_database_ledger(_from_digest_storage) emits a first result set (last_verified_block_id) on success before our summary row.
+            // sys.sp_verify_database_ledger(_from_digest_storage) emits a native result set containing
+            // last_verified_block_id before our summary row. Carry the engine's native block id directly.
+            long? nativeVerifiedBlockId = null;
             AuditLedgerVerificationRow? summary = null;
             while (!g.IsConsumed)
             {
-                var row = await g.ReadFirstOrDefaultAsync<AuditLedgerVerificationRow>().ConfigureAwait(false);
-                if (row is not null)
+                var row = await g.ReadFirstOrDefaultAsync<dynamic>().ConfigureAwait(false);
+                if (row is IDictionary<string, object> dict)
                 {
-                    summary = row;
+                    if (dict.TryGetValue("last_verified_block_id", out object? nativeObj) && nativeObj is not null)
+                    {
+                        nativeVerifiedBlockId = Convert.ToInt64(nativeObj);
+                    }
+                    else if (dict.ContainsKey("verified"))
+                    {
+                        summary = new AuditLedgerVerificationRow
+                        {
+                            Verified = Convert.ToBoolean(dict["verified"]),
+                            LastVerifiedBlockId = nativeVerifiedBlockId,
+                            DigestJson = dict.TryGetValue("digestJson", out object? dj) ? dj as string : null,
+                            VerifiedUtc = dict.TryGetValue("verifiedUtc", out object? vu) && vu is not null ? Convert.ToDateTime(vu) : DateTime.UtcNow,
+                            Detail = dict.TryGetValue("detail", out object? dt) ? dt as string ?? string.Empty : string.Empty,
+                            HasAutomaticDigestStorage = dict.TryGetValue("hasAutomaticDigestStorage", out object? ha) && ha is not null && Convert.ToBoolean(ha),
+                        };
+                    }
                 }
             }
-            return summary ?? new AuditLedgerVerificationRow { Verified = false, Detail = "No verification result returned." };
+            if (summary is null)
+            {
+                return new AuditLedgerVerificationRow { Verified = false, Detail = "No verification result returned." };
+            }
+            return summary.Verified && nativeVerifiedBlockId is not null
+                ? new AuditLedgerVerificationRow
+                {
+                    Verified = summary.Verified,
+                    LastVerifiedBlockId = nativeVerifiedBlockId,
+                    DigestJson = summary.DigestJson,
+                    VerifiedUtc = summary.VerifiedUtc,
+                    Detail = $"{summary.Detail.TrimEnd('.')} (block {nativeVerifiedBlockId}).",
+                    HasAutomaticDigestStorage = summary.HasAutomaticDigestStorage,
+                }
+                : summary;
         }, ct);
 
     public Task<Guid> RecordLedgerVerificationOutcomeAsync(string anchorSource, bool verified, long? lastVerifiedBlockId, int? digestFileCount, string detail, CancellationToken ct = default)
