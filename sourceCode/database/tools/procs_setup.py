@@ -31,11 +31,38 @@ PROCS = [
                  "'must be set at install' are created with a placeholder value of NOTSET where the application needs "
                  "a number to run; an administrator replaces them on the settings screen. Returns the root tenant id.",
         "body": """
+-- Serialize root-tenant hierarchy mutations with config.uspPurgeRootTenantInternal (Codex #2).
+DECLARE @hierLock INT;
+EXEC @hierLock = sys.sp_getapplock @Resource = N'MERIT.tenantHierarchy', @LockMode = 'Exclusive',
+     @LockOwner = 'Transaction', @LockTimeout = 10000;
+IF @hierLock < 0
+BEGIN
+    ;THROW 51409, N'Tenant hierarchy changes are busy; please retry.', 1;
+END;
+
 DECLARE @root UNIQUEIDENTIFIER = CAST (HASHBYTES ('MD5', CONCAT (N'tenant:', @tenantCode)) AS UNIQUEIDENTIFIER);
+IF EXISTS (SELECT 1 FROM auth.tenant WHERE (tenantId = @root OR tenantCode = @tenantCode) AND (isDeleted = 1 OR isActive = 0))
+BEGIN
+    ;THROW 51422, N'This root tenant is inactive or has been purged and cannot be reinstalled.', 1;
+END;
 SET @effectiveFrom=COALESCE(@effectiveFrom,auth.udfSessionToday());
-DECLARE @parent UNIQUEIDENTIFIER = COALESCE ((SELECT tenantId FROM auth.tenant WHERE tenantCode = @parentTenantCode
-                                                                                AND isDeleted = 0),
-                                             CAST (HASHBYTES ('MD5', N'tenant:PLATFORM') AS UNIQUEIDENTIFIER));
+DECLARE @parent UNIQUEIDENTIFIER;
+IF @parentTenantCode IS NOT NULL
+BEGIN
+    SELECT @parent = tenantId
+      FROM auth.tenant
+     WHERE tenantCode = @parentTenantCode
+       AND isDeleted = 0
+       AND isActive = 1;
+    IF @parent IS NULL
+    BEGIN
+        ;THROW 51422, N'The selected parent tenant was not found or is inactive.', 1;
+    END;
+END
+ELSE
+BEGIN
+    SET @parent = CAST (HASHBYTES ('MD5', N'tenant:PLATFORM') AS UNIQUEIDENTIFIER);
+END;
 
 IF @tenantType NOT IN ('region', 'state', 'tribe', 'jurisdiction')
 BEGIN
@@ -240,13 +267,26 @@ SET @Comments = N'Root tenant installed.';
 , @countiesJson     NVARCHAR (MAX) = N'[]'""",
         "key": "CONCAT (N'tenantCode=', @tenantCode, N', parentTenantCode=', @parentTenantCode)",
         "body": f"""
+-- Serialize child-tenant provisioning with root offboarding fence (Codex round 3).
+DECLARE @hierLock INT;
+EXEC @hierLock = sys.sp_getapplock @Resource = N'MERIT.tenantHierarchy', @LockMode = 'Exclusive',
+     @LockOwner = 'Transaction', @LockTimeout = 10000;
+IF @hierLock < 0
+BEGIN
+    ;THROW 51409, N'Tenant hierarchy changes are busy; please retry.', 1;
+END;
+
 DECLARE @parent UNIQUEIDENTIFIER, @root UNIQUEIDENTIFIER, @state CHAR (2);
-SELECT @parent = tenantId, @root = rootTenantId, @state = statePostalCode
-  FROM auth.tenant WHERE tenantCode = @parentTenantCode AND isDeleted = 0;
+SELECT @parent = p.tenantId, @root = p.rootTenantId, @state = p.statePostalCode
+  FROM auth.tenant AS p
+  JOIN auth.tenant AS r ON r.tenantId = p.rootTenantId
+ WHERE p.tenantCode = @parentTenantCode
+   AND p.isDeleted = 0 AND p.isActive = 1
+   AND r.isDeleted = 0 AND r.isActive = 1;
 
 IF @parent IS NULL
 BEGIN
-    ;THROW 51404, N'The parent tenant was not found.', 1;
+    ;THROW 51404, N'The parent tenant was not found or its root is inactive.', 1;
 END;
 
 IF @tenantType NOT IN ('program', 'jurisdiction')

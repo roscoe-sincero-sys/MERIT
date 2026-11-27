@@ -110,7 +110,8 @@ BEGIN
                      OR EXISTS (SELECT 1 FROM @auditScope AS s WHERE s.tenantId = e.owningTenantId)
                      OR (e.owningTenantId = e.rootTenantId AND e.entityType IN ('jurisdictionSetting', 'threshold', 'notificationRule')))))
            AND (   (c.entityType = 'person' AND @canPerson = 1
-                    AND EXISTS (SELECT 1 FROM dbo.person AS p WHERE p.personId = c.entityId AND p.isDeleted = 0))
+                    AND EXISTS (SELECT 1 FROM dbo.person AS p WHERE p.personId = c.entityId AND p.isDeleted = 0
+                                 AND auth.udfCanReadIdentified (p.owningTenantId, 'person.view', p.personId) = 1))
                 OR (c.entityType = 'labResult' AND @canResult = 1
                     AND EXISTS (SELECT 1 FROM dbo.labResult AS r WHERE r.labResultId = c.entityId AND r.isDeleted = 0
                                  AND auth.udfCanReadIdentified (r.owningTenantId, 'result.view', r.personId) = 1))

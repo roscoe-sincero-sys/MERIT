@@ -71,15 +71,15 @@ UPDATE u SET homeTenantId = COALESCE (
          WHERE ua.appUserId = u.appUserId AND ua.isDeleted = 0
          ORDER BY c.depth, ua.startDate), u.rootTenantId)
   FROM auth.appUser AS u
- WHERE u.homeTenantId IS NULL;
+ WHERE u.isDeleted = 0 AND u.homeTenantId IS NULL;
 
--- Every account has exactly one master profile.
+-- Every active account has exactly one master profile.
 INSERT auth.userProfile (userProfileId, appUserId, profileName, profileDescription, isMaster, isActive)
 SELECT CAST (HASHBYTES ('MD5', CONCAT (N'masterProfile:', u.appUserId)) AS UNIQUEIDENTIFIER), u.appUserId,
        N'Master profile', N'Everything you have been given. Managed by your administrator.', 1, 1
   FROM auth.appUser AS u
- WHERE NOT EXISTS (SELECT 1 FROM auth.userProfile AS p WHERE p.appUserId = u.appUserId AND p.isMaster = 1
-                                                       AND p.isDeleted = 0);
+ WHERE u.isDeleted = 0
+   AND NOT EXISTS (SELECT 1 FROM auth.userProfile AS p WHERE p.appUserId = u.appUserId AND p.isMaster = 1);
 GO
 
 -- ------------------------------------------------------------------------------------------------ first platform user

@@ -120,6 +120,28 @@ class ManifestTests(unittest.TestCase):
                             break
         self.assertEqual([], missing, f"Procedures declaring @auditUserAgentHash but omitting userAgentHash in INSERT logs.auditEvent: {missing}")
 
+    def test_root_tenant_lifecycle_inventory_covers_every_root_tenant_table(self):
+        # #346 (B4, I17): Every table in tableDefinitions.py plus append-only logs.auditEvent must be classified as
+        # either a covered tenant/auth table (71) or a global reference table (9), and no exported table may include
+        # credential columns.
+        import procs_tenant_lifecycle as ptl
+        all_shipped = {f"{t['schema']}.{t['name']}" for t in gt.TABLES} | {"logs.auditEvent"}
+        classified = ptl.ALL_TENANT_TABLES | ptl.GLOBAL_REFERENCE_TABLES
+        self.assertEqual(
+            all_shipped,
+            classified,
+            f"Table lifecycle inventory drift. Missing: {sorted(all_shipped - classified)}; Extra: {sorted(classified - all_shipped)}",
+        )
+        self.assertEqual(set(), ptl.ALL_TENANT_TABLES & ptl.GLOBAL_REFERENCE_TABLES)
+
+        # Verify no exported column list includes credentials/secrets (I17).
+        for full in sorted(ptl.ALL_TENANT_TABLES):
+            if full == "logs.auditEvent":
+                continue
+            exported = set(ptl._export_cols(full))
+            leaked = exported & ptl.EXPORT_EXCLUDED_COLS
+            self.assertEqual(set(), leaked, f"{full} export includes excluded credential columns: {leaked}")
+
 
 if __name__ == "__main__":
     unittest.main()

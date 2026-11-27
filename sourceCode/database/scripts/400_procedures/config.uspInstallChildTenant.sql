@@ -93,13 +93,26 @@ BEGIN
         -- ===== The procedure's own work starts here. Everything above and below is boilerplate. ==
         -- =========================================================================================
 
+        -- Serialize child-tenant provisioning with root offboarding fence (Codex round 3).
+        DECLARE @hierLock INT;
+        EXEC @hierLock = sys.sp_getapplock @Resource = N'MERIT.tenantHierarchy', @LockMode = 'Exclusive',
+             @LockOwner = 'Transaction', @LockTimeout = 10000;
+        IF @hierLock < 0
+        BEGIN
+            ;THROW 51409, N'Tenant hierarchy changes are busy; please retry.', 1;
+        END;
+
         DECLARE @parent UNIQUEIDENTIFIER, @root UNIQUEIDENTIFIER, @state CHAR (2);
-        SELECT @parent = tenantId, @root = rootTenantId, @state = statePostalCode
-          FROM auth.tenant WHERE tenantCode = @parentTenantCode AND isDeleted = 0;
+        SELECT @parent = p.tenantId, @root = p.rootTenantId, @state = p.statePostalCode
+          FROM auth.tenant AS p
+          JOIN auth.tenant AS r ON r.tenantId = p.rootTenantId
+         WHERE p.tenantCode = @parentTenantCode
+           AND p.isDeleted = 0 AND p.isActive = 1
+           AND r.isDeleted = 0 AND r.isActive = 1;
 
         IF @parent IS NULL
         BEGIN
-            ;THROW 51404, N'The parent tenant was not found.', 1;
+            ;THROW 51404, N'The parent tenant was not found or its root is inactive.', 1;
         END;
 
         IF @tenantType NOT IN ('program', 'jurisdiction')

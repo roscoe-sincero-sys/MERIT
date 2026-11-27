@@ -9,6 +9,9 @@
     <UserSecretsId>merit-worker-3f2a9c55</UserSecretsId>
   </PropertyGroup>
   <ItemGroup>
+    <InternalsVisibleTo Include="Merit.Tests" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\Merit.Application\Merit.Application.csproj" />
     <ProjectReference Include="..\Merit.Data.SqlServer\Merit.Data.SqlServer.csproj" />
   </ItemGroup>

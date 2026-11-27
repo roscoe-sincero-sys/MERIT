@@ -162,6 +162,26 @@ BEGIN
         ON logs.signInEvent (attemptedNameHash, eventUtc);
 END;
 GO
+IF NOT EXISTS (SELECT 1
+                 FROM sys.indexes
+                WHERE name      = N'IX_logs_signInEvent_legacySessionRef'
+                  AND object_id = OBJECT_ID (N'logs.signInEvent'))
+BEGIN
+    CREATE INDEX IX_logs_signInEvent_legacySessionRef
+        ON logs.signInEvent (eventUtc)
+        WHERE isDeleted = 1 AND sessionReference IS NOT NULL;
+END;
+GO
+IF NOT EXISTS (SELECT 1
+                 FROM sys.indexes
+                WHERE name      = N'IX_logs_signInEvent_legacyTraceId'
+                  AND object_id = OBJECT_ID (N'logs.signInEvent'))
+BEGIN
+    CREATE INDEX IX_logs_signInEvent_legacyTraceId
+        ON logs.signInEvent (eventUtc)
+        WHERE isDeleted = 1 AND traceId IS NOT NULL;
+END;
+GO
 
 -- -------------------------------------------------------------------------------------------
 -- 5. The audit trigger. Not optional: a DEFAULT fires on INSERT only, so without it every UPDATE

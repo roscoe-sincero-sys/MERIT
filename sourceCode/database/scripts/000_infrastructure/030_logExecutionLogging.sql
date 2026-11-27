@@ -834,6 +834,19 @@ BEGIN
               , @SafeContext       NVARCHAR (500) = LEFT (@ContextMessage, 500)
               , @SafeDynamicSql    NVARCHAR (100) = CASE WHEN @DynamicSql IS NULL THEN NULL ELSE N'[omitted by diagnostic minimization]' END;
 
+        -- #345: Never persist raw SQL Server system error messages (non-50000..51999) in logs.ExecutionLog;
+        -- system errors can embed patient/user data values anywhere in the text or across truncation boundaries.
+        -- Preserve ErrorNumber, ErrorProcedure, and ErrorLine for triage while keeping approved application
+        -- messages (50000..51999) on their existing path.
+        IF @SafeErrorMessage IS NOT NULL AND (@ErrorNumber IS NULL OR @ErrorNumber NOT BETWEEN 50000 AND 51999)
+        BEGIN
+            SET @SafeErrorMessage = CONCAT (
+                N'SQL Server system error ',
+                COALESCE (CAST (@ErrorNumber AS NVARCHAR (20)), N'unknown'),
+                N' [redacted for PHI safety; see ErrorNumber, ErrorProcedure, ErrorLine]'
+            );
+        END;
+
         -- #338 allowlisted execution diagnostics (per-token filtering, deny-first, ordinal-preserving) in the shared error writer.
         IF @SafeKeyParameters IS NOT NULL AND CHARINDEX (N'=', @SafeKeyParameters) > 0
         BEGIN

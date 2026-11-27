@@ -241,9 +241,10 @@ BEGIN
            AND ss.expiresUtc > SYSUTCDATETIME ()
            AND ss.isDeleted = 0
            AND ((@permissionCode = 'result.view' AND st.canReadIdentifiedResults = 1)
-                OR (@permissionCode = 'case.view' AND st.canReadIdentifiedCases = 1))
+                OR (@permissionCode = 'case.view' AND st.canReadIdentifiedCases = 1)
+                OR (@permissionCode = 'person.view' AND ss.isDeidentified = 0))
            AND (st.tenantId = @owningTenantId
-                OR (@permissionCode = 'result.view'
+                OR (@permissionCode IN ('result.view', 'person.view')
                     AND @personId IS NOT NULL
                     AND EXISTS (SELECT 1 FROM dbo.personAccess AS pa
                                  WHERE pa.personId = @personId

@@ -9,7 +9,7 @@ All purgeable SQL tables follow MERIT's **no-hard-delete invariant**: worker pur
 | Store | Config Key | Default (Range) | Purger Procedure | Fields Scrubbed on Expiry | Fields Retained (Aggregate / Compliance) |
 | --- | --- | --- | --- | --- | --- |
 | `logs.signInEvent` | `SignInLog:RetentionDays` | 365 days (30–3650) | `logs.uspPurgeSignInEvents` | `clientAddress`, `forwardedFor`, `userAgent`, `attemptedNameHash`, `attemptedNameProtected`, `sessionReference`, `traceId` (`isDeleted = 1`) | `signInEventId`, `eventUtc`, `eventType`, `step`, `method`, `reason`, `rootTenantId`, `appUserId` (for anonymous/aggregate counts) |
-| `logs.auditEvent` | *Immutable ledger* | Permanent (`APPEND_ONLY = ON`) | *None (append-only)* | *Never updated or deleted* | IDs, `eventAction`, `entityType`, `entityId`, `recordCount`, `clientAddress`, `userAgentHash` (64-bit SHA-256 prefix, never raw UA), `sessionReference`, `traceId`, `viewKind`, non-PHI `filterJson` |
+| `logs.auditEvent` | *Immutable ledger* | Permanent (`APPEND_ONLY = ON`) | *None (append-only)* | *Never updated or deleted* | IDs, `eventAction`, `entityType`, `entityId`, `recordCount`, `userAgentHash` (64-bit SHA-256 prefix, never raw UA), `sessionReference`, `traceId`, `viewKind`, canonical non-PHI `filterJson`, and post-authentication `clientAddress`. Effective upon deployment of PR #351 (#336), new sign-in ledger rows (`signIn`, `signInFailed`) omit `clientAddress` (`NULL`) so new sign-in IPs expire solely under `logs.signInEvent`; pre-deployment legacy sign-in rows already in the append-only ledger retain their historical `clientAddress` permanently. |
 | `logs.auditEventRecord` | `AuditManifest:RetentionDays` | 365 days (30–3650) | `logs.uspPurgeAuditEventRecords` | `entityId` set to `00000000-0000-0000-0000-000000000000`, `isDeleted = 1` | `auditEventId`, `rootTenantId`, `entityType`, `createdDateUtc` (capacity-planning note below) |
 | `logs.auditEventChange` | `AuditChangeHistory:RetentionDays` | 365 days (30–3650) | `logs.uspPurgeAuditEventChanges` | `beforeJson = NULL`, `afterJson = NULL`, `isDeleted = 1` | `auditEventId`, `rootTenantId`, `owningTenantId`, `entityType`, `entityId`, `changedUtc` |
 | `logs.searchLog` | `SearchLog:RetentionDays` | 90 days (30–3650) | `logs.uspPurgeSearchLog` | `searchText = N''`, `clientAddress = NULL`, `sessionReference = NULL`, `actingTenantId = NULL`, `isDeleted = 1` | `searchLogId`, `searchedUtc`, `rootTenantId`, `appUserId`, `resultCount`, `existsElsewhere`, `searchSource` |
@@ -23,7 +23,7 @@ All purgeable SQL tables follow MERIT's **no-hard-delete invariant**: worker pur
 1. **Trusted Proxy Boundary:** `clientAddress` is populated only from `HttpContext.Connection.RemoteIpAddress` after ASP.NET Core forwarded-headers middleware validates trusted proxies (`ForwardedHeaders`). Raw `X-Forwarded-For` chains are stored only in `logs.signInEvent.forwardedFor` and scrubbed on `SignInLog:RetentionDays` expiry.
 2. **Access Control:**
    - `logs.signInEvent` (`clientAddress`, `userAgent`): restricted to `security.review` / `tenant.administer` / `security.investigate`, scoped by `auth.tvfReviewAccounts`.
-   - `logs.auditEvent` (`clientAddress`, `userAgentHash`): restricted to `audit.view`, scoped by `#270` (`auth.tvfReviewTenants`). Raw `User-Agent` strings are **never** stored in `logs.auditEvent`; only a 64-bit SHA-256 hex prefix (`userAgentHash`) is recorded for mid-session drift detection (#327).
+   - `logs.auditEvent` (`clientAddress`, `userAgentHash`): restricted to `audit.view`, scoped by `#270` (`auth.tvfReviewTenants`). Effective upon deployment of PR #351 (#336), new sign-in ledger rows (`signIn`, `signInFailed`) omit `clientAddress` (`NULL`) so new sign-in IPs expire solely under `logs.signInEvent`; pre-deployment legacy sign-in rows remain immutable in the append-only ledger with their historical `clientAddress` (confirm disposition under the agency's records policy). Post-authentication ledger rows (`view`, `create`, `update`, `export`, `search`, `permissionDenied`, `notFound`, including root export/purge audit entries) retain `clientAddress`, `sessionReference`, `traceId`, and `userAgentHash` permanently for insider-threat and session-hijacking forensics (S16). Raw `User-Agent` strings are **never** stored in `logs.auditEvent`; only a 64-bit SHA-256 hex prefix (`userAgentHash`) is recorded for mid-session drift detection (#327).
    - `logs.searchLog` (`clientAddress`): restricted to `security.review` / `audit.view`; raw `searchText` is never exported and is visible in-app only to `security.investigate`.
 3. **Export Pseudonymization:** Structured log exports default to `pseudonymize=true`, replacing `clientAddress` with `<subnet>|ip_<12 hex>` (per-export keyed HMAC-SHA256) and `appUserId` with `usr_<16 hex>`, so AI-agent and external SIEM consumers can perform behavioral analysis without receiving raw IP addresses or account GUIDs.
 
@@ -32,17 +32,58 @@ All purgeable SQL tables follow MERIT's **no-hard-delete invariant**: worker pur
 - **Decision:** Retain **soft-delete** (`isDeleted = 1`, `entityId` scrubbed to the zero GUID) rather than introducing a hard-delete exception, preserving MERIT's database-wide no-hard-delete invariant.
 - **Growth & Indexing:** Expect ~1–2 rows per listed or exported record (~80 bytes/row in the clustered index). Filtered indexes (`WHERE isDeleted = 0`) keep active query paths (`logs.uspSearchAuditEvents`, `logs.uspGetAuditEventRecords`) independent of historical scrubbed rows.
 
-## 4. Production Release Verification Checklist (#342)
+## 4. Per-Root-Tenant Export and Offboarding Purge (#346)
+
+Platform administrators (holding both `security.investigate` and `tenant.create`) can export or purge a single root tenant's complete dataset without affecting any other data root:
+
+1. **Export (Stable Archive Prerequisite to Purge):**
+   - **Pause & drain writes before archiving:** For export followed by purge, **pause and drain all writes affecting the target root** (web traffic, cross-root writers, and background workers) **before** taking the export manifest. Reconcile all archived table and ledger pages against the manifest **while writes remain paused**, and **keep writes paused continuously until the purge fence commits**. Row-count reconciliation alone is **not** a substitute for pausing writes, because in-place edits committed after a page is read or late ledger commits below `@maxAuditEventId` can still pass a count check and be erased unarchived.
+   - **Manifest (always capture and check `@status`):**
+     ```sql
+     DECLARE @status INT;
+     EXEC @status = config.uspExportRootTenant @rootTenantId = '<guid>';
+     IF @status <> 0 THROW 51422, N'Root export manifest rejected (non-zero return status).', 1;
+     ```
+     Returns active, soft-deleted, and total row counts across all 71 tenant/auth tables + read-only `logs.auditEvent`, along with `maxAuditEventId`.
+   - **Streamed table pages (always capture and check `@status`):**
+     ```sql
+     DECLARE @status INT;
+     EXEC @status = config.uspExportRootTenant @rootTenantId = '<guid>', @tableName = N'dbo.person', @pageNumber = 1, @pageSize = 1000;
+     IF @status <> 0 THROW 51422, N'Root export page rejected (non-zero return status).', 1;
+     ```
+     Includes soft-deleted rows with `isDeleted` flag and excludes all credential/secret columns (`passwordHash`, `mfaSecretProtected`, `securityStamp`, `codeHash`, `codeVerifier`, `tokenVerifier`, `attemptedNameProtected`, `sessionScopeId`). For `logs.auditEvent`, `@maxAuditEventId` from the manifest is **required** (`51422` if omitted) and `@afterAuditEventId` supports keyset pagination.
+   - **Standalone execution & audit durability:** Audited in `logs.auditEvent` (`eventAction = 'export'`, `entityType = 'tenant'`, with canonicalized `tableName` from the 71-table allowlist in `filterJson`); raw invalid table names are rejected (`51422`) before any ledger write. The audit event is committed **before** any rows stream. Both `config.uspExportRootTenant` and `config.uspPurgeRootTenant` require standalone execution (`@@TRANCOUNT = 0` and `IMPLICIT_TRANSACTIONS OFF`), returning status `-100` with an informational message (severity 10) without rolling back or dooming caller transactions. Operators and automation (e.g., `sqlcmd -b`) **must** capture `@status`, fail if `@status <> 0`, and confirm the expected manifest, page, or purge-summary result set was returned before advancing.
+2. **Two-Step Confirmed Purge (always capture and check `@status`):**
+   ```sql
+   DECLARE @status INT;
+   EXEC @status = config.uspPurgeRootTenant @rootTenantId = '<guid>', @confirmationCode = N'PURGE:<tenantCode>', @backupRetentionDays = 35, @dryRun = 0;
+   IF @status <> 0 THROW 51422, N'Root purge rejected (non-zero return status).', 1;
+   ```
+   - **Dry-run rehearsal (S18):** Pass `@dryRun = 1` first to run all fencing, scrubbing, and verification steps inside a single rolled-back transaction before committing. **Run dry runs only on a restored copy or during an announced maintenance window — never on live production during business hours**, because `@dryRun = 1` holds one transaction and its locks across all 70 tables until rollback.
+   - **Pre-purge worker drain (S19):** Keep writes and background workers for the target root paused/drained from before the export manifest through the committed purge fence. If an in-flight writer commits late rows after the fence, the final verification pass raises an incomplete error (`51409`); because the purge is idempotent, re-run it after writers are drained and confirm `totalRemainingUnscrubbed = 0`.
+   - Refuses the platform root, rejects any region/root that still has live descendant data roots (`51422`, serialized with `config.uspInstallRootTenant` and `config.uspInstallChildTenant` under `MERIT.tenantHierarchy`), rejects `@dryRun IS NULL` (`51422`), and rejects any mismatched confirmation code (`51422`).
+   - Audited in `logs.auditEvent` (`eventAction = 'delete'`, `entityType = 'tenant'`, skipped on `@dryRun = 1`).
+   - **Fencing first (I18):** Under `MERIT.tenantHierarchy` and `MERIT.grants` exclusive applocks, rechecks descendant roots, deactivates all tenants in the root, revokes every live `auth.sessionScope` deriving access from the root (acting root, actor/View As users, and cross-root `sessionScopeRoot` / `sessionScopeTenant` / `sessionScopeAdminTenant` grants) before clearing membership rows, and marks `queued`/`running` `dbo.jobQueue` entries as `failed` (using a distinct `MERIT tenant fence` marker so the subsequent scrub never skips previously soft-deleted rows).
+   - Runs in independently committed 5,000-row batches (with 50 ms yield) across all 70 mutable tenant/auth tables (both live and previously soft-deleted rows) so other states are not blocked; resumable and idempotent.
+   - Scrubs all PHI, free-text, actor fields (`createdBy`, `modifiedBy`, `deletedBy`), binary (`intakeBatch.rawContent`, `extractRun.fileContent`, `personDocument.content`), snapshot JSON (`labResult.reportedSnapshotJson`), geocode (`location.postalCode`/`latitude`/`longitude`/`censusTract`), and credential (`appUser`, `mfaRecoveryCode`, `passwordReset`, `mfaEmailChallenge`, `userAssignment`) columns, marks purged `dbo.exposureCase` rows `closed` (`closureReason = 'other'`), then runs a **final verification pass** over all 70 tables asserting `totalRemainingUnscrubbed = 0` (throwing `51409` if any unscrubbed row remains).
+   - **Retained non-identifying structural fields (S17):** Surrogate primary/foreign keys, `rootTenantId`/`owningTenantId`, audit timestamps, and NOT NULL structural codes/flags/counts/dates (such as `exposureCase.openedDate`, `pregnancyEpisode.startDate`, `personActivity.activityDate`, `labResult.receivedUtc`) remain on rows whose person, address, document, file, and credential fields have been scrubbed and marked `isDeleted = 1`.
+   - **Append-only ledger retention:** `logs.auditEvent` is `APPEND_ONLY = ON` and cannot be updated or deleted; its rows are retained and reported as `ledgerRowsRetained`. Retained rows never contain patient clinical PHI, but **do** permanently retain IDs, actions, timestamps, post-authentication telemetry (`clientAddress`, `userAgentHash`, `sessionReference`, `traceId`, `viewKind`, canonical `filterJson` — including the export and purge audit entries themselves), and any pre-deployment (pre-PR #351) legacy sign-in `clientAddress` values. Operators must reflect this accurately in offboarding/erasure attestations and confirm disposition under the agency's records policy (#336).
+   - **Backup ageing & downstream copies:** The purge report returns `backupAgeOutUtc = DATEADD(DAY, @backupRetentionDays, SYSUTCDATETIME())` indicating when purged records age out of database backups (confirm actual backup/offsite retention per environment before quoting a date). Operators must also account for log-shipping/read replicas, non-production refreshes, and any structured log exports (#328) already delivered to external SIEM or AI consumers.
+
+## 5. Production Release Verification Checklist (#342, #347)
 
 Before promoting logging schema changes to production, operations should verify and record evidence for:
 
-1. **Append-only ledger upgrade & verification:** Rehearse `161_logs.auditEvent.sql` on a production-sized copy, record migration duration/locking, and run `EXEC sys.sp_verify_database_ledger;` immediately afterward.
-2. **Per-environment worker & web configuration:**
+1. **Deploy order (PR #348 / #347):** Deploy SQL scripts **before** the web binary (`WorkIntakeExtractData` reads the second `hiddenCount` result set from `logs.uspGetAuditEventRecords`, and `PersonAndPlaceData` sends `@isVerification` to `dbo.uspSavePersonRelationship`).
+2. **Append-only ledger upgrade & verification (#342, #347):** Rehearse `161_logs.auditEvent.sql` on a production-sized copy, record migration duration/locking (including `CK_logs_auditEvent_eventAction` replacement), ensure `ALLOW_SNAPSHOT_ISOLATION` is enabled (`ALTER DATABASE [Db] SET ALLOW_SNAPSHOT_ISOLATION ON;`), and run `EXEC sys.sp_verify_database_ledger;` immediately afterward.
+3. **Per-environment worker & web configuration (#342, #347):**
    - `SignInLog:RetentionDays` (default `365`)
    - `AuditManifest:RetentionDays` (default `365`, clamped `30..3650`)
    - `AuditChangeHistory:RetentionDays` (default `365`, clamped `30..3650`)
    - `SearchLog:RetentionDays` (default `90`, clamped `30..3650`)
    - `UsageLog:RetentionDays` (default `90`, clamped `30..365`)
    - `Merit:AuthenticatedRequestsPerMinute` (default `600` per user/min)
+   - `SecurityAlerts:ScanIntervalMinutes` (default `15`), `WindowHours` (default `24`), `WebhookUrl` (HTTPS; retries transient 5xx/429/network failures up to 3 attempts with 1s/3s backoff)
    - `Logging:Format=Json` on both `Merit.Web` and `Merit.Worker` where logs ship to a collector.
-3. **Row history (#332):** Decided and implemented as purgeable `logs.auditEventChange` snapshots (closed in PR #343).
+4. **Production-scale plans & tuning (#342, #347):** Capture query plans and latency on production-sized data for `logs.uspRunSecurityFindingScan`, 31-day 4-stream structured exports, manifest owner stamping on results/case lists, and offline index builds (`IX_logs_searchLog_searchedUtc_searchLogId`, `IX_logs_signInEvent_legacyCorrelationCleanup`). Run the anomaly scanner for one week to measure false-positive rates (including `midSessionIpDrift`, `midSessionUserAgentDrift`, and `apiOnlyNoScreenVisits`) before enabling outbound webhooks.
+5. **Row history (#332):** Decided and implemented as purgeable `logs.auditEventChange` snapshots (closed in PR #343).

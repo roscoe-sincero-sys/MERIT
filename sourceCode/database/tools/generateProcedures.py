@@ -35,7 +35,7 @@ OUT = HERE.parent / "scripts" / "400_procedures"
 AUTHOR = "MERIT build"
 CREATE_DATE = "2026-10-24"
 MODULES = ["procs_corrections", "procs_auth", "procs_config", "procs_person", "procs_places", "procs_results", "procs_cases",
-           "procs_work", "procs_intake", "procs_extracts", "procs_setup", "procs_review", "procs_mfa", "procs_password", "procs_signin", "procs_usage", "procs_care", "procs_receipt", "procs_testing", "procs_workflow", "procs_security"]
+           "procs_work", "procs_intake", "procs_extracts", "procs_setup", "procs_review", "procs_mfa", "procs_password", "procs_signin", "procs_usage", "procs_care", "procs_receipt", "procs_testing", "procs_workflow", "procs_security", "procs_tenant_lifecycle"]
 # #338: Disallowed sensitive/PHI parameter names in generated @KeyParameters expressions.
 DISALLOWED_DIAGNOSTIC_PARAMS = (
     "@password", "@passwordHash", "@secret", "@token", "@searchText", "@attemptedName",
@@ -207,6 +207,17 @@ def write_proc(p: dict) -> str:
         END;
 
 """
+    standalone_guard = ""
+    if p.get("require_standalone"):
+        standalone_guard = f"""    IF @@TRANCOUNT > 0 OR (@@OPTIONS & 2) = 2
+    BEGIN
+        -- Non-error return status (-100) preserves caller transactions even under XACT_ABORT ON + TRY/CATCH
+        -- and rejects IMPLICIT_TRANSACTIONS ON before any table write.
+        RAISERROR (N'{full} must be called standalone with IMPLICIT_TRANSACTIONS OFF and no enclosing transaction.', 10, 1);
+        RETURN -100;
+    END;
+
+"""
     return f"""{PROLOGUE}
 {header(p)}
 CREATE OR ALTER PROCEDURE {full}
@@ -214,7 +225,7 @@ CREATE OR ALTER PROCEDURE {full}
 AS
 BEGIN
     SET NOCOUNT ON;
-    SET XACT_ABORT ON;
+{standalone_guard}    SET XACT_ABORT ON;
 
     -- =============================================================================================
     -- Rule 8 instrumentation. Boilerplate: copy verbatim.
@@ -331,6 +342,17 @@ def read_proc(p: dict) -> str:
     lit = f"[{p['schema']}].[{p['name']}]"
     params = indent(p.get("params", ""), 6) if p.get("params") else ""
     validation = indent(p["validate"], 8) + "\n\n" if p.get("validate") else ""
+    standalone_guard = ""
+    if p.get("require_standalone"):
+        standalone_guard = f"""    IF @@TRANCOUNT > 0 OR (@@OPTIONS & 2) = 2
+    BEGIN
+        -- Non-error return status (-100) preserves caller transactions even under XACT_ABORT ON + TRY/CATCH
+        -- and rejects IMPLICIT_TRANSACTIONS ON before any table write.
+        RAISERROR (N'{full} must be called standalone with IMPLICIT_TRANSACTIONS OFF and no enclosing transaction.', 10, 1);
+        RETURN -100;
+    END;
+
+"""
     return f"""{PROLOGUE}
 {header(p)}
 CREATE OR ALTER PROCEDURE {full}
@@ -338,7 +360,7 @@ CREATE OR ALTER PROCEDURE {full}
 AS
 BEGIN
     SET NOCOUNT ON;
-    SET XACT_ABORT ON;
+{standalone_guard}    SET XACT_ABORT ON;
 
     -- =============================================================================================
     -- Rule 8 error-only instrumentation. Boilerplate: copy verbatim.
