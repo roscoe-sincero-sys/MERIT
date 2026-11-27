@@ -23,7 +23,7 @@ All purgeable SQL tables follow MERIT's **no-hard-delete invariant**: worker pur
 1. **Trusted Proxy Boundary:** `clientAddress` is populated only from `HttpContext.Connection.RemoteIpAddress` after ASP.NET Core forwarded-headers middleware validates trusted proxies (`ForwardedHeaders`). Raw `X-Forwarded-For` chains are stored only in `logs.signInEvent.forwardedFor` and scrubbed on `SignInLog:RetentionDays` expiry.
 2. **Access Control:**
    - `logs.signInEvent` (`clientAddress`, `userAgent`): restricted to `security.review` / `tenant.administer` / `security.investigate`, scoped by `auth.tvfReviewAccounts`.
-   - `logs.auditEvent` (`clientAddress`, `userAgentHash`): restricted to `audit.view`, scoped by `#270` (`auth.tvfReviewTenants`). Raw `User-Agent` strings are **never** stored in `logs.auditEvent`; only a 64-bit SHA-256 hex prefix (`userAgentHash`) is recorded for mid-session drift detection (#327).
+   - `logs.auditEvent` (`clientAddress`, `userAgentHash`): restricted to `audit.view`, scoped by `#270` (`auth.tvfReviewTenants`). Sign-in ledger rows (`signIn`, `signInFailed`) omit `clientAddress` (`NULL`) so sign-in IPs expire solely under `logs.signInEvent` (#336). Post-authentication ledger rows (`view`, `create`, `update`, `export`, `search`, `permissionDenied`, `notFound`) retain `clientAddress`, `sessionReference`, and `userAgentHash` permanently for insider-threat and session-hijacking forensics (S16). Raw `User-Agent` strings are **never** stored in `logs.auditEvent`; only a 64-bit SHA-256 hex prefix (`userAgentHash`) is recorded for mid-session drift detection (#327).
    - `logs.searchLog` (`clientAddress`): restricted to `security.review` / `audit.view`; raw `searchText` is never exported and is visible in-app only to `security.investigate`.
 3. **Export Pseudonymization:** Structured log exports default to `pseudonymize=true`, replacing `clientAddress` with `<subnet>|ip_<12 hex>` (per-export keyed HMAC-SHA256) and `appUserId` with `usr_<16 hex>`, so AI-agent and external SIEM consumers can perform behavioral analysis without receiving raw IP addresses or account GUIDs.
 
@@ -36,15 +36,17 @@ All purgeable SQL tables follow MERIT's **no-hard-delete invariant**: worker pur
 
 Platform administrators (holding both `security.investigate` and `tenant.create`) can export or purge a single root tenant's complete dataset without affecting any other data root:
 
-1. **Export:** `EXEC config.uspExportRootTenant @rootTenantId = '<guid>', @includePayloads = 1;`
+1. **Export:**
+   - Manifest: `EXEC config.uspExportRootTenant @rootTenantId = '<guid>';` (returns active, soft-deleted, and total row counts across all 71 tenant/auth tables + read-only `logs.auditEvent`).
+   - Streamed table pages: `EXEC config.uspExportRootTenant @rootTenantId = '<guid>', @tableName = N'dbo.person', @pageNumber = 1, @pageSize = 1000;` (includes soft-deleted rows with `isDeleted` flag and excludes all credential/secret columns: `passwordHash`, `mfaSecretProtected`, `securityStamp`, `codeHash`, `codeVerifier`, `tokenVerifier`, `attemptedNameProtected`, `sessionScopeId`).
    - Audited in `logs.auditEvent` (`eventAction = 'export'`, `entityType = 'tenant'`).
-   - Returns a manifest covering every table carrying `rootTenantId` (enforced by `test_root_tenant_lifecycle_inventory_covers_every_root_tenant_table` in `test_generateProcedures.py`), including read-only `logs.auditEvent` rows.
 2. **Two-Step Confirmed Purge:** `EXEC config.uspPurgeRootTenant @rootTenantId = '<guid>', @confirmationCode = N'PURGE:<tenantCode>', @backupRetentionDays = 35;`
    - Refuses the platform root and rejects any mismatched confirmation code (`51422`).
    - Audited in `logs.auditEvent` (`eventAction = 'delete'`, `entityType = 'tenant'`).
-   - Scrubs PHI/PII fields and soft-deletes (`isDeleted = 1`) all mutable rows for `@rootTenantId` across clinical, configuration, auth, and purgeable log tables while leaving other roots untouched.
+   - Runs in independently committed 5,000-row batches (with 50 ms yield) across all 70 mutable tenant/auth tables (both live and previously soft-deleted rows) so other states are not blocked; resumable and idempotent.
+   - Scrubs all PHI, free-text, binary (`intakeBatch.rawContent`, `extractRun.fileContent`, `personDocument.content`), snapshot JSON (`labResult.reportedSnapshotJson`), geocode (`location.postalCode`/`latitude`/`longitude`/`censusTract`), and credential (`appUser`, `mfaRecoveryCode`, `passwordReset`, `mfaEmailChallenge`, `userAssignment`) columns, then runs a post-purge verification pass asserting `totalRemainingUnscrubbed = 0`.
    - **Append-only ledger retention:** `logs.auditEvent` is `APPEND_ONLY = ON` and cannot be deleted; its rows (IDs, actions, and timestamps only — never patient PHI or sign-in IPs) are retained and reported as `ledgerRowsRetained`.
-   - **Backup ageing:** The purge report returns `backupAgeOutUtc = DATEADD(DAY, @backupRetentionDays, SYSUTCDATETIME())` indicating when purged records age out of full database backups.
+   - **Backup ageing & downstream copies:** The purge report returns `backupAgeOutUtc = DATEADD(DAY, @backupRetentionDays, SYSUTCDATETIME())` indicating when purged records age out of database backups (confirm actual backup/offsite retention per environment before quoting a date). Operators must also account for log-shipping/read replicas, non-production refreshes, and any structured log exports (#328) already delivered to external SIEM or AI consumers.
 
 ## 5. Production Release Verification Checklist (#342, #347)
 

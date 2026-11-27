@@ -13,7 +13,7 @@ CreateDate:   2026-10-24
 ========================================================================================================================
 Description:
 
-Platform-only, audited per-root-tenant data export covering every table with rootTenantId plus read-only logs.auditEvent rows (#346). Returns a manifest of row counts per table and optional JSON payloads.
+Platform-only, audited per-root-tenant data export covering all 70 mutable tenant/auth tables plus read-only logs.auditEvent (#346, I17). Pass @tableName = NULL for the full manifest (active + soft-deleted counts) or a table name to stream paginated rows with credential columns excluded.
 
 ========================================================================================================================
 Requirements and Key Dependencies:
@@ -45,8 +45,10 @@ Description:	Initial version.
 
 ***********************************************************************************************************************/
 CREATE OR ALTER PROCEDURE config.uspExportRootTenant
-      @rootTenantId    UNIQUEIDENTIFIER
-      , @includePayloads BIT = 0
+      @rootTenantId UNIQUEIDENTIFIER
+      , @tableName    NVARCHAR (128) = NULL
+      , @pageNumber   INT = 1
+      , @pageSize     INT = 1000
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -71,7 +73,7 @@ BEGIN
           , @ErrorLine      INT            = NULL;
 
     -- Identifiers and counts ONLY. Never a credential, a payload, or patient data.
-    SET @KeyParameters = CONCAT (N'rootTenantId=', @rootTenantId, N', includePayloads=', @includePayloads);
+    SET @KeyParameters = CONCAT (N'rootTenantId=', @rootTenantId, N', pageNumber=', @pageNumber, N', pageSize=', @pageSize);
 
     BEGIN TRY
 
@@ -111,7 +113,8 @@ BEGIN
         VALUES (auth.udfSessionUserId (), @rootTenantId, 'export', 'tenant', @rootTenantId, @auditClientAddress, @rootTenantId,
                 @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs, @auditUserAgentHash);
 
-        EXEC config.uspExportRootTenantInternal @rootTenantId = @rootTenantId, @includePayloads = @includePayloads;
+        EXEC config.uspExportRootTenantInternal @rootTenantId = @rootTenantId, @tableName = @tableName,
+             @pageNumber = @pageNumber, @pageSize = @pageSize;
         SET @Comments = CONCAT (N'Root tenant export completed for ', @rootTenantId);
 
         -- =========================================================================================
@@ -195,7 +198,7 @@ EXEC util.uspSetObjectDescription
       @SchemaName  = N'config'
     , @ObjectType  = N'PROCEDURE'
     , @ObjectName  = N'uspExportRootTenant'
-    , @Description = N'Platform-only, audited per-root-tenant data export covering every table with rootTenantId plus read-only logs.auditEvent rows (#346). Returns a manifest of row counts per table and optional JSON payloads.';
+    , @Description = N'Platform-only, audited per-root-tenant data export covering all 70 mutable tenant/auth tables plus read-only logs.auditEvent (#346, I17). Pass @tableName = NULL for the full manifest (active + soft-deleted counts) or a table name to stream paginated rows with credential columns excluded.';
 GO
 
 IF DATABASE_PRINCIPAL_ID (N'meritWebRole') IS NOT NULL

@@ -1,155 +1,375 @@
 """Per-root-tenant export and purge procedures (#346).
 
-Covers every table carrying rootTenantId (enforced by test_generateProcedures.py inventory test).
-Public entrypoints run EXECUTE AS CALLER with platform-only permissions (security.investigate AND tenant.create)
-and delegate cross-RLS data work to ungranted EXECUTE AS OWNER internal helpers (same pattern as
-logs.uspDdlAuditVerifyInternal).
-"""
-from procs_common import AUDIT_SESSION_VARS, BOTH
+Driven directly from tableDefinitions.py column metadata so every nullable non-key column is set to NULL,
+every non-nullable PHI/credential/free-text/binary column is scrubbed on BOTH live (isDeleted = 0) and
+previously soft-deleted (isDeleted = 1) rows, and every table (58 rootTenantId tables + 12 tenant/user-linked
+auth child tables + append-only logs.auditEvent) is enforced by test_generateProcedures.py.
 
-# Every mutable table carrying rootTenantId, in dependency-safe purge order (children before parents).
-# Tuple: (schema, table, extra_scrub_set_clause)
-# Kept in exact sync with tableDefinitions.py by test_root_tenant_lifecycle_inventory in test_generateProcedures.py.
-MUTABLE_ROOT_TABLES: list[tuple[str, str, str]] = [
-    # Logs (purgeable / scrubbable)
-    ("logs", "auditEventChange", "beforeJson = NULL, afterJson = NULL"),
-    ("logs", "auditEventRecord", "entityId = '00000000-0000-0000-0000-000000000000', owningTenantId = NULL"),
-    ("logs", "securityFinding", "clientAddress = NULL, sessionReference = NULL, detailJson = NULL"),
-    ("logs", "searchLog", "searchText = N'', clientAddress = NULL, sessionReference = NULL, actingTenantId = NULL"),
-    ("logs", "screenVisit", "appUserId = NULL, sessionReference = NULL, profileId = NULL, viewAsUserId = NULL, actingTenantId = NULL, roleCodes = NULL, tabId = NULL"),
-    ("logs", "signInEvent", "clientAddress = NULL, forwardedFor = NULL, userAgent = NULL, attemptedNameHash = NULL, attemptedNameProtected = NULL, sessionReference = NULL, traceId = NULL"),
-    # Clinical / workflow children
-    ("dbo", "contactCorrection", ""),
-    ("dbo", "caseResultLink", ""),
-    ("dbo", "notificationObligation", ""),
-    ("dbo", "personDocument", "title = N'[purged]', fileName = N'purged', content = 0x00, contentHash = CAST (0x00 AS BINARY (32)), description = NULL"),
-    ("dbo", "personActivity", "note = N'[purged]', recipientLabel = NULL"),
-    ("dbo", "matchExclusion", "incomingKey = N'[purged]', decisionNote = NULL"),
-    ("dbo", "extractRun", ""),
-    ("dbo", "jobQueue", "payloadJson = N'{}'"),
-    ("dbo", "workTask", "title = N'[purged]', detail = NULL"),
-    ("dbo", "caseCluster", ""),
-    ("dbo", "cluster", "notes = NULL"),
-    ("dbo", "environmentalSample", "notes = NULL"),
-    ("dbo", "investigationCase", ""),
-    ("dbo", "investigation", "findings = NULL"),
-    ("dbo", "exposureSource", "sourceDescription = NULL"),
-    ("dbo", "caseActivity", "note = NULL"),
-    ("dbo", "exposureCase", ""),
-    ("dbo", "stagingHoldReason", ""),
-    ("dbo", "stagingRow", "parsedJson = N'{}', correctedJson = NULL"),
-    ("dbo", "labResult", ""),
-    ("dbo", "intakeBatch", ""),
-    ("dbo", "intakeProfile", ""),
-    ("dbo", "provider", ""),
-    ("dbo", "product", ""),
-    ("dbo", "employmentAnalyte", ""),
-    ("dbo", "employment", "jobTitle = NULL, metalTasks = NULL, ppeNotes = NULL"),
-    ("dbo", "personLocation", ""),
-    ("dbo", "locationOwner", ""),
-    ("dbo", "organizationSite", ""),
-    ("dbo", "location", "addressLine1 = N'[purged]', unit = NULL"),
-    ("dbo", "organizationType", ""),
-    ("dbo", "organization", ""),
-    ("dbo", "personRelationship", ""),
-    ("dbo", "pregnancyEpisode", ""),
-    ("dbo", "personIdentifier", "identifierValue = N'[purged]'"),
-    ("dbo", "personContactMethod", "contactValue = N'[purged]'"),
-    ("dbo", "personRace", ""),
-    ("dbo", "personAlias", "lastName = N'[purged]', firstName = NULL, middleName = NULL, lastNameKey = N'PURGED', firstNameKey = NULL"),
-    ("dbo", "personMatchKey", "lastNameKey = N'PURGED', firstNameKey = NULL"),
-    ("dbo", "personAccess", ""),
-    ("dbo", "person", "lastName = N'[purged]', firstName = NULL, middleName = NULL, lastNameKey = N'PURGED', firstNameKey = NULL, dob = NULL"),
-    # Configuration
-    ("config", "workflowDefinition", ""),
-    ("config", "notificationRule", ""),
-    ("config", "environmentalStandard", ""),
-    ("config", "threshold", ""),
-    ("config", "jurisdictionSetting", ""),
-    ("config", "subJurisdiction", ""),
-    # Auth / tenant hierarchy (sessions -> users -> roles -> tenants)
-    ("auth", "sessionScopeRoot", ""),
-    ("auth", "sessionScope", "revokedUtc = COALESCE (revokedUtc, SYSUTCDATETIME ())"),
-    ("auth", "appUser", "isActive = 0, email = NULL"),
-    ("auth", "role", ""),
-    ("auth", "tenant", "isActive = 0"),
+Purge commits per 5,000-row batch (no_tx=True) so multi-tenant writes on other states are never blocked (I16).
+Export excludes all credential columns, includes soft-deleted history, and pages individual tables natively
+instead of buffering gigabytes into a single NVARCHAR(MAX) JSON blob (I17).
+"""
+import re
+from procs_common import AUDIT_SESSION_VARS, BOTH
+import tableDefinitions as td
+
+# Global reference/lookup tables that do not belong to any root tenant.
+GLOBAL_REFERENCE_TABLES: set[str] = {
+    "auth.permission",
+    "config.lookupValue",
+    "config.analyte",
+    "config.analyteSpecimen",
+    "config.acceptedUnit",
+    "config.loincCode",
+    "config.actionCode",
+    "config.extractLayout",
+    "config.extractLayoutField",
+}
+
+# Tables linked to a root tenant via appUserId, tenantId, roleId, or sessionScopeId (no direct rootTenantId column).
+# Tuple: (schema, table, where_predicate_using_@rootTenantId)
+CHILD_AUTH_TABLES: list[tuple[str, str, str]] = [
+    ("auth", "mfaRecoveryCode", "appUserId IN (SELECT appUserId FROM auth.appUser WHERE rootTenantId = @rootTenantId)"),
+    ("auth", "passwordReset", "appUserId IN (SELECT appUserId FROM auth.appUser WHERE rootTenantId = @rootTenantId)"),
+    ("auth", "mfaEmailChallenge", "appUserId IN (SELECT appUserId FROM auth.appUser WHERE rootTenantId = @rootTenantId)"),
+    ("auth", "userProfileGrant", "userProfileId IN (SELECT up.userProfileId FROM auth.userProfile AS up JOIN auth.appUser AS u ON u.appUserId = up.appUserId WHERE u.rootTenantId = @rootTenantId)"),
+    ("auth", "userProfile", "appUserId IN (SELECT appUserId FROM auth.appUser WHERE rootTenantId = @rootTenantId)"),
+    ("auth", "userAssignment", "appUserId IN (SELECT appUserId FROM auth.appUser WHERE rootTenantId = @rootTenantId) OR tenantId IN (SELECT tenantId FROM auth.tenant WHERE rootTenantId = @rootTenantId)"),
+    ("auth", "sessionScopeTenant", "sessionScopeId IN (SELECT sessionScopeId FROM auth.sessionScope WHERE rootTenantId = @rootTenantId)"),
+    ("auth", "sessionScopePermission", "sessionScopeId IN (SELECT sessionScopeId FROM auth.sessionScope WHERE rootTenantId = @rootTenantId)"),
+    ("auth", "sessionScopeAdminTenant", "sessionScopeId IN (SELECT sessionScopeId FROM auth.sessionScope WHERE rootTenantId = @rootTenantId)"),
+    ("auth", "rolePermission", "roleId IN (SELECT roleId FROM auth.role WHERE rootTenantId = @rootTenantId)"),
+    ("auth", "tenantJurisdiction", "tenantId IN (SELECT tenantId FROM auth.tenant WHERE rootTenantId = @rootTenantId)"),
+    ("auth", "tenantClosure", "ancestorTenantId IN (SELECT tenantId FROM auth.tenant WHERE rootTenantId = @rootTenantId) OR descendantTenantId IN (SELECT tenantId FROM auth.tenant WHERE rootTenantId = @rootTenantId)"),
 ]
 
-# Append-only tables that cannot be deleted/updated (export-only, explicitly reported as retained).
+# Mutable tables carrying rootTenantId directly, in child-before-parent order.
+MUTABLE_ROOT_TABLE_NAMES: list[tuple[str, str]] = [
+    ("logs", "auditEventChange"),
+    ("logs", "auditEventRecord"),
+    ("logs", "securityFinding"),
+    ("logs", "searchLog"),
+    ("logs", "screenVisit"),
+    ("logs", "signInEvent"),
+    ("dbo", "contactCorrection"),
+    ("dbo", "caseResultLink"),
+    ("dbo", "notificationObligation"),
+    ("dbo", "personDocument"),
+    ("dbo", "personActivity"),
+    ("dbo", "matchExclusion"),
+    ("dbo", "extractRun"),
+    ("dbo", "jobQueue"),
+    ("dbo", "workTask"),
+    ("dbo", "caseCluster"),
+    ("dbo", "cluster"),
+    ("dbo", "environmentalSample"),
+    ("dbo", "investigationCase"),
+    ("dbo", "investigation"),
+    ("dbo", "exposureSource"),
+    ("dbo", "caseActivity"),
+    ("dbo", "exposureCase"),
+    ("dbo", "stagingHoldReason"),
+    ("dbo", "stagingRow"),
+    ("dbo", "labResult"),
+    ("dbo", "intakeBatch"),
+    ("dbo", "intakeProfile"),
+    ("dbo", "provider"),
+    ("dbo", "product"),
+    ("dbo", "employmentAnalyte"),
+    ("dbo", "employment"),
+    ("dbo", "personLocation"),
+    ("dbo", "locationOwner"),
+    ("dbo", "organizationSite"),
+    ("dbo", "location"),
+    ("dbo", "organizationType"),
+    ("dbo", "organization"),
+    ("dbo", "personRelationship"),
+    ("dbo", "pregnancyEpisode"),
+    ("dbo", "personIdentifier"),
+    ("dbo", "personContactMethod"),
+    ("dbo", "personRace"),
+    ("dbo", "personAlias"),
+    ("dbo", "personMatchKey"),
+    ("dbo", "personAccess"),
+    ("dbo", "person"),
+    ("config", "workflowDefinition"),
+    ("config", "notificationRule"),
+    ("config", "environmentalStandard"),
+    ("config", "threshold"),
+    ("config", "jurisdictionSetting"),
+    ("config", "subJurisdiction"),
+    ("auth", "sessionScopeRoot"),
+    ("auth", "sessionScope"),
+    ("auth", "appUser"),
+    ("auth", "role"),
+    ("auth", "tenant"),
+]
+
+# Append-only tables that cannot be updated/deleted (export-only, explicitly reported as retained).
 APPEND_ONLY_ROOT_TABLES: list[tuple[str, str]] = [
     ("logs", "auditEvent"),
 ]
 
-ALL_ROOT_TABLES: set[str] = {f"{s}.{n}" for s, n, _ in MUTABLE_ROOT_TABLES} | {f"{s}.{n}" for s, n in APPEND_ONLY_ROOT_TABLES}
+# Credential / secret columns NEVER included in root-tenant exports (I17).
+EXPORT_EXCLUDED_COLS: set[str] = {
+    "passwordHash",
+    "mfaSecretProtected",
+    "securityStamp",
+    "codeHash",
+    "codeVerifier",
+    "tokenVerifier",
+    "attemptedNameProtected",
+    "sessionScopeId",
+}
+
+# Columns preserved during purge (identifiers, structural routing, or immutable types).
+KEEP_COLS_GLOBAL: set[str] = {
+    "rootTenantId",
+    "owningTenantId",
+    "rowVersion",
+}
+KEEP_COLS_PER_TABLE: dict[str, set[str]] = {
+    "auth.tenant": {"tenantCode", "tenantType"},
+    "auth.role": {"roleCode"},
+    "logs.signInEvent": {"eventUtc", "eventType"},
+    "logs.screenVisit": {"screenCode", "navigationType", "eventUtc"},
+    "logs.securityFinding": {"ruleCode", "severity", "status", "windowStartUtc", "windowEndUtc", "detectedUtc"},
+}
+
+# Explicit scrub expressions for non-nullable columns with CHECK/UNIQUE/format constraints.
+NON_NULL_SCRUB_OVERRIDES: dict[tuple[str, str], str] = {
+    ("auth.appUser", "userName"): "CONCAT (N'purged-', CAST (appUserId AS NVARCHAR (36)))",
+    ("auth.appUser", "displayName"): "N'[purged]'",
+    ("auth.appUser", "passwordHash"): "N'[purged]'",
+    ("auth.appUser", "securityStamp"): "'00000000-0000-0000-0000-000000000000'",
+    ("auth.appUser", "mfaEnabled"): "0",
+    ("auth.appUser", "failedSignInCount"): "0",
+    ("auth.appUser", "isActive"): "0",
+    ("auth.tenant", "isActive"): "0",
+    ("auth.userProfile", "isActive"): "0",
+    ("auth.sessionScope", "revokedUtc"): "COALESCE (revokedUtc, SYSUTCDATETIME ())",
+    ("auth.mfaRecoveryCode", "codeHash"): "N'[purged]'",
+    ("auth.mfaEmailChallenge", "codeVerifier"): "CAST (0x00 AS VARBINARY (32))",
+    ("auth.mfaEmailChallenge", "supportReference"): "'PURGED'",
+    ("auth.passwordReset", "tokenVerifier"): "CAST (0x00 AS VARBINARY (32))",
+    ("auth.passwordReset", "supportReference"): "'PURGED'",
+    ("dbo.person", "lastName"): "N'[purged]'",
+    ("dbo.person", "lastNameKey"): "N'PURGED'",
+    ("dbo.person", "sex"): "'unknown'",
+    ("dbo.person", "ethnicity"): "'unknown'",
+    ("dbo.personAlias", "lastName"): "N'[purged]'",
+    ("dbo.personAlias", "lastNameKey"): "N'PURGED'",
+    ("dbo.personMatchKey", "lastNameKey"): "N'PURGED'",
+    ("dbo.personDocument", "title"): "N'[purged]'",
+    ("dbo.personDocument", "fileName"): "N'purged'",
+    ("dbo.personDocument", "content"): "0x00",
+    ("dbo.personDocument", "contentHash"): "CAST (0x00 AS BINARY (32))",
+    ("dbo.location", "country"): "'XX'",
+    ("dbo.location", "city"): "N'[purged]'",
+    ("dbo.location", "addressKey"): "CONCAT (N'purged-', CAST (locationId AS NVARCHAR (36)))",
+    ("dbo.labResult", "collectedDate"): "'1900-01-01'",
+    ("dbo.labResult", "population"): "'unknown'",
+    ("dbo.labResult", "unitReported"): "N'[purged]'",
+    ("dbo.labResult", "unitCanonical"): "N'[purged]'",
+    ("dbo.labResult", "reportedSnapshotJson"): "N'{}'",
+    ("dbo.stagingRow", "parsedJson"): "N'{}'",
+    ("dbo.contactCorrection", "caregiverName"): "N'[purged]'",
+    ("dbo.contactCorrection", "proposedValue"): "N'[purged]'",
+    ("dbo.contactCorrection", "sourceNote"): "N'[purged]'",
+    ("dbo.contactCorrection", "beforeJson"): "N'{}'",
+    ("logs.auditEventRecord", "entityId"): "'00000000-0000-0000-0000-000000000000'",
+    ("logs.searchLog", "searchText"): "N''",
+    ("logs.securityFinding", "title"): "N'[purged]'",
+    ("logs.securityFinding", "fingerprint"): "CONCAT ('purged|', CONVERT (VARCHAR (36), securityFindingId))",
+}
+
+_TABLES_BY_NAME: dict[str, dict] = {f"{t['schema']}.{t['name']}": t for t in td.TABLES}
+
+# All 70 mutable tenant-owned tables (child auth tables first, then root tables in child-before-parent order).
+ALL_MUTABLE_SPECS: list[tuple[str, str, str]] = (
+    [(s, n, pred) for s, n, pred in CHILD_AUTH_TABLES]
+    + [(s, n, "rootTenantId = @rootTenantId") for s, n in MUTABLE_ROOT_TABLE_NAMES]
+)
+
+ALL_TENANT_TABLES: set[str] = (
+    {f"{s}.{n}" for s, n, _ in ALL_MUTABLE_SPECS}
+    | {f"{s}.{n}" for s, n in APPEND_ONLY_ROOT_TABLES}
+)
+
+
+def _scrub_assignments(full: str) -> list[str]:
+    """Derives SET assignments directly from tableDefinitions.py metadata so no PHI/credential column is missed."""
+    t = _TABLES_BY_NAME[full]
+    pk = t["cols"][0]["name"]
+    fks = {fk[0] for fk in t.get("fks", [])}
+    keep = KEEP_COLS_GLOBAL | KEEP_COLS_PER_TABLE.get(full, set()) | {pk} | fks
+    assigns: list[str] = []
+    for c in t["cols"]:
+        cname = c["name"]
+        if cname in keep:
+            continue
+        if (full, cname) in NON_NULL_SCRUB_OVERRIDES:
+            assigns.append(f"{cname} = {NON_NULL_SCRUB_OVERRIDES[(full, cname)]}")
+            continue
+        if c.get("null", True):
+            assigns.append(f"{cname} = NULL")
+            continue
+        # Non-nullable column without explicit override:
+        ctype = c["type"].upper()
+        check = c.get("check") or ""
+        if "ISJSON" in check.upper():
+            assigns.append(f"{cname} = N'{{}}'")
+        elif not check and (ctype.startswith("NVARCHAR") or ctype.startswith("VARCHAR")):
+            m = re.search(r"\((\d+)\)", ctype)
+            max_len = int(m.group(1)) if m else 100
+            val = "N'[purged]'" if max_len >= 8 else ("N'X'" if ctype.startswith("N") else "'X'")
+            if not ctype.startswith("N"):
+                val = val.lstrip("N")
+            assigns.append(f"{cname} = {val}")
+        elif not check and (ctype.startswith("VARBINARY") or ctype.startswith("BINARY")):
+            assigns.append(f"{cname} = 0x00")
+        elif cname == "isActive":
+            assigns.append(f"{cname} = 0")
+    assigns.append("isDeleted = 1")
+    assigns.append("modifiedBy = N'MERIT tenant purge'")
+    return assigns
+
+
+def _export_cols(full: str) -> list[str]:
+    """Explicit non-credential column list for root-tenant export, including isDeleted and audit metadata (I17)."""
+    if full == "logs.auditEvent":
+        return [
+            "auditEventId", "eventUtc", "appUserId", "rootTenantId", "owningTenantId", "eventAction", "entityType",
+            "entityId", "recordCount", "clientAddress", "userAgentHash", "sessionReference", "traceId",
+            "actingTenantId", "viewAsUserId", "viewKind", "filterJson", "administrationJson", "createdBy", "createdDateUtc",
+        ]
+    t = _TABLES_BY_NAME[full]
+    cols = [c["name"] for c in t["cols"] if c["name"] not in EXPORT_EXCLUDED_COLS and c["type"].upper() != "ROWVERSION"]
+    cols += ["isDeleted", "createdBy", "createdDateUtc", "modifiedBy", "modifiedDateUtc", "deletedBy", "deletedDateUtc"]
+    return cols
 
 
 def _export_body() -> str:
     lines = [
-        "DECLARE @manifest TABLE (",
-        "    tableName    NVARCHAR (128) NOT NULL,",
-        "    exportedRows INT NOT NULL,",
-        "    disposition  VARCHAR (30) NOT NULL,",
-        "    payloadJson  NVARCHAR (MAX) NULL",
-        ");",
+        "DECLARE @limit INT = CASE WHEN @pageSize BETWEEN 1 AND 5000 THEN @pageSize ELSE 1000 END;",
+        "DECLARE @offset INT = (CASE WHEN @pageNumber >= 1 THEN @pageNumber ELSE 1 END - 1) * @limit;",
         "",
+        "IF @tableName IS NULL",
+        "BEGIN",
+        "    DECLARE @manifest TABLE (",
+        "        tableName   NVARCHAR (128) NOT NULL,",
+        "        activeRows  INT NOT NULL,",
+        "        deletedRows INT NOT NULL,",
+        "        totalRows   INT NOT NULL,",
+        "        disposition VARCHAR (30) NOT NULL",
+        "    );",
     ]
-    for s, n, _ in MUTABLE_ROOT_TABLES:
+    for s, n, pred in ALL_MUTABLE_SPECS:
         full = f"{s}.{n}"
         lines.append(
-            f"INSERT @manifest (tableName, exportedRows, disposition, payloadJson)\n"
-            f"SELECT N'{full}', COUNT (*), 'exported',\n"
-            f"       CASE WHEN @includePayloads = 1 AND COUNT (*) > 0\n"
-            f"            THEN (SELECT * FROM {full} WHERE rootTenantId = @rootTenantId AND isDeleted = 0 FOR JSON PATH)\n"
-            f"            ELSE NULL END\n"
-            f"  FROM {full} WHERE rootTenantId = @rootTenantId AND isDeleted = 0;"
+            f"    INSERT @manifest (tableName, activeRows, deletedRows, totalRows, disposition)\n"
+            f"    SELECT N'{full}',\n"
+            f"           COALESCE (SUM (CASE WHEN isDeleted = 0 THEN 1 ELSE 0 END), 0),\n"
+            f"           COALESCE (SUM (CASE WHEN isDeleted = 1 THEN 1 ELSE 0 END), 0),\n"
+            f"           COUNT (*), 'exportable'\n"
+            f"      FROM {full} WHERE {pred};"
         )
     for s, n in APPEND_ONLY_ROOT_TABLES:
         full = f"{s}.{n}"
         lines.append(
-            f"INSERT @manifest (tableName, exportedRows, disposition, payloadJson)\n"
-            f"SELECT N'{full}', COUNT (*), 'ledgerReadOnly',\n"
-            f"       CASE WHEN @includePayloads = 1 AND COUNT (*) > 0\n"
-            f"            THEN (SELECT * FROM {full} WHERE rootTenantId = @rootTenantId FOR JSON PATH)\n"
-            f"            ELSE NULL END\n"
-            f"  FROM {full} WHERE rootTenantId = @rootTenantId;"
+            f"    INSERT @manifest (tableName, activeRows, deletedRows, totalRows, disposition)\n"
+            f"    SELECT N'{full}', COUNT (*), 0, COUNT (*), 'ledgerReadOnly'\n"
+            f"      FROM {full} WHERE rootTenantId = @rootTenantId;"
         )
+    lines.append("    SELECT tableName, COALESCE (activeRows, 0) AS activeRows, COALESCE (deletedRows, 0) AS deletedRows, totalRows, disposition FROM @manifest ORDER BY tableName;")
+    lines.append("    RETURN;")
+    lines.append("END;")
     lines.append("")
-    lines.append("SELECT tableName, exportedRows, disposition, payloadJson FROM @manifest ORDER BY tableName;")
+    # Paginated single-table streaming without tempdb JSON blob accumulation (I17).
+    first = True
+    for s, n, pred in ALL_MUTABLE_SPECS:
+        full = f"{s}.{n}"
+        pk = _TABLES_BY_NAME[full]["cols"][0]["name"]
+        col_list = ", ".join(_export_cols(full))
+        kw = "IF" if first else "ELSE IF"
+        first = False
+        lines.append(
+            f"{kw} @tableName = N'{full}'\n"
+            f"BEGIN\n"
+            f"    SELECT {col_list}\n"
+            f"      FROM {full}\n"
+            f"     WHERE {pred}\n"
+            f"     ORDER BY {pk}\n"
+            f"    OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY;\n"
+            f"END"
+        )
+    for s, n in APPEND_ONLY_ROOT_TABLES:
+        full = f"{s}.{n}"
+        col_list = ", ".join(_export_cols(full))
+        lines.append(
+            f"ELSE IF @tableName = N'{full}'\n"
+            f"BEGIN\n"
+            f"    SELECT {col_list}\n"
+            f"      FROM {full}\n"
+            f"     WHERE rootTenantId = @rootTenantId\n"
+            f"     ORDER BY auditEventId\n"
+            f"    OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY;\n"
+            f"END"
+        )
+    lines.append("ELSE")
+    lines.append("BEGIN")
+    lines.append("    ;THROW 51422, N'Unknown or non-tenant table name for root export.', 1;")
+    lines.append("END;")
     return "\n".join(lines)
 
 
 def _purge_body() -> str:
     lines = [
         "DECLARE @report TABLE (",
-        "    tableName    NVARCHAR (128) NOT NULL,",
-        "    rowsAffected INT NOT NULL,",
-        "    disposition  VARCHAR (40) NOT NULL",
+        "    tableName           NVARCHAR (128) NOT NULL,",
+        "    rowsAffected        INT NOT NULL,",
+        "    remainingUnscrubbed INT NOT NULL,",
+        "    disposition         VARCHAR (40) NOT NULL",
         ");",
-        "DECLARE @n INT = 0;",
+        "DECLARE @n INT = 0, @batch INT = 0, @rem INT = 0;",
         "",
     ]
-    for s, n, scrub in MUTABLE_ROOT_TABLES:
+    for s, n, pred in ALL_MUTABLE_SPECS:
         full = f"{s}.{n}"
-        set_clause = f"{scrub}, isDeleted = 1, modifiedBy = N'MERIT tenant purge'" if scrub else "isDeleted = 1, modifiedBy = N'MERIT tenant purge'"
+        set_clause = ", ".join(_scrub_assignments(full))
         lines.append(
-            f"UPDATE {full}\n"
-            f"   SET {set_clause}\n"
-            f" WHERE rootTenantId = @rootTenantId AND isDeleted = 0;\n"
-            f"SET @n = @@ROWCOUNT;\n"
-            f"INSERT @report (tableName, rowsAffected, disposition) VALUES (N'{full}', @n, 'scrubbedAndSoftDeleted');"
+            f"SET @batch = 1; SET @n = 0;\n"
+            f"WHILE @batch > 0\n"
+            f"BEGIN\n"
+            f"    BEGIN TRANSACTION;\n"
+            f"    UPDATE TOP (5000) {full}\n"
+            f"       SET {set_clause}\n"
+            f"     WHERE ({pred})\n"
+            f"       AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');\n"
+            f"    SET @batch = @@ROWCOUNT;\n"
+            f"    COMMIT TRANSACTION;\n"
+            f"    SET @n += @batch;\n"
+            f"    IF @batch = 5000\n"
+            f"    BEGIN\n"
+            f"        WAITFOR DELAY '00:00:00.050';\n"
+            f"    END;\n"
+            f"END;\n"
+            f"SELECT @rem = COUNT (*) FROM {full} WHERE ({pred}) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');\n"
+            f"INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'{full}', @n, @rem, 'scrubbedAndSoftDeleted');"
         )
     for s, n in APPEND_ONLY_ROOT_TABLES:
         full = f"{s}.{n}"
         lines.append(
             f"DECLARE @ledgerRows INT = (SELECT COUNT (*) FROM {full} WHERE rootTenantId = @rootTenantId);\n"
-            f"INSERT @report (tableName, rowsAffected, disposition) VALUES (N'{full}', @ledgerRows, 'retainedAppendOnlyLedger');"
+            f"INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'{full}', @ledgerRows, 0, 'retainedAppendOnlyLedger');"
         )
     lines.append("")
-    lines.append("SELECT tableName, rowsAffected, disposition FROM @report ORDER BY tableName;")
+    lines.append("SELECT tableName, rowsAffected, remainingUnscrubbed, disposition FROM @report ORDER BY tableName;")
     lines.append(
         "SELECT @rootTenantId AS rootTenantId,\n"
         "       (SELECT tenantCode FROM auth.tenant WHERE tenantId = @rootTenantId) AS tenantCode,\n"
         "       (SELECT SUM (rowsAffected) FROM @report WHERE disposition = 'scrubbedAndSoftDeleted') AS totalRowsPurged,\n"
+        "       (SELECT SUM (remainingUnscrubbed) FROM @report WHERE disposition = 'scrubbedAndSoftDeleted') AS totalRemainingUnscrubbed,\n"
         "       @ledgerRows AS ledgerRowsRetained,\n"
         "       DATEADD (DAY, @backupRetentionDays, SYSUTCDATETIME ()) AS backupAgeOutUtc;"
     )
@@ -161,20 +381,26 @@ PROCS = [
     {
         "schema": "config", "name": "uspExportRootTenantInternal", "kind": "read", "grants": [], "execute_as": "OWNER",
         "ticket": "346",
-        "desc": "Ungranted owner-context helper for config.uspExportRootTenant: reads all rootTenantId tables across RLS (#346).",
-        "params": """@rootTenantId    UNIQUEIDENTIFIER
-, @includePayloads BIT = 0""",
-        "key": "CONCAT (N'rootTenantId=', @rootTenantId, N', includePayloads=', @includePayloads)",
+        "desc": "Ungranted owner-context helper for config.uspExportRootTenant: returns the 71-table manifest (including "
+                "active and soft-deleted counts) or streams one table page without credential columns (#346, I17).",
+        "params": """@rootTenantId UNIQUEIDENTIFIER
+, @tableName    NVARCHAR (128) = NULL
+, @pageNumber   INT = 1
+, @pageSize     INT = 1000""",
+        "key": "CONCAT (N'rootTenantId=', @rootTenantId, N', pageNumber=', @pageNumber, N', pageSize=', @pageSize)",
         "body": _export_body(),
     },
     {
         "schema": "config", "name": "uspExportRootTenant", "kind": "write", "grants": BOTH, "ticket": "346",
         "permission_all": ["security.investigate", "tenant.create"],
-        "desc": "Platform-only, audited per-root-tenant data export covering every table with rootTenantId plus read-only "
-                "logs.auditEvent rows (#346). Returns a manifest of row counts per table and optional JSON payloads.",
-        "params": """@rootTenantId    UNIQUEIDENTIFIER
-, @includePayloads BIT = 0""",
-        "key": "CONCAT (N'rootTenantId=', @rootTenantId, N', includePayloads=', @includePayloads)",
+        "desc": "Platform-only, audited per-root-tenant data export covering all 70 mutable tenant/auth tables plus "
+                "read-only logs.auditEvent (#346, I17). Pass @tableName = NULL for the full manifest (active + "
+                "soft-deleted counts) or a table name to stream paginated rows with credential columns excluded.",
+        "params": """@rootTenantId UNIQUEIDENTIFIER
+, @tableName    NVARCHAR (128) = NULL
+, @pageNumber   INT = 1
+, @pageSize     INT = 1000""",
+        "key": "CONCAT (N'rootTenantId=', @rootTenantId, N', pageNumber=', @pageNumber, N', pageSize=', @pageSize)",
         "validate": """IF NOT EXISTS (SELECT 1 FROM auth.tenant WHERE tenantId = @rootTenantId AND tenantId = rootTenantId)
 BEGIN
     ;THROW 51404, N'The root tenant was not found.', 1;
@@ -186,27 +412,30 @@ INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entity
 VALUES (auth.udfSessionUserId (), @rootTenantId, 'export', 'tenant', @rootTenantId, @auditClientAddress, @rootTenantId,
         @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs, @auditUserAgentHash);
 
-EXEC config.uspExportRootTenantInternal @rootTenantId = @rootTenantId, @includePayloads = @includePayloads;
+EXEC config.uspExportRootTenantInternal @rootTenantId = @rootTenantId, @tableName = @tableName,
+     @pageNumber = @pageNumber, @pageSize = @pageSize;
 SET @Comments = CONCAT (N'Root tenant export completed for ', @rootTenantId);
 """,
     },
     {
-        "schema": "config", "name": "uspPurgeRootTenantInternal", "kind": "write", "grants": [], "execute_as": "OWNER",
+        "schema": "config", "name": "uspPurgeRootTenantInternal", "kind": "write", "no_tx": True, "grants": [], "execute_as": "OWNER",
         "ticket": "346",
-        "desc": "Ungranted owner-context helper for config.uspPurgeRootTenant: scrubs and soft-deletes all mutable "
-                "rootTenantId tables across RLS while leaving append-only logs.auditEvent intact (#346).",
+        "desc": "Ungranted owner-context helper for config.uspPurgeRootTenant: scrubs every PHI, free-text, binary, "
+                "geocode, and credential column across all 70 mutable tenant/auth tables (including previously soft-deleted "
+                "rows) in independently committed 5,000-row batches with post-purge verification (#346, B4, I16).",
         "params": """@rootTenantId        UNIQUEIDENTIFIER
 , @backupRetentionDays INT = 35""",
         "key": "CONCAT (N'rootTenantId=', @rootTenantId, N', backupRetentionDays=', @backupRetentionDays)",
         "body": _purge_body(),
     },
     {
-        "schema": "config", "name": "uspPurgeRootTenant", "kind": "write", "grants": BOTH, "ticket": "346",
+        "schema": "config", "name": "uspPurgeRootTenant", "kind": "write", "no_tx": True, "grants": BOTH, "ticket": "346",
         "permission_all": ["security.investigate", "tenant.create"],
-        "desc": "Platform-only, two-step confirmed, audited per-root-tenant purge (#346). Requires @confirmationCode = "
-                "N'PURGE:' + tenantCode and refuses the platform root. Scrubs and soft-deletes every mutable table "
-                "carrying rootTenantId, leaves append-only logs.auditEvent intact (IDs only), and returns a purge report "
-                "including when data ages out of backups.",
+        "desc": "Platform-only, two-step confirmed, audited per-root-tenant purge (#346, B4, I16). Requires "
+                "@confirmationCode = N'PURGE:' + tenantCode and refuses the platform root. Scrubs and soft-deletes "
+                "all 70 mutable tenant/auth tables (live and previously soft-deleted rows) in independently committed "
+                "5,000-row batches, leaves append-only logs.auditEvent intact, verifies zero unscrubbed rows remain, "
+                "and returns a purge report including when data ages out of backups.",
         "params": """@rootTenantId        UNIQUEIDENTIFIER
 , @confirmationCode    NVARCHAR (60)
 , @backupRetentionDays INT = 35""",
@@ -233,11 +462,13 @@ BEGIN
     ;THROW 51422, N'@backupRetentionDays must be between 1 and 3650.', 1;
 END;""",
         "body": f"""
+BEGIN TRANSACTION;
 {AUDIT_SESSION_VARS}
 INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, clientAddress, owningTenantId,
                         sessionReference, traceId, actingTenantId, viewAsUserId, userAgentHash)
 VALUES (auth.udfSessionUserId (), @rootTenantId, 'delete', 'tenant', @rootTenantId, @auditClientAddress, @rootTenantId,
         @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs, @auditUserAgentHash);
+COMMIT TRANSACTION;
 
 EXEC config.uspPurgeRootTenantInternal @rootTenantId = @rootTenantId, @backupRetentionDays = @backupRetentionDays;
 SET @Comments = CONCAT (N'Root tenant purge completed for ', @rootTenantId);

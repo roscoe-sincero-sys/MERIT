@@ -138,23 +138,47 @@ public sealed class LoggingWave4IntegrationTests(MeritFixture fixture)
         Guid synRoot = TimeOrderedId.New();
         string synCode = "OFFB" + Guid.NewGuid().ToString("N")[..6].ToUpperInvariant();
         Guid synPerson = TimeOrderedId.New();
+        Guid synDeletedPerson = TimeOrderedId.New();
+        Guid synLocation = TimeOrderedId.New();
+        Guid synBatch = TimeOrderedId.New();
         Guid synSearch = TimeOrderedId.New();
         Guid synUser = TimeOrderedId.New();
+        Guid synRole = TimeOrderedId.New();
+        Guid synAssign = TimeOrderedId.New();
+        Guid synRecovery = TimeOrderedId.New();
 
-        // Seed a synthetic root tenant with clinical + log data.
+        // Seed a synthetic root tenant with live + previously soft-deleted PHI, geocodes, raw intake file,
+        // credentials, recovery codes, live assignments, searchLog, and append-only auditEvent (B4, I17).
         await conn.ExecuteAsync(
             """
             INSERT auth.tenant (tenantId, rootTenantId, tenantCode, tenantName, tenantType, isActive)
             VALUES (@r, @r, @code, N'Synthetic Offboarding Root', 'state', 1);
-            INSERT auth.appUser (appUserId, rootTenantId, homeTenantId, userName, displayName, passwordHash, securityStamp, isActive)
-            VALUES (@u, @r, @r, @uname, N'Synthetic User', N'synthetic-hash-346', NEWID (), 1);
+            INSERT auth.role (roleId, rootTenantId, roleCode, roleName)
+            VALUES (@role, @r, 'stateAdmin', N'State Admin');
+            INSERT auth.appUser (appUserId, rootTenantId, homeTenantId, userName, displayName, email, passwordHash, mfaSecretProtected, securityStamp, isActive)
+            VALUES (@u, @r, @r, @uname, N'Synthetic User', N'syn@example.org', N'real-hash-secret', N'protected-totp-secret', NEWID (), 1);
+            INSERT auth.userAssignment (userAssignmentId, appUserId, roleId, tenantId, includeDescendants, accessLevel, startDate)
+            VALUES (@assign, @u, @role, @r, 1, 'full', '2026-01-01');
+            INSERT auth.mfaRecoveryCode (mfaRecoveryCodeId, appUserId, codeHash)
+            VALUES (@rec, @u, N'recovery-hash-secret');
             INSERT dbo.person (personId, rootTenantId, owningTenantId, lastName, firstName, lastNameKey, firstNameKey, dob, sex, ethnicity)
-            VALUES (@p, @r, @r, N'OffboardSecretName', N'Jane', N'OFFBOARDSECRETNAME', N'JANE', '2021-02-03', 'female', 'unknown');
+            VALUES (@p, @r, @r, N'OffboardSecretName', N'Jane', N'OFFBOARDSECRETNAME', N'JANE', '2021-02-03', 'female', 'hispanic');
+            INSERT dbo.person (personId, rootTenantId, owningTenantId, lastName, firstName, lastNameKey, firstNameKey, dob, sex, ethnicity, isDeleted)
+            VALUES (@pd, @r, @r, N'PreviouslyDeletedPhi', N'Merged', N'PREVIOUSLYDELETEDPHI', N'MERGED', '2019-07-08', 'male', 'notHispanic', 1);
+            INSERT dbo.location (locationId, rootTenantId, owningTenantId, addressLine1, city, state, postalCode, country, stdStatus, latitude, longitude, censusTract, addressKey)
+            VALUES (@loc, @r, @r, N'123 Secret St', N'Baltimore', 'MD', '21201', 'US', 'raw', 39.2904, -76.6122, '24510010100', N'123-SECRET-ST');
+            INSERT dbo.intakeBatch (intakeBatchId, rootTenantId, owningTenantId, sourceChannel, receivedUtc, batchStatus, fileName, rawContent, receivedCount, loadedCount, heldCount, rejectedCount)
+            VALUES (@batch, @r, @r, 'upload', SYSUTCDATETIME (), 'loaded', N'secret-lab.hl7', CONVERT (VARBINARY (MAX), 'MSH|^~\&|SECRET_LAB_FILE'), 1, 1, 0, 0);
             INSERT logs.searchLog (searchLogId, appUserId, rootTenantId, searchText, resultCount, searchedUtc)
             VALUES (@s, @u, @r, N'OffboardSecretQuery', 1, SYSUTCDATETIME ());
             INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId)
             VALUES (@u, @r, 'view', 'person', @p);
-            """, new { r = synRoot, code = synCode, u = synUser, uname = "u_" + synCode, p = synPerson, s = synSearch });
+            """, new
+            {
+                r = synRoot, code = synCode, role = synRole, u = synUser, uname = "u_" + synCode,
+                assign = synAssign, rec = synRecovery, p = synPerson, pd = synDeletedPerson,
+                loc = synLocation, batch = synBatch, s = synSearch,
+            });
 
         int mdPersonsBefore = await conn.ExecuteScalarAsync<int>(
             "SELECT COUNT (*) FROM dbo.person WHERE rootTenantId = (SELECT rootTenantId FROM auth.tenant WHERE tenantCode = 'MD') AND isDeleted = 0");
@@ -165,47 +189,98 @@ public sealed class LoggingWave4IntegrationTests(MeritFixture fixture)
             await denyConn.OpenAsync();
             await denyConn.ExecuteAsync("EXECUTE AS USER = 'meritWeb';");
             var ex = await Assert.ThrowsAsync<SqlException>(() =>
-                denyConn.ExecuteAsync("config.uspExportRootTenant", new { rootTenantId = synRoot, includePayloads = false }, commandType: CommandType.StoredProcedure));
+                denyConn.ExecuteAsync("config.uspExportRootTenant", new { rootTenantId = synRoot }, commandType: CommandType.StoredProcedure));
             Assert.Equal(51403, ex.Number);
             await denyConn.ExecuteAsync("REVERT;");
         }
 
-        // 2. Platform export returns full 59-table manifest and JSON payloads for the synthetic root.
-        var exportRows = (await conn.QueryAsync<(string tableName, int exportedRows, string disposition, string? payloadJson)>(
-            "config.uspExportRootTenant", new { rootTenantId = synRoot, includePayloads = true }, commandType: CommandType.StoredProcedure)).ToList();
-        Assert.True(exportRows.Count >= 59);
-        var personManifest = Assert.Single(exportRows, r => r.tableName == "dbo.person");
-        Assert.Equal(1, personManifest.exportedRows);
-        Assert.Contains("OffboardSecretName", personManifest.payloadJson ?? "", StringComparison.Ordinal);
-        var ledgerManifest = Assert.Single(exportRows, r => r.tableName == "logs.auditEvent");
+        // 2. Platform export manifest covers all 71 tenant/auth tables (active + soft-deleted counts) and streams
+        //    individual tables without credential columns while including soft-deleted history (I17).
+        var manifest = (await conn.QueryAsync<(string tableName, int activeRows, int deletedRows, int totalRows, string disposition)>(
+            "config.uspExportRootTenant", new { rootTenantId = synRoot }, commandType: CommandType.StoredProcedure)).ToList();
+        Assert.Equal(71, manifest.Count);
+        var personManifest = Assert.Single(manifest, r => r.tableName == "dbo.person");
+        Assert.Equal(1, personManifest.activeRows);
+        Assert.Equal(1, personManifest.deletedRows);
+        Assert.Equal(2, personManifest.totalRows);
+        var ledgerManifest = Assert.Single(manifest, r => r.tableName == "logs.auditEvent");
         Assert.Equal("ledgerReadOnly", ledgerManifest.disposition);
-        Assert.True(ledgerManifest.exportedRows >= 2);
+        Assert.True(ledgerManifest.totalRows >= 2);
+
+        // Stream dbo.person: returns BOTH active and soft-deleted rows.
+        var exportedPeople = (await conn.QueryAsync<dynamic>(
+            "config.uspExportRootTenant", new { rootTenantId = synRoot, tableName = "dbo.person", pageNumber = 1, pageSize = 100 }, commandType: CommandType.StoredProcedure)).ToList();
+        Assert.Equal(2, exportedPeople.Count);
+
+        // Stream auth.appUser: must NOT include credential columns (passwordHash, mfaSecretProtected, securityStamp).
+        var exportedUser = (IDictionary<string, object>)Assert.Single(await conn.QueryAsync<dynamic>(
+            "config.uspExportRootTenant", new { rootTenantId = synRoot, tableName = "auth.appUser", pageNumber = 1, pageSize = 100 }, commandType: CommandType.StoredProcedure));
+        Assert.DoesNotContain("passwordHash", exportedUser.Keys, StringComparer.OrdinalIgnoreCase);
+        Assert.DoesNotContain("mfaSecretProtected", exportedUser.Keys, StringComparer.OrdinalIgnoreCase);
+        Assert.DoesNotContain("securityStamp", exportedUser.Keys, StringComparer.OrdinalIgnoreCase);
 
         // 3. Purge rejects mismatched confirmation code (51422).
         var badConfirm = await Assert.ThrowsAsync<SqlException>(() =>
             conn.ExecuteAsync("config.uspPurgeRootTenant", new { rootTenantId = synRoot, confirmationCode = "PURGE:WRONG", backupRetentionDays = 35 }, commandType: CommandType.StoredProcedure));
         Assert.Equal(51422, badConfirm.Number);
 
-        // 4. Confirmed purge scrubs and soft-deletes synthetic root rows, reports backup age-out and retained ledger rows,
-        //    and leaves the Maryland root completely untouched.
+        // 4. Confirmed per-batch purge scrubs live AND previously soft-deleted PHI, geocodes, raw intake files,
+        //    credentials, recovery codes, and assignments, verifies 0 unscrubbed rows remain, and isolates Maryland.
         using (var grid = await conn.QueryMultipleAsync(
             "config.uspPurgeRootTenant", new { rootTenantId = synRoot, confirmationCode = $"PURGE:{synCode}", backupRetentionDays = 35 }, commandType: CommandType.StoredProcedure))
         {
-            var tableReport = (await grid.ReadAsync<(string tableName, int rowsAffected, string disposition)>()).ToList();
-            var summary = await grid.ReadSingleAsync<(Guid rootTenantId, string tenantCode, int totalRowsPurged, int ledgerRowsRetained, DateTime backupAgeOutUtc)>();
-            Assert.True(tableReport.Count >= 59);
+            var tableReport = (await grid.ReadAsync<(string tableName, int rowsAffected, int remainingUnscrubbed, string disposition)>()).ToList();
+            var summary = await grid.ReadSingleAsync<(Guid rootTenantId, string tenantCode, int totalRowsPurged, int totalRemainingUnscrubbed, int ledgerRowsRetained, DateTime backupAgeOutUtc)>();
+            Assert.Equal(71, tableReport.Count);
             Assert.Equal(synRoot, summary.rootTenantId);
             Assert.Equal(synCode, summary.tenantCode);
-            Assert.True(summary.totalRowsPurged >= 4);
+            Assert.True(summary.totalRowsPurged >= 9);
+            Assert.Equal(0, summary.totalRemainingUnscrubbed);
             Assert.True(summary.ledgerRowsRetained >= 2);
             Assert.True(summary.backupAgeOutUtc > DateTime.UtcNow.AddDays(34));
         }
 
-        // Verify synthetic person and searchLog are scrubbed & soft-deleted.
-        var purgedPerson = await conn.QuerySingleAsync<(bool isDeleted, string lastName)>(
-            "SELECT isDeleted, lastName FROM dbo.person WHERE personId = @p", new { p = synPerson });
-        Assert.True(purgedPerson.isDeleted);
-        Assert.Equal("[purged]", purgedPerson.lastName);
+        // Verify BOTH live and previously soft-deleted persons are fully scrubbed (B4).
+        foreach (Guid pid in new[] { synPerson, synDeletedPerson })
+        {
+            var pRow = await conn.QuerySingleAsync<(bool isDeleted, string lastName, string? firstName, DateTime? dob, string sex, string ethnicity)>(
+                "SELECT isDeleted, lastName, firstName, dob, sex, ethnicity FROM dbo.person WHERE personId = @p", new { p = pid });
+            Assert.True(pRow.isDeleted);
+            Assert.Equal("[purged]", pRow.lastName);
+            Assert.Null(pRow.firstName);
+            Assert.Null(pRow.dob);
+            Assert.Equal("unknown", pRow.sex);
+            Assert.Equal("unknown", pRow.ethnicity);
+        }
+
+        // Verify location geocodes/ZIP, intakeBatch.rawContent, appUser credentials, recoveryCode, and userAssignment are scrubbed (B4).
+        var locRow = await conn.QuerySingleAsync<(bool isDeleted, string? postalCode, decimal? latitude, decimal? longitude, string? censusTract)>(
+            "SELECT isDeleted, postalCode, latitude, longitude, censusTract FROM dbo.location WHERE locationId = @id", new { id = synLocation });
+        Assert.True(locRow.isDeleted);
+        Assert.Null(locRow.postalCode);
+        Assert.Null(locRow.latitude);
+        Assert.Null(locRow.longitude);
+        Assert.Null(locRow.censusTract);
+
+        var batchRow = await conn.QuerySingleAsync<(bool isDeleted, byte[]? rawContent)>(
+            "SELECT isDeleted, rawContent FROM dbo.intakeBatch WHERE intakeBatchId = @id", new { id = synBatch });
+        Assert.True(batchRow.isDeleted);
+        Assert.Null(batchRow.rawContent);
+
+        var userRow = await conn.QuerySingleAsync<(bool isDeleted, bool isActive, string displayName, string passwordHash, string? mfaSecretProtected)>(
+            "SELECT isDeleted, isActive, displayName, passwordHash, mfaSecretProtected FROM auth.appUser WHERE appUserId = @id", new { id = synUser });
+        Assert.True(userRow.isDeleted);
+        Assert.False(userRow.isActive);
+        Assert.Equal("[purged]", userRow.displayName);
+        Assert.Equal("[purged]", userRow.passwordHash);
+        Assert.Null(userRow.mfaSecretProtected);
+
+        var recRow = await conn.QuerySingleAsync<(bool isDeleted, string codeHash)>(
+            "SELECT isDeleted, codeHash FROM auth.mfaRecoveryCode WHERE mfaRecoveryCodeId = @id", new { id = synRecovery });
+        Assert.True(recRow.isDeleted);
+        Assert.Equal("[purged]", recRow.codeHash);
+
+        Assert.True(await conn.ExecuteScalarAsync<bool>("SELECT isDeleted FROM auth.userAssignment WHERE userAssignmentId = @id", new { id = synAssign }));
 
         var purgedSearch = await conn.QuerySingleAsync<(bool isDeleted, string searchText)>(
             "SELECT isDeleted, searchText FROM logs.searchLog WHERE searchLogId = @s", new { s = synSearch });

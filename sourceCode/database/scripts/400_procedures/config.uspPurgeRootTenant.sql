@@ -13,7 +13,7 @@ CreateDate:   2026-10-24
 ========================================================================================================================
 Description:
 
-Platform-only, two-step confirmed, audited per-root-tenant purge (#346). Requires @confirmationCode = N'PURGE:' + tenantCode and refuses the platform root. Scrubs and soft-deletes every mutable table carrying rootTenantId, leaves append-only logs.auditEvent intact (IDs only), and returns a purge report including when data ages out of backups.
+Platform-only, two-step confirmed, audited per-root-tenant purge (#346, B4, I16). Requires @confirmationCode = N'PURGE:' + tenantCode and refuses the platform root. Scrubs and soft-deletes all 70 mutable tenant/auth tables (live and previously soft-deleted rows) in independently committed 5,000-row batches, leaves append-only logs.auditEvent intact, verifies zero unscrubbed rows remain, and returns a purge report including when data ages out of backups.
 
 ========================================================================================================================
 Requirements and Key Dependencies:
@@ -110,12 +110,11 @@ BEGIN
             ;THROW 51422, N'@backupRetentionDays must be between 1 and 3650.', 1;
         END;
 
-        BEGIN TRANSACTION;
-
         -- =========================================================================================
         -- ===== The procedure's own work starts here. Everything above and below is boilerplate. ==
         -- =========================================================================================
 
+        BEGIN TRANSACTION;
         DECLARE @auditScope UNIQUEIDENTIFIER = TRY_CAST (SESSION_CONTEXT (N'scopeKey') AS UNIQUEIDENTIFIER);
         DECLARE @auditSessionRef UNIQUEIDENTIFIER, @auditActingTenant UNIQUEIDENTIFIER, @auditViewAs UNIQUEIDENTIFIER;
         SELECT @auditSessionRef = sessionReference, @auditActingTenant = actingTenantId, @auditViewAs = viewAsUserId
@@ -128,6 +127,7 @@ BEGIN
                                 sessionReference, traceId, actingTenantId, viewAsUserId, userAgentHash)
         VALUES (auth.udfSessionUserId (), @rootTenantId, 'delete', 'tenant', @rootTenantId, @auditClientAddress, @rootTenantId,
                 @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs, @auditUserAgentHash);
+        COMMIT TRANSACTION;
 
         EXEC config.uspPurgeRootTenantInternal @rootTenantId = @rootTenantId, @backupRetentionDays = @backupRetentionDays;
         SET @Comments = CONCAT (N'Root tenant purge completed for ', @rootTenantId);
@@ -135,11 +135,6 @@ BEGIN
         -- =========================================================================================
         -- ===== End of the procedure's own work. ===================================================
         -- =========================================================================================
-
-        IF @@TRANCOUNT > 0
-        BEGIN
-            COMMIT TRANSACTION;
-        END;
 
         -- Completion. Deliberately after the COMMIT.
         SET @EndTimeUtc = SYSUTCDATETIME ();
@@ -213,7 +208,7 @@ EXEC util.uspSetObjectDescription
       @SchemaName  = N'config'
     , @ObjectType  = N'PROCEDURE'
     , @ObjectName  = N'uspPurgeRootTenant'
-    , @Description = N'Platform-only, two-step confirmed, audited per-root-tenant purge (#346). Requires @confirmationCode = N''PURGE:'' + tenantCode and refuses the platform root. Scrubs and soft-deletes every mutable table carrying rootTenantId, leaves append-only logs.auditEvent intact (IDs only), and returns a purge report including when data ages out of backups.';
+    , @Description = N'Platform-only, two-step confirmed, audited per-root-tenant purge (#346, B4, I16). Requires @confirmationCode = N''PURGE:'' + tenantCode and refuses the platform root. Scrubs and soft-deletes all 70 mutable tenant/auth tables (live and previously soft-deleted rows) in independently committed 5,000-row batches, leaves append-only logs.auditEvent intact, verifies zero unscrubbed rows remain, and returns a purge report including when data ages out of backups.';
 GO
 
 IF DATABASE_PRINCIPAL_ID (N'meritWebRole') IS NOT NULL

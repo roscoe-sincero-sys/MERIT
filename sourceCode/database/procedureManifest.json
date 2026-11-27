@@ -1208,8 +1208,20 @@
     "isOutput": false
    },
    {
-    "name": "includePayloads",
-    "type": "BIT",
+    "name": "tableName",
+    "type": "NVARCHAR (128)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "pageNumber",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "pageSize",
+    "type": "INT",
     "hasDefault": true,
     "isOutput": false
    }
@@ -1228,8 +1240,20 @@
     "isOutput": false
    },
    {
-    "name": "includePayloads",
-    "type": "BIT",
+    "name": "tableName",
+    "type": "NVARCHAR (128)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "pageNumber",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "pageSize",
+    "type": "INT",
     "hasDefault": true,
     "isOutput": false
    }
