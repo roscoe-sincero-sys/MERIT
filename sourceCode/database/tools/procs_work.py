@@ -636,16 +636,27 @@ DECLARE @resolvedAddress VARCHAR (45) = COALESCE (NULLIF (@clientAddress, ''), @
 DECLARE @resolvedTrace VARCHAR (64) = COALESCE (NULLIF (@traceId, ''), @auditTraceId);
 
 INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, recordCount, clientAddress, owningTenantId,
-                        sessionReference, traceId, actingTenantId, viewAsUserId, viewKind, filterJson)
+                        sessionReference, traceId, actingTenantId, viewAsUserId, viewKind, filterJson, userAgentHash)
 VALUES (auth.udfSessionUserId (), @root, @eventAction, @entityType, @entityId, @recordCount,
-        @resolvedAddress, @owner, @auditSessionRef, @resolvedTrace, @auditActingTenant, @auditViewAs, @viewKind, @filterJson);
+        @resolvedAddress, @owner, @auditSessionRef, @resolvedTrace, @auditActingTenant, @auditViewAs, @viewKind, @filterJson, @auditUserAgentHash);
 
 DECLARE @auditEventId BIGINT = SCOPE_IDENTITY ();
 
 IF @recordIdsJson IS NOT NULL AND ISJSON (@recordIdsJson) = 1 AND @root IS NOT NULL
 BEGIN
-    INSERT logs.auditEventRecord (auditEventRecordId, auditEventId, rootTenantId, entityType, entityId)
-    SELECT {NEWID}, @auditEventId, @root, x.entityType, x.entityId
+    INSERT logs.auditEventRecord (auditEventRecordId, auditEventId, rootTenantId, entityType, entityId, owningTenantId)
+    SELECT {NEWID}, @auditEventId, @root, x.entityType, x.entityId,
+           CASE x.entityType
+               WHEN 'person'                 THEN dbo.udfPatientWorkOwner (x.entityId)
+               WHEN 'patientCare'            THEN dbo.udfPatientWorkOwner (x.entityId)
+               WHEN 'labResult'              THEN dbo.udfPatientWorkOwner ((SELECT lr.personId FROM dbo.labResult AS lr WHERE lr.labResultId = x.entityId))
+               WHEN 'exposureCase'           THEN (SELECT ec.owningTenantId FROM dbo.exposureCase AS ec WHERE ec.exposureCaseId = x.entityId)
+               WHEN 'investigation'          THEN (SELECT inv.owningTenantId FROM dbo.investigation AS inv WHERE inv.investigationId = x.entityId)
+               WHEN 'stagingRow'             THEN (SELECT sr.owningTenantId FROM dbo.stagingRow AS sr WHERE sr.stagingRowId = x.entityId)
+               WHEN 'workTask'               THEN (SELECT wt.owningTenantId FROM dbo.workTask AS wt WHERE wt.workTaskId = x.entityId)
+               WHEN 'testingPlan'            THEN (SELECT wt.owningTenantId FROM dbo.workTask AS wt WHERE wt.workTaskId = x.entityId)
+               WHEN 'notificationObligation' THEN (SELECT no2.owningTenantId FROM dbo.notificationObligation AS no2 WHERE no2.notificationObligationId = x.entityId)
+           END
       FROM (SELECT DISTINCT
                    COALESCE (NULLIF (JSON_VALUE (j.[value], '$.entityType'), ''), @entityType) AS entityType,
                    COALESCE (TRY_CAST (JSON_VALUE (j.[value], '$.entityId') AS UNIQUEIDENTIFIER),
@@ -712,8 +723,10 @@ INSERT @users SELECT u.appUserId FROM auth.appUser AS u
                      -- Root configuration applies to every reviewed county in this root, never to another root.
                      OR (e.owningTenantId=e.rootTenantId AND e.entityType IN ('jurisdictionSetting','threshold','notificationRule')))))
        AND (@appUserId IS NULL OR e.appUserId = @appUserId)
-       AND (@entityId IS NULL OR e.entityId = @entityId
-            OR EXISTS (SELECT 1 FROM logs.auditEventRecord AS r WHERE r.auditEventId = e.auditEventId AND r.entityId = @entityId AND r.isDeleted = 0))
+       AND (@entityId IS NULL OR e.auditEventId IN (
+                SELECT a.auditEventId FROM logs.auditEvent AS a WHERE a.entityId = @entityId
+                UNION
+                SELECT r.auditEventId FROM logs.auditEventRecord AS r WHERE r.entityId = @entityId AND r.isDeleted = 0))
        AND (@eventAction IS NULL OR e.eventAction = @eventAction
             -- "signInEvents": every sign-in and account-security action at once (#191).
             OR (@eventAction = 'signInEvents' AND e.eventAction IN ('signIn', 'signInFailed', 'signOut', 'mfaEnrolled', 'mfaEmailEnabled', 'mfaEmailDisabled', 'mfaMethodChanged', 'mfaCodeSent', 'mfaCodeNotSent', 'mfaCodeRefused', 'mfaCodeLocked', 'passwordChanged', 'passwordResetRequested', 'passwordResetCompleted', 'passwordSetByAdmin')))
@@ -739,7 +752,8 @@ OPTION (RECOMPILE);
         "schema": "logs", "name": "uspGetAuditEventRecords", "kind": "read", "grants": WEB, "ticket": "#333",
         "permission": "audit.view",
         "desc": "Returns the manifest of record identifiers associated with one list, export or batch audit event, "
-                "checking that the caller's review scope covers that event (#333).",
+                "checking both parent-event review scope (#333) and per-record tenant ownership (#341), plus the count "
+                "of manifest rows outside the caller's review scope.",
         "params": "@auditEventId BIGINT",
         "key": "CONCAT (N'auditEventId=', @auditEventId)",
         "body": """
@@ -756,22 +770,60 @@ INSERT @users SELECT u.appUserId FROM auth.appUser AS u
    AND (EXISTS (SELECT 1 FROM @scope AS s WHERE s.tenantId = u.homeTenantId)
         OR EXISTS (SELECT 1 FROM auth.userAssignment AS ua JOIN @scope AS s ON s.tenantId = ua.tenantId WHERE ua.appUserId = u.appUserId AND ua.isDeleted = 0));
 
-IF NOT EXISTS (SELECT 1
-                 FROM logs.auditEvent AS e
-                WHERE e.auditEventId = @auditEventId
-                  AND (EXISTS (SELECT 1 FROM @wholeRoots AS w WHERE w.rootTenantId = e.rootTenantId)
-                       OR (EXISTS (SELECT 1 FROM @partRoots AS p WHERE p.rootTenantId = e.rootTenantId)
-                           AND ((e.owningTenantId IS NULL AND EXISTS (SELECT 1 FROM @users AS x WHERE x.appUserId = e.appUserId))
-                                OR EXISTS (SELECT 1 FROM @scope AS s WHERE s.tenantId = e.owningTenantId)
-                                OR (e.owningTenantId = e.rootTenantId AND e.entityType IN ('jurisdictionSetting', 'threshold', 'notificationRule'))))))
+DECLARE @eventRoot UNIQUEIDENTIFIER;
+SELECT @eventRoot = e.rootTenantId
+  FROM logs.auditEvent AS e
+ WHERE e.auditEventId = @auditEventId
+   AND (EXISTS (SELECT 1 FROM @wholeRoots AS w WHERE w.rootTenantId = e.rootTenantId)
+        OR (EXISTS (SELECT 1 FROM @partRoots AS p WHERE p.rootTenantId = e.rootTenantId)
+            AND ((e.owningTenantId IS NULL AND EXISTS (SELECT 1 FROM @users AS x WHERE x.appUserId = e.appUserId))
+                 OR EXISTS (SELECT 1 FROM @scope AS s WHERE s.tenantId = e.owningTenantId)
+                 OR (e.owningTenantId = e.rootTenantId AND e.entityType IN ('jurisdictionSetting', 'threshold', 'notificationRule')))));
+
+IF @eventRoot IS NULL
 BEGIN
     ;THROW 51404, N'The audit event was not found, or you do not have access to it.', 1;
 END;
 
-SELECT r.entityType, r.entityId
+DECLARE @isWholeRoot BIT = CASE WHEN EXISTS (SELECT 1 FROM @wholeRoots AS w WHERE w.rootTenantId = @eventRoot) THEN 1 ELSE 0 END;
+
+DECLARE @manifest TABLE (
+    entityType VARCHAR (30) NOT NULL,
+    entityId   UNIQUEIDENTIFIER NOT NULL,
+    isVisible  BIT NOT NULL
+);
+
+INSERT @manifest (entityType, entityId, isVisible)
+SELECT r.entityType, r.entityId,
+       CASE
+           WHEN @isWholeRoot = 1 THEN 1
+           WHEN r.entityType IN ('person', 'patientCare')
+                THEN CASE WHEN COALESCE (r.owningTenantId, dbo.udfPatientWorkOwner (r.entityId)) IN (SELECT tenantId FROM @scope) THEN 1 ELSE 0 END
+           WHEN r.entityType = 'labResult'
+                THEN CASE WHEN COALESCE (r.owningTenantId, dbo.udfPatientWorkOwner ((SELECT lr.personId FROM dbo.labResult AS lr WHERE lr.labResultId = r.entityId))) IN (SELECT tenantId FROM @scope) THEN 1 ELSE 0 END
+           WHEN r.entityType = 'exposureCase'
+                THEN CASE WHEN COALESCE (r.owningTenantId, (SELECT ec.owningTenantId FROM dbo.exposureCase AS ec WHERE ec.exposureCaseId = r.entityId)) IN (SELECT tenantId FROM @scope) THEN 1 ELSE 0 END
+           WHEN r.entityType = 'investigation'
+                THEN CASE WHEN COALESCE (r.owningTenantId, (SELECT inv.owningTenantId FROM dbo.investigation AS inv WHERE inv.investigationId = r.entityId)) IN (SELECT tenantId FROM @scope) THEN 1 ELSE 0 END
+           WHEN r.entityType = 'stagingRow'
+                THEN CASE WHEN COALESCE (r.owningTenantId, (SELECT sr.owningTenantId FROM dbo.stagingRow AS sr WHERE sr.stagingRowId = r.entityId)) IN (SELECT tenantId FROM @scope) THEN 1 ELSE 0 END
+           WHEN r.entityType IN ('workTask', 'testingPlan')
+                THEN CASE WHEN COALESCE (r.owningTenantId, (SELECT wt.owningTenantId FROM dbo.workTask AS wt WHERE wt.workTaskId = r.entityId)) IN (SELECT tenantId FROM @scope) THEN 1 ELSE 0 END
+           WHEN r.entityType = 'notificationObligation'
+                THEN CASE WHEN COALESCE (r.owningTenantId, (SELECT no2.owningTenantId FROM dbo.notificationObligation AS no2 WHERE no2.notificationObligationId = r.entityId)) IN (SELECT tenantId FROM @scope) THEN 1 ELSE 0 END
+           ELSE 1
+       END
   FROM logs.auditEventRecord AS r
- WHERE r.auditEventId = @auditEventId AND r.isDeleted = 0
- ORDER BY r.entityType, r.entityId;
+ WHERE r.auditEventId = @auditEventId AND r.isDeleted = 0;
+
+SELECT entityType, entityId
+  FROM @manifest
+ WHERE isVisible = 1
+ ORDER BY entityType, entityId;
+
+SELECT COUNT (*) AS hiddenCount
+  FROM @manifest
+ WHERE isVisible = 0;
 """,
     },
     {
@@ -797,16 +849,27 @@ VALUES ({NEWID}, COALESCE (@user, '00000000-0000-0000-0000-000000000000'),
         @resultCount, SYSUTCDATETIME (), @auditSessionRef, @auditClientAddress, @auditActingTenant, 0, @searchSource);
 
 INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, recordCount, clientAddress, owningTenantId,
-                        sessionReference, traceId, actingTenantId, viewAsUserId, viewKind, filterJson)
+                        sessionReference, traceId, actingTenantId, viewAsUserId, viewKind, filterJson, userAgentHash)
 VALUES (@user, @root, 'search', @entityType, NULL, @resultCount, @auditClientAddress, NULL,
-        @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs, 'direct', @filterJson);
+        @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs, 'direct', @filterJson, @auditUserAgentHash);
 
 DECLARE @auditEventId BIGINT = SCOPE_IDENTITY ();
 
 IF @recordIdsJson IS NOT NULL AND ISJSON (@recordIdsJson) = 1 AND @root IS NOT NULL
 BEGIN
-    INSERT logs.auditEventRecord (auditEventRecordId, auditEventId, rootTenantId, entityType, entityId)
-    SELECT {NEWID}, @auditEventId, @root, x.entityType, x.entityId
+    INSERT logs.auditEventRecord (auditEventRecordId, auditEventId, rootTenantId, entityType, entityId, owningTenantId)
+    SELECT {NEWID}, @auditEventId, @root, x.entityType, x.entityId,
+           CASE x.entityType
+               WHEN 'person'                 THEN dbo.udfPatientWorkOwner (x.entityId)
+               WHEN 'patientCare'            THEN dbo.udfPatientWorkOwner (x.entityId)
+               WHEN 'labResult'              THEN dbo.udfPatientWorkOwner ((SELECT lr.personId FROM dbo.labResult AS lr WHERE lr.labResultId = x.entityId))
+               WHEN 'exposureCase'           THEN (SELECT ec.owningTenantId FROM dbo.exposureCase AS ec WHERE ec.exposureCaseId = x.entityId)
+               WHEN 'investigation'          THEN (SELECT inv.owningTenantId FROM dbo.investigation AS inv WHERE inv.investigationId = x.entityId)
+               WHEN 'stagingRow'             THEN (SELECT sr.owningTenantId FROM dbo.stagingRow AS sr WHERE sr.stagingRowId = x.entityId)
+               WHEN 'workTask'               THEN (SELECT wt.owningTenantId FROM dbo.workTask AS wt WHERE wt.workTaskId = x.entityId)
+               WHEN 'testingPlan'            THEN (SELECT wt.owningTenantId FROM dbo.workTask AS wt WHERE wt.workTaskId = x.entityId)
+               WHEN 'notificationObligation' THEN (SELECT no2.owningTenantId FROM dbo.notificationObligation AS no2 WHERE no2.notificationObligationId = x.entityId)
+           END
       FROM (SELECT DISTINCT
                    COALESCE (NULLIF (JSON_VALUE (j.[value], '$.entityType'), ''), @entityType) AS entityType,
                    COALESCE (TRY_CAST (JSON_VALUE (j.[value], '$.entityId') AS UNIQUEIDENTIFIER),
@@ -819,9 +882,10 @@ SET @Comments = N'Search logged.';
 """,
     },
     {
-        "schema": "logs", "name": "uspPurgeAuditEventRecords", "kind": "write", "grants": WORKER, "ticket": "#333",
+        "schema": "logs", "name": "uspPurgeAuditEventRecords", "kind": "write", "no_tx": True, "grants": WORKER, "ticket": "#333",
         "desc": "Retention purger for logs.auditEventRecord: soft-deletes and scrubs record identifiers older than "
-                "@retentionDays (default 365, minimum 30) in batches. Granted to meritWorkerRole only (#333).",
+                "@retentionDays (default 365, minimum 30) in independently committed 5,000-row batches so concurrent web "
+                "and intake writes are not blocked (#333, #340). Granted to meritWorkerRole only.",
         "params": "@retentionDays INT = 365",
         "key": "CONCAT (N'retentionDays=', @retentionDays)",
         "body": """
@@ -831,14 +895,22 @@ DECLARE @total INT = 0, @batch INT = 1;
 
 WHILE @batch > 0
 BEGIN
+    BEGIN TRANSACTION;
     UPDATE TOP (5000) logs.auditEventRecord
-       SET entityId   = '00000000-0000-0000-0000-000000000000'
-         , isDeleted  = 1
-         , modifiedBy = N'retention'
+       SET entityId       = '00000000-0000-0000-0000-000000000000'
+         , owningTenantId = NULL
+         , isDeleted      = 1
+         , modifiedBy     = N'retention'
      WHERE isDeleted = 0 AND createdDateUtc < @cutoff;
 
     SET @batch = @@ROWCOUNT;
+    COMMIT TRANSACTION;
+
     SET @total = @total + @batch;
+    IF @batch = 5000
+    BEGIN
+        WAITFOR DELAY '00:00:00.050';
+    END;
 END;
 
 SELECT @total AS purgedCount;

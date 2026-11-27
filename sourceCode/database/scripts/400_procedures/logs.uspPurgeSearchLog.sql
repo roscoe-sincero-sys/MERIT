@@ -13,7 +13,7 @@ CreateDate:   2026-10-24
 ========================================================================================================================
 Description:
 
-Scrubs searchText and personal correlation fields and soft-deletes logs.searchLog rows older than @retentionDays (30 to 3650, default 90) in batches. Worker-only; never hard-deletes (#329).
+Scrubs searchText and personal correlation fields and soft-deletes logs.searchLog rows older than @retentionDays (30 to 3650, default 90) in independently committed 5,000-row batches (#329, #340). Worker-only; never hard-deletes.
 
 ========================================================================================================================
 Requirements and Key Dependencies:
@@ -86,8 +86,6 @@ BEGIN
             ;THROW 51422, N'Retention must be from 30 to 3650 days.', 1;
         END;
 
-        BEGIN TRANSACTION;
-
         -- =========================================================================================
         -- ===== The procedure's own work starts here. Everything above and below is boilerplate. ==
         -- =========================================================================================
@@ -96,6 +94,7 @@ BEGIN
         DECLARE @count INT = 0, @batch INT = 1;
         WHILE @batch > 0
         BEGIN
+            BEGIN TRANSACTION;
             UPDATE TOP (5000) logs.searchLog
                SET searchText       = N''
                  , clientAddress    = NULL
@@ -106,7 +105,12 @@ BEGIN
                  , modifiedBy       = N'MERIT search log retention'
              WHERE searchedUtc < @cutoff AND isDeleted = 0;
             SET @batch = @@ROWCOUNT;
+            COMMIT TRANSACTION;
             SET @count += @batch;
+            IF @batch = 5000
+            BEGIN
+                WAITFOR DELAY '00:00:00.050';
+            END;
         END;
         SELECT @count AS purged;
         SET @Comments = CONCAT (N'Scrubbed ', @count, N' search log row(s).');
@@ -114,11 +118,6 @@ BEGIN
         -- =========================================================================================
         -- ===== End of the procedure's own work. ===================================================
         -- =========================================================================================
-
-        IF @@TRANCOUNT > 0
-        BEGIN
-            COMMIT TRANSACTION;
-        END;
 
         -- Completion. Deliberately after the COMMIT.
         SET @EndTimeUtc = SYSUTCDATETIME ();
@@ -192,7 +191,7 @@ EXEC util.uspSetObjectDescription
       @SchemaName  = N'logs'
     , @ObjectType  = N'PROCEDURE'
     , @ObjectName  = N'uspPurgeSearchLog'
-    , @Description = N'Scrubs searchText and personal correlation fields and soft-deletes logs.searchLog rows older than @retentionDays (30 to 3650, default 90) in batches. Worker-only; never hard-deletes (#329).';
+    , @Description = N'Scrubs searchText and personal correlation fields and soft-deletes logs.searchLog rows older than @retentionDays (30 to 3650, default 90) in independently committed 5,000-row batches (#329, #340). Worker-only; never hard-deletes.';
 GO
 
 IF DATABASE_PRINCIPAL_ID (N'meritWorkerRole') IS NOT NULL

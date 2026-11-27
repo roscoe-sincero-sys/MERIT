@@ -294,6 +294,20 @@ BEGIN
          CASE WHEN @planKind='discharge' THEN auth.udfSessionUserId() END,CASE WHEN @planKind='discharge' THEN @evidence END);
         UPDATE dbo.workTask SET taskStatus='done',completedUtc=SYSUTCDATETIME(),completedByUserId=auth.udfSessionUserId(),resolutionNote=N'Clinician-approved testing plan recorded.'
          WHERE personId=@personId AND queueCode='testingReview' AND taskStatus='open' AND isDeleted=0;
+        -- In-transaction audit event (#335): commits or rolls back atomically with the data change.
+        DECLARE @auditScope UNIQUEIDENTIFIER = TRY_CAST (SESSION_CONTEXT (N'scopeKey') AS UNIQUEIDENTIFIER);
+        DECLARE @auditSessionRef UNIQUEIDENTIFIER, @auditActingTenant UNIQUEIDENTIFIER, @auditViewAs UNIQUEIDENTIFIER;
+        SELECT @auditSessionRef = sessionReference, @auditActingTenant = actingTenantId, @auditViewAs = viewAsUserId
+          FROM auth.sessionScope
+         WHERE sessionScopeId = @auditScope AND revokedUtc IS NULL AND expiresUtc > SYSUTCDATETIME () AND isDeleted = 0;
+        DECLARE @auditClientAddress VARCHAR (45) = TRY_CAST (SESSION_CONTEXT (N'clientAddress') AS VARCHAR (45));
+        DECLARE @auditTraceId VARCHAR (64) = TRY_CAST (SESSION_CONTEXT (N'traceId') AS VARCHAR (64));
+        DECLARE @auditUserAgentHash CHAR (16) = TRY_CAST (SESSION_CONTEXT (N'userAgentHash') AS CHAR (16));
+        INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, clientAddress, owningTenantId,
+                                sessionReference, traceId, actingTenantId, viewAsUserId, userAgentHash)
+        VALUES (auth.udfSessionUserId (), auth.udfSessionRootTenantId (), 'create', 'testingPlan', @workTaskId,
+                @auditClientAddress, dbo.udfPatientWorkOwner (@personId), @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs, @auditUserAgentHash);
+
 
         -- =========================================================================================
         -- ===== End of the procedure's own work. ===================================================

@@ -108,7 +108,6 @@ public sealed class CaseService(IClock clock, ICaseData cases, IWorkData work, I
         }
         int failed = await cases.SaveActivityAsync(TimeOrderedId.New(), input.ExposureCaseId, input.ActivityType, input.ActivityDate,
             input.ContactPersonId, input.Outcome, input.Note, ct).ConfigureAwait(false);
-        await audit.ChangedAsync("exposureCase", input.ExposureCaseId, ct).ConfigureAwait(false);
 
         return await ProposeLetterAsync(input.ExposureCaseId, failed, input.ActivityType, input.Outcome, ct).ConfigureAwait(false);
     }
@@ -185,7 +184,6 @@ public sealed class CaseService(IClock clock, ICaseData cases, IWorkData work, I
         if (request.JoinInvestigationId is Guid existing)
         {
             await cases.LinkInvestigationAsync(existing, request.ExposureCaseId, request.EmploymentId, ct).ConfigureAwait(false);
-            await audit.ChangedAsync("investigation", existing, ct).ConfigureAwait(false);
             return existing;
         }
 
@@ -200,7 +198,6 @@ public sealed class CaseService(IClock clock, ICaseData cases, IWorkData work, I
             request.InvestigationType == "workplace" ? request.OrganizationId : null,
             request.InvestigationType == "workplace" ? request.WorksiteLocationId : null, null, request.ExposureCaseId,
             request.EmploymentId, clock.Today), ct).ConfigureAwait(false);
-        await audit.CreatedAsync("investigation", id, ct).ConfigureAwait(false);
         return id;
     }
 }
@@ -259,7 +256,6 @@ public sealed class InvestigationService(IClock clock, ICaseData cases, AuditSer
             "Enter the completed date before clearing or closing.");
         v.ThrowIfInvalid();
         await cases.SaveInvestigationAsync(update, ct).ConfigureAwait(false);
-        await audit.ChangedAsync("investigation", update.InvestigationId, ct).ConfigureAwait(false);
     }
 
     /// <summary>Saves a sample; exceedance is computed by the database from the standard in force, never typed.</summary>
@@ -278,9 +274,7 @@ public sealed class InvestigationService(IClock clock, ICaseData cases, AuditSer
             new Validator().When(sample.OriginalModifiedUtc is null, "OriginalModifiedUtc", "Reload the reading before changing it.").ThrowIfInvalid();
         }
 
-        var exceeds = await cases.SaveEnvironmentalSampleAsync(sample, ct).ConfigureAwait(false);
-        await audit.ChangedAsync("investigation", sample.InvestigationId, ct).ConfigureAwait(false);
-        return exceeds;
+        return await cases.SaveEnvironmentalSampleAsync(sample, ct).ConfigureAwait(false);
     }
 
     public async Task<IReadOnlyDictionary<string, string[]>> SampleUnitsAsync(CancellationToken ct = default)
@@ -295,8 +289,6 @@ public sealed class InvestigationService(IClock clock, ICaseData cases, AuditSer
     {
         session.Require(Permissions.InvestigationEdit);
         var samples = EnvironmentalSamples.ParseCsv(investigationId, importId, csv, clock.Today, await SampleUnitsAsync(ct).ConfigureAwait(false));
-        int count = await cases.ImportEnvironmentalSamplesAsync(investigationId, samples, ct).ConfigureAwait(false);
-        await audit.ChangedAsync("investigation", investigationId, ct).ConfigureAwait(false);
-        return count;
+        return await cases.ImportEnvironmentalSamplesAsync(investigationId, samples, ct).ConfigureAwait(false);
     }
 }

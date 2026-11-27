@@ -13,7 +13,7 @@ CreateDate:   2026-10-24
 ========================================================================================================================
 Description:
 
-Returns the manifest of record identifiers associated with one list, export or batch audit event, checking that the caller's review scope covers that event (#333).
+Returns the manifest of record identifiers associated with one list, export or batch audit event, checking both parent-event review scope (#333) and per-record tenant ownership (#341), plus the count of manifest rows outside the caller's review scope.
 
 ========================================================================================================================
 Requirements and Key Dependencies:
@@ -96,22 +96,60 @@ BEGIN
            AND (EXISTS (SELECT 1 FROM @scope AS s WHERE s.tenantId = u.homeTenantId)
                 OR EXISTS (SELECT 1 FROM auth.userAssignment AS ua JOIN @scope AS s ON s.tenantId = ua.tenantId WHERE ua.appUserId = u.appUserId AND ua.isDeleted = 0));
 
-        IF NOT EXISTS (SELECT 1
-                         FROM logs.auditEvent AS e
-                        WHERE e.auditEventId = @auditEventId
-                          AND (EXISTS (SELECT 1 FROM @wholeRoots AS w WHERE w.rootTenantId = e.rootTenantId)
-                               OR (EXISTS (SELECT 1 FROM @partRoots AS p WHERE p.rootTenantId = e.rootTenantId)
-                                   AND ((e.owningTenantId IS NULL AND EXISTS (SELECT 1 FROM @users AS x WHERE x.appUserId = e.appUserId))
-                                        OR EXISTS (SELECT 1 FROM @scope AS s WHERE s.tenantId = e.owningTenantId)
-                                        OR (e.owningTenantId = e.rootTenantId AND e.entityType IN ('jurisdictionSetting', 'threshold', 'notificationRule'))))))
+        DECLARE @eventRoot UNIQUEIDENTIFIER;
+        SELECT @eventRoot = e.rootTenantId
+          FROM logs.auditEvent AS e
+         WHERE e.auditEventId = @auditEventId
+           AND (EXISTS (SELECT 1 FROM @wholeRoots AS w WHERE w.rootTenantId = e.rootTenantId)
+                OR (EXISTS (SELECT 1 FROM @partRoots AS p WHERE p.rootTenantId = e.rootTenantId)
+                    AND ((e.owningTenantId IS NULL AND EXISTS (SELECT 1 FROM @users AS x WHERE x.appUserId = e.appUserId))
+                         OR EXISTS (SELECT 1 FROM @scope AS s WHERE s.tenantId = e.owningTenantId)
+                         OR (e.owningTenantId = e.rootTenantId AND e.entityType IN ('jurisdictionSetting', 'threshold', 'notificationRule')))));
+
+        IF @eventRoot IS NULL
         BEGIN
             ;THROW 51404, N'The audit event was not found, or you do not have access to it.', 1;
         END;
 
-        SELECT r.entityType, r.entityId
+        DECLARE @isWholeRoot BIT = CASE WHEN EXISTS (SELECT 1 FROM @wholeRoots AS w WHERE w.rootTenantId = @eventRoot) THEN 1 ELSE 0 END;
+
+        DECLARE @manifest TABLE (
+            entityType VARCHAR (30) NOT NULL,
+            entityId   UNIQUEIDENTIFIER NOT NULL,
+            isVisible  BIT NOT NULL
+        );
+
+        INSERT @manifest (entityType, entityId, isVisible)
+        SELECT r.entityType, r.entityId,
+               CASE
+                   WHEN @isWholeRoot = 1 THEN 1
+                   WHEN r.entityType IN ('person', 'patientCare')
+                        THEN CASE WHEN COALESCE (r.owningTenantId, dbo.udfPatientWorkOwner (r.entityId)) IN (SELECT tenantId FROM @scope) THEN 1 ELSE 0 END
+                   WHEN r.entityType = 'labResult'
+                        THEN CASE WHEN COALESCE (r.owningTenantId, dbo.udfPatientWorkOwner ((SELECT lr.personId FROM dbo.labResult AS lr WHERE lr.labResultId = r.entityId))) IN (SELECT tenantId FROM @scope) THEN 1 ELSE 0 END
+                   WHEN r.entityType = 'exposureCase'
+                        THEN CASE WHEN COALESCE (r.owningTenantId, (SELECT ec.owningTenantId FROM dbo.exposureCase AS ec WHERE ec.exposureCaseId = r.entityId)) IN (SELECT tenantId FROM @scope) THEN 1 ELSE 0 END
+                   WHEN r.entityType = 'investigation'
+                        THEN CASE WHEN COALESCE (r.owningTenantId, (SELECT inv.owningTenantId FROM dbo.investigation AS inv WHERE inv.investigationId = r.entityId)) IN (SELECT tenantId FROM @scope) THEN 1 ELSE 0 END
+                   WHEN r.entityType = 'stagingRow'
+                        THEN CASE WHEN COALESCE (r.owningTenantId, (SELECT sr.owningTenantId FROM dbo.stagingRow AS sr WHERE sr.stagingRowId = r.entityId)) IN (SELECT tenantId FROM @scope) THEN 1 ELSE 0 END
+                   WHEN r.entityType IN ('workTask', 'testingPlan')
+                        THEN CASE WHEN COALESCE (r.owningTenantId, (SELECT wt.owningTenantId FROM dbo.workTask AS wt WHERE wt.workTaskId = r.entityId)) IN (SELECT tenantId FROM @scope) THEN 1 ELSE 0 END
+                   WHEN r.entityType = 'notificationObligation'
+                        THEN CASE WHEN COALESCE (r.owningTenantId, (SELECT no2.owningTenantId FROM dbo.notificationObligation AS no2 WHERE no2.notificationObligationId = r.entityId)) IN (SELECT tenantId FROM @scope) THEN 1 ELSE 0 END
+                   ELSE 1
+               END
           FROM logs.auditEventRecord AS r
-         WHERE r.auditEventId = @auditEventId AND r.isDeleted = 0
-         ORDER BY r.entityType, r.entityId;
+         WHERE r.auditEventId = @auditEventId AND r.isDeleted = 0;
+
+        SELECT entityType, entityId
+          FROM @manifest
+         WHERE isVisible = 1
+         ORDER BY entityType, entityId;
+
+        SELECT COUNT (*) AS hiddenCount
+          FROM @manifest
+         WHERE isVisible = 0;
 
         -- =========================================================================================
         -- ===== End of the procedure's own work. ===================================================
@@ -150,7 +188,7 @@ EXEC util.uspSetObjectDescription
       @SchemaName  = N'logs'
     , @ObjectType  = N'PROCEDURE'
     , @ObjectName  = N'uspGetAuditEventRecords'
-    , @Description = N'Returns the manifest of record identifiers associated with one list, export or batch audit event, checking that the caller''s review scope covers that event (#333).';
+    , @Description = N'Returns the manifest of record identifiers associated with one list, export or batch audit event, checking both parent-event review scope (#333) and per-record tenant ownership (#341), plus the count of manifest rows outside the caller''s review scope.';
 GO
 
 IF DATABASE_PRINCIPAL_ID (N'meritWebRole') IS NOT NULL

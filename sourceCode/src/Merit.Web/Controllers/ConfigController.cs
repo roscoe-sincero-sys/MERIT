@@ -353,9 +353,9 @@ public sealed class AdminController(IClock clock, AdminService admin, AuditServi
     [Authorize(Policy = Permissions.AuditView)]
     public async Task<IActionResult> AuditRecords(long id, CancellationToken ct)
     {
-        var records = await audit.RecordsAsync(session, id, ct);
-        await audit.ListedAsync("auditEvent", records.Count, ct, new { auditEventId = id });
-        return View("AuditRecords", (id, records));
+        var result = await audit.RecordsAsync(session, id, ct);
+        await audit.ListedAsync("auditEvent", result.Records.Count, ct, new { auditEventId = id });
+        return View("AuditRecords", (id, result));
     }
 
     /// <summary>The filtered view as CSV, up to 10,000 events. The export is itself audited.</summary>

@@ -45,6 +45,22 @@ public sealed partial class MeritExceptionFilter(ILogger<MeritExceptionFilter> l
                 LogAuditFailure(logger, ex.GetType().Name, traceId);
             }
         }
+        else if (context.Exception is NotFoundException && session?.IsAuthenticated == true)
+        {
+            try
+            {
+                var audit = http.RequestServices.GetService<AuditService>();
+                if (audit is not null)
+                {
+                    await audit.NotFoundAsync(RequestTrace.EntityTypeFromRoute(http),
+                        RequestTrace.EntityIdFromRoute(http), CancellationToken.None).ConfigureAwait(false);
+                }
+            }
+            catch (Exception ex)
+            {
+                LogAuditFailure(logger, ex.GetType().Name, traceId);
+            }
+        }
 
         var (status, title, message) = context.Exception switch
         {

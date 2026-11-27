@@ -13,7 +13,7 @@ CreateDate:   2026-10-24
 ========================================================================================================================
 Description:
 
-Purges sign-in events older than @retentionDays (at least 30), in batches: the personal data (address, forwarded chain, user agent, and both copies of an attempted name) is removed and the row is marked deleted, leaving only an anonymous count. This database never hard-deletes. The worker runs it daily (SignInLog:RetentionDays).
+Purges sign-in events older than @retentionDays (at least 30), in independently committed 5,000-row batches (#336, #340): the personal/correlation data (address, forwarded chain, user agent, session reference, trace ID, and both copies of an attempted name) is removed and the row is marked deleted, leaving only an anonymous count. This database never hard-deletes. The worker runs it daily (SignInLog:RetentionDays).
 
 ========================================================================================================================
 Requirements and Key Dependencies:
@@ -86,8 +86,6 @@ BEGIN
             ;THROW 50000, N'@retentionDays must be at least 30.', 1;
         END;
 
-        BEGIN TRANSACTION;
-
         -- =========================================================================================
         -- ===== The procedure's own work starts here. Everything above and below is boilerplate. ==
         -- =========================================================================================
@@ -97,12 +95,18 @@ BEGIN
 
         WHILE @batch > 0
         BEGIN
+            BEGIN TRANSACTION;
             UPDATE TOP (5000) logs.signInEvent
                SET clientAddress = NULL, forwardedFor = NULL, userAgent = NULL, attemptedNameHash = NULL,
-                   attemptedNameProtected = NULL, isDeleted = 1
+                   attemptedNameProtected = NULL, sessionReference = NULL, traceId = NULL, isDeleted = 1
              WHERE eventUtc < @cutoff AND isDeleted = 0;
             SET @batch = @@ROWCOUNT;
+            COMMIT TRANSACTION;
             SET @deleted += @batch;
+            IF @batch = 5000
+            BEGIN
+                WAITFOR DELAY '00:00:00.050';
+            END;
         END;
 
         SELECT @deleted AS purged;
@@ -112,11 +116,6 @@ BEGIN
         -- =========================================================================================
         -- ===== End of the procedure's own work. ===================================================
         -- =========================================================================================
-
-        IF @@TRANCOUNT > 0
-        BEGIN
-            COMMIT TRANSACTION;
-        END;
 
         -- Completion. Deliberately after the COMMIT.
         SET @EndTimeUtc = SYSUTCDATETIME ();
@@ -190,7 +189,7 @@ EXEC util.uspSetObjectDescription
       @SchemaName  = N'logs'
     , @ObjectType  = N'PROCEDURE'
     , @ObjectName  = N'uspPurgeSignInEvents'
-    , @Description = N'Purges sign-in events older than @retentionDays (at least 30), in batches: the personal data (address, forwarded chain, user agent, and both copies of an attempted name) is removed and the row is marked deleted, leaving only an anonymous count. This database never hard-deletes. The worker runs it daily (SignInLog:RetentionDays).';
+    , @Description = N'Purges sign-in events older than @retentionDays (at least 30), in independently committed 5,000-row batches (#336, #340): the personal/correlation data (address, forwarded chain, user agent, session reference, trace ID, and both copies of an attempted name) is removed and the row is marked deleted, leaving only an anonymous count. This database never hard-deletes. The worker runs it daily (SignInLog:RetentionDays).';
 GO
 
 IF DATABASE_PRINCIPAL_ID (N'meritWorkerRole') IS NOT NULL

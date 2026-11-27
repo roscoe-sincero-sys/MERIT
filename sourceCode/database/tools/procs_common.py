@@ -18,14 +18,15 @@ SELECT @jobProfile = userProfileId, @jobViewAs = viewAsUserId, @jobActing = acti
 JOB_SCOPE_COLUMNS = "requestedProfileId, requestedViewAsUserId, requestedActingTenantId"
 JOB_SCOPE_VALUES = "@jobProfile, @jobViewAs, @jobActing"
 
-# Session and request correlation context for logs.auditEvent and logs.searchLog (#326).
+# Session and request correlation context for logs.auditEvent and logs.searchLog (#326, #327).
 AUDIT_SESSION_VARS = """DECLARE @auditScope UNIQUEIDENTIFIER = TRY_CAST (SESSION_CONTEXT (N'scopeKey') AS UNIQUEIDENTIFIER);
 DECLARE @auditSessionRef UNIQUEIDENTIFIER, @auditActingTenant UNIQUEIDENTIFIER, @auditViewAs UNIQUEIDENTIFIER;
 SELECT @auditSessionRef = sessionReference, @auditActingTenant = actingTenantId, @auditViewAs = viewAsUserId
   FROM auth.sessionScope
  WHERE sessionScopeId = @auditScope AND revokedUtc IS NULL AND expiresUtc > SYSUTCDATETIME () AND isDeleted = 0;
 DECLARE @auditClientAddress VARCHAR (45) = TRY_CAST (SESSION_CONTEXT (N'clientAddress') AS VARCHAR (45));
-DECLARE @auditTraceId VARCHAR (64) = TRY_CAST (SESSION_CONTEXT (N'traceId') AS VARCHAR (64));"""
+DECLARE @auditTraceId VARCHAR (64) = TRY_CAST (SESSION_CONTEXT (N'traceId') AS VARCHAR (64));
+DECLARE @auditUserAgentHash CHAR (16) = TRY_CAST (SESSION_CONTEXT (N'userAgentHash') AS CHAR (16));"""
 BOTH = ["meritWebRole", "meritWorkerRole"]
 
 # Rejects a missing or stale row version on an UPDATE. Use after the UPDATE: @@ROWCOUNT = 0 means the row changed or is

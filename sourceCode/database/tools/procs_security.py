@@ -62,9 +62,10 @@ AUTOMATED_UA_PREDICATE = """(   e.userAgent LIKE N'%curl/%'
 PROCS = [
     # --------------------------------------------------------------------------------------------- #329 searchLog
     {
-        "schema": "logs", "name": "uspPurgeSearchLog", "kind": "write", "grants": WORKER, "ticket": "329",
+        "schema": "logs", "name": "uspPurgeSearchLog", "kind": "write", "no_tx": True, "grants": WORKER, "ticket": "329",
         "desc": "Scrubs searchText and personal correlation fields and soft-deletes logs.searchLog rows older than "
-                "@retentionDays (30 to 3650, default 90) in batches. Worker-only; never hard-deletes (#329).",
+                "@retentionDays (30 to 3650, default 90) in independently committed 5,000-row batches (#329, #340). "
+                "Worker-only; never hard-deletes.",
         "params": "@retentionDays INT = 90",
         "key": "CONCAT (N'retentionDays=', @retentionDays)",
         "validate": """IF @retentionDays NOT BETWEEN 30 AND 3650
@@ -76,6 +77,7 @@ DECLARE @cutoff DATETIME2 (3) = DATEADD (DAY, -@retentionDays, SYSUTCDATETIME ()
 DECLARE @count INT = 0, @batch INT = 1;
 WHILE @batch > 0
 BEGIN
+    BEGIN TRANSACTION;
     UPDATE TOP (5000) logs.searchLog
        SET searchText       = N''
          , clientAddress    = NULL
@@ -86,7 +88,12 @@ BEGIN
          , modifiedBy       = N'MERIT search log retention'
      WHERE searchedUtc < @cutoff AND isDeleted = 0;
     SET @batch = @@ROWCOUNT;
+    COMMIT TRANSACTION;
     SET @count += @batch;
+    IF @batch = 5000
+    BEGIN
+        WAITFOR DELAY '00:00:00.050';
+    END;
 END;
 SELECT @count AS purged;
 SET @Comments = CONCAT (N'Scrubbed ', @count, N' search log row(s).');
@@ -199,8 +206,9 @@ SELECT c.auditEventChangeId, c.auditEventId, c.rootTenantId, c.owningTenantId,
 """,
     },
     {
-        "schema": "logs", "name": "uspPurgeAuditEventChanges", "kind": "write", "grants": WORKER, "ticket": "332",
-        "desc": "Scrubs beforeJson/afterJson and soft-deletes logs.auditEventChange rows older than @retentionDays in batches. Worker-only (#332).",
+        "schema": "logs", "name": "uspPurgeAuditEventChanges", "kind": "write", "no_tx": True, "grants": WORKER, "ticket": "332",
+        "desc": "Scrubs beforeJson/afterJson and soft-deletes logs.auditEventChange rows older than @retentionDays in "
+                "independently committed 5,000-row batches so clinical saves are not blocked (#332, #340). Worker-only.",
         "params": "@retentionDays INT = 365",
         "key": "CONCAT (N'retentionDays=', @retentionDays)",
         "validate": """IF @retentionDays NOT BETWEEN 30 AND 3650
@@ -212,6 +220,7 @@ DECLARE @cutoff DATETIME2 (3) = DATEADD (DAY, -@retentionDays, SYSUTCDATETIME ()
 DECLARE @count INT = 0, @batch INT = 1;
 WHILE @batch > 0
 BEGIN
+    BEGIN TRANSACTION;
     UPDATE TOP (5000) logs.auditEventChange
        SET beforeJson = NULL
          , afterJson  = NULL
@@ -220,7 +229,12 @@ BEGIN
          , modifiedBy = N'MERIT change history retention'
      WHERE changedUtc < @cutoff AND isDeleted = 0;
     SET @batch = @@ROWCOUNT;
+    COMMIT TRANSACTION;
     SET @count += @batch;
+    IF @batch = 5000
+    BEGIN
+        WAITFOR DELAY '00:00:00.050';
+    END;
 END;
 SELECT @count AS purged;
 SET @Comments = CONCAT (N'Scrubbed ', @count, N' audit change detail row(s).');
@@ -307,21 +321,22 @@ SELECT 'bulkExportSpike',
 HAVING COUNT (DISTINCT {LOGICAL_EVENT_KEY}) >= @exportSpikeThreshold
     OR SUM (COALESCE (e.recordCount, 0)) >= @exportRowsThreshold;
 
--- Rule 3: Repeated permissionDenied or outside-scope probing
+-- Rule 3: Repeated permissionDenied, authenticated notFound, or outside-scope probing (#327)
 INSERT @findings
 SELECT 'probingDeniedOrOutsideScope',
        CASE WHEN COUNT (*) >= @probingThreshold * 2 THEN 'high' ELSE 'medium' END,
        e.appUserId, u.userName, u.displayName, MAX (e.clientAddress), NULL,
        COUNT (*),
-       CONCAT (N'Repeated permission-denied or outside-scope probing (', COUNT (*), N' events)'),
+       CONCAT (N'Repeated permission-denied, not-found, or outside-scope probing (', COUNT (*), N' events)'),
        (SELECT SUM (CASE WHEN e.eventAction = 'permissionDenied' THEN 1 ELSE 0 END) AS permissionDenied,
+               SUM (CASE WHEN e.eventAction = 'notFound' THEN 1 ELSE 0 END) AS notFound,
                SUM (CASE WHEN e.entityType = 'personOutsideScope' THEN 1 ELSE 0 END) AS outsideScope,
                @probingThreshold AS threshold FOR JSON PATH, WITHOUT_ARRAY_WRAPPER),
        MIN (e.eventUtc), MAX (e.eventUtc)
   FROM logs.auditEvent AS e
   LEFT JOIN auth.appUser AS u ON u.appUserId = e.appUserId
  WHERE e.eventUtc >= @since
-   AND (e.eventAction = 'permissionDenied' OR e.entityType = 'personOutsideScope')
+   AND (e.eventAction IN ('permissionDenied', 'notFound') OR e.entityType = 'personOutsideScope')
    AND (@all = 1 OR e.rootTenantId IN (SELECT rootTenantId FROM @wholeSecRoots)
         OR e.owningTenantId IN (SELECT tenantId FROM @secTenants)
         OR (e.owningTenantId IS NULL AND e.actingTenantId IN (SELECT tenantId FROM @secTenants)))
@@ -363,6 +378,24 @@ SELECT 'midSessionIpDrift',
         OR (e.owningTenantId IS NULL AND e.actingTenantId IN (SELECT tenantId FROM @secTenants)))
  GROUP BY e.appUserId, u.userName, u.displayName, e.sessionReference
 HAVING COUNT (DISTINCT {IP_PREFIX_EXPR}) > 1;
+
+-- Rule 11: Mid-session User-Agent drift (event-level tenant scope, #327)
+INSERT @findings
+SELECT 'midSessionUserAgentDrift',
+       CASE WHEN COUNT (DISTINCT e.userAgentHash) >= 3 THEN 'high' ELSE 'medium' END,
+       e.appUserId, u.userName, u.displayName, MAX (e.clientAddress), e.sessionReference,
+       COUNT (DISTINCT e.userAgentHash),
+       CONCAT (N'Mid-session User-Agent change (', COUNT (DISTINCT e.userAgentHash), N' distinct client agents in one session)'),
+       (SELECT COUNT (DISTINCT e.userAgentHash) AS distinctUserAgents, COUNT (*) AS events FOR JSON PATH, WITHOUT_ARRAY_WRAPPER),
+       MIN (e.eventUtc), MAX (e.eventUtc)
+  FROM logs.auditEvent AS e
+  LEFT JOIN auth.appUser AS u ON u.appUserId = e.appUserId
+ WHERE e.eventUtc >= @since AND e.sessionReference IS NOT NULL AND e.userAgentHash IS NOT NULL
+   AND (@all = 1 OR e.rootTenantId IN (SELECT rootTenantId FROM @wholeSecRoots)
+        OR e.owningTenantId IN (SELECT tenantId FROM @secTenants)
+        OR (e.owningTenantId IS NULL AND e.actingTenantId IN (SELECT tenantId FROM @secTenants)))
+ GROUP BY e.appUserId, u.userName, u.displayName, e.sessionReference
+HAVING COUNT (DISTINCT e.userAgentHash) > 1;
 
 -- Rule 6: Automated / headless User-Agent strings
 INSERT @findings
@@ -534,17 +567,20 @@ SELECT COALESCE (e.rootTenantId, @platformRoot),
 HAVING COUNT (DISTINCT {LOGICAL_EVENT_KEY}) >= @exportSpikeThreshold
     OR SUM (COALESCE (e.recordCount, 0)) >= @exportRowsThreshold;
 
--- Rule 3: probingDeniedOrOutsideScope (handles NULL rootTenantId safely under platform-only scope, B1 / Codex #3)
+-- Rule 3: probingDeniedOrOutsideScope (includes authenticated 404s, handles NULL rootTenantId safely under platform-only scope, #327)
 INSERT @candidates
 SELECT COALESCE (e.rootTenantId, @platformRoot),
        {SINGLE_OWNER_EXPR},
        e.appUserId, MAX (e.clientAddress), NULL,
        'probingDeniedOrOutsideScope', CASE WHEN COUNT (*) >= @probingThreshold * 2 THEN 'high' ELSE 'medium' END,
-       CONCAT (N'Repeated permission-denied or outside-scope probing (', COUNT (*), N' events)'),
-       (SELECT COUNT (*) AS events FOR JSON PATH, WITHOUT_ARRAY_WRAPPER),
+       CONCAT (N'Repeated permission-denied, not-found, or outside-scope probing (', COUNT (*), N' events)'),
+       (SELECT SUM (CASE WHEN e.eventAction = 'permissionDenied' THEN 1 ELSE 0 END) AS permissionDenied,
+               SUM (CASE WHEN e.eventAction = 'notFound' THEN 1 ELSE 0 END) AS notFound,
+               SUM (CASE WHEN e.entityType = 'personOutsideScope' THEN 1 ELSE 0 END) AS outsideScope,
+               COUNT (*) AS events FOR JSON PATH, WITHOUT_ARRAY_WRAPPER),
        CONCAT ('probingDeniedOrOutsideScope|', CONVERT (VARCHAR (36), COALESCE (e.rootTenantId, @platformRoot)), '|', COALESCE (CONVERT (VARCHAR (36), e.appUserId), 'none'), '|', @dayBucket)
   FROM logs.auditEvent AS e
- WHERE e.eventUtc >= @since AND (e.eventAction = 'permissionDenied' OR e.entityType = 'personOutsideScope')
+ WHERE e.eventUtc >= @since AND (e.eventAction IN ('permissionDenied', 'notFound') OR e.entityType = 'personOutsideScope')
  GROUP BY COALESCE (e.rootTenantId, @platformRoot), e.appUserId
 HAVING COUNT (*) >= @probingThreshold;
 
@@ -575,6 +611,20 @@ SELECT COALESCE (e.rootTenantId, @platformRoot),
  WHERE e.eventUtc >= @since AND e.sessionReference IS NOT NULL AND e.clientAddress IS NOT NULL
  GROUP BY COALESCE (e.rootTenantId, @platformRoot), e.appUserId, e.sessionReference
 HAVING COUNT (DISTINCT {IP_PREFIX_EXPR}) > 1;
+
+-- Rule 11: midSessionUserAgentDrift (source-event ownership, #327)
+INSERT @candidates
+SELECT COALESCE (e.rootTenantId, @platformRoot),
+       {SINGLE_OWNER_EXPR},
+       e.appUserId, MAX (e.clientAddress), e.sessionReference,
+       'midSessionUserAgentDrift', CASE WHEN COUNT (DISTINCT e.userAgentHash) >= 3 THEN 'high' ELSE 'medium' END,
+       CONCAT (N'Mid-session User-Agent change (', COUNT (DISTINCT e.userAgentHash), N' distinct client agents)'),
+       (SELECT COUNT (DISTINCT e.userAgentHash) AS distinctUserAgents, COUNT (*) AS events FOR JSON PATH, WITHOUT_ARRAY_WRAPPER),
+       CONCAT ('midSessionUserAgentDrift|', CONVERT (VARCHAR (36), COALESCE (e.rootTenantId, @platformRoot)), '|', COALESCE (CONVERT (VARCHAR (36), e.appUserId), 'none'), '|', CONVERT (VARCHAR (36), e.sessionReference))
+  FROM logs.auditEvent AS e
+ WHERE e.eventUtc >= @since AND e.sessionReference IS NOT NULL AND e.userAgentHash IS NOT NULL
+ GROUP BY COALESCE (e.rootTenantId, @platformRoot), e.appUserId, e.sessionReference
+HAVING COUNT (DISTINCT e.userAgentHash) > 1;
 
 -- Rule 6: automatedUserAgent (Codex #6 parity)
 INSERT @candidates

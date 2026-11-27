@@ -203,6 +203,7 @@ BEGIN
          WHERE sessionScopeId = @auditScope AND revokedUtc IS NULL AND expiresUtc > SYSUTCDATETIME () AND isDeleted = 0;
         DECLARE @auditClientAddress VARCHAR (45) = TRY_CAST (SESSION_CONTEXT (N'clientAddress') AS VARCHAR (45));
         DECLARE @auditTraceId VARCHAR (64) = TRY_CAST (SESSION_CONTEXT (N'traceId') AS VARCHAR (64));
+        DECLARE @auditUserAgentHash CHAR (16) = TRY_CAST (SESSION_CONTEXT (N'userAgentHash') AS CHAR (16));
 
         -- Outside scope: only on an exact name and DOB match, through the match-key table, and every hit is audited.
         IF NOT EXISTS (SELECT 1 FROM OPENJSON (COALESCE (@namePairsJson, N'[]'))) AND @found = 0 AND @nameKey1 IS NOT NULL AND @nameKey2 IS NOT NULL AND @dob IS NOT NULL

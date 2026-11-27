@@ -47,7 +47,7 @@ BEGIN
         CONSTRAINT PK_logs_auditEvent PRIMARY KEY CLUSTERED (auditEventId),
         CONSTRAINT CK_logs_auditEvent_eventAction
             CHECK (eventAction IN ('view', 'create', 'update', 'delete', 'merge', 'export', 'search', 'signIn',
-                                   'signInFailed', 'signOut', 'mfaEnrolled', 'permissionDenied', 'mfaEmailEnabled',
+                                   'signInFailed', 'signOut', 'mfaEnrolled', 'permissionDenied', 'notFound', 'mfaEmailEnabled',
                                    'mfaEmailDisabled', 'mfaMethodChanged', 'mfaCodeSent', 'mfaCodeNotSent',
                                    'mfaCodeRefused', 'mfaCodeLocked', 'passwordChanged', 'passwordResetRequested',
                                    'passwordResetCompleted', 'passwordSetByAdmin', 'grant', 'revoke', 'deactivate', 'reactivate', 'unlock', 'mfaResetByAdmin'))
@@ -79,7 +79,7 @@ IF NOT EXISTS (SELECT 1
                  FROM sys.check_constraints
                 WHERE name = N'CK_logs_auditEvent_eventAction'
                   AND parent_object_id = OBJECT_ID (N'logs.auditEvent')
-                  AND definition LIKE N'%mfaResetByAdmin%')
+                  AND definition LIKE N'%notFound%')
 BEGIN
     IF OBJECT_ID (N'logs.CK_logs_auditEvent_eventAction', N'C') IS NOT NULL
     BEGIN
@@ -91,7 +91,7 @@ BEGIN
         PRINT N'logs.auditEvent holds interim #190 action names; CK_logs_auditEvent_eventAction is added WITH NOCHECK.';
         ALTER TABLE logs.auditEvent WITH NOCHECK ADD CONSTRAINT CK_logs_auditEvent_eventAction
             CHECK (eventAction IN ('view', 'create', 'update', 'delete', 'merge', 'export', 'search', 'signIn',
-                                   'signInFailed', 'signOut', 'mfaEnrolled', 'permissionDenied', 'mfaEmailEnabled',
+                                   'signInFailed', 'signOut', 'mfaEnrolled', 'permissionDenied', 'notFound', 'mfaEmailEnabled',
                                    'mfaEmailDisabled', 'mfaMethodChanged', 'mfaCodeSent', 'mfaCodeNotSent',
                                    'mfaCodeRefused', 'mfaCodeLocked', 'passwordChanged', 'passwordResetRequested',
                                    'passwordResetCompleted', 'passwordSetByAdmin', 'grant', 'revoke', 'deactivate', 'reactivate', 'unlock', 'mfaResetByAdmin'));
@@ -100,7 +100,7 @@ BEGIN
     BEGIN
         ALTER TABLE logs.auditEvent WITH CHECK ADD CONSTRAINT CK_logs_auditEvent_eventAction
             CHECK (eventAction IN ('view', 'create', 'update', 'delete', 'merge', 'export', 'search', 'signIn',
-                                   'signInFailed', 'signOut', 'mfaEnrolled', 'permissionDenied', 'mfaEmailEnabled',
+                                   'signInFailed', 'signOut', 'mfaEnrolled', 'permissionDenied', 'notFound', 'mfaEmailEnabled',
                                    'mfaEmailDisabled', 'mfaMethodChanged', 'mfaCodeSent', 'mfaCodeNotSent',
                                    'mfaCodeRefused', 'mfaCodeLocked', 'passwordChanged', 'passwordResetRequested',
                                    'passwordResetCompleted', 'passwordSetByAdmin', 'grant', 'revoke', 'deactivate', 'reactivate', 'unlock', 'mfaResetByAdmin'));
@@ -245,4 +245,11 @@ EXEC util.uspSetObjectDescription @SchemaName = N'logs', @ObjectType = N'TABLE',
 EXEC util.uspSetObjectDescription @SchemaName = N'logs', @ObjectType = N'TABLE', @ObjectName = N'auditEvent', @ColumnName = N'viewAsUserId', @Description = N'User whose access an administrator was viewing when the event occurred; NULL outside View As (#326).';
 EXEC util.uspSetObjectDescription @SchemaName = N'logs', @ObjectType = N'TABLE', @ObjectName = N'auditEvent', @ColumnName = N'viewKind', @Description = N'For view events: direct (user opened the record) or incidental (loaded as a side effect of another screen, e.g. timeline); NULL for non-view or legacy rows (#333).';
 EXEC util.uspSetObjectDescription @SchemaName = N'logs', @ObjectType = N'TABLE', @ObjectName = N'auditEvent', @ColumnName = N'filterJson', @Description = N'Canonical non-PHI snapshot of list or export filter parameters (codes, IDs, dates, flags, sort, page). Never holds free-text search terms or patient data (#333).';
+GO
+
+-- Issue 327: minimal non-PII User-Agent hash (64-bit SHA-256 hex prefix) for mid-session User-Agent drift detection.
+IF COL_LENGTH (N'logs.auditEvent', N'userAgentHash') IS NULL
+    ALTER TABLE logs.auditEvent ADD userAgentHash CHAR (16) NULL;
+GO
+EXEC util.uspSetObjectDescription @SchemaName = N'logs', @ObjectType = N'TABLE', @ObjectName = N'auditEvent', @ColumnName = N'userAgentHash', @Description = N'First 16 uppercase hex characters of SHA-256 over the sanitized request User-Agent for mid-session User-Agent drift detection; never stores raw User-Agent strings (#327).';
 GO

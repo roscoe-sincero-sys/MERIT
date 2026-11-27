@@ -13,7 +13,7 @@ CreateDate:   2026-10-24
 ========================================================================================================================
 Description:
 
-Scrubs beforeJson/afterJson and soft-deletes logs.auditEventChange rows older than @retentionDays in batches. Worker-only (#332).
+Scrubs beforeJson/afterJson and soft-deletes logs.auditEventChange rows older than @retentionDays in independently committed 5,000-row batches so clinical saves are not blocked (#332, #340). Worker-only.
 
 ========================================================================================================================
 Requirements and Key Dependencies:
@@ -86,8 +86,6 @@ BEGIN
             ;THROW 51422, N'Retention must be from 30 to 3650 days.', 1;
         END;
 
-        BEGIN TRANSACTION;
-
         -- =========================================================================================
         -- ===== The procedure's own work starts here. Everything above and below is boilerplate. ==
         -- =========================================================================================
@@ -96,6 +94,7 @@ BEGIN
         DECLARE @count INT = 0, @batch INT = 1;
         WHILE @batch > 0
         BEGIN
+            BEGIN TRANSACTION;
             UPDATE TOP (5000) logs.auditEventChange
                SET beforeJson = NULL
                  , afterJson  = NULL
@@ -104,7 +103,12 @@ BEGIN
                  , modifiedBy = N'MERIT change history retention'
              WHERE changedUtc < @cutoff AND isDeleted = 0;
             SET @batch = @@ROWCOUNT;
+            COMMIT TRANSACTION;
             SET @count += @batch;
+            IF @batch = 5000
+            BEGIN
+                WAITFOR DELAY '00:00:00.050';
+            END;
         END;
         SELECT @count AS purged;
         SET @Comments = CONCAT (N'Scrubbed ', @count, N' audit change detail row(s).');
@@ -112,11 +116,6 @@ BEGIN
         -- =========================================================================================
         -- ===== End of the procedure's own work. ===================================================
         -- =========================================================================================
-
-        IF @@TRANCOUNT > 0
-        BEGIN
-            COMMIT TRANSACTION;
-        END;
 
         -- Completion. Deliberately after the COMMIT.
         SET @EndTimeUtc = SYSUTCDATETIME ();
@@ -190,7 +189,7 @@ EXEC util.uspSetObjectDescription
       @SchemaName  = N'logs'
     , @ObjectType  = N'PROCEDURE'
     , @ObjectName  = N'uspPurgeAuditEventChanges'
-    , @Description = N'Scrubs beforeJson/afterJson and soft-deletes logs.auditEventChange rows older than @retentionDays in batches. Worker-only (#332).';
+    , @Description = N'Scrubs beforeJson/afterJson and soft-deletes logs.auditEventChange rows older than @retentionDays in independently committed 5,000-row batches so clinical saves are not blocked (#332, #340). Worker-only.';
 GO
 
 IF DATABASE_PRINCIPAL_ID (N'meritWorkerRole') IS NOT NULL

@@ -14,7 +14,7 @@ public static class AuditText
         ("grant", "Granted access"), ("revoke", "Ended grant"), ("deactivate", "Deactivated"),
         ("reactivate", "Reactivated"), ("unlock", "Unlocked account"), ("mfaResetByAdmin", "Administrator reset MFA"),
         ("delete", "Deleted"), ("view", "Viewed"), ("create", "Created"), ("update", "Changed"), ("export", "Exported"), ("search", "Searched"),
-        ("permissionDenied", "Permission denied"),
+        ("permissionDenied", "Permission denied"), ("notFound", "Record not found"),
         ("signIn", "Signed in"), ("signInFailed", "Sign-in failed"), ("signOut", "Signed out"),
         ("mfaEnrolled", "Set up multi-factor authentication"),
         ("mfaEmailEnabled", "Turned on email codes"), ("mfaEmailDisabled", "Turned off email codes"),

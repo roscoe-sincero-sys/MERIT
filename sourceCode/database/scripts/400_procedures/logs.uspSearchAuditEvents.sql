@@ -128,8 +128,10 @@ BEGIN
                              -- Root configuration applies to every reviewed county in this root, never to another root.
                              OR (e.owningTenantId=e.rootTenantId AND e.entityType IN ('jurisdictionSetting','threshold','notificationRule')))))
                AND (@appUserId IS NULL OR e.appUserId = @appUserId)
-               AND (@entityId IS NULL OR e.entityId = @entityId
-                    OR EXISTS (SELECT 1 FROM logs.auditEventRecord AS r WHERE r.auditEventId = e.auditEventId AND r.entityId = @entityId AND r.isDeleted = 0))
+               AND (@entityId IS NULL OR e.auditEventId IN (
+                        SELECT a.auditEventId FROM logs.auditEvent AS a WHERE a.entityId = @entityId
+                        UNION
+                        SELECT r.auditEventId FROM logs.auditEventRecord AS r WHERE r.entityId = @entityId AND r.isDeleted = 0))
                AND (@eventAction IS NULL OR e.eventAction = @eventAction
                     -- "signInEvents": every sign-in and account-security action at once (#191).
                     OR (@eventAction = 'signInEvents' AND e.eventAction IN ('signIn', 'signInFailed', 'signOut', 'mfaEnrolled', 'mfaEmailEnabled', 'mfaEmailDisabled', 'mfaMethodChanged', 'mfaCodeSent', 'mfaCodeNotSent', 'mfaCodeRefused', 'mfaCodeLocked', 'passwordChanged', 'passwordResetRequested', 'passwordResetCompleted', 'passwordSetByAdmin')))

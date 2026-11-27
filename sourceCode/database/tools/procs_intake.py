@@ -459,8 +459,10 @@ BEGIN
             @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs);
     DECLARE @auditEventId BIGINT = SCOPE_IDENTITY ();
     IF @root IS NOT NULL
-        INSERT logs.auditEventRecord (auditEventRecordId, auditEventId, rootTenantId, entityType, entityId)
-        SELECT {NEWID}, @auditEventId, @root, 'stagingRow', stagingRowId FROM @corrected;
+        INSERT logs.auditEventRecord (auditEventRecordId, auditEventId, rootTenantId, entityType, entityId, owningTenantId)
+        SELECT {NEWID}, @auditEventId, @root, 'stagingRow', c.stagingRowId, sr.owningTenantId
+          FROM @corrected AS c
+          JOIN dbo.stagingRow AS sr ON sr.stagingRowId = c.stagingRowId;
 END;
 SELECT @count AS updated;
 SET @Comments = CONCAT (@count, N' rows corrected.');
@@ -563,8 +565,10 @@ BEGIN
             @releasedCount, @auditClientAddress, @singleOwner, @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs);
     DECLARE @auditEventId BIGINT = SCOPE_IDENTITY ();
     IF @auditRoot IS NOT NULL
-        INSERT logs.auditEventRecord (auditEventRecordId, auditEventId, rootTenantId, entityType, entityId)
-        SELECT {NEWID}, @auditEventId, @auditRoot, 'stagingRow', stagingRowId FROM @released;
+        INSERT logs.auditEventRecord (auditEventRecordId, auditEventId, rootTenantId, entityType, entityId, owningTenantId)
+        SELECT {NEWID}, @auditEventId, @auditRoot, 'stagingRow', r.stagingRowId, sr.owningTenantId
+          FROM @released AS r
+          JOIN dbo.stagingRow AS sr ON sr.stagingRowId = r.stagingRowId;
 END;
 
 SELECT @releasedCount AS releasedCount;
@@ -611,8 +615,10 @@ BEGIN
             @rejectedCount, @auditClientAddress, @singleOwner, @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs);
     DECLARE @auditEventId BIGINT = SCOPE_IDENTITY ();
     IF @auditRoot IS NOT NULL
-        INSERT logs.auditEventRecord (auditEventRecordId, auditEventId, rootTenantId, entityType, entityId)
-        SELECT {NEWID}, @auditEventId, @auditRoot, 'stagingRow', stagingRowId FROM @rejected;
+        INSERT logs.auditEventRecord (auditEventRecordId, auditEventId, rootTenantId, entityType, entityId, owningTenantId)
+        SELECT {NEWID}, @auditEventId, @auditRoot, 'stagingRow', r.stagingRowId, sr.owningTenantId
+          FROM @rejected AS r
+          JOIN dbo.stagingRow AS sr ON sr.stagingRowId = r.stagingRowId;
 END;
 
 SELECT @rejectedCount AS rejectedCount;

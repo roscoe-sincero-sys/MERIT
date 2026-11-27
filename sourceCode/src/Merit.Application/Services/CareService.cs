@@ -72,7 +72,6 @@ public sealed class CareService(ICareData data, IWorkData work, AuditService aud
         v.MaxLength("noticeFormReference", row.NoticeFormReference, 300, "Notice form reference");
         v.ThrowIfInvalid();
         int failed = await data.RecordAsync(row, ct).ConfigureAwait(false);
-        await audit.CreatedAsync("patientActivity", row.PersonActivityId, ct).ConfigureAwait(false);
         return row.ExposureCaseId is Guid caseId
             ? await cases.ProposeLetterAsync(caseId, failed, row.ActivityType, row.Outcome, ct).ConfigureAwait(false) : null;
     }
@@ -81,7 +80,6 @@ public sealed class CareService(ICareData data, IWorkData work, AuditService aud
     {
         session.Require(Permissions.PersonEdit); session.Require(Permissions.CaseEdit);
         await data.LinkAsync(personId, caseId, activityId, ct).ConfigureAwait(false);
-        await audit.ChangedAsync("patientActivity", activityId, ct).ConfigureAwait(false);
     }
 
     public async Task UploadAsync(Guid id, Guid personId, Guid? caseId, Guid? supersedes, string title, string fileName,
@@ -101,7 +99,6 @@ public sealed class CareService(ICareData data, IWorkData work, AuditService aud
         var type = PatientDocumentValidator.Validate(fileName, bytes);
         await data.SaveDocumentAsync(new(id, personId, title.Trim(), fileName, type, category, date, source.Trim(),
             SHA256.HashData(bytes), bytes, description, caseId, supersedes), ct).ConfigureAwait(false);
-        await audit.CreatedAsync("patientDocument", id, ct).ConfigureAwait(false);
     }
 
     public async Task<PatientDocumentRow> DocumentAsync(Guid personId, Guid id, CancellationToken ct)
@@ -116,13 +113,11 @@ public sealed class CareService(ICareData data, IWorkData work, AuditService aud
     {
         session.Require(Permissions.PersonEdit); ValidateReason(reason);
         await data.ReviewAsync(personId, id, applies, reason, ct, criteriaConfirmed).ConfigureAwait(false);
-        await audit.ChangedAsync("notificationObligation", id, ct).ConfigureAwait(false);
     }
     public async Task WithdrawAsync(Guid personId, Guid id, string reason, CancellationToken ct)
     {
         session.Require(Permissions.PersonEdit); ValidateReason(reason);
         await data.WithdrawAsync(personId, id, reason, ct).ConfigureAwait(false);
-        await audit.ChangedAsync("notificationObligation", id, ct).ConfigureAwait(false);
     }
     private static void ValidateReason(string reason)
     {
@@ -175,14 +170,12 @@ public sealed class CareService(ICareData data, IWorkData work, AuditService aud
         var v = new Validator(); v.Required("evidence", plan.Evidence, "Clinical/source evidence").MaxLength("evidence", plan.Evidence, 1000, "Clinical/source evidence")
             .MaxLength("currentGuidanceReason", plan.CurrentGuidanceReason, 1000, "Current guidance decision"); v.ThrowIfInvalid();
         await data.SaveTestingPlanAsync(plan, ct).ConfigureAwait(false);
-        await audit.CreatedAsync("testingPlan", plan.WorkTaskId, ct).ConfigureAwait(false);
     }
     public async Task ResolveTestingPlanAsync(Guid personId, Guid id, string evidence, bool confirmed, Guid? resultId, bool dismiss, CancellationToken ct)
     {
         session.Require(Permissions.PersonEdit); session.Require(Permissions.TaskEdit);
         var v = new Validator(); v.Required("evidence", evidence, "Source evidence").MaxLength("evidence", evidence, 1000, "Source evidence"); v.ThrowIfInvalid();
         await data.ResolveTestingPlanAsync(personId, id, evidence, confirmed, resultId, dismiss, ct).ConfigureAwait(false);
-        await audit.ChangedAsync("testingPlan", id, ct).ConfigureAwait(false);
     }
     public async Task<int> EvaluateAsync(Guid? ruleId, Guid? personId, CancellationToken ct)
     {
@@ -212,14 +205,12 @@ public sealed class CareService(ICareData data, IWorkData work, AuditService aud
         if (!session.Has(Permissions.PersonEdit) && !session.Has(Permissions.IntakeUpload)) throw new PermissionDeniedException(Permissions.PersonEdit);
         var v = new Validator(); v.Required("evidence", evidence, "Source evidence").MaxLength("evidence", evidence, 1000, "Source evidence"); v.ThrowIfInvalid();
         await data.ReceiveInformationAsync(id, date, evidence, confirmed, ct).ConfigureAwait(false);
-        await audit.ChangedAsync("workTask", id, ct).ConfigureAwait(false);
     }
     public async Task VerifyTimelineAsync(Guid personId, Guid resultId, DateOnly? finalDate, string evidence, bool confirmed, CancellationToken ct, bool applies = true, bool sameDayChecked = false, bool lateConfirmed = false)
     {
         session.Require(Permissions.ResultEdit);
         var v = new Validator(); v.Required("evidence", evidence, "Source evidence").MaxLength("evidence", evidence, 1000, "Source evidence"); v.ThrowIfInvalid();
         await data.VerifyTimelineAsync(personId, resultId, finalDate, evidence, confirmed, ct, applies, sameDayChecked, lateConfirmed).ConfigureAwait(false);
-        await audit.ChangedAsync("labResult", resultId, ct).ConfigureAwait(false);
     }
     public Task<IReadOnlyList<NotificationRuleRow>> RulesAsync(CancellationToken ct)
     { session.Require(Permissions.ConfigEdit); return data.RulesAsync(ct); }

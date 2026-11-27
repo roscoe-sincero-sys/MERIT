@@ -99,6 +99,7 @@ BEGIN
          WHERE sessionScopeId = @auditScope AND revokedUtc IS NULL AND expiresUtc > SYSUTCDATETIME () AND isDeleted = 0;
         DECLARE @auditClientAddress VARCHAR (45) = TRY_CAST (SESSION_CONTEXT (N'clientAddress') AS VARCHAR (45));
         DECLARE @auditTraceId VARCHAR (64) = TRY_CAST (SESSION_CONTEXT (N'traceId') AS VARCHAR (64));
+        DECLARE @auditUserAgentHash CHAR (16) = TRY_CAST (SESSION_CONTEXT (N'userAgentHash') AS CHAR (16));
         DECLARE @user UNIQUEIDENTIFIER = auth.udfSessionUserId ();
         DECLARE @root UNIQUEIDENTIFIER = auth.udfSessionRootTenantId ();
 
@@ -109,16 +110,27 @@ BEGIN
                 @resultCount, SYSUTCDATETIME (), @auditSessionRef, @auditClientAddress, @auditActingTenant, 0, @searchSource);
 
         INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, recordCount, clientAddress, owningTenantId,
-                                sessionReference, traceId, actingTenantId, viewAsUserId, viewKind, filterJson)
+                                sessionReference, traceId, actingTenantId, viewAsUserId, viewKind, filterJson, userAgentHash)
         VALUES (@user, @root, 'search', @entityType, NULL, @resultCount, @auditClientAddress, NULL,
-                @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs, 'direct', @filterJson);
+                @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs, 'direct', @filterJson, @auditUserAgentHash);
 
         DECLARE @auditEventId BIGINT = SCOPE_IDENTITY ();
 
         IF @recordIdsJson IS NOT NULL AND ISJSON (@recordIdsJson) = 1 AND @root IS NOT NULL
         BEGIN
-            INSERT logs.auditEventRecord (auditEventRecordId, auditEventId, rootTenantId, entityType, entityId)
-            SELECT CAST (CAST (NEWID () AS BINARY (10)) + CAST (DATEDIFF_BIG (MILLISECOND, '19700101', SYSUTCDATETIME ()) AS BINARY (6)) AS UNIQUEIDENTIFIER), @auditEventId, @root, x.entityType, x.entityId
+            INSERT logs.auditEventRecord (auditEventRecordId, auditEventId, rootTenantId, entityType, entityId, owningTenantId)
+            SELECT CAST (CAST (NEWID () AS BINARY (10)) + CAST (DATEDIFF_BIG (MILLISECOND, '19700101', SYSUTCDATETIME ()) AS BINARY (6)) AS UNIQUEIDENTIFIER), @auditEventId, @root, x.entityType, x.entityId,
+                   CASE x.entityType
+                       WHEN 'person'                 THEN dbo.udfPatientWorkOwner (x.entityId)
+                       WHEN 'patientCare'            THEN dbo.udfPatientWorkOwner (x.entityId)
+                       WHEN 'labResult'              THEN dbo.udfPatientWorkOwner ((SELECT lr.personId FROM dbo.labResult AS lr WHERE lr.labResultId = x.entityId))
+                       WHEN 'exposureCase'           THEN (SELECT ec.owningTenantId FROM dbo.exposureCase AS ec WHERE ec.exposureCaseId = x.entityId)
+                       WHEN 'investigation'          THEN (SELECT inv.owningTenantId FROM dbo.investigation AS inv WHERE inv.investigationId = x.entityId)
+                       WHEN 'stagingRow'             THEN (SELECT sr.owningTenantId FROM dbo.stagingRow AS sr WHERE sr.stagingRowId = x.entityId)
+                       WHEN 'workTask'               THEN (SELECT wt.owningTenantId FROM dbo.workTask AS wt WHERE wt.workTaskId = x.entityId)
+                       WHEN 'testingPlan'            THEN (SELECT wt.owningTenantId FROM dbo.workTask AS wt WHERE wt.workTaskId = x.entityId)
+                       WHEN 'notificationObligation' THEN (SELECT no2.owningTenantId FROM dbo.notificationObligation AS no2 WHERE no2.notificationObligationId = x.entityId)
+                   END
               FROM (SELECT DISTINCT
                            COALESCE (NULLIF (JSON_VALUE (j.[value], '$.entityType'), ''), @entityType) AS entityType,
                            COALESCE (TRY_CAST (JSON_VALUE (j.[value], '$.entityId') AS UNIQUEIDENTIFIER),

@@ -1,21 +1,25 @@
-@model (long AuditEventId, IReadOnlyList<Merit.Application.Security.AuditEventRecordRow> Records)
+@model (long AuditEventId, Merit.Application.Security.AuditEventRecordsResult Result)
 @inject ICurrentSession CurrentSession
 @{
     ViewData["Title"] = $"Audit event #{Model.AuditEventId} records";
 }
 <partial name="_Breadcrumbs" model='(IReadOnlyList<BreadcrumbItem>)[new("Home", "/"), new("Audit history", "/admin/audit"), new($"Event #{Model.AuditEventId}")]' />
 <h1>Records in audit event #@Model.AuditEventId</h1>
-<p class="merit-meta">@Model.Records.Count.ToString("N0") record identifier(s) recorded for this list, export, or batch event.</p>
-@if (Model.Records.Count == 0)
+<p class="merit-meta">@Model.Result.Records.Count.ToString("N0") record identifier(s) visible in your review scope for this list, export, or batch event.</p>
+@if (Model.Result.HiddenCount > 0)
 {
-    <p>No manifest records are stored for this event.</p>
+    <p class="merit-meta">@Model.Result.HiddenCount.ToString("N0") additional record(s) in this event are outside your review scope.</p>
+}
+@if (Model.Result.Records.Count == 0)
+{
+    <p>No manifest records within your review scope are stored for this event.</p>
 }
 else
 {
     <table class="usa-table usa-table--borderless usa-table--compact">
         <thead><tr><th scope="col">Record type</th><th scope="col">Record id</th><th scope="col">Audit history</th></tr></thead>
         <tbody>
-            @foreach (var r in Model.Records)
+            @foreach (var r in Model.Result.Records)
             {
                 string? href = AuditText.Link(r.EntityType, r.EntityId, CurrentSession);
                 <tr>

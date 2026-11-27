@@ -13,7 +13,7 @@ CreateDate:   2026-10-24
 ========================================================================================================================
 Description:
 
-Anonymizes and soft-deletes expired usage in batches, including standard audit metadata. Keeps only root, screen and date for anonymous totals. Never updates or deletes the immutable audit ledger.
+Anonymizes and soft-deletes expired usage in independently committed 5,000-row batches (#340), including standard audit metadata. Keeps only root, screen and date for anonymous totals. Never updates or deletes the immutable audit ledger.
 
 ========================================================================================================================
 Requirements and Key Dependencies:
@@ -81,8 +81,6 @@ BEGIN
             , @ReCreatedAfterRollback = 0
             , @ExecutionLogId         = @ExecutionId OUTPUT;
 
-        BEGIN TRANSACTION;
-
         -- =========================================================================================
         -- ===== The procedure's own work starts here. Everything above and below is boilerplate. ==
         -- =========================================================================================
@@ -94,6 +92,7 @@ BEGIN
         DECLARE @count INT = 0, @batch INT = 1;
         WHILE @batch > 0
         BEGIN
+            BEGIN TRANSACTION;
             UPDATE TOP (5000) logs.screenVisit
                SET appUserId = NULL, sessionReference = NULL, profileId = NULL, viewAsUserId = NULL,
                    actingTenantId = NULL, roleCodes = NULL, tabId = NULL, previousVisitId = NULL, durationMs = NULL,
@@ -102,18 +101,18 @@ BEGIN
                    createdBy = N'MERIT usage retention', modifiedBy = N'MERIT usage retention', deletedBy = N'MERIT usage retention'
              WHERE eventUtc < DATEADD (DAY, -@retentionDays, SYSUTCDATETIME ()) AND isDeleted = 0;
             SET @batch = @@ROWCOUNT;
+            COMMIT TRANSACTION;
             SET @count += @batch;
+            IF @batch = 5000
+            BEGIN
+                WAITFOR DELAY '00:00:00.050';
+            END;
         END;
         SELECT @count AS purged;
 
         -- =========================================================================================
         -- ===== End of the procedure's own work. ===================================================
         -- =========================================================================================
-
-        IF @@TRANCOUNT > 0
-        BEGIN
-            COMMIT TRANSACTION;
-        END;
 
         -- Completion. Deliberately after the COMMIT.
         SET @EndTimeUtc = SYSUTCDATETIME ();
@@ -187,7 +186,7 @@ EXEC util.uspSetObjectDescription
       @SchemaName  = N'logs'
     , @ObjectType  = N'PROCEDURE'
     , @ObjectName  = N'uspPurgeScreenVisits'
-    , @Description = N'Anonymizes and soft-deletes expired usage in batches, including standard audit metadata. Keeps only root, screen and date for anonymous totals. Never updates or deletes the immutable audit ledger.';
+    , @Description = N'Anonymizes and soft-deletes expired usage in independently committed 5,000-row batches (#340), including standard audit metadata. Keeps only root, screen and date for anonymous totals. Never updates or deletes the immutable audit ledger.';
 GO
 
 IF DATABASE_PRINCIPAL_ID (N'meritWorkerRole') IS NOT NULL
