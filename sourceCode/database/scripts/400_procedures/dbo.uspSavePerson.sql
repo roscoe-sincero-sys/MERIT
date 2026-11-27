@@ -203,11 +203,12 @@ BEGIN
          WHERE sessionScopeId = @auditScope AND revokedUtc IS NULL AND expiresUtc > SYSUTCDATETIME () AND isDeleted = 0;
         DECLARE @auditClientAddress VARCHAR (45) = TRY_CAST (SESSION_CONTEXT (N'clientAddress') AS VARCHAR (45));
         DECLARE @auditTraceId VARCHAR (64) = TRY_CAST (SESSION_CONTEXT (N'traceId') AS VARCHAR (64));
+        DECLARE @auditUserAgentHash CHAR (16) = TRY_CAST (SESSION_CONTEXT (N'userAgentHash') AS CHAR (16));
         DECLARE @personAuditOwner UNIQUEIDENTIFIER = COALESCE (dbo.udfPatientWorkOwner (@personId), @acting, @root);
         INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, clientAddress, owningTenantId,
-                                sessionReference, traceId, actingTenantId, viewAsUserId)
+                                sessionReference, traceId, actingTenantId, viewAsUserId, userAgentHash)
         VALUES (auth.udfSessionUserId (), @root, IIF (@isNew = 1, 'create', 'update'), 'person', @personId, @auditClientAddress,
-                @personAuditOwner, @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs);
+                @personAuditOwner, @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs, @auditUserAgentHash);
         DECLARE @personAuditEventId BIGINT = SCOPE_IDENTITY ();
         INSERT logs.auditEventChange (auditEventChangeId, auditEventId, rootTenantId, owningTenantId, entityType, entityId,
                                       beforeJson, afterJson)

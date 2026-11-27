@@ -1843,13 +1843,16 @@ TABLES += [{
     "schema": "logs", "name": "auditEventRecord", "rls": None, "tenantKey": False,
     "desc": "Purgeable manifest of record identifiers returned by list views, exports, or batch actions, keyed by "
             "logs.auditEvent.auditEventId. Holds identifiers and entity types only, never patient data (#333). "
-            "Retention scrubs entityId and soft-deletes rows in accordance with MERIT's no-hard-delete convention.",
+            "Decision (#340): retains MERIT's no-hard-delete invariant — retention scrubs entityId to the zero GUID "
+            "and soft-deletes rows in independently committed 5,000-row batches so filtered indexes stay compact; "
+            "capacity planning should budget ~80 bytes/row (~1-2 rows per listed or exported record).",
     "cols": [
         c("auditEventRecordId", UUID, "Surrogate key.", null=False),
         c("auditEventId", "BIGINT", "Parent ledger event in logs.auditEvent.", null=False),
         c("rootTenantId", UUID, "Data root of the audit event.", null=False),
         c("entityType", "VARCHAR (30)", "Kind of record in the manifest, e.g. person, labResult, exposureCase, stagingRow.", null=False),
         c("entityId", UUID, "Identifier of the record returned or acted on.", null=False),
+        c("owningTenantId", UUID, "Tenant that owned the record when the manifest row was recorded, for per-record county audit review (#341)."),
     ],
     "fks": [],
     "dropIndexes": ["IX_logs_auditEventRecord_auditEventId", "IX_logs_auditEventRecord_entityType_entityId"],

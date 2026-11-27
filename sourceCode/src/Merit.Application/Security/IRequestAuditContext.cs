@@ -1,3 +1,6 @@
+using System.Security.Cryptography;
+using System.Text;
+
 namespace Merit.Application.Security;
 
 /// <summary>
@@ -14,8 +17,18 @@ public interface IRequestAuditContext
 
     string? UserAgent { get; }
 
+    /// <summary>First 16 uppercase hex chars of SHA-256 over the sanitized User-Agent for mid-session UA drift (#327).</summary>
+    string? UserAgentHash => ComputeUserAgentHash(UserAgent);
+
     /// <summary>Normalized route pattern (never raw query string or patient values).</summary>
     string? RouteTemplate { get; }
+
+    static string? ComputeUserAgentHash(string? userAgent)
+    {
+        if (string.IsNullOrWhiteSpace(userAgent)) return null;
+        byte[] hash = SHA256.HashData(Encoding.UTF8.GetBytes(userAgent.Trim()));
+        return Convert.ToHexString(hash.AsSpan(0, 8));
+    }
 }
 
 public sealed class NullRequestAuditContext : IRequestAuditContext
@@ -41,3 +54,6 @@ public sealed class AuditEventRecordRow
 
     public Guid EntityId { get; init; }
 }
+
+/// <summary>Scoped manifest rows plus count of rows outside the caller's review scope (#341).</summary>
+public sealed record AuditEventRecordsResult(IReadOnlyList<AuditEventRecordRow> Records, int HiddenCount);

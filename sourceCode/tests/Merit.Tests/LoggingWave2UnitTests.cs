@@ -220,7 +220,7 @@ public sealed class LoggingWave2UnitTests
             RecordedAudits.Add((eventAction, entityType, recordCount));
             return Task.CompletedTask;
         }
-        public Task<IReadOnlyList<AuditEventRecordRow>> GetAuditEventRecordsAsync(long auditEventId, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<AuditEventRecordRow>>([]);
+        public Task<AuditEventRecordsResult> GetAuditEventRecordsAsync(long auditEventId, CancellationToken ct = default) => Task.FromResult(new AuditEventRecordsResult([], 0));
         public Task<int> PurgeAuditEventRecordsAsync(int retentionDays, CancellationToken ct = default) => Task.FromResult(0);
         public Task RecordSearchLogAsync(string searchText, int resultCount, string searchSource, string entityType, string? filterJson = null, string? recordIdsJson = null, CancellationToken ct = default) => Task.CompletedTask;
         public Task CreateTaskAsync(WorkTaskCreate task, CancellationToken ct = default) => throw new NotImplementedException();

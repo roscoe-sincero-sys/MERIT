@@ -74,7 +74,6 @@ public sealed class MatchReviewService(IClock clock, IReviewData review, IPerson
 
         await review.RecordMatchDecisionAsync(stagingRowId, decision, personId, decision == "different" ? key : null, note, ct)
             .ConfigureAwait(false);
-        await audit.ChangedAsync("stagingRow", stagingRowId, ct).ConfigureAwait(false);
 
         switch (decision)
         {
@@ -192,7 +191,6 @@ public sealed class ClusterService(IReviewData review, AuditService audit, ICurr
         v.ThrowIfInvalid();
         await review.UpdateClusterAsync(clusterId, status, string.IsNullOrWhiteSpace(notes) ? null : notes.Trim(), rowVersion, ct)
             .ConfigureAwait(false);
-        await audit.ChangedAsync("cluster", clusterId, ct).ConfigureAwait(false);
     }
 
     public async Task SetMemberAsync(Guid clusterId, string caseNumber, bool isMember, CancellationToken ct = default)
@@ -200,7 +198,6 @@ public sealed class ClusterService(IReviewData review, AuditService audit, ICurr
         session.Require(Permissions.CaseEdit);
         new Validator().Required("CaseNumber", caseNumber, "Case number").MaxLength("CaseNumber", caseNumber, 20, "Case number").ThrowIfInvalid();
         await review.SetCaseClusterMemberAsync(clusterId, caseNumber.Trim().ToUpperInvariant(), isMember, ct).ConfigureAwait(false);
-        await audit.ChangedAsync("cluster", clusterId, ct).ConfigureAwait(false);
     }
 
     public async Task<IReadOnlyList<CaseMapRow>> MapAsync(Guid? analyteId, DateOnly? openedFrom, DateOnly? openedTo, bool openOnly,

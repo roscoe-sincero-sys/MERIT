@@ -252,7 +252,6 @@ public sealed class PersonService(
         v.ThrowIfInvalid();
         await data.SaveContactMethodAsync(id ?? TimeOrderedId.New(), personId, contactType, value.Trim(), isPreferred, isDeleted, ct)
             .ConfigureAwait(false);
-        await audit.ChangedAsync("person", personId, ct).ConfigureAwait(false);
     }
 
     public async Task SaveIdentifierAsync(Guid personId, string type, string value, string? facility, CancellationToken ct = default)
@@ -262,7 +261,6 @@ public sealed class PersonService(
         new Validator().Required("IdentifierValue", value, "Identifier").ThrowIfInvalid();
         await data.SaveIdentifierAsync(TimeOrderedId.New(), personId, type, value.Trim(), Clean(facility), "staff",
             clock.Today, false, ct).ConfigureAwait(false);
-        await audit.ChangedAsync("person", personId, ct).ConfigureAwait(false);
     }
 
     /// <summary>"Add relationship" picks an existing person or creates a contact-only person.</summary>
@@ -290,7 +288,6 @@ public sealed class PersonService(
             input.IsPrimaryContact, input.HasLegalCustody, input.StartDate, null, input.Source,
             input.Source is "interview" or "caseManager" ? clock.Today : null, false, null), ct)
             .ConfigureAwait(false);
-        await audit.ChangedAsync("person", input.PersonId, ct).ConfigureAwait(false);
     }
 
     public async Task EndRelationshipAsync(Guid personId, Guid relationshipId, DateOnly endDate, CancellationToken ct = default)
@@ -300,7 +297,6 @@ public sealed class PersonService(
             .FirstOrDefault(r => r.PersonRelationshipId == relationshipId && !r.IsInverse) ?? throw new NotFoundException();
         await data.SaveRelationshipAsync(new RelationshipSave(relationshipId, personId, rel.OtherPersonId, rel.Role, false,
             rel.HasLegalCustody, rel.StartDate, endDate, rel.Source, rel.VerifiedDate, false, rel.RowVersion), ct).ConfigureAwait(false);
-        await audit.ChangedAsync("person", personId, ct).ConfigureAwait(false);
     }
 
     public async Task VerifyRelationshipAsync(Guid personId,Guid relationshipId,bool confirmed,bool primary,bool legalCustody,string role,byte[]? version,CancellationToken ct)
@@ -309,8 +305,7 @@ public sealed class PersonService(
         if(!confirmed) throw new ValidationException("confirmed","Verify the caregiver identity, relationship and contact information before confirming.");
         var rel=(await data.GetRelationshipsAsync(personId,ct)).FirstOrDefault(r=>r.PersonRelationshipId==relationshipId && !r.IsInverse && r.EndDate is null) ?? throw new NotFoundException();
         if(role is not ("parent" or "legalGuardian" or "fosterParent" or "caregiver")) throw new ValidationException("role","Choose the verified caregiver relationship.");
-        await data.SaveRelationshipAsync(new(relationshipId,personId,rel.OtherPersonId,role,primary,legalCustody,rel.StartDate,null,"interview",clock.Today,false,version),ct);
-        await audit.ChangedAsync("personRelationship",relationshipId,ct);
+        await data.SaveRelationshipAsync(new(relationshipId,personId,rel.OtherPersonId,role,primary,legalCustody,rel.StartDate,null,"interview",clock.Today,false,version,IsVerification:true),ct);
     }
 
     public async Task SaveEmploymentAsync(EmploymentInput input, CancellationToken ct = default)
@@ -348,7 +343,6 @@ public sealed class PersonService(
                 : existing is not null && input.OccupationCode == existing.OccupationCode ? existing.OccupationCodeVersion : "2002",
             Clean(input.NaicsOverride), Clean(input.MetalTasks), Clean(input.PpeNotes), input.HoursPerWeek, input.StartDate,
             input.EndDate, input.Source, input.Verify ? clock.Today : existing?.VerifiedDate, input.AnalyteIds, false, input.RowVersion), ct).ConfigureAwait(false);
-        await audit.ChangedAsync("person", input.PersonId, ct).ConfigureAwait(false);
     }
 
     public async Task SaveExposureSourceAsync(ExposureSourceInput input, CancellationToken ct = default)
@@ -373,7 +367,6 @@ public sealed class PersonService(
         await places.SaveExposureSourceAsync(new ExposureSourceSave(input.ExposureSourceId ?? TimeOrderedId.New(), input.PersonId, existing is null ? open?.ExposureCaseId : existing.ExposureCaseId,
             input.SourceType, CleanSingleLine(input.Description), productId, existing?.LocationId, input.StartDate, input.EndDate, input.IsConfirmed, false, input.OriginalModifiedUtc), ct)
             .ConfigureAwait(false);
-        await audit.ChangedAsync("person", input.PersonId, ct).ConfigureAwait(false);
     }
 
     /// <summary>Saves a pregnancy episode, warns rather than blocks for a person recorded as male, and reruns classification.</summary>
@@ -397,7 +390,6 @@ public sealed class PersonService(
         await data.SavePregnancyAsync(new PregnancySave(input.PregnancyEpisodeId ?? TimeOrderedId.New(), input.PersonId,
             input.StartDate, input.ExpectedEndDate, input.ActualEndDate, Clean(input.Outcome), input.Source, null, false,
             input.RowVersion), ct).ConfigureAwait(false);
-        await audit.ChangedAsync("person", input.PersonId, ct).ConfigureAwait(false);
 
         if (input.Outcome == "liveBirth")
         {

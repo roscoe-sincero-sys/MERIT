@@ -237,7 +237,6 @@ public sealed class ResultService(
         v.When(!confirmed, "confirmed", "Confirm that this result was entered in error.");
         v.ThrowIfInvalid();
         await results.SetRowStatusAsync(id, "enteredInError", rowVersion, ct, reason!.Trim()).ConfigureAwait(false);
-        await audit.ChangedAsync("labResult", id, ct).ConfigureAwait(false);
     }
 
     public async Task<LabResultDetailRow> GetAsync(Guid labResultId, CancellationToken ct = default)

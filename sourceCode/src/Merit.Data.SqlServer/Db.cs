@@ -30,9 +30,10 @@ public sealed class Db(IOptions<MeritDatabaseOptions> options, ICurrentSession s
         // The jurisdiction's time zone, for auth.udfSessionToday (issue #36). Only a signed-in session sets it: a sign-in
         // leaves it open, and auth.uspCreateSessionScope sets it from the user's data root.
         "IF @timeZone IS NOT NULL EXEC sys.sp_set_session_context @key = N'timeZone', @value = @timeZone, @read_only = 1;" +
-        // Request correlation context for logs.auditEvent and logs.searchLog (#326).
+        // Request correlation context for logs.auditEvent and logs.searchLog (#326, #327).
         "IF @clientAddress IS NOT NULL EXEC sys.sp_set_session_context @key = N'clientAddress', @value = @clientAddress, @read_only = 1;" +
-        "IF @traceId IS NOT NULL EXEC sys.sp_set_session_context @key = N'traceId', @value = @traceId, @read_only = 1;";
+        "IF @traceId IS NOT NULL EXEC sys.sp_set_session_context @key = N'traceId', @value = @traceId, @read_only = 1;" +
+        "IF @userAgentHash IS NOT NULL EXEC sys.sp_set_session_context @key = N'userAgentHash', @value = @userAgentHash, @read_only = 1;";
 
     static Db()
     {
@@ -57,6 +58,7 @@ public sealed class Db(IOptions<MeritDatabaseOptions> options, ICurrentSession s
                 timeZone = session.TimeZoneId,
                 clientAddress = auditContext?.ClientAddress,
                 traceId = auditContext?.TraceId,
+                userAgentHash = auditContext?.UserAgentHash,
             }, commandTimeout: Timeout, cancellationToken: ct)).ConfigureAwait(false);
         }
 

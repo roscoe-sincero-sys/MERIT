@@ -208,10 +208,11 @@ SELECT e.eventUtc, e.eventType, e.reason FROM logs.signInEvent AS e
 """,
     },
     {
-        "schema": "logs", "name": "uspPurgeScreenVisits", "kind": "write", "grants": WORKER, "ticket": "227",
+        "schema": "logs", "name": "uspPurgeScreenVisits", "kind": "write", "no_tx": True, "grants": WORKER, "ticket": "227",
         "params": "@retentionDays INT = 90", "key": "CONCAT (N'retentionDays=', @retentionDays)",
-        "desc": "Anonymizes and soft-deletes expired usage in batches, including standard audit metadata. Keeps only "
-                "root, screen and date for anonymous totals. Never updates or deletes the immutable audit ledger.",
+        "desc": "Anonymizes and soft-deletes expired usage in independently committed 5,000-row batches (#340), "
+                "including standard audit metadata. Keeps only root, screen and date for anonymous totals. Never "
+                "updates or deletes the immutable audit ledger.",
         "body": """
 IF @retentionDays NOT BETWEEN 30 AND 365
 BEGIN
@@ -220,6 +221,7 @@ END;
 DECLARE @count INT = 0, @batch INT = 1;
 WHILE @batch > 0
 BEGIN
+    BEGIN TRANSACTION;
     UPDATE TOP (5000) logs.screenVisit
        SET appUserId = NULL, sessionReference = NULL, profileId = NULL, viewAsUserId = NULL,
            actingTenantId = NULL, roleCodes = NULL, tabId = NULL, previousVisitId = NULL, durationMs = NULL,
@@ -228,7 +230,12 @@ BEGIN
            createdBy = N'MERIT usage retention', modifiedBy = N'MERIT usage retention', deletedBy = N'MERIT usage retention'
      WHERE eventUtc < DATEADD (DAY, -@retentionDays, SYSUTCDATETIME ()) AND isDeleted = 0;
     SET @batch = @@ROWCOUNT;
+    COMMIT TRANSACTION;
     SET @count += @batch;
+    IF @batch = 5000
+    BEGIN
+        WAITFOR DELAY '00:00:00.050';
+    END;
 END;
 SELECT @count AS purged;
 """,

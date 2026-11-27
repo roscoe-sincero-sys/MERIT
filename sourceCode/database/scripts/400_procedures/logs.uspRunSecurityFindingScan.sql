@@ -157,17 +157,20 @@ BEGIN
         HAVING COUNT (DISTINCT CASE WHEN e.entityType = 'structuredLogExport' AND e.entityId IS NOT NULL THEN CAST (e.entityId AS VARCHAR (36)) ELSE CAST (e.auditEventId AS VARCHAR (20)) END) >= @exportSpikeThreshold
             OR SUM (COALESCE (e.recordCount, 0)) >= @exportRowsThreshold;
 
-        -- Rule 3: probingDeniedOrOutsideScope (handles NULL rootTenantId safely under platform-only scope, B1 / Codex #3)
+        -- Rule 3: probingDeniedOrOutsideScope (includes authenticated 404s, handles NULL rootTenantId safely under platform-only scope, #327)
         INSERT @candidates
         SELECT COALESCE (e.rootTenantId, @platformRoot),
                CASE WHEN SUM (CASE WHEN COALESCE (e.owningTenantId, e.actingTenantId) IS NULL THEN 1 ELSE 0 END) = 0 AND COUNT (DISTINCT COALESCE (e.owningTenantId, e.actingTenantId)) = 1 AND COUNT (DISTINCT e.actingTenantId) <= 1 THEN MAX (COALESCE (e.owningTenantId, e.actingTenantId)) END,
                e.appUserId, MAX (e.clientAddress), NULL,
                'probingDeniedOrOutsideScope', CASE WHEN COUNT (*) >= @probingThreshold * 2 THEN 'high' ELSE 'medium' END,
-               CONCAT (N'Repeated permission-denied or outside-scope probing (', COUNT (*), N' events)'),
-               (SELECT COUNT (*) AS events FOR JSON PATH, WITHOUT_ARRAY_WRAPPER),
+               CONCAT (N'Repeated permission-denied, not-found, or outside-scope probing (', COUNT (*), N' events)'),
+               (SELECT SUM (CASE WHEN e.eventAction = 'permissionDenied' THEN 1 ELSE 0 END) AS permissionDenied,
+                       SUM (CASE WHEN e.eventAction = 'notFound' THEN 1 ELSE 0 END) AS notFound,
+                       SUM (CASE WHEN e.entityType = 'personOutsideScope' THEN 1 ELSE 0 END) AS outsideScope,
+                       COUNT (*) AS events FOR JSON PATH, WITHOUT_ARRAY_WRAPPER),
                CONCAT ('probingDeniedOrOutsideScope|', CONVERT (VARCHAR (36), COALESCE (e.rootTenantId, @platformRoot)), '|', COALESCE (CONVERT (VARCHAR (36), e.appUserId), 'none'), '|', @dayBucket)
           FROM logs.auditEvent AS e
-         WHERE e.eventUtc >= @since AND (e.eventAction = 'permissionDenied' OR e.entityType = 'personOutsideScope')
+         WHERE e.eventUtc >= @since AND (e.eventAction IN ('permissionDenied', 'notFound') OR e.entityType = 'personOutsideScope')
          GROUP BY COALESCE (e.rootTenantId, @platformRoot), e.appUserId
         HAVING COUNT (*) >= @probingThreshold;
 
@@ -242,6 +245,20 @@ BEGIN
                       e.clientAddress)
             ELSE e.clientAddress
         END) > 1;
+
+        -- Rule 11: midSessionUserAgentDrift (source-event ownership, #327)
+        INSERT @candidates
+        SELECT COALESCE (e.rootTenantId, @platformRoot),
+               CASE WHEN SUM (CASE WHEN COALESCE (e.owningTenantId, e.actingTenantId) IS NULL THEN 1 ELSE 0 END) = 0 AND COUNT (DISTINCT COALESCE (e.owningTenantId, e.actingTenantId)) = 1 AND COUNT (DISTINCT e.actingTenantId) <= 1 THEN MAX (COALESCE (e.owningTenantId, e.actingTenantId)) END,
+               e.appUserId, MAX (e.clientAddress), e.sessionReference,
+               'midSessionUserAgentDrift', CASE WHEN COUNT (DISTINCT e.userAgentHash) >= 3 THEN 'high' ELSE 'medium' END,
+               CONCAT (N'Mid-session User-Agent change (', COUNT (DISTINCT e.userAgentHash), N' distinct client agents)'),
+               (SELECT COUNT (DISTINCT e.userAgentHash) AS distinctUserAgents, COUNT (*) AS events FOR JSON PATH, WITHOUT_ARRAY_WRAPPER),
+               CONCAT ('midSessionUserAgentDrift|', CONVERT (VARCHAR (36), COALESCE (e.rootTenantId, @platformRoot)), '|', COALESCE (CONVERT (VARCHAR (36), e.appUserId), 'none'), '|', CONVERT (VARCHAR (36), e.sessionReference))
+          FROM logs.auditEvent AS e
+         WHERE e.eventUtc >= @since AND e.sessionReference IS NOT NULL AND e.userAgentHash IS NOT NULL
+         GROUP BY COALESCE (e.rootTenantId, @platformRoot), e.appUserId, e.sessionReference
+        HAVING COUNT (DISTINCT e.userAgentHash) > 1;
 
         -- Rule 6: automatedUserAgent (Codex #6 parity)
         INSERT @candidates

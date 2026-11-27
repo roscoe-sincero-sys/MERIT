@@ -211,6 +211,7 @@ BEGIN
          WHERE sessionScopeId = @auditScope AND revokedUtc IS NULL AND expiresUtc > SYSUTCDATETIME () AND isDeleted = 0;
         DECLARE @auditClientAddress VARCHAR (45) = TRY_CAST (SESSION_CONTEXT (N'clientAddress') AS VARCHAR (45));
         DECLARE @auditTraceId VARCHAR (64) = TRY_CAST (SESSION_CONTEXT (N'traceId') AS VARCHAR (64));
+        DECLARE @auditUserAgentHash CHAR (16) = TRY_CAST (SESSION_CONTEXT (N'userAgentHash') AS CHAR (16));
         DECLARE @resultAuditOwner UNIQUEIDENTIFIER = dbo.udfPatientWorkOwner (@personId);
         DECLARE @resultAfterJson NVARCHAR (MAX) = (
             SELECT labResultId, personId, collectedDate, resultStatus, resultRowStatus, operator, valueReported, unitReported,
@@ -218,9 +219,9 @@ BEGIN
               FROM dbo.labResult WHERE labResultId = @labResultId
                FOR JSON PATH, WITHOUT_ARRAY_WRAPPER);
         INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, clientAddress, owningTenantId,
-                                sessionReference, traceId, actingTenantId, viewAsUserId)
+                                sessionReference, traceId, actingTenantId, viewAsUserId, userAgentHash)
         VALUES (auth.udfSessionUserId (), @root, 'create', 'labResult', @labResultId, @auditClientAddress,
-                @resultAuditOwner, @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs);
+                @resultAuditOwner, @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs, @auditUserAgentHash);
         DECLARE @resultAuditEventId BIGINT = SCOPE_IDENTITY ();
         INSERT logs.auditEventChange (auditEventChangeId, auditEventId, rootTenantId, owningTenantId, entityType, entityId,
                                       beforeJson, afterJson)
@@ -229,9 +230,9 @@ BEGIN
         IF @supersedesLabResultId IS NOT NULL
         BEGIN
             INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, clientAddress, owningTenantId,
-                                    sessionReference, traceId, actingTenantId, viewAsUserId)
+                                    sessionReference, traceId, actingTenantId, viewAsUserId, userAgentHash)
             VALUES (auth.udfSessionUserId (), @root, 'update', 'labResult', @supersedesLabResultId, @auditClientAddress,
-                    @resultAuditOwner, @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs);
+                    @resultAuditOwner, @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs, @auditUserAgentHash);
             DECLARE @supAuditEventId BIGINT = SCOPE_IDENTITY ();
             INSERT logs.auditEventChange (auditEventChangeId, auditEventId, rootTenantId, owningTenantId, entityType, entityId,
                                           beforeJson, afterJson)

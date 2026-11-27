@@ -16,6 +16,7 @@ public sealed class AuditService(IWorkData data, IRequestAuditContext? request =
     private readonly IRequestAuditContext context = request ?? NullRequestAuditContext.Instance;
     private readonly HashSet<(string EntityType, Guid EntityId)> viewedThisRequest = [];
     private bool permissionDeniedRecorded;
+    private bool notFoundRecorded;
 
     public Task ViewedAsync(string entityType, Guid id, CancellationToken ct = default, string viewKind = "direct")
     {
@@ -68,14 +69,26 @@ public sealed class AuditService(IWorkData data, IRequestAuditContext? request =
         return data.RecordAuditAsync("permissionDenied", entityType, entityId, null, context.ClientAddress, ct, traceId: context.TraceId);
     }
 
+    /// <summary>Records an authenticated record-lookup 404 once per request for probing detection (#327).</summary>
+    public Task NotFoundAsync(string entityType, Guid? entityId = null, CancellationToken ct = default)
+    {
+        if (notFoundRecorded)
+        {
+            return Task.CompletedTask;
+        }
+
+        notFoundRecorded = true;
+        return data.RecordAuditAsync("notFound", entityType, entityId, null, context.ClientAddress, ct, traceId: context.TraceId);
+    }
+
     public Task<IReadOnlyList<AuditEventRow>> SearchAsync(ICurrentSession session, AuditQuery query, CancellationToken ct = default)
     {
         session.Require(Permissions.AuditView);
         return data.SearchAuditAsync(query, ct);
     }
 
-    /// <summary>Record manifest for one list, export or batch audit event (#333).</summary>
-    public Task<IReadOnlyList<AuditEventRecordRow>> RecordsAsync(ICurrentSession session, long auditEventId, CancellationToken ct = default)
+    /// <summary>Record manifest for one list, export or batch audit event, scoped per record (#333, #341).</summary>
+    public Task<AuditEventRecordsResult> RecordsAsync(ICurrentSession session, long auditEventId, CancellationToken ct = default)
     {
         session.Require(Permissions.AuditView);
         return data.GetAuditEventRecordsAsync(auditEventId, ct);

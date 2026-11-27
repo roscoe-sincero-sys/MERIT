@@ -251,10 +251,11 @@ SELECT TOP (500) e.eventUtc, e.eventType, e.clientAddress, e.forwardedFor, e.use
 """,
     },
     {
-        "schema": "logs", "name": "uspPurgeSignInEvents", "kind": "write", "grants": WORKER, "ticket": "T213",
-        "desc": "Purges sign-in events older than @retentionDays (at least 30), in batches: the personal data (address, "
-                "forwarded chain, user agent, and both copies of an attempted name) is removed and the row is marked "
-                "deleted, leaving only an anonymous count. This database never hard-deletes. The worker runs it daily "
+        "schema": "logs", "name": "uspPurgeSignInEvents", "kind": "write", "no_tx": True, "grants": WORKER, "ticket": "T213",
+        "desc": "Purges sign-in events older than @retentionDays (at least 30), in independently committed 5,000-row "
+                "batches (#336, #340): the personal/correlation data (address, forwarded chain, user agent, session "
+                "reference, trace ID, and both copies of an attempted name) is removed and the row is marked deleted, "
+                "leaving only an anonymous count. This database never hard-deletes. The worker runs it daily "
                 "(SignInLog:RetentionDays).",
         "params": """@retentionDays INT = 365""",
         "key": "CONCAT (N'retentionDays=', @retentionDays)",
@@ -268,12 +269,36 @@ DECLARE @deleted INT = 0, @batch INT = 1;
 
 WHILE @batch > 0
 BEGIN
+    BEGIN TRANSACTION;
     UPDATE TOP (5000) logs.signInEvent
        SET clientAddress = NULL, forwardedFor = NULL, userAgent = NULL, attemptedNameHash = NULL,
-           attemptedNameProtected = NULL, isDeleted = 1
+           attemptedNameProtected = NULL, sessionReference = NULL, traceId = NULL, isDeleted = 1
      WHERE eventUtc < @cutoff AND isDeleted = 0;
     SET @batch = @@ROWCOUNT;
+    COMMIT TRANSACTION;
     SET @deleted += @batch;
+    IF @batch = 5000
+    BEGIN
+        WAITFOR DELAY '00:00:00.050';
+    END;
+END;
+
+-- Idempotent batched cleanup for previously soft-deleted rows that still retain correlation IDs (#336, Codex #4).
+SET @batch = 1;
+WHILE @batch > 0
+BEGIN
+    BEGIN TRANSACTION;
+    UPDATE TOP (5000) logs.signInEvent
+       SET sessionReference = NULL, traceId = NULL
+     WHERE eventUtc < @cutoff AND isDeleted = 1
+       AND (sessionReference IS NOT NULL OR traceId IS NOT NULL);
+    SET @batch = @@ROWCOUNT;
+    COMMIT TRANSACTION;
+    SET @deleted += @batch;
+    IF @batch = 5000
+    BEGIN
+        WAITFOR DELAY '00:00:00.050';
+    END;
 END;
 
 SELECT @deleted AS purged;

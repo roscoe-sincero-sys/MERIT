@@ -127,9 +127,9 @@ IF NOT EXISTS (SELECT 1 FROM OPENJSON (COALESCE (@namePairsJson, N'[]'))) AND @f
 BEGIN
     SET @elsewhere = 1;
     INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, recordCount, clientAddress,
-                            sessionReference, traceId, actingTenantId, viewAsUserId)
+                            sessionReference, traceId, actingTenantId, viewAsUserId, userAgentHash)
     VALUES (auth.udfSessionUserId (), auth.udfSessionRootTenantId (), 'search', 'personOutsideScope', NULL, 1,
-            @auditClientAddress, @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs);
+            @auditClientAddress, @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs, @auditUserAgentHash);
 END;
 
 SELECT @elsewhere AS existsElsewhere;
@@ -468,9 +468,9 @@ SELECT @afterJson = (SELECT lastName, firstName, middleName, dob, dobVerified, s
 {AUDIT_SESSION_VARS}
 DECLARE @personAuditOwner UNIQUEIDENTIFIER = COALESCE (dbo.udfPatientWorkOwner (@personId), @acting, @root);
 INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, clientAddress, owningTenantId,
-                        sessionReference, traceId, actingTenantId, viewAsUserId)
+                        sessionReference, traceId, actingTenantId, viewAsUserId, userAgentHash)
 VALUES (auth.udfSessionUserId (), @root, IIF (@isNew = 1, 'create', 'update'), 'person', @personId, @auditClientAddress,
-        @personAuditOwner, @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs);
+        @personAuditOwner, @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs, @auditUserAgentHash);
 DECLARE @personAuditEventId BIGINT = SCOPE_IDENTITY ();
 INSERT logs.auditEventChange (auditEventChangeId, auditEventId, rootTenantId, owningTenantId, entityType, entityId,
                               beforeJson, afterJson)
@@ -679,7 +679,8 @@ SET @Comments = N'Pregnancy episode saved.';
 , @source               VARCHAR (20)
 , @verifiedDate         DATE = NULL
 , @isDeleted            BIT = 0
-, @rowVersion           BINARY (8) = NULL""",
+, @rowVersion           BINARY (8) = NULL
+, @isVerification       BIT = 0""",
         "key": "CONCAT (N'personRelationshipId=', @personRelationshipId, N', personId=', @personId)",
         "validate": PERSON_VISIBLE,
         "body": f"""

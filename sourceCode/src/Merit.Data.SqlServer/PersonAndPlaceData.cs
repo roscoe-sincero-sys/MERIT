@@ -91,7 +91,7 @@ public sealed class PersonData(Db db) : IPersonData
         => db.ExecuteAsync("dbo.uspSavePersonRelationship", new
         {
             r.PersonRelationshipId, r.PersonId, r.RelatedPersonId, r.Role, r.IsPrimaryContact, r.HasLegalCustody, r.StartDate,
-            r.EndDate, r.Source, r.VerifiedDate, r.IsDeleted, r.RowVersion,
+            r.EndDate, r.Source, r.VerifiedDate, r.IsDeleted, r.RowVersion, r.IsVerification,
         }, ct);
 
     public Task<IReadOnlyList<PersonCandidateRow>> FindCandidatesAsync(string lastNameKey, string? firstNameKey, DateOnly? dob, int maxRows,

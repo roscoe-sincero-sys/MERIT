@@ -454,13 +454,15 @@ BEGIN
     DECLARE @root UNIQUEIDENTIFIER = auth.udfSessionRootTenantId ();
     DECLARE @singleOwner UNIQUEIDENTIFIER = (SELECT CASE WHEN COUNT (DISTINCT owningTenantId) = 1 THEN MAX (owningTenantId) END FROM @corrected);
     INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, recordCount, clientAddress, owningTenantId,
-                            sessionReference, traceId, actingTenantId, viewAsUserId)
+                            sessionReference, traceId, actingTenantId, viewAsUserId, userAgentHash)
     VALUES (auth.udfSessionUserId (), @root, 'update', 'stagingRow', NULL, @count, @auditClientAddress, @singleOwner,
-            @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs);
+            @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs, @auditUserAgentHash);
     DECLARE @auditEventId BIGINT = SCOPE_IDENTITY ();
     IF @root IS NOT NULL
-        INSERT logs.auditEventRecord (auditEventRecordId, auditEventId, rootTenantId, entityType, entityId)
-        SELECT {NEWID}, @auditEventId, @root, 'stagingRow', stagingRowId FROM @corrected;
+        INSERT logs.auditEventRecord (auditEventRecordId, auditEventId, rootTenantId, entityType, entityId, owningTenantId)
+        SELECT {NEWID}, @auditEventId, @root, 'stagingRow', c.stagingRowId, sr.owningTenantId
+          FROM @corrected AS c
+          JOIN dbo.stagingRow AS sr ON sr.stagingRowId = c.stagingRowId;
 END;
 SELECT @count AS updated;
 SET @Comments = CONCAT (@count, N' rows corrected.');
@@ -499,9 +501,9 @@ BEGIN
     {AUDIT_SESSION_VARS}
     DECLARE @owner UNIQUEIDENTIFIER = (SELECT owningTenantId FROM dbo.stagingRow WHERE stagingRowId = @stagingRowId);
     INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, clientAddress, owningTenantId,
-                            sessionReference, traceId, actingTenantId, viewAsUserId)
+                            sessionReference, traceId, actingTenantId, viewAsUserId, userAgentHash)
     VALUES (auth.udfSessionUserId (), auth.udfSessionRootTenantId (), 'update', 'stagingRow', @stagingRowId,
-            @auditClientAddress, @owner, @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs);
+            @auditClientAddress, @owner, @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs, @auditUserAgentHash);
 END;
 
 SET @Comments = CONCAT (@updated, N' row(s) corrected.');
@@ -557,14 +559,16 @@ BEGIN
     DECLARE @singleOwner UNIQUEIDENTIFIER = (SELECT CASE WHEN COUNT (DISTINCT s.owningTenantId) = 1 THEN MAX (s.owningTenantId) END
                                                FROM dbo.stagingRow AS s JOIN @released AS r ON r.stagingRowId = s.stagingRowId);
     INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, recordCount, clientAddress, owningTenantId,
-                            sessionReference, traceId, actingTenantId, viewAsUserId)
+                            sessionReference, traceId, actingTenantId, viewAsUserId, userAgentHash)
     VALUES (auth.udfSessionUserId (), @auditRoot, 'update', 'stagingRow',
             CASE WHEN @releasedCount = 1 THEN (SELECT TOP (1) stagingRowId FROM @released) END,
-            @releasedCount, @auditClientAddress, @singleOwner, @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs);
+            @releasedCount, @auditClientAddress, @singleOwner, @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs, @auditUserAgentHash);
     DECLARE @auditEventId BIGINT = SCOPE_IDENTITY ();
     IF @auditRoot IS NOT NULL
-        INSERT logs.auditEventRecord (auditEventRecordId, auditEventId, rootTenantId, entityType, entityId)
-        SELECT {NEWID}, @auditEventId, @auditRoot, 'stagingRow', stagingRowId FROM @released;
+        INSERT logs.auditEventRecord (auditEventRecordId, auditEventId, rootTenantId, entityType, entityId, owningTenantId)
+        SELECT {NEWID}, @auditEventId, @auditRoot, 'stagingRow', r.stagingRowId, sr.owningTenantId
+          FROM @released AS r
+          JOIN dbo.stagingRow AS sr ON sr.stagingRowId = r.stagingRowId;
 END;
 
 SELECT @releasedCount AS releasedCount;
@@ -605,14 +609,16 @@ BEGIN
     DECLARE @auditRoot UNIQUEIDENTIFIER = auth.udfSessionRootTenantId ();
     DECLARE @singleOwner UNIQUEIDENTIFIER = (SELECT CASE WHEN COUNT (DISTINCT owningTenantId) = 1 THEN MAX (owningTenantId) END FROM @rejected);
     INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, recordCount, clientAddress, owningTenantId,
-                            sessionReference, traceId, actingTenantId, viewAsUserId)
+                            sessionReference, traceId, actingTenantId, viewAsUserId, userAgentHash)
     VALUES (auth.udfSessionUserId (), @auditRoot, 'update', 'stagingRow',
             CASE WHEN @rejectedCount = 1 THEN (SELECT TOP (1) stagingRowId FROM @rejected) END,
-            @rejectedCount, @auditClientAddress, @singleOwner, @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs);
+            @rejectedCount, @auditClientAddress, @singleOwner, @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs, @auditUserAgentHash);
     DECLARE @auditEventId BIGINT = SCOPE_IDENTITY ();
     IF @auditRoot IS NOT NULL
-        INSERT logs.auditEventRecord (auditEventRecordId, auditEventId, rootTenantId, entityType, entityId)
-        SELECT {NEWID}, @auditEventId, @auditRoot, 'stagingRow', stagingRowId FROM @rejected;
+        INSERT logs.auditEventRecord (auditEventRecordId, auditEventId, rootTenantId, entityType, entityId, owningTenantId)
+        SELECT {NEWID}, @auditEventId, @auditRoot, 'stagingRow', r.stagingRowId, sr.owningTenantId
+          FROM @rejected AS r
+          JOIN dbo.stagingRow AS sr ON sr.stagingRowId = r.stagingRowId;
 END;
 
 SELECT @rejectedCount AS rejectedCount;

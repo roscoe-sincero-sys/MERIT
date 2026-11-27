@@ -59,6 +59,7 @@ CREATE OR ALTER PROCEDURE dbo.uspSavePersonRelationship
       , @verifiedDate         DATE = NULL
       , @isDeleted            BIT = 0
       , @rowVersion           BINARY (8) = NULL
+      , @isVerification       BIT = 0
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -145,6 +146,20 @@ BEGIN
         END;
 
         SET @Comments = N'Relationship saved.';
+        -- In-transaction audit event (#335): commits or rolls back atomically with the data change.
+        DECLARE @auditScope UNIQUEIDENTIFIER = TRY_CAST (SESSION_CONTEXT (N'scopeKey') AS UNIQUEIDENTIFIER);
+        DECLARE @auditSessionRef UNIQUEIDENTIFIER, @auditActingTenant UNIQUEIDENTIFIER, @auditViewAs UNIQUEIDENTIFIER;
+        SELECT @auditSessionRef = sessionReference, @auditActingTenant = actingTenantId, @auditViewAs = viewAsUserId
+          FROM auth.sessionScope
+         WHERE sessionScopeId = @auditScope AND revokedUtc IS NULL AND expiresUtc > SYSUTCDATETIME () AND isDeleted = 0;
+        DECLARE @auditClientAddress VARCHAR (45) = TRY_CAST (SESSION_CONTEXT (N'clientAddress') AS VARCHAR (45));
+        DECLARE @auditTraceId VARCHAR (64) = TRY_CAST (SESSION_CONTEXT (N'traceId') AS VARCHAR (64));
+        DECLARE @auditUserAgentHash CHAR (16) = TRY_CAST (SESSION_CONTEXT (N'userAgentHash') AS CHAR (16));
+        INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, clientAddress, owningTenantId,
+                                sessionReference, traceId, actingTenantId, viewAsUserId, userAgentHash)
+        VALUES (auth.udfSessionUserId (), auth.udfSessionRootTenantId (), 'update', CASE WHEN @isVerification = 1 THEN 'personRelationship' ELSE 'person' END, CASE WHEN @isVerification = 1 THEN @personRelationshipId ELSE @personId END,
+                @auditClientAddress, dbo.udfPatientWorkOwner (@personId), @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs, @auditUserAgentHash);
+
 
         -- =========================================================================================
         -- ===== End of the procedure's own work. ===================================================

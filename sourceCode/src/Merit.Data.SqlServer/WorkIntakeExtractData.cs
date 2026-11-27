@@ -77,8 +77,13 @@ public sealed class WorkData(Db db) : IWorkData
             viewKind = query.ViewKind,
         }, ct);
 
-    public Task<IReadOnlyList<Merit.Application.Security.AuditEventRecordRow>> GetAuditEventRecordsAsync(long auditEventId, CancellationToken ct = default)
-        => db.QueryAsync<Merit.Application.Security.AuditEventRecordRow>("logs.uspGetAuditEventRecords", new { auditEventId }, ct);
+    public Task<Merit.Application.Security.AuditEventRecordsResult> GetAuditEventRecordsAsync(long auditEventId, CancellationToken ct = default)
+        => db.MultipleAsync("logs.uspGetAuditEventRecords", new { auditEventId }, async grid =>
+        {
+            var rows = (await grid.ReadAsync<Merit.Application.Security.AuditEventRecordRow>().ConfigureAwait(false)).ToList();
+            int hidden = await grid.ReadFirstOrDefaultAsync<int>().ConfigureAwait(false);
+            return new Merit.Application.Security.AuditEventRecordsResult(rows, hidden);
+        }, ct);
 
     public Task<int> PurgeAuditEventRecordsAsync(int retentionDays, CancellationToken ct = default)
         => db.QuerySingleAsync<int>("logs.uspPurgeAuditEventRecords", new { retentionDays }, ct)!;

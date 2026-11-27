@@ -16,7 +16,7 @@ public sealed class WorkflowService(IWorkflowData data, ICurrentSession session,
         session.Require(Permissions.ConfigEdit);
         new Validator().Required("Name", draft.Name, "Task name").MaxLength("Name", draft.Name, 120, "Task name")
             .Required("Description", draft.Description, "Instructions").MaxLength("Description", draft.Description, 1000, "Instructions").ThrowIfInvalid();
-        await data.SaveAsync(draft, ct).ConfigureAwait(false); await audit.ChangedAsync("workflowDefinition", draft.WorkflowDefinitionId, ct).ConfigureAwait(false);
+        await data.SaveAsync(draft, ct).ConfigureAwait(false);
     }
     public Task<IReadOnlyList<WorkflowPreviewRow>> PreviewAsync(Guid id, Guid patient, Guid? caseId, CancellationToken ct)
     { session.Require(Permissions.ConfigEdit); return data.PreviewAsync(id, patient, caseId, ct); }
@@ -25,10 +25,9 @@ public sealed class WorkflowService(IWorkflowData data, ICurrentSession session,
         session.Require(Permissions.ConfigEdit);
         new Validator().Required("approvalReference", reference, "Approval reference").MaxLength("approvalReference", reference, 300, "Approval reference").ThrowIfInvalid();
         await data.PublishAsync(id, stamp, reference, approved, patientA, patientB, caseA, caseB, ct).ConfigureAwait(false);
-        await audit.ChangedAsync("workflowDefinition", id, ct).ConfigureAwait(false);
     }
     public async Task RetireAsync(Guid id, CancellationToken ct)
-    { session.Require(Permissions.ConfigEdit); await data.RetireAsync(id, ct).ConfigureAwait(false); await audit.ChangedAsync("workflowDefinition", id, ct).ConfigureAwait(false); }
+    { session.Require(Permissions.ConfigEdit); await data.RetireAsync(id, ct).ConfigureAwait(false); }
     public async Task QueueEvaluationAsync(Guid id, CancellationToken ct)
     {
         session.Require(Permissions.ConfigEdit);
@@ -68,14 +67,14 @@ public sealed class WorkflowService(IWorkflowData data, ICurrentSession session,
     {
         session.Require(Permissions.PersonEdit); session.Require(Permissions.TaskEdit);
         new Validator().Required("title", title, "Task").MaxLength("title", title, 200, "Task").Required("description", description, "Instructions").MaxLength("description", description, 1000, "Instructions").ThrowIfInvalid();
-        await data.CreateAsync(id, person, title, description, kind, caseId, due, ct).ConfigureAwait(false); await audit.CreatedAsync("workTask", id, ct).ConfigureAwait(false);
+        await data.CreateAsync(id, person, title, description, kind, caseId, due, ct).ConfigureAwait(false);
     }
     public async Task ResolveAsync(WorkEvidenceSave evidence, CancellationToken ct)
     {
         session.Require(Permissions.TaskEdit); session.Require(Permissions.PersonEdit);
         new Validator().Required("note", evidence.Note, "Source evidence").MaxLength("note", evidence.Note, 1000, "Source evidence").ThrowIfInvalid();
         var task = await TaskAsync(evidence.WorkTaskId, ct).ConfigureAwait(false);
-        await data.ResolveAsync(evidence, ct).ConfigureAwait(false); await audit.ChangedAsync("workTask", evidence.WorkTaskId, ct).ConfigureAwait(false);
+        await data.ResolveAsync(evidence, ct).ConfigureAwait(false);
         if (evidence.Action == "attempt" && task.ExposureCaseId is Guid caseId)
         {
             int failed = (await cases.GetAsync(caseId, ct).ConfigureAwait(false)).Activities.Count(a => !a.IsVoided && a.ActivityType == "contactAttempt" && a.Outcome is "noAnswer" or "leftMessage" or "wrongNumber");
@@ -86,6 +85,6 @@ public sealed class WorkflowService(IWorkflowData data, ICurrentSession session,
     {
         session.Require(Permissions.PersonEdit);
         new Validator().Required("reason", reason, "Correction reason").MaxLength("reason", reason, 500, "Correction reason").ThrowIfInvalid();
-        await data.CorrectAsync(person, id, source, reason, ct).ConfigureAwait(false); await audit.ChangedAsync("patientActivity", id, ct).ConfigureAwait(false);
+        await data.CorrectAsync(person, id, source, reason, ct).ConfigureAwait(false);
     }
 }

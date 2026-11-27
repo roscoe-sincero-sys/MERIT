@@ -534,7 +534,8 @@ public sealed record RelationshipSave(
     string Source,
     DateOnly? VerifiedDate,
     bool IsDeleted,
-    byte[]? RowVersion);
+    byte[]? RowVersion,
+    bool IsVerification = false);
 
 public sealed record PregnancySave(
     Guid PregnancyEpisodeId,

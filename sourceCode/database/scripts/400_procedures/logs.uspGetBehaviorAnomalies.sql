@@ -156,21 +156,22 @@ BEGIN
         HAVING COUNT (DISTINCT CASE WHEN e.entityType = 'structuredLogExport' AND e.entityId IS NOT NULL THEN CAST (e.entityId AS VARCHAR (36)) ELSE CAST (e.auditEventId AS VARCHAR (20)) END) >= @exportSpikeThreshold
             OR SUM (COALESCE (e.recordCount, 0)) >= @exportRowsThreshold;
 
-        -- Rule 3: Repeated permissionDenied or outside-scope probing
+        -- Rule 3: Repeated permissionDenied, authenticated notFound, or outside-scope probing (#327)
         INSERT @findings
         SELECT 'probingDeniedOrOutsideScope',
                CASE WHEN COUNT (*) >= @probingThreshold * 2 THEN 'high' ELSE 'medium' END,
                e.appUserId, u.userName, u.displayName, MAX (e.clientAddress), NULL,
                COUNT (*),
-               CONCAT (N'Repeated permission-denied or outside-scope probing (', COUNT (*), N' events)'),
+               CONCAT (N'Repeated permission-denied, not-found, or outside-scope probing (', COUNT (*), N' events)'),
                (SELECT SUM (CASE WHEN e.eventAction = 'permissionDenied' THEN 1 ELSE 0 END) AS permissionDenied,
+                       SUM (CASE WHEN e.eventAction = 'notFound' THEN 1 ELSE 0 END) AS notFound,
                        SUM (CASE WHEN e.entityType = 'personOutsideScope' THEN 1 ELSE 0 END) AS outsideScope,
                        @probingThreshold AS threshold FOR JSON PATH, WITHOUT_ARRAY_WRAPPER),
                MIN (e.eventUtc), MAX (e.eventUtc)
           FROM logs.auditEvent AS e
           LEFT JOIN auth.appUser AS u ON u.appUserId = e.appUserId
          WHERE e.eventUtc >= @since
-           AND (e.eventAction = 'permissionDenied' OR e.entityType = 'personOutsideScope')
+           AND (e.eventAction IN ('permissionDenied', 'notFound') OR e.entityType = 'personOutsideScope')
            AND (@all = 1 OR e.rootTenantId IN (SELECT rootTenantId FROM @wholeSecRoots)
                 OR e.owningTenantId IN (SELECT tenantId FROM @secTenants)
                 OR (e.owningTenantId IS NULL AND e.actingTenantId IN (SELECT tenantId FROM @secTenants)))
@@ -267,6 +268,24 @@ BEGIN
                       e.clientAddress)
             ELSE e.clientAddress
         END) > 1;
+
+        -- Rule 11: Mid-session User-Agent drift (event-level tenant scope, #327)
+        INSERT @findings
+        SELECT 'midSessionUserAgentDrift',
+               CASE WHEN COUNT (DISTINCT e.userAgentHash) >= 3 THEN 'high' ELSE 'medium' END,
+               e.appUserId, u.userName, u.displayName, MAX (e.clientAddress), e.sessionReference,
+               COUNT (DISTINCT e.userAgentHash),
+               CONCAT (N'Mid-session User-Agent change (', COUNT (DISTINCT e.userAgentHash), N' distinct client agents in one session)'),
+               (SELECT COUNT (DISTINCT e.userAgentHash) AS distinctUserAgents, COUNT (*) AS events FOR JSON PATH, WITHOUT_ARRAY_WRAPPER),
+               MIN (e.eventUtc), MAX (e.eventUtc)
+          FROM logs.auditEvent AS e
+          LEFT JOIN auth.appUser AS u ON u.appUserId = e.appUserId
+         WHERE e.eventUtc >= @since AND e.sessionReference IS NOT NULL AND e.userAgentHash IS NOT NULL
+           AND (@all = 1 OR e.rootTenantId IN (SELECT rootTenantId FROM @wholeSecRoots)
+                OR e.owningTenantId IN (SELECT tenantId FROM @secTenants)
+                OR (e.owningTenantId IS NULL AND e.actingTenantId IN (SELECT tenantId FROM @secTenants)))
+         GROUP BY e.appUserId, u.userName, u.displayName, e.sessionReference
+        HAVING COUNT (DISTINCT e.userAgentHash) > 1;
 
         -- Rule 6: Automated / headless User-Agent strings
         INSERT @findings

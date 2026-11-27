@@ -13,7 +13,7 @@ CreateDate:   2026-10-24
 ========================================================================================================================
 Description:
 
-Retention purger for logs.auditEventRecord: soft-deletes and scrubs record identifiers older than @retentionDays (default 365, minimum 30) in batches. Granted to meritWorkerRole only (#333).
+Retention purger for logs.auditEventRecord: soft-deletes and scrubs record identifiers older than @retentionDays (default 365, minimum 30) in independently committed 5,000-row batches so concurrent web and intake writes are not blocked (#333, #340). Granted to meritWorkerRole only.
 
 ========================================================================================================================
 Requirements and Key Dependencies:
@@ -81,8 +81,6 @@ BEGIN
             , @ReCreatedAfterRollback = 0
             , @ExecutionLogId         = @ExecutionId OUTPUT;
 
-        BEGIN TRANSACTION;
-
         -- =========================================================================================
         -- ===== The procedure's own work starts here. Everything above and below is boilerplate. ==
         -- =========================================================================================
@@ -93,14 +91,22 @@ BEGIN
 
         WHILE @batch > 0
         BEGIN
+            BEGIN TRANSACTION;
             UPDATE TOP (5000) logs.auditEventRecord
-               SET entityId   = '00000000-0000-0000-0000-000000000000'
-                 , isDeleted  = 1
-                 , modifiedBy = N'retention'
+               SET entityId       = '00000000-0000-0000-0000-000000000000'
+                 , owningTenantId = NULL
+                 , isDeleted      = 1
+                 , modifiedBy     = N'retention'
              WHERE isDeleted = 0 AND createdDateUtc < @cutoff;
 
             SET @batch = @@ROWCOUNT;
+            COMMIT TRANSACTION;
+
             SET @total = @total + @batch;
+            IF @batch = 5000
+            BEGIN
+                WAITFOR DELAY '00:00:00.050';
+            END;
         END;
 
         SELECT @total AS purgedCount;
@@ -109,11 +115,6 @@ BEGIN
         -- =========================================================================================
         -- ===== End of the procedure's own work. ===================================================
         -- =========================================================================================
-
-        IF @@TRANCOUNT > 0
-        BEGIN
-            COMMIT TRANSACTION;
-        END;
 
         -- Completion. Deliberately after the COMMIT.
         SET @EndTimeUtc = SYSUTCDATETIME ();
@@ -187,7 +188,7 @@ EXEC util.uspSetObjectDescription
       @SchemaName  = N'logs'
     , @ObjectType  = N'PROCEDURE'
     , @ObjectName  = N'uspPurgeAuditEventRecords'
-    , @Description = N'Retention purger for logs.auditEventRecord: soft-deletes and scrubs record identifiers older than @retentionDays (default 365, minimum 30) in batches. Granted to meritWorkerRole only (#333).';
+    , @Description = N'Retention purger for logs.auditEventRecord: soft-deletes and scrubs record identifiers older than @retentionDays (default 365, minimum 30) in independently committed 5,000-row batches so concurrent web and intake writes are not blocked (#333, #340). Granted to meritWorkerRole only.';
 GO
 
 IF DATABASE_PRINCIPAL_ID (N'meritWorkerRole') IS NOT NULL

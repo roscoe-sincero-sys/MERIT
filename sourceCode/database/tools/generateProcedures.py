@@ -140,11 +140,73 @@ END;
 """, pad) + "\n\n"
 
 
+from procs_common import AUDIT_SESSION_VARS
+
+# In-transaction audit specs (#335): every secondary write procedure commits its data mutation and logs.auditEvent
+# entry atomically inside the same SQL transaction. Keyed by (schema, name) -> (eventAction, entityType, entityIdExpr, ownerExpr).
+TX_AUDIT_SPECS: dict[tuple[str, str], tuple[str, str, str, str]] = {
+    ("dbo", "uspRecordPatientActivity"):        ("create", "patientActivity", "@personActivityId", "dbo.udfPatientWorkOwner (@personId)"),
+    ("dbo", "uspLinkPatientRecord"):            ("update", "CASE @recordKind WHEN 'activity' THEN 'patientActivity' ELSE 'patientDocument' END", "@recordId", "dbo.udfPatientWorkOwner (@personId)"),
+    ("dbo", "uspSavePatientDocument"):          ("create", "patientDocument", "@personDocumentId", "dbo.udfPatientWorkOwner (@personId)"),
+    ("dbo", "uspReviewNotificationObligation"): ("update", "notificationObligation", "@notificationObligationId", "(SELECT owningTenantId FROM dbo.notificationObligation WHERE notificationObligationId = @notificationObligationId)"),
+    ("dbo", "uspWithdrawNotificationEvidence"): ("update", "notificationObligation", "@notificationObligationId", "(SELECT owningTenantId FROM dbo.notificationObligation WHERE notificationObligationId = @notificationObligationId)"),
+    ("dbo", "uspSaveTestingPlan"):              ("create", "testingPlan", "@workTaskId", "(SELECT owningTenantId FROM dbo.workTask WHERE workTaskId = @workTaskId)"),
+    ("dbo", "uspResolveTestingPlan"):           ("update", "testingPlan", "@workTaskId", "(SELECT owningTenantId FROM dbo.workTask WHERE workTaskId = @workTaskId)"),
+    ("dbo", "uspReceiveMissingInformation"):    ("update", "workTask", "@workTaskId", "(SELECT owningTenantId FROM dbo.workTask WHERE workTaskId = @workTaskId)"),
+    ("dbo", "uspVerifyLabReportingTimeline"):   ("update", "labResult", "@labResultId", "dbo.udfPatientWorkOwner (@personId)"),
+    ("dbo", "uspSaveCaseActivity"):             ("update", "exposureCase", "@exposureCaseId", "(SELECT owningTenantId FROM dbo.exposureCase WHERE exposureCaseId = @exposureCaseId)"),
+    ("dbo", "uspCreateInvestigation"):          ("create", "investigation", "@investigationId", "(SELECT owningTenantId FROM dbo.investigation WHERE investigationId = @investigationId)"),
+    ("dbo", "uspLinkInvestigationCase"):        ("update", "investigation", "@investigationId", "(SELECT owningTenantId FROM dbo.investigation WHERE investigationId = @investigationId)"),
+    ("dbo", "uspSaveInvestigation"):            ("update", "investigation", "@investigationId", "(SELECT owningTenantId FROM dbo.investigation WHERE investigationId = @investigationId)"),
+    ("dbo", "uspSaveEnvironmentalSample"):      ("update", "investigation", "@investigationId", "(SELECT owningTenantId FROM dbo.investigation WHERE investigationId = @investigationId)"),
+    ("dbo", "uspImportEnvironmentalSamples"):   ("update", "investigation", "@investigationId", "(SELECT owningTenantId FROM dbo.investigation WHERE investigationId = @investigationId)"),
+    ("dbo", "uspSavePersonRaces"):              ("update", "person", "@personId", "dbo.udfPatientWorkOwner (@personId)"),
+    ("dbo", "uspSavePersonContactMethod"):      ("update", "person", "@personId", "dbo.udfPatientWorkOwner (@personId)"),
+    ("dbo", "uspSavePersonIdentifier"):         ("update", "person", "@personId", "dbo.udfPatientWorkOwner (@personId)"),
+    ("dbo", "uspSavePregnancyEpisode"):         ("update", "person", "@personId", "dbo.udfPatientWorkOwner (@personId)"),
+    ("dbo", "uspSavePersonRelationship"):       ("update", "CASE WHEN @isVerification = 1 THEN 'personRelationship' ELSE 'person' END", "CASE WHEN @isVerification = 1 THEN @personRelationshipId ELSE @personId END", "dbo.udfPatientWorkOwner (@personId)"),
+    ("dbo", "uspSaveEmployment"):               ("update", "person", "@personId", "dbo.udfPatientWorkOwner (@personId)"),
+    ("dbo", "uspSaveExposureSource"):           ("update", "person", "@personId", "dbo.udfPatientWorkOwner (@personId)"),
+    ("dbo", "uspSetLabResultRowStatus"):        ("update", "labResult", "@labResultId", "dbo.udfPatientWorkOwner ((SELECT personId FROM dbo.labResult WHERE labResultId = @labResultId))"),
+    ("dbo", "uspRecordMatchDecision"):          ("update", "stagingRow", "@stagingRowId", "(SELECT owningTenantId FROM dbo.stagingRow WHERE stagingRowId = @stagingRowId)"),
+    ("dbo", "uspUpdateCluster"):                ("update", "cluster", "@clusterId", "NULL"),
+    ("dbo", "uspSetCaseClusterMember"):         ("update", "cluster", "@clusterId", "NULL"),
+    ("config", "uspSaveWorkflowDefinition"):    ("update", "workflowDefinition", "@workflowDefinitionId", "auth.udfSessionRootTenantId ()"),
+    ("config", "uspPublishWorkflowDefinition"): ("update", "workflowDefinition", "@workflowDefinitionId", "auth.udfSessionRootTenantId ()"),
+    ("config", "uspRetireWorkflowDefinition"):  ("update", "workflowDefinition", "@workflowDefinitionId", "auth.udfSessionRootTenantId ()"),
+    ("dbo", "uspCreateAdHocWork"):              ("create", "workTask", "@workTaskId", "(SELECT owningTenantId FROM dbo.workTask WHERE workTaskId = @workTaskId)"),
+    ("dbo", "uspResolveWorkWithEvidence"):      ("update", "workTask", "@workTaskId", "(SELECT owningTenantId FROM dbo.workTask WHERE workTaskId = @workTaskId)"),
+    ("dbo", "uspCorrectPatientActivity"):       ("update", "patientActivity", "@activityId", "dbo.udfPatientWorkOwner (@personId)"),
+}
+
+
+def tx_audit_block(p: dict, pad: int) -> str:
+    spec = TX_AUDIT_SPECS.get((p["schema"], p["name"]))
+    if not spec:
+        return ""
+    action, entity_type, entity_id_expr, owner_expr = spec
+    entity_type_sql = entity_type if entity_type.upper().startswith("CASE ") else f"'{entity_type}'"
+    sql = f"""-- In-transaction audit event (#335): commits or rolls back atomically with the data change.
+{AUDIT_SESSION_VARS}
+INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, clientAddress, owningTenantId,
+                        sessionReference, traceId, actingTenantId, viewAsUserId, userAgentHash)
+VALUES (auth.udfSessionUserId (), auth.udfSessionRootTenantId (), '{action}', {entity_type_sql}, {entity_id_expr},
+        @auditClientAddress, {owner_expr}, @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs, @auditUserAgentHash);"""
+    return "\n" + indent(sql, pad) + "\n"
+
+
 def write_proc(p: dict) -> str:
     full = f"{p['schema']}.{p['name']}"
     lit = f"[{p['schema']}].[{p['name']}]"
     params = indent(p.get("params", ""), 6) if p.get("params") else ""
     validation = indent(p["validate"], 8) + "\n\n" if p.get("validate") else ""
+    begin_tx = "" if p.get("no_tx") else "        BEGIN TRANSACTION;\n\n"
+    commit_tx = "" if p.get("no_tx") else """        IF @@TRANCOUNT > 0
+        BEGIN
+            COMMIT TRANSACTION;
+        END;
+
+"""
     return f"""{PROLOGUE}
 {header(p)}
 CREATE OR ALTER PROCEDURE {full}
@@ -184,24 +246,17 @@ BEGIN
             , @ReCreatedAfterRollback = 0
             , @ExecutionLogId         = @ExecutionId OUTPUT;
 
-{permission_check(p, 8)}{validation}        BEGIN TRANSACTION;
-
-        -- =========================================================================================
+{permission_check(p, 8)}{validation}{begin_tx}        -- =========================================================================================
         -- ===== The procedure's own work starts here. Everything above and below is boilerplate. ==
         -- =========================================================================================
 
-{indent(p['body'], 8)}
+{indent(p['body'], 8)}{tx_audit_block(p, 8)}
 
         -- =========================================================================================
         -- ===== End of the procedure's own work. ===================================================
         -- =========================================================================================
 
-        IF @@TRANCOUNT > 0
-        BEGIN
-            COMMIT TRANSACTION;
-        END;
-
-        -- Completion. Deliberately after the COMMIT.
+{commit_tx}        -- Completion. Deliberately after the COMMIT.
         SET @EndTimeUtc = SYSUTCDATETIME ();
 
         IF @ExecutionId IS NOT NULL
