@@ -72,7 +72,7 @@ BEGIN
           , @ErrorLine      INT            = NULL;
 
     -- Identifiers and counts ONLY. Never free-text search terms or patient data.
-    SET @KeyParameters = CONCAT (N'days=', @days, N', status=', @status, N', severity=', @severity);
+    SET @KeyParameters = CONCAT (N'days=', @days, N', top=', @top);
 
     SET @ContextMessage = N'Error-only instrumented read: no start row is opened, so @ExecutionLogId is NULL by design.';
 
@@ -94,6 +94,8 @@ BEGIN
         INSERT @accounts SELECT appUserId FROM auth.tvfReviewAccounts ('security.review');
         DECLARE @reviewTenants TABLE (tenantId UNIQUEIDENTIFIER PRIMARY KEY);
         INSERT @reviewTenants SELECT tenantId FROM auth.tvfReviewTenants ('security.review');
+        DECLARE @wholeSecRoots TABLE (rootTenantId UNIQUEIDENTIFIER PRIMARY KEY);
+        INSERT @wholeSecRoots SELECT t.tenantId FROM auth.tenant AS t JOIN @reviewTenants AS r ON r.tenantId = t.tenantId WHERE t.tenantId = t.rootTenantId;
 
         SELECT TOP (@limit)
                f.securityFindingId, f.rootTenantId, f.owningTenantId, f.appUserId,
@@ -109,9 +111,9 @@ BEGIN
            AND (@severity IS NULL OR f.severity = @severity)
            AND (@appUserId IS NULL OR f.appUserId = @appUserId)
            AND (@all = 1
-                OR f.appUserId IN (SELECT appUserId FROM @accounts)
                 OR f.owningTenantId IN (SELECT tenantId FROM @reviewTenants)
-                OR f.rootTenantId IN (SELECT tenantId FROM @reviewTenants))
+                OR (f.owningTenantId IS NULL AND f.rootTenantId IN (SELECT rootTenantId FROM @wholeSecRoots))
+                OR (f.owningTenantId IS NULL AND f.appUserId IN (SELECT appUserId FROM @accounts)))
          ORDER BY CASE f.severity WHEN 'critical' THEN 1 WHEN 'high' THEN 2 WHEN 'medium' THEN 3 ELSE 4 END,
                   f.detectedUtc DESC;
 

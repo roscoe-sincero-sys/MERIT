@@ -105,8 +105,9 @@ BEGIN
         -- ===== The procedure's own work starts here. Everything above and below is boilerplate. ==
         -- =========================================================================================
 
-        DECLARE @personId UNIQUEIDENTIFIER, @root UNIQUEIDENTIFIER, @owner UNIQUEIDENTIFIER, @opened DATE;
-        SELECT @personId = personId, @root = rootTenantId, @owner = owningTenantId, @opened = openedDate
+        DECLARE @personId UNIQUEIDENTIFIER, @root UNIQUEIDENTIFIER, @owner UNIQUEIDENTIFIER, @opened DATE, @beforeCloseJson NVARCHAR (MAX);
+        SELECT @personId = personId, @root = rootTenantId, @owner = owningTenantId, @opened = openedDate,
+               @beforeCloseJson = (SELECT caseStatus, closureReason, closedDate FROM dbo.exposureCase WHERE exposureCaseId = @exposureCaseId FOR JSON PATH, WITHOUT_ARRAY_WRAPPER)
           FROM dbo.exposureCase WHERE exposureCaseId = @exposureCaseId;
 
         DECLARE @workflowLock INT,@workflowResource NVARCHAR(255)=CONCAT(N'MERIT.workflow.',@personId);
@@ -215,11 +216,13 @@ BEGIN
 
         EXEC dbo.uspRefreshPersonAccess @personId = @personId;
 
-        DECLARE @auditClientAddress VARCHAR (45) = NULLIF (CAST (SESSION_CONTEXT (N'clientAddress') AS VARCHAR (45)), '');
-        DECLARE @auditSessionRef UNIQUEIDENTIFIER = TRY_CAST (SESSION_CONTEXT (N'sessionReference') AS UNIQUEIDENTIFIER);
-        DECLARE @auditTraceId VARCHAR (64) = NULLIF (CAST (SESSION_CONTEXT (N'traceId') AS VARCHAR (64)), '');
-        DECLARE @auditActingTenant UNIQUEIDENTIFIER = TRY_CAST (SESSION_CONTEXT (N'actingTenantId') AS UNIQUEIDENTIFIER);
-        DECLARE @auditViewAs UNIQUEIDENTIFIER = TRY_CAST (SESSION_CONTEXT (N'viewAsUserId') AS UNIQUEIDENTIFIER);
+        DECLARE @auditScope UNIQUEIDENTIFIER = TRY_CAST (SESSION_CONTEXT (N'scopeKey') AS UNIQUEIDENTIFIER);
+        DECLARE @auditSessionRef UNIQUEIDENTIFIER, @auditActingTenant UNIQUEIDENTIFIER, @auditViewAs UNIQUEIDENTIFIER;
+        SELECT @auditSessionRef = sessionReference, @auditActingTenant = actingTenantId, @auditViewAs = viewAsUserId
+          FROM auth.sessionScope
+         WHERE sessionScopeId = @auditScope AND revokedUtc IS NULL AND expiresUtc > SYSUTCDATETIME () AND isDeleted = 0;
+        DECLARE @auditClientAddress VARCHAR (45) = TRY_CAST (SESSION_CONTEXT (N'clientAddress') AS VARCHAR (45));
+        DECLARE @auditTraceId VARCHAR (64) = TRY_CAST (SESSION_CONTEXT (N'traceId') AS VARCHAR (64));
         INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, clientAddress, owningTenantId,
                                 sessionReference, traceId, actingTenantId, viewAsUserId)
         VALUES (auth.udfSessionUserId (), @root, 'update', 'exposureCase', @exposureCaseId, @auditClientAddress, @owner,
@@ -228,7 +231,7 @@ BEGIN
         INSERT logs.auditEventChange (auditEventChangeId, auditEventId, rootTenantId, owningTenantId, entityType, entityId, beforeJson, afterJson)
         VALUES (CAST (CAST (NEWID () AS BINARY (10)) + CAST (DATEDIFF_BIG (MILLISECOND, '19700101', SYSUTCDATETIME ()) AS BINARY (6)) AS UNIQUEIDENTIFIER),
                 @closeAuditId, @root, @owner, 'exposureCase', @exposureCaseId,
-                N'{"caseStatus":"open"}',
+                @beforeCloseJson,
                 (SELECT caseStatus, closureReason, closedDate FROM dbo.exposureCase WHERE exposureCaseId = @exposureCaseId FOR JSON PATH, WITHOUT_ARRAY_WRAPPER));
 
         SET @Comments = N'Case closed.';

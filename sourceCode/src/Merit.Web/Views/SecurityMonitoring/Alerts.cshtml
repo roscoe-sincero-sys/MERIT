@@ -64,14 +64,22 @@
                     <td>@f.Status</td>
                     <td class="merit-nowrap">@Options.Date(f.DetectedUtc)</td>
                     <td>
-                        <form method="post" action="/admin/security-alerts/@f.SecurityFindingId/status">
-                            <input type="hidden" name="hours" value="@Model.Hours" />
-                            <input type="hidden" name="days" value="@Model.Days" />
-                            <select name="status" aria-label="Status for @f.RuleCode">
-                                @foreach (var s in new[] { "open", "acknowledged", "resolved", "falsePositive" }) { <option value="@s" selected="@(s == f.Status)">@s</option> }
-                            </select>
-                            <button class="usa-button usa-button--unstyled" type="submit">Save</button>
-                        </form>
+                        @if (Model.CanEditFindings)
+                        {
+                            <form method="post" action="/admin/security-alerts/@f.SecurityFindingId/status">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="hours" value="@Model.Hours" />
+                                <input type="hidden" name="days" value="@Model.Days" />
+                                <select name="status" aria-label="Status for @f.RuleCode">
+                                    @foreach (var s in new[] { "open", "acknowledged", "resolved", "falsePositive" }) { <option value="@s" selected="@(s == f.Status)">@s</option> }
+                                </select>
+                                <button class="usa-button usa-button--unstyled" type="submit">Save</button>
+                            </form>
+                        }
+                        else
+                        {
+                            <span>Read-only</span>
+                        }
                     </td>
                 </tr>
             }</tbody>

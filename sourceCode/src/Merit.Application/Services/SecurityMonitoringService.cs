@@ -37,7 +37,7 @@ public sealed class SecurityMonitoringService(ISecurityMonitoringData data, Audi
 
     public async Task UpdateFindingStatusAsync(Guid securityFindingId, string status, CancellationToken ct = default)
     {
-        session.RequireAny(Permissions.SecurityReview, Permissions.TenantAdminister);
+        session.RequireAny(Permissions.TenantAdminister, Permissions.SecurityInvestigate);
         await data.UpdateSecurityFindingStatusAsync(securityFindingId, status, ct).ConfigureAwait(false);
     }
 

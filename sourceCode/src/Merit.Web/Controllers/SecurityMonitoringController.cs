@@ -1,11 +1,12 @@
-using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using Merit.Application.Data;
+using Merit.Application.Errors;
 using Merit.Application.Security;
 using Merit.Application.Services;
 using Merit.Web.Infrastructure;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Merit.Web.Controllers;
@@ -14,9 +15,12 @@ public sealed record SecurityAlertsPage(
     int Hours,
     int Days,
     string? Status,
+    bool CanEditFindings,
     IReadOnlyList<BehaviorAnomalyRow> Anomalies,
     IReadOnlyList<SecurityFindingRow> Findings,
     IReadOnlyList<SearchLogSummaryRow> SearchSummary);
+
+public sealed record AuditChangesPage(long AuditEventId, IReadOnlyList<AuditEventChangeRow> Changes);
 
 public sealed record LogExportPage(
     DateOnly FromDate,
@@ -53,16 +57,22 @@ public sealed class SecurityMonitoringController(
         var anomalies = await monitoring.GetBehaviorAnomaliesAsync(new BehaviorAnomalyQuery(Hours: h), ct);
         var findings = await monitoring.ListFindingsAsync(d, status, null, null, ct);
         var searchSummary = await monitoring.GetSearchLogSummaryAsync(d, null, ct);
-        return View(new SecurityAlertsPage(h, d, status, anomalies, findings, searchSummary));
+        bool canEdit = session.Has(Permissions.TenantAdminister) || session.Has(Permissions.SecurityInvestigate);
+        return View(new SecurityAlertsPage(h, d, status, canEdit, anomalies, findings, searchSummary));
     }
 
     [HttpPost("security-alerts/{id:guid}/status")]
-    [Authorize(Policy = Permissions.SecurityReports)]
+    [Authorize(Policy = Permissions.TenantAdminister)]
     public async Task<IActionResult> UpdateFindingStatus(Guid id, string status, int hours = 24, int days = 30, CancellationToken ct = default)
     {
         await monitoring.UpdateFindingStatusAsync(id, status, ct);
         return RedirectToAction(nameof(Alerts), new { hours, days });
     }
+
+    [HttpGet("audit/{id:long}/changes")]
+    [Authorize(Policy = Permissions.AuditView)]
+    public async Task<IActionResult> AuditChanges(long id, CancellationToken ct = default)
+        => View(new AuditChangesPage(id, await monitoring.GetAuditEventChangesAsync(id, ct)));
 
     [HttpGet("security-alerts.csv")]
     [Authorize(Policy = Permissions.SecurityReports)]
@@ -165,8 +175,14 @@ public sealed class SecurityMonitoringController(
         var fromDate = from ?? today.AddDays(-7);
         var toDate = to ?? today;
         if (toDate < fromDate) (fromDate, toDate) = (toDate, fromDate);
+        if (toDate.DayNumber - fromDate.DayNumber > 31)
+        {
+            throw new ValidationException("from", "Export range cannot exceed 31 days per request. Download longer periods in monthly chunks.");
+        }
+
+        // Half-open UTC range [fromUtc, toUtc) avoids end-of-day rounding into the following midnight (Codex #2).
         DateTime fromUtc = fromDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
-        DateTime toUtc = toDate.ToDateTime(TimeOnly.MaxValue, DateTimeKind.Utc);
+        DateTime toUtc = toDate.AddDays(1).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
 
         var selected = streams.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Select(s => s.ToLowerInvariant())
@@ -174,18 +190,27 @@ public sealed class SecurityMonitoringController(
             .ToHashSet(StringComparer.Ordinal);
         if (selected.Count == 0) selected.Add("audit");
 
+        // Pre-authorize every requested stream before streaming response bytes (Claude I3, Codex #7).
+        exporter.AuthorizeStreams(selected);
+
         bool isCsv = string.Equals(format, "csv", StringComparison.OrdinalIgnoreCase);
-        using var ms = new MemoryStream();
+        string ext = isCsv ? "csv" : "jsonl";
+        string fileName = $"merit-logs-{fromDate:yyyy-MM-dd}-to-{toDate:yyyy-MM-dd}{(pseudonymize ? "-pseudonymized" : "")}.{ext}";
+
+        HttpContext.Features.Get<IHttpResponseBodyFeature>()?.DisableBuffering();
+        Response.ContentType = isCsv ? TabularExport.CsvType : "application/x-ndjson";
+        Response.Headers.ContentDisposition = $"attachment; filename=\"{fileName}\"";
+
         if (isCsv)
         {
-            await exporter.WriteCsvAsync(ms, fromUtc, toUtc, selected, pseudonymize, ct: ct);
-            return File(ms.ToArray(), TabularExport.CsvType,
-                $"merit-logs-{fromDate:yyyy-MM-dd}-to-{toDate:yyyy-MM-dd}{(pseudonymize ? "-pseudonymized" : "")}.csv");
+            await exporter.WriteCsvAsync(Response.Body, fromUtc, toUtc, selected, pseudonymize, ct: ct);
+        }
+        else
+        {
+            await exporter.WriteJsonlAsync(Response.Body, fromUtc, toUtc, selected, pseudonymize, ct: ct);
         }
 
-        await exporter.WriteJsonlAsync(ms, fromUtc, toUtc, selected, pseudonymize, ct: ct);
-        return File(ms.ToArray(), "application/x-ndjson",
-            $"merit-logs-{fromDate:yyyy-MM-dd}-to-{toDate:yyyy-MM-dd}{(pseudonymize ? "-pseudonymized" : "")}.jsonl");
+        return new EmptyResult();
     }
 
     // --------------------------------------------------------------------------------------------- #330 User behavior summary

@@ -88,9 +88,20 @@ BEGIN
         DECLARE @all BIT = auth.udfHasPermission (N'security.investigate');
         DECLARE @accounts TABLE (appUserId UNIQUEIDENTIFIER PRIMARY KEY);
         INSERT @accounts SELECT appUserId FROM auth.tvfReviewAccounts ('security.review');
-        DECLARE @allAudit BIT = auth.udfHasPermission (N'security.investigate');
-        DECLARE @auditTenants TABLE (tenantId UNIQUEIDENTIFIER PRIMARY KEY);
-        INSERT @auditTenants SELECT tenantId FROM auth.tvfReviewTenants ('audit.view');
+        DECLARE @auditScope TABLE (tenantId UNIQUEIDENTIFIER PRIMARY KEY);
+        INSERT @auditScope SELECT tenantId FROM auth.tvfReviewTenants ('audit.view');
+        DECLARE @wholeRoots TABLE (rootTenantId UNIQUEIDENTIFIER PRIMARY KEY);
+        INSERT @wholeRoots SELECT t.tenantId FROM auth.tenant AS t JOIN @auditScope AS s ON s.tenantId = t.tenantId WHERE t.tenantId = t.rootTenantId;
+        DECLARE @partRoots TABLE (rootTenantId UNIQUEIDENTIFIER PRIMARY KEY);
+        INSERT @partRoots SELECT DISTINCT t.rootTenantId FROM auth.tenant AS t JOIN @auditScope AS s ON s.tenantId = t.tenantId
+         WHERE NOT EXISTS (SELECT 1 FROM @wholeRoots AS w WHERE w.rootTenantId = t.rootTenantId);
+        DECLARE @auditUsers TABLE (appUserId UNIQUEIDENTIFIER PRIMARY KEY);
+        INSERT @auditUsers SELECT u.appUserId FROM auth.appUser AS u
+         WHERE EXISTS (SELECT 1 FROM @partRoots)
+           AND (EXISTS (SELECT 1 FROM @auditScope AS s WHERE s.tenantId = u.homeTenantId)
+                OR EXISTS (SELECT 1 FROM auth.userAssignment AS ua JOIN @auditScope AS s ON s.tenantId = ua.tenantId WHERE ua.appUserId = u.appUserId AND ua.isDeleted = 0));
+        DECLARE @secTenants TABLE (tenantId UNIQUEIDENTIFIER PRIMARY KEY);
+        INSERT @secTenants SELECT tenantId FROM auth.tvfReviewTenants ('security.review');
 
         SELECT s.appUserId, u.userName, u.displayName,
                COUNT (*) AS totalSearches,
@@ -103,10 +114,11 @@ BEGIN
           LEFT JOIN auth.appUser AS u ON u.appUserId = s.appUserId
          WHERE s.isDeleted = 0 AND s.searchedUtc >= @since
            AND (@appUserId IS NULL OR s.appUserId = @appUserId)
-           AND (@all = 1 OR @allAudit = 1
-                OR s.appUserId IN (SELECT appUserId FROM @accounts)
-                OR s.actingTenantId IN (SELECT tenantId FROM @auditTenants)
-                OR s.rootTenantId IN (SELECT tenantId FROM @auditTenants))
+           AND (@all = 1
+                OR EXISTS (SELECT 1 FROM @wholeRoots AS w WHERE w.rootTenantId = s.rootTenantId)
+                OR s.actingTenantId IN (SELECT tenantId FROM @auditScope)
+                OR s.actingTenantId IN (SELECT tenantId FROM @secTenants)
+                OR (s.actingTenantId IS NULL AND s.appUserId IN (SELECT appUserId FROM @accounts)))
          GROUP BY s.appUserId, u.userName, u.displayName
          ORDER BY totalSearches DESC, lastUtc DESC;
 

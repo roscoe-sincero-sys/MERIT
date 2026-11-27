@@ -13,7 +13,7 @@ CreateDate:   2026-10-24
 ========================================================================================================================
 Description:
 
-Scheduled worker scan that evaluates behavioral anomaly rules across all active tenants, deduplicates by fingerprint within the window, persists new findings into logs.securityFinding, and returns newly inserted rows (#327).
+Scheduled worker scan evaluating all 10 behavioral anomaly rules across active tenants (and platform-scoped unattributed events), serialized via sp_getapplock, deduplicated by unique fingerprint (#327).
 
 ========================================================================================================================
 Requirements and Key Dependencies:
@@ -53,6 +53,7 @@ CREATE OR ALTER PROCEDURE logs.uspRunSecurityFindingScan
       , @searchVelocityThreshold  INT = 40
       , @privBurstThreshold       INT = 5
       , @mfaAbuseThreshold        INT = 5
+      , @distributedFailThreshold INT = 10
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -94,10 +95,22 @@ BEGIN
         -- ===== The procedure's own work starts here. Everything above and below is boilerplate. ==
         -- =========================================================================================
 
+        DECLARE @scanLock INT;
+        EXEC @scanLock = sys.sp_getapplock @Resource = N'MERIT.securityFindingScan', @LockMode = 'Exclusive',
+             @LockOwner = 'Transaction', @LockTimeout = 5000;
+        IF @scanLock < 0
+        BEGIN
+            SELECT TOP (0) securityFindingId, rootTenantId, appUserId, ruleCode, severity, title, detailJson, detectedUtc
+              FROM logs.securityFinding;
+            SET @Comments = N'Another worker instance is running the scan.';
+            RETURN;
+        END;
+
         DECLARE @winHours INT = CASE WHEN @hours BETWEEN 1 AND 168 THEN @hours ELSE 24 END;
         DECLARE @now DATETIME2 (3) = SYSUTCDATETIME ();
         DECLARE @since DATETIME2 (3) = DATEADD (HOUR, -@winHours, @now);
         DECLARE @dayBucket VARCHAR (10) = CONVERT (VARCHAR (10), @now, 23);
+        DECLARE @platformRoot UNIQUEIDENTIFIER = '00000000-0000-0000-0000-000000000000';
 
         DECLARE @candidates TABLE (
             rootTenantId     UNIQUEIDENTIFIER NOT NULL,
@@ -112,71 +125,179 @@ BEGIN
             fingerprint      VARCHAR (128) NOT NULL
         );
 
+        -- Rule 1: bulkViewVelocity
         INSERT @candidates
-        SELECT e.rootTenantId, MAX (e.actingTenantId), e.appUserId, NULL, e.sessionReference,
+        SELECT COALESCE (e.rootTenantId, @platformRoot), MAX (e.actingTenantId), e.appUserId, NULL, e.sessionReference,
                'bulkViewVelocity', CASE WHEN COUNT (DISTINCT e.entityId) >= @viewVelocityThreshold * 2 THEN 'high' ELSE 'medium' END,
                CONCAT (N'High distinct record view velocity (', COUNT (DISTINCT e.entityId), N' records in ', @winHours, N'h)'),
                (SELECT COUNT (DISTINCT e.entityId) AS distinctEntities, COUNT (*) AS totalViews FOR JSON PATH, WITHOUT_ARRAY_WRAPPER),
                CONCAT ('bulkViewVelocity|', COALESCE (CONVERT (VARCHAR (36), e.appUserId), 'none'), '|', COALESCE (CONVERT (VARCHAR (36), e.sessionReference), @dayBucket))
           FROM logs.auditEvent AS e
          WHERE e.eventUtc >= @since AND e.eventAction = 'view' AND e.entityId IS NOT NULL
-         GROUP BY e.rootTenantId, e.appUserId, e.sessionReference
+         GROUP BY COALESCE (e.rootTenantId, @platformRoot), e.appUserId, e.sessionReference
         HAVING COUNT (DISTINCT e.entityId) >= @viewVelocityThreshold;
 
+        -- Rule 2: bulkExportSpike
         INSERT @candidates
-        SELECT e.rootTenantId, MAX (e.actingTenantId), e.appUserId, NULL, NULL,
-               'bulkExportSpike', CASE WHEN SUM (COALESCE (e.recordCount, 1)) >= @exportRowsThreshold * 2 THEN 'high' ELSE 'medium' END,
+        SELECT COALESCE (e.rootTenantId, @platformRoot), MAX (e.actingTenantId), e.appUserId, NULL, NULL,
+               'bulkExportSpike', CASE WHEN SUM (COALESCE (e.recordCount, 1)) >= @exportRowsThreshold * 2 OR COUNT (*) >= @exportSpikeThreshold * 2 THEN 'high' ELSE 'medium' END,
                CONCAT (N'Bulk export spike (', COUNT (*), N' exports, ', SUM (COALESCE (e.recordCount, 0)), N' rows)'),
                (SELECT COUNT (*) AS exportCount, SUM (COALESCE (e.recordCount, 0)) AS totalRows FOR JSON PATH, WITHOUT_ARRAY_WRAPPER),
-               CONCAT ('bulkExportSpike|', COALESCE (CONVERT (VARCHAR (36), e.appUserId), 'none'), '|', @dayBucket)
+               CONCAT ('bulkExportSpike|', CONVERT (VARCHAR (36), COALESCE (e.rootTenantId, @platformRoot)), '|', COALESCE (CONVERT (VARCHAR (36), e.appUserId), 'none'), '|', @dayBucket)
           FROM logs.auditEvent AS e
          WHERE e.eventUtc >= @since AND e.eventAction = 'export'
-         GROUP BY e.rootTenantId, e.appUserId
+         GROUP BY COALESCE (e.rootTenantId, @platformRoot), e.appUserId
         HAVING COUNT (*) >= @exportSpikeThreshold OR SUM (COALESCE (e.recordCount, 0)) >= @exportRowsThreshold;
 
+        -- Rule 3: probingDeniedOrOutsideScope (handles NULL rootTenantId safely under platform-only scope, B1 / Codex #3)
         INSERT @candidates
-        SELECT e.rootTenantId, MAX (e.actingTenantId), e.appUserId, MAX (e.clientAddress), NULL,
+        SELECT COALESCE (e.rootTenantId, @platformRoot), MAX (e.actingTenantId), e.appUserId, MAX (e.clientAddress), NULL,
                'probingDeniedOrOutsideScope', CASE WHEN COUNT (*) >= @probingThreshold * 2 THEN 'high' ELSE 'medium' END,
                CONCAT (N'Repeated permission-denied or outside-scope probing (', COUNT (*), N' events)'),
                (SELECT COUNT (*) AS events FOR JSON PATH, WITHOUT_ARRAY_WRAPPER),
-               CONCAT ('probingDeniedOrOutsideScope|', COALESCE (CONVERT (VARCHAR (36), e.appUserId), 'none'), '|', @dayBucket)
+               CONCAT ('probingDeniedOrOutsideScope|', CONVERT (VARCHAR (36), COALESCE (e.rootTenantId, @platformRoot)), '|', COALESCE (CONVERT (VARCHAR (36), e.appUserId), 'none'), '|', @dayBucket)
           FROM logs.auditEvent AS e
          WHERE e.eventUtc >= @since AND (e.eventAction = 'permissionDenied' OR e.entityType = 'personOutsideScope')
-         GROUP BY e.rootTenantId, e.appUserId
+         GROUP BY COALESCE (e.rootTenantId, @platformRoot), e.appUserId
         HAVING COUNT (*) >= @probingThreshold;
 
+        -- Rule 4: searchVelocitySpike
         INSERT @candidates
-        SELECT e.rootTenantId, MAX (e.actingTenantId), e.appUserId, NULL, e.sessionReference,
-               'midSessionIpDrift', 'high',
-               CONCAT (N'Mid-session IP address change (', COUNT (DISTINCT e.clientAddress), N' addresses)'),
-               (SELECT COUNT (DISTINCT e.clientAddress) AS distinctAddresses, COUNT (*) AS events FOR JSON PATH, WITHOUT_ARRAY_WRAPPER),
-               CONCAT ('midSessionIpDrift|', CONVERT (VARCHAR (36), e.sessionReference))
-          FROM logs.auditEvent AS e
-         WHERE e.eventUtc >= @since AND e.sessionReference IS NOT NULL AND e.clientAddress IS NOT NULL
-         GROUP BY e.rootTenantId, e.appUserId, e.sessionReference
-        HAVING COUNT (DISTINCT e.clientAddress) > 1;
-
-        INSERT @candidates
-        SELECT s.rootTenantId, MAX (s.actingTenantId), s.appUserId, MAX (s.clientAddress), NULL,
+        SELECT COALESCE (s.rootTenantId, @platformRoot), MAX (s.actingTenantId), s.appUserId, MAX (s.clientAddress), NULL,
                'searchVelocitySpike', CASE WHEN COUNT (*) >= @searchVelocityThreshold * 2 THEN 'high' ELSE 'medium' END,
                CONCAT (N'High-velocity searching (', COUNT (*), N' queries)'),
                (SELECT COUNT (*) AS searches, SUM (CASE WHEN s.resultCount = 0 THEN 1 ELSE 0 END) AS zeroResults FOR JSON PATH, WITHOUT_ARRAY_WRAPPER),
-               CONCAT ('searchVelocitySpike|', CONVERT (VARCHAR (36), s.appUserId), '|', @dayBucket)
+               CONCAT ('searchVelocitySpike|', CONVERT (VARCHAR (36), COALESCE (s.rootTenantId, @platformRoot)), '|', CONVERT (VARCHAR (36), s.appUserId), '|', @dayBucket)
           FROM logs.searchLog AS s
          WHERE s.isDeleted = 0 AND s.searchedUtc >= @since
-         GROUP BY s.rootTenantId, s.appUserId
+         GROUP BY COALESCE (s.rootTenantId, @platformRoot), s.appUserId
         HAVING COUNT (*) >= @searchVelocityThreshold;
 
+        -- Rule 5: midSessionIpDrift (network prefix comparison, Claude I5)
         INSERT @candidates
-        SELECT COALESCE (e.rootTenantId, '00000000-0000-0000-0000-000000000000'), NULL, e.appUserId, MAX (e.clientAddress), NULL,
+        SELECT COALESCE (e.rootTenantId, @platformRoot), MAX (e.actingTenantId), e.appUserId, NULL, e.sessionReference,
+               'midSessionIpDrift', CASE WHEN COUNT (DISTINCT CASE
+            WHEN CHARINDEX ('.', e.clientAddress) > 0
+                 THEN LEFT (e.clientAddress, LEN (e.clientAddress) - CHARINDEX ('.', REVERSE (e.clientAddress)))
+            WHEN CHARINDEX (':', e.clientAddress) > 0
+                 THEN LEFT (e.clientAddress, 14)
+            ELSE e.clientAddress
+        END) >= 3 THEN 'high' ELSE 'medium' END,
+               CONCAT (N'Mid-session network change (', COUNT (DISTINCT CASE
+            WHEN CHARINDEX ('.', e.clientAddress) > 0
+                 THEN LEFT (e.clientAddress, LEN (e.clientAddress) - CHARINDEX ('.', REVERSE (e.clientAddress)))
+            WHEN CHARINDEX (':', e.clientAddress) > 0
+                 THEN LEFT (e.clientAddress, 14)
+            ELSE e.clientAddress
+        END), N' distinct network prefixes)'),
+               (SELECT COUNT (DISTINCT CASE
+            WHEN CHARINDEX ('.', e.clientAddress) > 0
+                 THEN LEFT (e.clientAddress, LEN (e.clientAddress) - CHARINDEX ('.', REVERSE (e.clientAddress)))
+            WHEN CHARINDEX (':', e.clientAddress) > 0
+                 THEN LEFT (e.clientAddress, 14)
+            ELSE e.clientAddress
+        END) AS distinctPrefixes, COUNT (DISTINCT e.clientAddress) AS distinctAddresses, COUNT (*) AS events FOR JSON PATH, WITHOUT_ARRAY_WRAPPER),
+               CONCAT ('midSessionIpDrift|', CONVERT (VARCHAR (36), e.sessionReference))
+          FROM logs.auditEvent AS e
+         WHERE e.eventUtc >= @since AND e.sessionReference IS NOT NULL AND e.clientAddress IS NOT NULL
+         GROUP BY COALESCE (e.rootTenantId, @platformRoot), e.appUserId, e.sessionReference
+        HAVING COUNT (DISTINCT CASE
+            WHEN CHARINDEX ('.', e.clientAddress) > 0
+                 THEN LEFT (e.clientAddress, LEN (e.clientAddress) - CHARINDEX ('.', REVERSE (e.clientAddress)))
+            WHEN CHARINDEX (':', e.clientAddress) > 0
+                 THEN LEFT (e.clientAddress, 14)
+            ELSE e.clientAddress
+        END) > 1;
+
+        -- Rule 6: automatedUserAgent (Codex #6 parity)
+        INSERT @candidates
+        SELECT COALESCE (e.rootTenantId, @platformRoot), NULL, e.appUserId, MAX (e.clientAddress), MAX (e.sessionReference),
+               'automatedUserAgent', 'medium',
+               CONCAT (N'Automated or headless client user-agent detected (', COUNT (*), N' sign-in events)'),
+               (SELECT COUNT (*) AS events, LEFT (MAX (e.userAgent), 120) AS sampleUserAgent FOR JSON PATH, WITHOUT_ARRAY_WRAPPER),
+               CONCAT ('automatedUserAgent|', CONVERT (VARCHAR (36), COALESCE (e.rootTenantId, @platformRoot)), '|', COALESCE (CONVERT (VARCHAR (36), e.appUserId), 'none'), '|', @dayBucket)
+          FROM logs.signInEvent AS e
+         WHERE e.isDeleted = 0 AND e.eventUtc >= @since AND e.userAgent IS NOT NULL
+           AND (   e.userAgent LIKE N'%curl/%'
+             OR e.userAgent LIKE N'%python-requests%'
+             OR e.userAgent LIKE N'%HeadlessChrome%'
+             OR e.userAgent LIKE N'%Playwright%'
+             OR e.userAgent LIKE N'%Selenium%'
+             OR e.userAgent LIKE N'%Scrapy%'
+             OR e.userAgent LIKE N'%wget%'
+             OR e.userAgent LIKE N'%Go-http-client%')
+         GROUP BY COALESCE (e.rootTenantId, @platformRoot), e.appUserId;
+
+        -- Rule 7: privilegedActionBurst (Codex #6 parity)
+        INSERT @candidates
+        SELECT COALESCE (e.rootTenantId, @platformRoot), MAX (e.actingTenantId), e.appUserId, MAX (e.clientAddress), NULL,
+               'privilegedActionBurst', 'high',
+               CONCAT (N'Privileged security/configuration burst (', COUNT (*), N' actions)'),
+               (SELECT COUNT (*) AS actions, @privBurstThreshold AS threshold FOR JSON PATH, WITHOUT_ARRAY_WRAPPER),
+               CONCAT ('privilegedActionBurst|', CONVERT (VARCHAR (36), COALESCE (e.rootTenantId, @platformRoot)), '|', COALESCE (CONVERT (VARCHAR (36), e.appUserId), 'none'), '|', @dayBucket)
+          FROM logs.auditEvent AS e
+         WHERE e.eventUtc >= @since
+           AND (   e.eventAction IN ('grant', 'revoke', 'deactivate', 'mfaResetByAdmin', 'passwordSetByAdmin')
+                OR (e.entityType IN ('threshold', 'jurisdictionSetting', 'userAssignment', 'role') AND e.eventAction IN ('create', 'update', 'delete')))
+         GROUP BY COALESCE (e.rootTenantId, @platformRoot), e.appUserId
+        HAVING COUNT (*) >= @privBurstThreshold;
+
+        -- Rule 8: mfaOrResetAbuse (Claude I2 canonical event types)
+        INSERT @candidates
+        SELECT COALESCE (e.rootTenantId, @platformRoot), NULL, e.appUserId, MAX (e.clientAddress), NULL,
                'mfaOrResetAbuse', 'high',
                CONCAT (N'Repeated MFA or password-reset attempts (', COUNT (*), N' events)'),
                (SELECT COUNT (*) AS events, COUNT (DISTINCT e.clientAddress) AS distinctAddresses FOR JSON PATH, WITHOUT_ARRAY_WRAPPER),
-               CONCAT ('mfaOrResetAbuse|', COALESCE (CONVERT (VARCHAR (36), e.appUserId), 'none'), '|', @dayBucket)
+               CONCAT ('mfaOrResetAbuse|', CONVERT (VARCHAR (36), COALESCE (e.rootTenantId, @platformRoot)), '|', COALESCE (CONVERT (VARCHAR (36), e.appUserId), 'none'), '|', @dayBucket)
           FROM logs.signInEvent AS e
-         WHERE e.isDeleted = 0 AND e.eventUtc >= @since AND e.eventType IN ('mfaFailed', 'mfaEmailCodeSent', 'passwordResetRequested')
-         GROUP BY e.rootTenantId, e.appUserId
+         WHERE e.isDeleted = 0 AND e.eventUtc >= @since AND e.eventType IN ('mfaFailed', 'emailCodeSent', 'emailCodeRefused', 'passwordResetRequested', 'recoveryCodeUsed')
+         GROUP BY COALESCE (e.rootTenantId, @platformRoot), e.appUserId
         HAVING COUNT (*) >= @mfaAbuseThreshold;
+
+        -- Rule 9: distributedLowAndSlowFailures (Codex #6 parity)
+        INSERT @candidates
+        SELECT COALESCE (e.rootTenantId, @platformRoot), NULL, e.appUserId, NULL, NULL,
+               'distributedLowAndSlowFailures', 'medium',
+               CONCAT (N'Distributed low-and-slow sign-in failures (', COUNT (*), N' failures across ', COUNT (DISTINCT e.clientAddress), N' addresses)'),
+               (SELECT COUNT (*) AS failures, COUNT (DISTINCT e.clientAddress) AS distinctAddresses, @distributedFailThreshold AS threshold FOR JSON PATH, WITHOUT_ARRAY_WRAPPER),
+               CONCAT ('distributedLowAndSlowFailures|', CONVERT (VARCHAR (36), COALESCE (e.rootTenantId, @platformRoot)), '|', COALESCE (CONVERT (VARCHAR (36), e.appUserId), 'none'), '|', @dayBucket)
+          FROM logs.signInEvent AS e
+         WHERE e.isDeleted = 0 AND e.eventUtc >= @since AND e.eventType IN ('passwordFailed', 'unknownUser', 'mfaFailed', 'attemptWhileLocked', 'accountInactive')
+         GROUP BY COALESCE (e.rootTenantId, @platformRoot), e.appUserId
+        HAVING COUNT (*) >= @distributedFailThreshold AND COUNT (DISTINCT e.clientAddress) >= 4;
+
+        -- Rule 10: apiOnlyNoScreenVisits (Codex #6 parity)
+        INSERT @candidates
+        SELECT COALESCE (e.rootTenantId, @platformRoot), MAX (e.actingTenantId), e.appUserId, MAX (e.clientAddress), e.sessionReference,
+               'apiOnlyNoScreenVisits', 'medium',
+               CONCAT (N'Data-access session with zero UI screen visits (', COUNT (*), N' reads)'),
+               (SELECT COUNT (*) AS readEvents, COUNT (DISTINCT e.entityId) AS distinctEntities FOR JSON PATH, WITHOUT_ARRAY_WRAPPER),
+               CONCAT ('apiOnlyNoScreenVisits|', CONVERT (VARCHAR (36), e.sessionReference))
+          FROM logs.auditEvent AS e
+         WHERE e.eventUtc >= @since AND e.sessionReference IS NOT NULL
+           AND e.eventAction IN ('view', 'list', 'export')
+           AND NOT EXISTS (SELECT 1 FROM logs.screenVisit AS v
+                            WHERE v.sessionReference = e.sessionReference AND v.isDeleted = 0)
+         GROUP BY COALESCE (e.rootTenantId, @platformRoot), e.appUserId, e.sessionReference
+        HAVING COUNT (*) >= 25;
+
+        -- Deduplicate candidates by fingerprint within this scan batch before inserting against the unique index.
+        DECLARE @deduped TABLE (
+            rootTenantId     UNIQUEIDENTIFIER NOT NULL,
+            owningTenantId   UNIQUEIDENTIFIER NULL,
+            appUserId        UNIQUEIDENTIFIER NULL,
+            clientAddress    VARCHAR (45) NULL,
+            sessionReference UNIQUEIDENTIFIER NULL,
+            ruleCode         VARCHAR (50) NOT NULL,
+            severity         VARCHAR (15) NOT NULL,
+            title            NVARCHAR (200) NOT NULL,
+            detailJson       NVARCHAR (2000) NULL,
+            fingerprint      VARCHAR (128) NOT NULL PRIMARY KEY
+        );
+        INSERT @deduped
+        SELECT rootTenantId, owningTenantId, appUserId, clientAddress, sessionReference, ruleCode, severity, title, detailJson, fingerprint
+          FROM (SELECT *, ROW_NUMBER () OVER (PARTITION BY fingerprint ORDER BY severity) AS rn FROM @candidates) AS x
+         WHERE rn = 1;
 
         DECLARE @inserted TABLE (
             securityFindingId UNIQUEIDENTIFIER,
@@ -196,7 +317,7 @@ BEGIN
           INTO @inserted
         SELECT CAST (CAST (NEWID () AS BINARY (10)) + CAST (DATEDIFF_BIG (MILLISECOND, '19700101', SYSUTCDATETIME ()) AS BINARY (6)) AS UNIQUEIDENTIFIER), c.rootTenantId, c.owningTenantId, c.appUserId, c.clientAddress, c.sessionReference,
                c.ruleCode, c.severity, c.title, c.detailJson, @since, @now, @now, 'open', c.fingerprint
-          FROM @candidates AS c
+          FROM @deduped AS c
          WHERE NOT EXISTS (SELECT 1 FROM logs.securityFinding AS existing
                             WHERE existing.fingerprint = c.fingerprint AND existing.isDeleted = 0);
 
@@ -287,7 +408,7 @@ EXEC util.uspSetObjectDescription
       @SchemaName  = N'logs'
     , @ObjectType  = N'PROCEDURE'
     , @ObjectName  = N'uspRunSecurityFindingScan'
-    , @Description = N'Scheduled worker scan that evaluates behavioral anomaly rules across all active tenants, deduplicates by fingerprint within the window, persists new findings into logs.securityFinding, and returns newly inserted rows (#327).';
+    , @Description = N'Scheduled worker scan evaluating all 10 behavioral anomaly rules across active tenants (and platform-scoped unattributed events), serialized via sp_getapplock, deduplicated by unique fingerprint (#327).';
 GO
 
 IF DATABASE_PRINCIPAL_ID (N'meritWorkerRole') IS NOT NULL

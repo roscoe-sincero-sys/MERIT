@@ -13,7 +13,7 @@ CreateDate:   2026-10-24
 ========================================================================================================================
 Description:
 
-Cursor-paginated canonical export of logs.screenVisit rows for a UTC range within the caller's usage.view scope (#328).
+Cursor-paginated canonical export of logs.screenVisit rows over [@fromUtc, @toUtc) within the caller's usage.view scope (#328).
 
 ========================================================================================================================
 Requirements and Key Dependencies:
@@ -98,7 +98,7 @@ BEGIN
                v.roleCodes, v.screenCode, v.navigationType, v.tabId, v.previousVisitId, v.durationMs
           FROM logs.screenVisit AS v
           LEFT JOIN auth.appUser AS u ON u.appUserId = v.appUserId
-         WHERE v.isDeleted = 0 AND v.eventUtc >= @fromUtc AND v.eventUtc <= @toUtc
+         WHERE v.isDeleted = 0 AND v.eventUtc >= @fromUtc AND v.eventUtc < @toUtc
            AND (@afterScreenVisitId IS NULL
                 OR v.eventUtc > @afterEventUtc
                 OR (v.eventUtc = @afterEventUtc AND v.screenVisitId > @afterScreenVisitId))
@@ -142,7 +142,7 @@ EXEC util.uspSetObjectDescription
       @SchemaName  = N'logs'
     , @ObjectType  = N'PROCEDURE'
     , @ObjectName  = N'uspExportScreenVisits'
-    , @Description = N'Cursor-paginated canonical export of logs.screenVisit rows for a UTC range within the caller''s usage.view scope (#328).';
+    , @Description = N'Cursor-paginated canonical export of logs.screenVisit rows over [@fromUtc, @toUtc) within the caller''s usage.view scope (#328).';
 GO
 
 IF DATABASE_PRINCIPAL_ID (N'meritWebRole') IS NOT NULL

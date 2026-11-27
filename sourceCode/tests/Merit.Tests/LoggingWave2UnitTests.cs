@@ -113,6 +113,56 @@ public sealed class LoggingWave2UnitTests
         Assert.Contains("KeyParameters", props);
     }
 
+    [Fact]
+    public void SecurityAnomalyProceduresReferenceOnlyCanonicalSignInEventTypes()
+    {
+        // Claude I2: Ensure every sign-in eventType literal in procs_security.py matches SignInEventTypes.
+        var canonical = typeof(SignInEventTypes)
+            .GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
+            .Where(f => f.FieldType == typeof(string))
+            .Select(f => (string)f.GetRawConstantValue()!)
+            .ToHashSet(StringComparer.Ordinal);
+
+        string procsPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "database", "tools", "procs_security.py"));
+        string text = File.ReadAllText(procsPath);
+
+        foreach (string varName in new[] { "FAILURES", "MFA_ABUSE_EVENTS" })
+        {
+            var match = System.Text.RegularExpressions.Regex.Match(text, $@"{varName}\s*=\s*""([^""]+)""");
+            Assert.True(match.Success, $"Expected {varName} definition in procs_security.py");
+            foreach (System.Text.RegularExpressions.Match lit in System.Text.RegularExpressions.Regex.Matches(match.Groups[1].Value, @"'([^']+)'"))
+            {
+                string code = lit.Groups[1].Value;
+                Assert.True(canonical.Contains(code), $"Unknown sign-in eventType '{code}' in {varName}");
+            }
+        }
+    }
+
+    [Fact]
+    public async Task StructuredLogExportCsvPreservesAllDocumentedCorrelationAndStateFields()
+    {
+        // Codex #8: CSV must include actorUserId, viewAsUserId, userAgent, lockoutEndUtc alongside JSONL fields.
+        var userId = Guid.NewGuid();
+        var rootId = Guid.NewGuid();
+        var viewAs = Guid.NewGuid();
+        var t1 = new DateTime(2026, 11, 1, 12, 0, 0, DateTimeKind.Utc);
+        var data = new FakeSecurityMonitoringData
+        {
+            AuditRows = [new AuditExportRow { AuditEventId = 10, EventUtc = t1, EventAction = "view", EntityType = "person", AppUserId = userId, ViewAsUserId = viewAs, RootTenantId = rootId }],
+        };
+        var session = new FakeSession(userId, rootId, Permissions.AuditView);
+        var svc = new StructuredLogExportService(data, new AuditService(new RecordingWorkData(), new NullRequestAuditContext()), session);
+        using var ms = new MemoryStream();
+        await svc.WriteCsvAsync(ms, t1.AddMinutes(-1), t1.AddMinutes(1), new HashSet<string> { "audit" }, pseudonymize: false);
+        string csv = Encoding.UTF8.GetString(ms.ToArray());
+        string header = csv.Split('\n')[0];
+        Assert.Contains("actorUserId", header, StringComparison.Ordinal);
+        Assert.Contains("viewAsUserId", header, StringComparison.Ordinal);
+        Assert.Contains("userAgent", header, StringComparison.Ordinal);
+        Assert.Contains("lockoutEndUtc", header, StringComparison.Ordinal);
+        Assert.Contains(viewAs.ToString(), csv, StringComparison.Ordinal);
+    }
+
     private sealed class FakeSession(Guid userId, Guid rootId, params string[] perms) : ICurrentSession
     {
         private readonly HashSet<string> set = [.. perms];

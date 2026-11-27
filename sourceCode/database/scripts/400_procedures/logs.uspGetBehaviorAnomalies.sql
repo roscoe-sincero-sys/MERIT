@@ -13,7 +13,7 @@ CreateDate:   2026-10-24
 ========================================================================================================================
 Description:
 
-Evaluates post-authentication and sign-in behavioral anomaly rules over the last @hours within the caller's review scope, with configurable thresholds (#327).
+Evaluates all 10 post-authentication and sign-in behavioral anomaly rules over the last @hours within the caller's review scope, with configurable thresholds (#327).
 
 ========================================================================================================================
 Requirements and Key Dependencies:
@@ -181,20 +181,51 @@ BEGIN
          GROUP BY s.appUserId, u.userName, u.displayName
         HAVING COUNT (*) >= @searchVelocityThreshold;
 
-        -- Rule 5: Mid-session IP drift (possible session hijacking)
+        -- Rule 5: Mid-session network-prefix drift (compares /24 IPv4 or /48 IPv6 prefixes; medium unless >= 3 prefixes, Claude I5)
         INSERT @findings
-        SELECT 'midSessionIpDrift', 'high',
+        SELECT 'midSessionIpDrift',
+               CASE WHEN COUNT (DISTINCT CASE
+            WHEN CHARINDEX ('.', e.clientAddress) > 0
+                 THEN LEFT (e.clientAddress, LEN (e.clientAddress) - CHARINDEX ('.', REVERSE (e.clientAddress)))
+            WHEN CHARINDEX (':', e.clientAddress) > 0
+                 THEN LEFT (e.clientAddress, 14)
+            ELSE e.clientAddress
+        END) >= 3 THEN 'high' ELSE 'medium' END,
                e.appUserId, u.userName, u.displayName, NULL, e.sessionReference,
-               COUNT (DISTINCT e.clientAddress),
-               CONCAT (N'Mid-session IP address change (', COUNT (DISTINCT e.clientAddress), N' distinct addresses in one session)'),
-               (SELECT COUNT (DISTINCT e.clientAddress) AS distinctAddresses, COUNT (*) AS events FOR JSON PATH, WITHOUT_ARRAY_WRAPPER),
+               COUNT (DISTINCT CASE
+            WHEN CHARINDEX ('.', e.clientAddress) > 0
+                 THEN LEFT (e.clientAddress, LEN (e.clientAddress) - CHARINDEX ('.', REVERSE (e.clientAddress)))
+            WHEN CHARINDEX (':', e.clientAddress) > 0
+                 THEN LEFT (e.clientAddress, 14)
+            ELSE e.clientAddress
+        END),
+               CONCAT (N'Mid-session network change (', COUNT (DISTINCT CASE
+            WHEN CHARINDEX ('.', e.clientAddress) > 0
+                 THEN LEFT (e.clientAddress, LEN (e.clientAddress) - CHARINDEX ('.', REVERSE (e.clientAddress)))
+            WHEN CHARINDEX (':', e.clientAddress) > 0
+                 THEN LEFT (e.clientAddress, 14)
+            ELSE e.clientAddress
+        END), N' distinct network prefixes in one session)'),
+               (SELECT COUNT (DISTINCT CASE
+            WHEN CHARINDEX ('.', e.clientAddress) > 0
+                 THEN LEFT (e.clientAddress, LEN (e.clientAddress) - CHARINDEX ('.', REVERSE (e.clientAddress)))
+            WHEN CHARINDEX (':', e.clientAddress) > 0
+                 THEN LEFT (e.clientAddress, 14)
+            ELSE e.clientAddress
+        END) AS distinctPrefixes, COUNT (DISTINCT e.clientAddress) AS distinctAddresses, COUNT (*) AS events FOR JSON PATH, WITHOUT_ARRAY_WRAPPER),
                MIN (e.eventUtc), MAX (e.eventUtc)
           FROM logs.auditEvent AS e
           LEFT JOIN auth.appUser AS u ON u.appUserId = e.appUserId
          WHERE e.eventUtc >= @since AND e.sessionReference IS NOT NULL AND e.clientAddress IS NOT NULL
            AND (@all = 1 OR e.appUserId IN (SELECT appUserId FROM @accounts))
          GROUP BY e.appUserId, u.userName, u.displayName, e.sessionReference
-        HAVING COUNT (DISTINCT e.clientAddress) > 1;
+        HAVING COUNT (DISTINCT CASE
+            WHEN CHARINDEX ('.', e.clientAddress) > 0
+                 THEN LEFT (e.clientAddress, LEN (e.clientAddress) - CHARINDEX ('.', REVERSE (e.clientAddress)))
+            WHEN CHARINDEX (':', e.clientAddress) > 0
+                 THEN LEFT (e.clientAddress, 14)
+            ELSE e.clientAddress
+        END) > 1;
 
         -- Rule 6: Automated / headless User-Agent strings
         INSERT @findings
@@ -208,13 +239,13 @@ BEGIN
           LEFT JOIN auth.appUser AS u ON u.appUserId = e.appUserId
          WHERE e.isDeleted = 0 AND e.eventUtc >= @since AND e.userAgent IS NOT NULL
            AND (   e.userAgent LIKE N'%curl/%'
-                OR e.userAgent LIKE N'%python-requests%'
-                OR e.userAgent LIKE N'%HeadlessChrome%'
-                OR e.userAgent LIKE N'%Playwright%'
-                OR e.userAgent LIKE N'%Selenium%'
-                OR e.userAgent LIKE N'%Scrapy%'
-                OR e.userAgent LIKE N'%wget%'
-                OR e.userAgent LIKE N'%Go-http-client%')
+             OR e.userAgent LIKE N'%python-requests%'
+             OR e.userAgent LIKE N'%HeadlessChrome%'
+             OR e.userAgent LIKE N'%Playwright%'
+             OR e.userAgent LIKE N'%Selenium%'
+             OR e.userAgent LIKE N'%Scrapy%'
+             OR e.userAgent LIKE N'%wget%'
+             OR e.userAgent LIKE N'%Go-http-client%')
            AND (@all = 1 OR e.appUserId IN (SELECT appUserId FROM @accounts))
          GROUP BY e.appUserId, u.userName, u.displayName;
 
@@ -235,7 +266,7 @@ BEGIN
          GROUP BY e.appUserId, u.userName, u.displayName
         HAVING COUNT (*) >= @privBurstThreshold;
 
-        -- Rule 8: MFA fatigue / password-reset abuse
+        -- Rule 8: MFA fatigue / email-code / password-reset abuse (uses canonical SignInEventTypes, Claude I2)
         INSERT @findings
         SELECT 'mfaOrResetAbuse', 'high',
                e.appUserId, u.userName, u.displayName, MAX (e.clientAddress), NULL,
@@ -246,7 +277,7 @@ BEGIN
           FROM logs.signInEvent AS e
           LEFT JOIN auth.appUser AS u ON u.appUserId = e.appUserId
          WHERE e.isDeleted = 0 AND e.eventUtc >= @since
-           AND e.eventType IN ('mfaFailed', 'mfaEmailCodeSent', 'passwordResetRequested')
+           AND e.eventType IN ('mfaFailed', 'emailCodeSent', 'emailCodeRefused', 'passwordResetRequested', 'recoveryCodeUsed')
            AND (@all = 1 OR e.appUserId IN (SELECT appUserId FROM @accounts))
          GROUP BY e.appUserId, u.userName, u.displayName
         HAVING COUNT (*) >= @mfaAbuseThreshold;
@@ -328,7 +359,7 @@ EXEC util.uspSetObjectDescription
       @SchemaName  = N'logs'
     , @ObjectType  = N'PROCEDURE'
     , @ObjectName  = N'uspGetBehaviorAnomalies'
-    , @Description = N'Evaluates post-authentication and sign-in behavioral anomaly rules over the last @hours within the caller''s review scope, with configurable thresholds (#327).';
+    , @Description = N'Evaluates all 10 post-authentication and sign-in behavioral anomaly rules over the last @hours within the caller''s review scope, with configurable thresholds (#327).';
 GO
 
 IF DATABASE_PRINCIPAL_ID (N'meritWebRole') IS NOT NULL

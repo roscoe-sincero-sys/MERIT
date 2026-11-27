@@ -7,11 +7,46 @@ REVIEW_ACCOUNTS = """DECLARE @all BIT = auth.udfHasPermission (N'security.invest
 DECLARE @accounts TABLE (appUserId UNIQUEIDENTIFIER PRIMARY KEY);
 INSERT @accounts SELECT appUserId FROM auth.tvfReviewAccounts ('security.review');"""
 
-AUDIT_TENANTS = """DECLARE @allAudit BIT = auth.udfHasPermission (N'security.investigate');
-DECLARE @auditTenants TABLE (tenantId UNIQUEIDENTIFIER PRIMARY KEY);
-INSERT @auditTenants SELECT tenantId FROM auth.tvfReviewTenants ('audit.view');"""
+# Exact #270 audit-event review scope used by logs.uspSearchAuditEvents (Claude I4, Codex #1).
+AUDIT_SCOPE_270 = """DECLARE @auditScope TABLE (tenantId UNIQUEIDENTIFIER PRIMARY KEY);
+INSERT @auditScope SELECT tenantId FROM auth.tvfReviewTenants ('audit.view');
+DECLARE @wholeRoots TABLE (rootTenantId UNIQUEIDENTIFIER PRIMARY KEY);
+INSERT @wholeRoots SELECT t.tenantId FROM auth.tenant AS t JOIN @auditScope AS s ON s.tenantId = t.tenantId WHERE t.tenantId = t.rootTenantId;
+DECLARE @partRoots TABLE (rootTenantId UNIQUEIDENTIFIER PRIMARY KEY);
+INSERT @partRoots SELECT DISTINCT t.rootTenantId FROM auth.tenant AS t JOIN @auditScope AS s ON s.tenantId = t.tenantId
+ WHERE NOT EXISTS (SELECT 1 FROM @wholeRoots AS w WHERE w.rootTenantId = t.rootTenantId);
+DECLARE @auditUsers TABLE (appUserId UNIQUEIDENTIFIER PRIMARY KEY);
+INSERT @auditUsers SELECT u.appUserId FROM auth.appUser AS u
+ WHERE EXISTS (SELECT 1 FROM @partRoots)
+   AND (EXISTS (SELECT 1 FROM @auditScope AS s WHERE s.tenantId = u.homeTenantId)
+        OR EXISTS (SELECT 1 FROM auth.userAssignment AS ua JOIN @auditScope AS s ON s.tenantId = ua.tenantId WHERE ua.appUserId = u.appUserId AND ua.isDeleted = 0));"""
+
+AUDIT_PREDICATE_270 = """(EXISTS (SELECT 1 FROM @wholeRoots AS w WHERE w.rootTenantId = e.rootTenantId)
+    OR (EXISTS (SELECT 1 FROM @partRoots AS p WHERE p.rootTenantId = e.rootTenantId)
+        AND ((e.owningTenantId IS NULL AND EXISTS (SELECT 1 FROM @auditUsers AS x WHERE x.appUserId = e.appUserId))
+             OR EXISTS (SELECT 1 FROM @auditScope AS s WHERE s.tenantId = e.owningTenantId)
+             OR (e.owningTenantId = e.rootTenantId AND e.entityType IN ('jurisdictionSetting', 'threshold', 'notificationRule')))))"""
 
 FAILURES = "'passwordFailed', 'unknownUser', 'mfaFailed', 'attemptWhileLocked', 'accountInactive'"
+MFA_ABUSE_EVENTS = "'mfaFailed', 'emailCodeSent', 'emailCodeRefused', 'passwordResetRequested', 'recoveryCodeUsed'"
+
+# Network-prefix expression (/24 for IPv4, first 3 hextets for IPv6) to avoid dual-stack/DHCP false positives (Claude I5).
+IP_PREFIX_EXPR = """CASE
+    WHEN CHARINDEX ('.', e.clientAddress) > 0
+         THEN LEFT (e.clientAddress, LEN (e.clientAddress) - CHARINDEX ('.', REVERSE (e.clientAddress)))
+    WHEN CHARINDEX (':', e.clientAddress) > 0
+         THEN LEFT (e.clientAddress, 14)
+    ELSE e.clientAddress
+END"""
+
+AUTOMATED_UA_PREDICATE = """(   e.userAgent LIKE N'%curl/%'
+     OR e.userAgent LIKE N'%python-requests%'
+     OR e.userAgent LIKE N'%HeadlessChrome%'
+     OR e.userAgent LIKE N'%Playwright%'
+     OR e.userAgent LIKE N'%Selenium%'
+     OR e.userAgent LIKE N'%Scrapy%'
+     OR e.userAgent LIKE N'%wget%'
+     OR e.userAgent LIKE N'%Go-http-client%')"""
 
 PROCS = [
     # --------------------------------------------------------------------------------------------- #329 searchLog
@@ -57,7 +92,9 @@ SET @Comments = CONCAT (N'Scrubbed ', @count, N' search log row(s).');
         "body": f"""
 DECLARE @since DATETIME2 (3) = DATEADD (DAY, -CASE WHEN @days BETWEEN 1 AND 365 THEN @days ELSE 30 END, SYSUTCDATETIME ());
 {REVIEW_ACCOUNTS}
-{AUDIT_TENANTS}
+{AUDIT_SCOPE_270}
+DECLARE @secTenants TABLE (tenantId UNIQUEIDENTIFIER PRIMARY KEY);
+INSERT @secTenants SELECT tenantId FROM auth.tvfReviewTenants ('security.review');
 
 SELECT s.appUserId, u.userName, u.displayName,
        COUNT (*) AS totalSearches,
@@ -70,10 +107,11 @@ SELECT s.appUserId, u.userName, u.displayName,
   LEFT JOIN auth.appUser AS u ON u.appUserId = s.appUserId
  WHERE s.isDeleted = 0 AND s.searchedUtc >= @since
    AND (@appUserId IS NULL OR s.appUserId = @appUserId)
-   AND (@all = 1 OR @allAudit = 1
-        OR s.appUserId IN (SELECT appUserId FROM @accounts)
-        OR s.actingTenantId IN (SELECT tenantId FROM @auditTenants)
-        OR s.rootTenantId IN (SELECT tenantId FROM @auditTenants))
+   AND (@all = 1
+        OR EXISTS (SELECT 1 FROM @wholeRoots AS w WHERE w.rootTenantId = s.rootTenantId)
+        OR s.actingTenantId IN (SELECT tenantId FROM @auditScope)
+        OR s.actingTenantId IN (SELECT tenantId FROM @secTenants)
+        OR (s.actingTenantId IS NULL AND s.appUserId IN (SELECT appUserId FROM @accounts)))
  GROUP BY s.appUserId, u.userName, u.displayName
  ORDER BY totalSearches DESC, lastUtc DESC;
 """,
@@ -93,7 +131,9 @@ SELECT s.appUserId, u.userName, u.displayName,
 DECLARE @canSeeText BIT = CASE WHEN @includeSearchText = 1 AND auth.udfHasPermission (N'security.investigate') = 1 THEN 1 ELSE 0 END;
 DECLARE @limit INT = CASE WHEN @top BETWEEN 1 AND 1000 THEN @top ELSE 200 END;
 {REVIEW_ACCOUNTS}
-{AUDIT_TENANTS}
+{AUDIT_SCOPE_270}
+DECLARE @secTenants TABLE (tenantId UNIQUEIDENTIFIER PRIMARY KEY);
+INSERT @secTenants SELECT tenantId FROM auth.tvfReviewTenants ('security.review');
 
 SELECT TOP (@limit)
        s.searchLogId, s.searchedUtc, s.appUserId, u.userName, u.displayName,
@@ -104,12 +144,13 @@ SELECT TOP (@limit)
   LEFT JOIN auth.appUser AS u ON u.appUserId = s.appUserId
  WHERE s.isDeleted = 0
    AND (@fromUtc IS NULL OR s.searchedUtc >= @fromUtc)
-   AND (@toUtc IS NULL OR s.searchedUtc <= @toUtc)
+   AND (@toUtc IS NULL OR s.searchedUtc < @toUtc)
    AND (@appUserId IS NULL OR s.appUserId = @appUserId)
-   AND (@all = 1 OR @allAudit = 1
-        OR s.appUserId IN (SELECT appUserId FROM @accounts)
-        OR s.actingTenantId IN (SELECT tenantId FROM @auditTenants)
-        OR s.rootTenantId IN (SELECT tenantId FROM @auditTenants))
+   AND (@all = 1
+        OR EXISTS (SELECT 1 FROM @wholeRoots AS w WHERE w.rootTenantId = s.rootTenantId)
+        OR s.actingTenantId IN (SELECT tenantId FROM @auditScope)
+        OR s.actingTenantId IN (SELECT tenantId FROM @secTenants)
+        OR (s.actingTenantId IS NULL AND s.appUserId IN (SELECT appUserId FROM @accounts)))
  ORDER BY s.searchedUtc DESC, s.searchLogId DESC;
 """,
     },
@@ -118,19 +159,17 @@ SELECT TOP (@limit)
     {
         "schema": "logs", "name": "uspGetAuditEventChanges", "kind": "read", "grants": WEB, "ticket": "332",
         "permission": ["audit.view", "security.review"],
-        "desc": "Returns purgeable before/after change snapshots from logs.auditEventChange for an auditEventId within the caller's review scope (#332).",
+        "desc": "Returns purgeable before/after change snapshots from logs.auditEventChange for an auditEventId within the caller's #270 audit review scope (#332).",
         "params": "@auditEventId BIGINT",
         "key": "CONCAT (N'auditEventId=', @auditEventId)",
         "body": f"""
-{AUDIT_TENANTS}
+{AUDIT_SCOPE_270}
 SELECT c.auditEventChangeId, c.auditEventId, c.rootTenantId, c.owningTenantId,
        c.entityType, c.entityId, c.changedUtc, c.beforeJson, c.afterJson
   FROM logs.auditEventChange AS c
   JOIN logs.auditEvent AS e ON e.auditEventId = c.auditEventId
  WHERE c.auditEventId = @auditEventId AND c.isDeleted = 0
-   AND (@allAudit = 1
-        OR e.owningTenantId IN (SELECT tenantId FROM @auditTenants)
-        OR (e.owningTenantId IS NULL AND e.rootTenantId IN (SELECT tenantId FROM @auditTenants)))
+   AND {AUDIT_PREDICATE_270}
  ORDER BY c.changedUtc, c.auditEventChangeId;
 """,
     },
@@ -167,7 +206,7 @@ SET @Comments = CONCAT (N'Scrubbed ', @count, N' audit change detail row(s).');
     {
         "schema": "logs", "name": "uspGetBehaviorAnomalies", "kind": "read", "grants": WEB, "ticket": "327",
         "permission": ["security.review", "tenant.administer"],
-        "desc": "Evaluates post-authentication and sign-in behavioral anomaly rules over the last @hours within the "
+        "desc": "Evaluates all 10 post-authentication and sign-in behavioral anomaly rules over the last @hours within the "
                 "caller's review scope, with configurable thresholds (#327).",
         "params": """@hours                    INT = 24
 , @viewVelocityThreshold    INT = 50
@@ -268,20 +307,21 @@ SELECT 'searchVelocitySpike',
  GROUP BY s.appUserId, u.userName, u.displayName
 HAVING COUNT (*) >= @searchVelocityThreshold;
 
--- Rule 5: Mid-session IP drift (possible session hijacking)
+-- Rule 5: Mid-session network-prefix drift (compares /24 IPv4 or /48 IPv6 prefixes; medium unless >= 3 prefixes, Claude I5)
 INSERT @findings
-SELECT 'midSessionIpDrift', 'high',
+SELECT 'midSessionIpDrift',
+       CASE WHEN COUNT (DISTINCT {IP_PREFIX_EXPR}) >= 3 THEN 'high' ELSE 'medium' END,
        e.appUserId, u.userName, u.displayName, NULL, e.sessionReference,
-       COUNT (DISTINCT e.clientAddress),
-       CONCAT (N'Mid-session IP address change (', COUNT (DISTINCT e.clientAddress), N' distinct addresses in one session)'),
-       (SELECT COUNT (DISTINCT e.clientAddress) AS distinctAddresses, COUNT (*) AS events FOR JSON PATH, WITHOUT_ARRAY_WRAPPER),
+       COUNT (DISTINCT {IP_PREFIX_EXPR}),
+       CONCAT (N'Mid-session network change (', COUNT (DISTINCT {IP_PREFIX_EXPR}), N' distinct network prefixes in one session)'),
+       (SELECT COUNT (DISTINCT {IP_PREFIX_EXPR}) AS distinctPrefixes, COUNT (DISTINCT e.clientAddress) AS distinctAddresses, COUNT (*) AS events FOR JSON PATH, WITHOUT_ARRAY_WRAPPER),
        MIN (e.eventUtc), MAX (e.eventUtc)
   FROM logs.auditEvent AS e
   LEFT JOIN auth.appUser AS u ON u.appUserId = e.appUserId
  WHERE e.eventUtc >= @since AND e.sessionReference IS NOT NULL AND e.clientAddress IS NOT NULL
    AND (@all = 1 OR e.appUserId IN (SELECT appUserId FROM @accounts))
  GROUP BY e.appUserId, u.userName, u.displayName, e.sessionReference
-HAVING COUNT (DISTINCT e.clientAddress) > 1;
+HAVING COUNT (DISTINCT {IP_PREFIX_EXPR}) > 1;
 
 -- Rule 6: Automated / headless User-Agent strings
 INSERT @findings
@@ -294,14 +334,7 @@ SELECT 'automatedUserAgent', 'medium',
   FROM logs.signInEvent AS e
   LEFT JOIN auth.appUser AS u ON u.appUserId = e.appUserId
  WHERE e.isDeleted = 0 AND e.eventUtc >= @since AND e.userAgent IS NOT NULL
-   AND (   e.userAgent LIKE N'%curl/%'
-        OR e.userAgent LIKE N'%python-requests%'
-        OR e.userAgent LIKE N'%HeadlessChrome%'
-        OR e.userAgent LIKE N'%Playwright%'
-        OR e.userAgent LIKE N'%Selenium%'
-        OR e.userAgent LIKE N'%Scrapy%'
-        OR e.userAgent LIKE N'%wget%'
-        OR e.userAgent LIKE N'%Go-http-client%')
+   AND {AUTOMATED_UA_PREDICATE}
    AND (@all = 1 OR e.appUserId IN (SELECT appUserId FROM @accounts))
  GROUP BY e.appUserId, u.userName, u.displayName;
 
@@ -322,7 +355,7 @@ SELECT 'privilegedActionBurst', 'high',
  GROUP BY e.appUserId, u.userName, u.displayName
 HAVING COUNT (*) >= @privBurstThreshold;
 
--- Rule 8: MFA fatigue / password-reset abuse
+-- Rule 8: MFA fatigue / email-code / password-reset abuse (uses canonical SignInEventTypes, Claude I2)
 INSERT @findings
 SELECT 'mfaOrResetAbuse', 'high',
        e.appUserId, u.userName, u.displayName, MAX (e.clientAddress), NULL,
@@ -333,7 +366,7 @@ SELECT 'mfaOrResetAbuse', 'high',
   FROM logs.signInEvent AS e
   LEFT JOIN auth.appUser AS u ON u.appUserId = e.appUserId
  WHERE e.isDeleted = 0 AND e.eventUtc >= @since
-   AND e.eventType IN ('mfaFailed', 'mfaEmailCodeSent', 'passwordResetRequested')
+   AND e.eventType IN ({MFA_ABUSE_EVENTS})
    AND (@all = 1 OR e.appUserId IN (SELECT appUserId FROM @accounts))
  GROUP BY e.appUserId, u.userName, u.displayName
 HAVING COUNT (*) >= @mfaAbuseThreshold;
@@ -381,8 +414,8 @@ SELECT ruleCode, severity, appUserId, userName, displayName, clientAddress, sess
     },
     {
         "schema": "logs", "name": "uspRunSecurityFindingScan", "kind": "write", "grants": WORKER, "ticket": "327",
-        "desc": "Scheduled worker scan that evaluates behavioral anomaly rules across all active tenants, deduplicates "
-                "by fingerprint within the window, persists new findings into logs.securityFinding, and returns newly inserted rows (#327).",
+        "desc": "Scheduled worker scan evaluating all 10 behavioral anomaly rules across active tenants (and platform-scoped "
+                "unattributed events), serialized via sp_getapplock, deduplicated by unique fingerprint (#327).",
         "params": """@hours                    INT = 24
 , @viewVelocityThreshold    INT = 50
 , @exportSpikeThreshold     INT = 5
@@ -390,13 +423,26 @@ SELECT ruleCode, severity, appUserId, userName, displayName, clientAddress, sess
 , @probingThreshold         INT = 10
 , @searchVelocityThreshold  INT = 40
 , @privBurstThreshold       INT = 5
-, @mfaAbuseThreshold        INT = 5""",
+, @mfaAbuseThreshold        INT = 5
+, @distributedFailThreshold INT = 10""",
         "key": "CONCAT (N'hours=', @hours)",
         "body": f"""
+DECLARE @scanLock INT;
+EXEC @scanLock = sys.sp_getapplock @Resource = N'MERIT.securityFindingScan', @LockMode = 'Exclusive',
+     @LockOwner = 'Transaction', @LockTimeout = 5000;
+IF @scanLock < 0
+BEGIN
+    SELECT TOP (0) securityFindingId, rootTenantId, appUserId, ruleCode, severity, title, detailJson, detectedUtc
+      FROM logs.securityFinding;
+    SET @Comments = N'Another worker instance is running the scan.';
+    RETURN;
+END;
+
 DECLARE @winHours INT = CASE WHEN @hours BETWEEN 1 AND 168 THEN @hours ELSE 24 END;
 DECLARE @now DATETIME2 (3) = SYSUTCDATETIME ();
 DECLARE @since DATETIME2 (3) = DATEADD (HOUR, -@winHours, @now);
 DECLARE @dayBucket VARCHAR (10) = CONVERT (VARCHAR (10), @now, 23);
+DECLARE @platformRoot UNIQUEIDENTIFIER = '00000000-0000-0000-0000-000000000000';
 
 DECLARE @candidates TABLE (
     rootTenantId     UNIQUEIDENTIFIER NOT NULL,
@@ -411,71 +457,148 @@ DECLARE @candidates TABLE (
     fingerprint      VARCHAR (128) NOT NULL
 );
 
+-- Rule 1: bulkViewVelocity
 INSERT @candidates
-SELECT e.rootTenantId, MAX (e.actingTenantId), e.appUserId, NULL, e.sessionReference,
+SELECT COALESCE (e.rootTenantId, @platformRoot), MAX (e.actingTenantId), e.appUserId, NULL, e.sessionReference,
        'bulkViewVelocity', CASE WHEN COUNT (DISTINCT e.entityId) >= @viewVelocityThreshold * 2 THEN 'high' ELSE 'medium' END,
        CONCAT (N'High distinct record view velocity (', COUNT (DISTINCT e.entityId), N' records in ', @winHours, N'h)'),
        (SELECT COUNT (DISTINCT e.entityId) AS distinctEntities, COUNT (*) AS totalViews FOR JSON PATH, WITHOUT_ARRAY_WRAPPER),
        CONCAT ('bulkViewVelocity|', COALESCE (CONVERT (VARCHAR (36), e.appUserId), 'none'), '|', COALESCE (CONVERT (VARCHAR (36), e.sessionReference), @dayBucket))
   FROM logs.auditEvent AS e
  WHERE e.eventUtc >= @since AND e.eventAction = 'view' AND e.entityId IS NOT NULL
- GROUP BY e.rootTenantId, e.appUserId, e.sessionReference
+ GROUP BY COALESCE (e.rootTenantId, @platformRoot), e.appUserId, e.sessionReference
 HAVING COUNT (DISTINCT e.entityId) >= @viewVelocityThreshold;
 
+-- Rule 2: bulkExportSpike
 INSERT @candidates
-SELECT e.rootTenantId, MAX (e.actingTenantId), e.appUserId, NULL, NULL,
-       'bulkExportSpike', CASE WHEN SUM (COALESCE (e.recordCount, 1)) >= @exportRowsThreshold * 2 THEN 'high' ELSE 'medium' END,
+SELECT COALESCE (e.rootTenantId, @platformRoot), MAX (e.actingTenantId), e.appUserId, NULL, NULL,
+       'bulkExportSpike', CASE WHEN SUM (COALESCE (e.recordCount, 1)) >= @exportRowsThreshold * 2 OR COUNT (*) >= @exportSpikeThreshold * 2 THEN 'high' ELSE 'medium' END,
        CONCAT (N'Bulk export spike (', COUNT (*), N' exports, ', SUM (COALESCE (e.recordCount, 0)), N' rows)'),
        (SELECT COUNT (*) AS exportCount, SUM (COALESCE (e.recordCount, 0)) AS totalRows FOR JSON PATH, WITHOUT_ARRAY_WRAPPER),
-       CONCAT ('bulkExportSpike|', COALESCE (CONVERT (VARCHAR (36), e.appUserId), 'none'), '|', @dayBucket)
+       CONCAT ('bulkExportSpike|', CONVERT (VARCHAR (36), COALESCE (e.rootTenantId, @platformRoot)), '|', COALESCE (CONVERT (VARCHAR (36), e.appUserId), 'none'), '|', @dayBucket)
   FROM logs.auditEvent AS e
  WHERE e.eventUtc >= @since AND e.eventAction = 'export'
- GROUP BY e.rootTenantId, e.appUserId
+ GROUP BY COALESCE (e.rootTenantId, @platformRoot), e.appUserId
 HAVING COUNT (*) >= @exportSpikeThreshold OR SUM (COALESCE (e.recordCount, 0)) >= @exportRowsThreshold;
 
+-- Rule 3: probingDeniedOrOutsideScope (handles NULL rootTenantId safely under platform-only scope, B1 / Codex #3)
 INSERT @candidates
-SELECT e.rootTenantId, MAX (e.actingTenantId), e.appUserId, MAX (e.clientAddress), NULL,
+SELECT COALESCE (e.rootTenantId, @platformRoot), MAX (e.actingTenantId), e.appUserId, MAX (e.clientAddress), NULL,
        'probingDeniedOrOutsideScope', CASE WHEN COUNT (*) >= @probingThreshold * 2 THEN 'high' ELSE 'medium' END,
        CONCAT (N'Repeated permission-denied or outside-scope probing (', COUNT (*), N' events)'),
        (SELECT COUNT (*) AS events FOR JSON PATH, WITHOUT_ARRAY_WRAPPER),
-       CONCAT ('probingDeniedOrOutsideScope|', COALESCE (CONVERT (VARCHAR (36), e.appUserId), 'none'), '|', @dayBucket)
+       CONCAT ('probingDeniedOrOutsideScope|', CONVERT (VARCHAR (36), COALESCE (e.rootTenantId, @platformRoot)), '|', COALESCE (CONVERT (VARCHAR (36), e.appUserId), 'none'), '|', @dayBucket)
   FROM logs.auditEvent AS e
  WHERE e.eventUtc >= @since AND (e.eventAction = 'permissionDenied' OR e.entityType = 'personOutsideScope')
- GROUP BY e.rootTenantId, e.appUserId
+ GROUP BY COALESCE (e.rootTenantId, @platformRoot), e.appUserId
 HAVING COUNT (*) >= @probingThreshold;
 
+-- Rule 4: searchVelocitySpike
 INSERT @candidates
-SELECT e.rootTenantId, MAX (e.actingTenantId), e.appUserId, NULL, e.sessionReference,
-       'midSessionIpDrift', 'high',
-       CONCAT (N'Mid-session IP address change (', COUNT (DISTINCT e.clientAddress), N' addresses)'),
-       (SELECT COUNT (DISTINCT e.clientAddress) AS distinctAddresses, COUNT (*) AS events FOR JSON PATH, WITHOUT_ARRAY_WRAPPER),
-       CONCAT ('midSessionIpDrift|', CONVERT (VARCHAR (36), e.sessionReference))
-  FROM logs.auditEvent AS e
- WHERE e.eventUtc >= @since AND e.sessionReference IS NOT NULL AND e.clientAddress IS NOT NULL
- GROUP BY e.rootTenantId, e.appUserId, e.sessionReference
-HAVING COUNT (DISTINCT e.clientAddress) > 1;
-
-INSERT @candidates
-SELECT s.rootTenantId, MAX (s.actingTenantId), s.appUserId, MAX (s.clientAddress), NULL,
+SELECT COALESCE (s.rootTenantId, @platformRoot), MAX (s.actingTenantId), s.appUserId, MAX (s.clientAddress), NULL,
        'searchVelocitySpike', CASE WHEN COUNT (*) >= @searchVelocityThreshold * 2 THEN 'high' ELSE 'medium' END,
        CONCAT (N'High-velocity searching (', COUNT (*), N' queries)'),
        (SELECT COUNT (*) AS searches, SUM (CASE WHEN s.resultCount = 0 THEN 1 ELSE 0 END) AS zeroResults FOR JSON PATH, WITHOUT_ARRAY_WRAPPER),
-       CONCAT ('searchVelocitySpike|', CONVERT (VARCHAR (36), s.appUserId), '|', @dayBucket)
+       CONCAT ('searchVelocitySpike|', CONVERT (VARCHAR (36), COALESCE (s.rootTenantId, @platformRoot)), '|', CONVERT (VARCHAR (36), s.appUserId), '|', @dayBucket)
   FROM logs.searchLog AS s
  WHERE s.isDeleted = 0 AND s.searchedUtc >= @since
- GROUP BY s.rootTenantId, s.appUserId
+ GROUP BY COALESCE (s.rootTenantId, @platformRoot), s.appUserId
 HAVING COUNT (*) >= @searchVelocityThreshold;
 
+-- Rule 5: midSessionIpDrift (network prefix comparison, Claude I5)
 INSERT @candidates
-SELECT COALESCE (e.rootTenantId, '00000000-0000-0000-0000-000000000000'), NULL, e.appUserId, MAX (e.clientAddress), NULL,
+SELECT COALESCE (e.rootTenantId, @platformRoot), MAX (e.actingTenantId), e.appUserId, NULL, e.sessionReference,
+       'midSessionIpDrift', CASE WHEN COUNT (DISTINCT {IP_PREFIX_EXPR}) >= 3 THEN 'high' ELSE 'medium' END,
+       CONCAT (N'Mid-session network change (', COUNT (DISTINCT {IP_PREFIX_EXPR}), N' distinct network prefixes)'),
+       (SELECT COUNT (DISTINCT {IP_PREFIX_EXPR}) AS distinctPrefixes, COUNT (DISTINCT e.clientAddress) AS distinctAddresses, COUNT (*) AS events FOR JSON PATH, WITHOUT_ARRAY_WRAPPER),
+       CONCAT ('midSessionIpDrift|', CONVERT (VARCHAR (36), e.sessionReference))
+  FROM logs.auditEvent AS e
+ WHERE e.eventUtc >= @since AND e.sessionReference IS NOT NULL AND e.clientAddress IS NOT NULL
+ GROUP BY COALESCE (e.rootTenantId, @platformRoot), e.appUserId, e.sessionReference
+HAVING COUNT (DISTINCT {IP_PREFIX_EXPR}) > 1;
+
+-- Rule 6: automatedUserAgent (Codex #6 parity)
+INSERT @candidates
+SELECT COALESCE (e.rootTenantId, @platformRoot), NULL, e.appUserId, MAX (e.clientAddress), MAX (e.sessionReference),
+       'automatedUserAgent', 'medium',
+       CONCAT (N'Automated or headless client user-agent detected (', COUNT (*), N' sign-in events)'),
+       (SELECT COUNT (*) AS events, LEFT (MAX (e.userAgent), 120) AS sampleUserAgent FOR JSON PATH, WITHOUT_ARRAY_WRAPPER),
+       CONCAT ('automatedUserAgent|', CONVERT (VARCHAR (36), COALESCE (e.rootTenantId, @platformRoot)), '|', COALESCE (CONVERT (VARCHAR (36), e.appUserId), 'none'), '|', @dayBucket)
+  FROM logs.signInEvent AS e
+ WHERE e.isDeleted = 0 AND e.eventUtc >= @since AND e.userAgent IS NOT NULL
+   AND {AUTOMATED_UA_PREDICATE}
+ GROUP BY COALESCE (e.rootTenantId, @platformRoot), e.appUserId;
+
+-- Rule 7: privilegedActionBurst (Codex #6 parity)
+INSERT @candidates
+SELECT COALESCE (e.rootTenantId, @platformRoot), MAX (e.actingTenantId), e.appUserId, MAX (e.clientAddress), NULL,
+       'privilegedActionBurst', 'high',
+       CONCAT (N'Privileged security/configuration burst (', COUNT (*), N' actions)'),
+       (SELECT COUNT (*) AS actions, @privBurstThreshold AS threshold FOR JSON PATH, WITHOUT_ARRAY_WRAPPER),
+       CONCAT ('privilegedActionBurst|', CONVERT (VARCHAR (36), COALESCE (e.rootTenantId, @platformRoot)), '|', COALESCE (CONVERT (VARCHAR (36), e.appUserId), 'none'), '|', @dayBucket)
+  FROM logs.auditEvent AS e
+ WHERE e.eventUtc >= @since
+   AND (   e.eventAction IN ('grant', 'revoke', 'deactivate', 'mfaResetByAdmin', 'passwordSetByAdmin')
+        OR (e.entityType IN ('threshold', 'jurisdictionSetting', 'userAssignment', 'role') AND e.eventAction IN ('create', 'update', 'delete')))
+ GROUP BY COALESCE (e.rootTenantId, @platformRoot), e.appUserId
+HAVING COUNT (*) >= @privBurstThreshold;
+
+-- Rule 8: mfaOrResetAbuse (Claude I2 canonical event types)
+INSERT @candidates
+SELECT COALESCE (e.rootTenantId, @platformRoot), NULL, e.appUserId, MAX (e.clientAddress), NULL,
        'mfaOrResetAbuse', 'high',
        CONCAT (N'Repeated MFA or password-reset attempts (', COUNT (*), N' events)'),
        (SELECT COUNT (*) AS events, COUNT (DISTINCT e.clientAddress) AS distinctAddresses FOR JSON PATH, WITHOUT_ARRAY_WRAPPER),
-       CONCAT ('mfaOrResetAbuse|', COALESCE (CONVERT (VARCHAR (36), e.appUserId), 'none'), '|', @dayBucket)
+       CONCAT ('mfaOrResetAbuse|', CONVERT (VARCHAR (36), COALESCE (e.rootTenantId, @platformRoot)), '|', COALESCE (CONVERT (VARCHAR (36), e.appUserId), 'none'), '|', @dayBucket)
   FROM logs.signInEvent AS e
- WHERE e.isDeleted = 0 AND e.eventUtc >= @since AND e.eventType IN ('mfaFailed', 'mfaEmailCodeSent', 'passwordResetRequested')
- GROUP BY e.rootTenantId, e.appUserId
+ WHERE e.isDeleted = 0 AND e.eventUtc >= @since AND e.eventType IN ({MFA_ABUSE_EVENTS})
+ GROUP BY COALESCE (e.rootTenantId, @platformRoot), e.appUserId
 HAVING COUNT (*) >= @mfaAbuseThreshold;
+
+-- Rule 9: distributedLowAndSlowFailures (Codex #6 parity)
+INSERT @candidates
+SELECT COALESCE (e.rootTenantId, @platformRoot), NULL, e.appUserId, NULL, NULL,
+       'distributedLowAndSlowFailures', 'medium',
+       CONCAT (N'Distributed low-and-slow sign-in failures (', COUNT (*), N' failures across ', COUNT (DISTINCT e.clientAddress), N' addresses)'),
+       (SELECT COUNT (*) AS failures, COUNT (DISTINCT e.clientAddress) AS distinctAddresses, @distributedFailThreshold AS threshold FOR JSON PATH, WITHOUT_ARRAY_WRAPPER),
+       CONCAT ('distributedLowAndSlowFailures|', CONVERT (VARCHAR (36), COALESCE (e.rootTenantId, @platformRoot)), '|', COALESCE (CONVERT (VARCHAR (36), e.appUserId), 'none'), '|', @dayBucket)
+  FROM logs.signInEvent AS e
+ WHERE e.isDeleted = 0 AND e.eventUtc >= @since AND e.eventType IN ({FAILURES})
+ GROUP BY COALESCE (e.rootTenantId, @platformRoot), e.appUserId
+HAVING COUNT (*) >= @distributedFailThreshold AND COUNT (DISTINCT e.clientAddress) >= 4;
+
+-- Rule 10: apiOnlyNoScreenVisits (Codex #6 parity)
+INSERT @candidates
+SELECT COALESCE (e.rootTenantId, @platformRoot), MAX (e.actingTenantId), e.appUserId, MAX (e.clientAddress), e.sessionReference,
+       'apiOnlyNoScreenVisits', 'medium',
+       CONCAT (N'Data-access session with zero UI screen visits (', COUNT (*), N' reads)'),
+       (SELECT COUNT (*) AS readEvents, COUNT (DISTINCT e.entityId) AS distinctEntities FOR JSON PATH, WITHOUT_ARRAY_WRAPPER),
+       CONCAT ('apiOnlyNoScreenVisits|', CONVERT (VARCHAR (36), e.sessionReference))
+  FROM logs.auditEvent AS e
+ WHERE e.eventUtc >= @since AND e.sessionReference IS NOT NULL
+   AND e.eventAction IN ('view', 'list', 'export')
+   AND NOT EXISTS (SELECT 1 FROM logs.screenVisit AS v
+                    WHERE v.sessionReference = e.sessionReference AND v.isDeleted = 0)
+ GROUP BY COALESCE (e.rootTenantId, @platformRoot), e.appUserId, e.sessionReference
+HAVING COUNT (*) >= 25;
+
+-- Deduplicate candidates by fingerprint within this scan batch before inserting against the unique index.
+DECLARE @deduped TABLE (
+    rootTenantId     UNIQUEIDENTIFIER NOT NULL,
+    owningTenantId   UNIQUEIDENTIFIER NULL,
+    appUserId        UNIQUEIDENTIFIER NULL,
+    clientAddress    VARCHAR (45) NULL,
+    sessionReference UNIQUEIDENTIFIER NULL,
+    ruleCode         VARCHAR (50) NOT NULL,
+    severity         VARCHAR (15) NOT NULL,
+    title            NVARCHAR (200) NOT NULL,
+    detailJson       NVARCHAR (2000) NULL,
+    fingerprint      VARCHAR (128) NOT NULL PRIMARY KEY
+);
+INSERT @deduped
+SELECT rootTenantId, owningTenantId, appUserId, clientAddress, sessionReference, ruleCode, severity, title, detailJson, fingerprint
+  FROM (SELECT *, ROW_NUMBER () OVER (PARTITION BY fingerprint ORDER BY severity) AS rn FROM @candidates) AS x
+ WHERE rn = 1;
 
 DECLARE @inserted TABLE (
     securityFindingId UNIQUEIDENTIFIER,
@@ -495,7 +618,7 @@ OUTPUT INSERTED.securityFindingId, INSERTED.rootTenantId, INSERTED.appUserId, IN
   INTO @inserted
 SELECT {NEWID}, c.rootTenantId, c.owningTenantId, c.appUserId, c.clientAddress, c.sessionReference,
        c.ruleCode, c.severity, c.title, c.detailJson, @since, @now, @now, 'open', c.fingerprint
-  FROM @candidates AS c
+  FROM @deduped AS c
  WHERE NOT EXISTS (SELECT 1 FROM logs.securityFinding AS existing
                     WHERE existing.fingerprint = c.fingerprint AND existing.isDeleted = 0);
 
@@ -515,13 +638,15 @@ SET @Comments = CONCAT (N'Inserted ', (SELECT COUNT (*) FROM @inserted), N' new 
 , @severity  VARCHAR (15) = NULL
 , @appUserId UNIQUEIDENTIFIER = NULL
 , @top       INT = 200""",
-        "key": "CONCAT (N'days=', @days, N', status=', @status, N', severity=', @severity)",
+        "key": "CONCAT (N'days=', @days, N', top=', @top)",
         "body": f"""
 DECLARE @since DATETIME2 (3) = DATEADD (DAY, -CASE WHEN @days BETWEEN 1 AND 365 THEN @days ELSE 30 END, SYSUTCDATETIME ());
 DECLARE @limit INT = CASE WHEN @top BETWEEN 1 AND 1000 THEN @top ELSE 200 END;
 {REVIEW_ACCOUNTS}
 DECLARE @reviewTenants TABLE (tenantId UNIQUEIDENTIFIER PRIMARY KEY);
 INSERT @reviewTenants SELECT tenantId FROM auth.tvfReviewTenants ('security.review');
+DECLARE @wholeSecRoots TABLE (rootTenantId UNIQUEIDENTIFIER PRIMARY KEY);
+INSERT @wholeSecRoots SELECT t.tenantId FROM auth.tenant AS t JOIN @reviewTenants AS r ON r.tenantId = t.tenantId WHERE t.tenantId = t.rootTenantId;
 
 SELECT TOP (@limit)
        f.securityFindingId, f.rootTenantId, f.owningTenantId, f.appUserId,
@@ -537,41 +662,43 @@ SELECT TOP (@limit)
    AND (@severity IS NULL OR f.severity = @severity)
    AND (@appUserId IS NULL OR f.appUserId = @appUserId)
    AND (@all = 1
-        OR f.appUserId IN (SELECT appUserId FROM @accounts)
         OR f.owningTenantId IN (SELECT tenantId FROM @reviewTenants)
-        OR f.rootTenantId IN (SELECT tenantId FROM @reviewTenants))
+        OR (f.owningTenantId IS NULL AND f.rootTenantId IN (SELECT rootTenantId FROM @wholeSecRoots))
+        OR (f.owningTenantId IS NULL AND f.appUserId IN (SELECT appUserId FROM @accounts)))
  ORDER BY CASE f.severity WHEN 'critical' THEN 1 WHEN 'high' THEN 2 WHEN 'medium' THEN 3 ELSE 4 END,
           f.detectedUtc DESC;
 """,
     },
     {
         "schema": "logs", "name": "uspUpdateSecurityFindingStatus", "kind": "write", "grants": WEB, "ticket": "327",
-        "permission": ["security.review", "tenant.administer"],
-        "desc": "Updates the review status of a persisted security finding and audits the transition in the same transaction (#327).",
+        "permission": ["tenant.administer", "security.investigate"],
+        "desc": "Updates the review status of a persisted security finding (requires tenant.administer or security.investigate, "
+                "not read-only security.review) and audits the transition in the same transaction (#327, Codex #4).",
         "params": """@securityFindingId UNIQUEIDENTIFIER
 , @status            VARCHAR (20)""",
-        "key": "CONCAT (N'securityFindingId=', @securityFindingId, N', status=', @status)",
+        "key": "CONCAT (N'securityFindingId=', @securityFindingId)",
         "validate": """IF @status NOT IN ('open', 'acknowledged', 'resolved', 'falsePositive')
 BEGIN
     ;THROW 51422, N'Choose a valid finding status (open, acknowledged, resolved, falsePositive).', 1;
 END;""",
         "body": f"""
-{REVIEW_ACCOUNTS}
-DECLARE @reviewTenants TABLE (tenantId UNIQUEIDENTIFIER PRIMARY KEY);
-INSERT @reviewTenants SELECT tenantId FROM auth.tvfReviewTenants ('security.review');
+DECLARE @all BIT = auth.udfHasPermission (N'security.investigate');
+DECLARE @adminTenants TABLE (tenantId UNIQUEIDENTIFIER PRIMARY KEY);
+INSERT @adminTenants SELECT tenantId FROM auth.tvfSessionWritePermission ('tenant.administer');
+DECLARE @wholeAdminRoots TABLE (rootTenantId UNIQUEIDENTIFIER PRIMARY KEY);
+INSERT @wholeAdminRoots SELECT t.tenantId FROM auth.tenant AS t JOIN @adminTenants AS a ON a.tenantId = t.tenantId WHERE t.tenantId = t.rootTenantId;
 
 DECLARE @root UNIQUEIDENTIFIER, @owner UNIQUEIDENTIFIER;
 SELECT @root = f.rootTenantId, @owner = f.owningTenantId
   FROM logs.securityFinding AS f
  WHERE f.securityFindingId = @securityFindingId AND f.isDeleted = 0
    AND (@all = 1
-        OR f.appUserId IN (SELECT appUserId FROM @accounts)
-        OR f.owningTenantId IN (SELECT tenantId FROM @reviewTenants)
-        OR f.rootTenantId IN (SELECT tenantId FROM @reviewTenants));
+        OR f.owningTenantId IN (SELECT tenantId FROM @adminTenants)
+        OR (f.owningTenantId IS NULL AND f.rootTenantId IN (SELECT rootTenantId FROM @wholeAdminRoots)));
 
 IF @root IS NULL
 BEGIN
-    ;THROW 51404, N'The security finding was not found, or you do not have access to it.', 1;
+    ;THROW 51404, N'The security finding was not found, or you do not have permission to update it.', 1;
 END;
 
 UPDATE logs.securityFinding
@@ -594,7 +721,8 @@ SET @Comments = CONCAT (N'Finding status updated to ', @status, N'.');
     {
         "schema": "logs", "name": "uspExportAuditEvents", "kind": "read", "grants": WEB, "ticket": "328",
         "permission": "audit.view",
-        "desc": "Cursor-paginated canonical export of logs.auditEvent rows for a UTC range within the caller's audit.view scope (#328).",
+        "desc": "Cursor-paginated canonical export of logs.auditEvent rows over the half-open UTC range [@fromUtc, @toUtc) "
+                "using the exact #270 audit review scope (#328, Claude I4, Codex #2).",
         "params": """@fromUtc           DATETIME2 (3)
 , @toUtc             DATETIME2 (3)
 , @afterEventUtc     DATETIME2 (3) = NULL
@@ -603,7 +731,7 @@ SET @Comments = CONCAT (N'Finding status updated to ', @status, N'.');
         "key": "CONCAT (N'batchSize=', @batchSize, N', afterAuditEventId=', @afterAuditEventId)",
         "body": f"""
 DECLARE @limit INT = CASE WHEN @batchSize BETWEEN 1 AND 5000 THEN @batchSize ELSE 2000 END;
-{AUDIT_TENANTS}
+{AUDIT_SCOPE_270}
 
 SELECT TOP (@limit)
        e.auditEventId, e.eventUtc, e.eventAction, e.entityType, e.entityId, e.recordCount, e.viewKind,
@@ -612,20 +740,18 @@ SELECT TOP (@limit)
        e.sessionReference, e.traceId, e.clientAddress, e.filterJson
   FROM logs.auditEvent AS e
   LEFT JOIN auth.appUser AS u ON u.appUserId = e.appUserId
- WHERE e.eventUtc >= @fromUtc AND e.eventUtc <= @toUtc
+ WHERE e.eventUtc >= @fromUtc AND e.eventUtc < @toUtc
    AND (@afterAuditEventId IS NULL
         OR e.eventUtc > @afterEventUtc
         OR (e.eventUtc = @afterEventUtc AND e.auditEventId > @afterAuditEventId))
-   AND (@allAudit = 1
-        OR e.owningTenantId IN (SELECT tenantId FROM @auditTenants)
-        OR (e.owningTenantId IS NULL AND e.rootTenantId IN (SELECT tenantId FROM @auditTenants)))
+   AND {AUDIT_PREDICATE_270}
  ORDER BY e.eventUtc ASC, e.auditEventId ASC;
 """,
     },
     {
         "schema": "logs", "name": "uspExportSignInEvents", "kind": "read", "grants": WEB, "ticket": "328",
         "permission": ["security.review", "tenant.administer"],
-        "desc": "Cursor-paginated canonical export of logs.signInEvent rows for a UTC range within the caller's security review scope. Never returns attempted names (#328).",
+        "desc": "Cursor-paginated canonical export of logs.signInEvent rows over [@fromUtc, @toUtc) within the caller's security review scope. Never returns attempted names (#328).",
         "params": """@fromUtc            DATETIME2 (3)
 , @toUtc              DATETIME2 (3)
 , @afterEventUtc      DATETIME2 (3) = NULL
@@ -643,7 +769,7 @@ SELECT TOP (@limit)
        e.failedSignInCount, e.lockoutEndUtc
   FROM logs.signInEvent AS e
   LEFT JOIN auth.appUser AS u ON u.appUserId = e.appUserId
- WHERE e.isDeleted = 0 AND e.eventUtc >= @fromUtc AND e.eventUtc <= @toUtc
+ WHERE e.isDeleted = 0 AND e.eventUtc >= @fromUtc AND e.eventUtc < @toUtc
    AND (@afterSignInEventId IS NULL
         OR e.eventUtc > @afterEventUtc
         OR (e.eventUtc = @afterEventUtc AND e.signInEventId > @afterSignInEventId))
@@ -654,7 +780,7 @@ SELECT TOP (@limit)
     {
         "schema": "logs", "name": "uspExportScreenVisits", "kind": "read", "grants": WEB, "ticket": "328",
         "permission": "usage.view",
-        "desc": "Cursor-paginated canonical export of logs.screenVisit rows for a UTC range within the caller's usage.view scope (#328).",
+        "desc": "Cursor-paginated canonical export of logs.screenVisit rows over [@fromUtc, @toUtc) within the caller's usage.view scope (#328).",
         "params": """@fromUtc            DATETIME2 (3)
 , @toUtc              DATETIME2 (3)
 , @afterEventUtc      DATETIME2 (3) = NULL
@@ -673,7 +799,7 @@ SELECT TOP (@limit)
        v.roleCodes, v.screenCode, v.navigationType, v.tabId, v.previousVisitId, v.durationMs
   FROM logs.screenVisit AS v
   LEFT JOIN auth.appUser AS u ON u.appUserId = v.appUserId
- WHERE v.isDeleted = 0 AND v.eventUtc >= @fromUtc AND v.eventUtc <= @toUtc
+ WHERE v.isDeleted = 0 AND v.eventUtc >= @fromUtc AND v.eventUtc < @toUtc
    AND (@afterScreenVisitId IS NULL
         OR v.eventUtc > @afterEventUtc
         OR (v.eventUtc = @afterEventUtc AND v.screenVisitId > @afterScreenVisitId))
@@ -684,7 +810,7 @@ SELECT TOP (@limit)
     {
         "schema": "logs", "name": "uspExportSearchLogs", "kind": "read", "grants": WEB, "ticket": "328",
         "permission": ["security.review", "audit.view"],
-        "desc": "Cursor-paginated canonical export of logs.searchLog metadata (never raw searchText) for a UTC range (#328/#329).",
+        "desc": "Cursor-paginated canonical export of logs.searchLog metadata (never raw searchText) over [@fromUtc, @toUtc) (#328/#329).",
         "params": """@fromUtc          DATETIME2 (3)
 , @toUtc            DATETIME2 (3)
 , @afterSearchedUtc DATETIME2 (3) = NULL
@@ -694,7 +820,9 @@ SELECT TOP (@limit)
         "body": f"""
 DECLARE @limit INT = CASE WHEN @batchSize BETWEEN 1 AND 5000 THEN @batchSize ELSE 2000 END;
 {REVIEW_ACCOUNTS}
-{AUDIT_TENANTS}
+{AUDIT_SCOPE_270}
+DECLARE @secTenants TABLE (tenantId UNIQUEIDENTIFIER PRIMARY KEY);
+INSERT @secTenants SELECT tenantId FROM auth.tvfReviewTenants ('security.review');
 
 SELECT TOP (@limit)
        s.searchLogId, s.searchedUtc, s.appUserId, u.userName, u.displayName,
@@ -702,14 +830,15 @@ SELECT TOP (@limit)
        s.resultCount, s.existsElsewhere, s.searchSource
   FROM logs.searchLog AS s
   LEFT JOIN auth.appUser AS u ON u.appUserId = s.appUserId
- WHERE s.isDeleted = 0 AND s.searchedUtc >= @fromUtc AND s.searchedUtc <= @toUtc
+ WHERE s.isDeleted = 0 AND s.searchedUtc >= @fromUtc AND s.searchedUtc < @toUtc
    AND (@afterSearchLogId IS NULL
         OR s.searchedUtc > @afterSearchedUtc
         OR (s.searchedUtc = @afterSearchedUtc AND s.searchLogId > @afterSearchLogId))
-   AND (@all = 1 OR @allAudit = 1
-        OR s.appUserId IN (SELECT appUserId FROM @accounts)
-        OR s.actingTenantId IN (SELECT tenantId FROM @auditTenants)
-        OR s.rootTenantId IN (SELECT tenantId FROM @auditTenants))
+   AND (@all = 1
+        OR EXISTS (SELECT 1 FROM @wholeRoots AS w WHERE w.rootTenantId = s.rootTenantId)
+        OR s.actingTenantId IN (SELECT tenantId FROM @auditScope)
+        OR s.actingTenantId IN (SELECT tenantId FROM @secTenants)
+        OR (s.actingTenantId IS NULL AND s.appUserId IN (SELECT appUserId FROM @accounts)))
  ORDER BY s.searchedUtc ASC, s.searchLogId ASC;
 """,
     },
@@ -718,25 +847,34 @@ SELECT TOP (@limit)
     {
         "schema": "logs", "name": "uspGetUserBehaviorSummary", "kind": "read", "grants": WEB, "ticket": "330",
         "permission": ["security.review", "audit.view", "tenant.administer"],
-        "desc": "Unified per-user behavioral summary across sign-ins, active sessions, audit ledger actions, search volume, "
-                "screen usage, and open security findings within the caller's review scope (#330).",
+        "desc": "Unified per-user behavioral summary applying strict event-level tenant scope to audit, search, usage, "
+                "and security-finding aggregates (#330, Codex #1).",
         "params": """@appUserId UNIQUEIDENTIFIER
 , @days      INT = 30""",
         "key": "CONCAT (N'appUserId=', @appUserId, N', days=', @days)",
         "body": f"""
 DECLARE @winDays INT = CASE WHEN @days BETWEEN 1 AND 365 THEN @days ELSE 30 END;
 DECLARE @since DATETIME2 (3) = DATEADD (DAY, -@winDays, SYSUTCDATETIME ());
+DECLARE @canAudit BIT = auth.udfHasPermission (N'audit.view');
+DECLARE @canUsage BIT = auth.udfHasPermission (N'usage.view');
 {REVIEW_ACCOUNTS}
-{AUDIT_TENANTS}
+{AUDIT_SCOPE_270}
+DECLARE @secTenants TABLE (tenantId UNIQUEIDENTIFIER PRIMARY KEY);
+INSERT @secTenants SELECT tenantId FROM auth.tvfReviewTenants ('security.review');
+DECLARE @wholeSecRoots TABLE (rootTenantId UNIQUEIDENTIFIER PRIMARY KEY);
+INSERT @wholeSecRoots SELECT t.tenantId FROM auth.tenant AS t JOIN @secTenants AS r ON r.tenantId = t.tenantId WHERE t.tenantId = t.rootTenantId;
+DECLARE @usageTenants TABLE (tenantId UNIQUEIDENTIFIER PRIMARY KEY);
+IF @canUsage = 1 INSERT @usageTenants SELECT tenantId FROM auth.tvfReviewTenants ('usage.view');
 
-IF @all = 0 AND @allAudit = 0
+IF @all = 0
    AND NOT EXISTS (SELECT 1 FROM @accounts WHERE appUserId = @appUserId)
-   AND NOT EXISTS (SELECT 1 FROM auth.appUser AS u WHERE u.appUserId = @appUserId AND u.homeTenantId IN (SELECT tenantId FROM @auditTenants))
+   AND NOT EXISTS (SELECT 1 FROM @auditUsers WHERE appUserId = @appUserId)
+   AND NOT EXISTS (SELECT 1 FROM auth.appUser AS u WHERE u.appUserId = @appUserId AND u.rootTenantId IN (SELECT rootTenantId FROM @wholeRoots))
 BEGIN
     ;THROW 51404, N'The user was not found, or you do not have access to review this account.', 1;
 END;
 
--- 1. Account overview & sign-in posture
+-- 1. Account overview & event-scoped posture
 SELECT u.appUserId, u.userName, u.displayName, u.isActive, u.mfaEnabled, u.lastSignInUtc,
        (SELECT COUNT (*) FROM auth.sessionScope AS ss
          WHERE ss.appUserId = u.appUserId AND ss.revokedUtc IS NULL AND ss.expiresUtc > SYSUTCDATETIME ()) AS activeSessions,
@@ -744,42 +882,64 @@ SELECT u.appUserId, u.userName, u.displayName, u.isActive, u.mfaEnabled, u.lastS
        (SELECT COUNT (*) FROM logs.signInEvent AS se WHERE se.appUserId = u.appUserId AND se.isDeleted = 0 AND se.eventUtc >= @since AND se.eventType IN ({FAILURES})) AS signInFailures,
        (SELECT COUNT (*) FROM logs.signInEvent AS se WHERE se.appUserId = u.appUserId AND se.isDeleted = 0 AND se.eventUtc >= @since AND se.eventType = 'accountLocked') AS lockouts,
        (SELECT COUNT (DISTINCT se.clientAddress) FROM logs.signInEvent AS se WHERE se.appUserId = u.appUserId AND se.isDeleted = 0 AND se.eventUtc >= @since AND se.clientAddress IS NOT NULL) AS distinctAddresses,
-       (SELECT COUNT (*) FROM logs.searchLog AS sl WHERE sl.appUserId = u.appUserId AND sl.isDeleted = 0 AND sl.searchedUtc >= @since) AS totalSearches,
-       (SELECT COUNT (*) FROM logs.searchLog AS sl WHERE sl.appUserId = u.appUserId AND sl.isDeleted = 0 AND sl.searchedUtc >= @since AND sl.resultCount = 0) AS zeroResultSearches,
-       (SELECT COUNT (*) FROM logs.searchLog AS sl WHERE sl.appUserId = u.appUserId AND sl.isDeleted = 0 AND sl.searchedUtc >= @since AND sl.existsElsewhere = 1) AS outsideScopeSearches,
-       (SELECT COUNT (DISTINCT sv.sessionReference) FROM logs.screenVisit AS sv WHERE sv.appUserId = u.appUserId AND sv.isDeleted = 0 AND sv.eventUtc >= @since) AS usageSessions,
-       (SELECT COUNT (*) FROM logs.screenVisit AS sv WHERE sv.appUserId = u.appUserId AND sv.isDeleted = 0 AND sv.eventUtc >= @since) AS screenVisits
+       (SELECT COUNT (*) FROM logs.searchLog AS sl
+         WHERE sl.appUserId = u.appUserId AND sl.isDeleted = 0 AND sl.searchedUtc >= @since
+           AND (@all = 1 OR EXISTS (SELECT 1 FROM @wholeRoots AS w WHERE w.rootTenantId = sl.rootTenantId)
+                OR sl.actingTenantId IN (SELECT tenantId FROM @auditScope)
+                OR sl.actingTenantId IN (SELECT tenantId FROM @secTenants))) AS totalSearches,
+       (SELECT COUNT (*) FROM logs.searchLog AS sl
+         WHERE sl.appUserId = u.appUserId AND sl.isDeleted = 0 AND sl.searchedUtc >= @since AND sl.resultCount = 0
+           AND (@all = 1 OR EXISTS (SELECT 1 FROM @wholeRoots AS w WHERE w.rootTenantId = sl.rootTenantId)
+                OR sl.actingTenantId IN (SELECT tenantId FROM @auditScope)
+                OR sl.actingTenantId IN (SELECT tenantId FROM @secTenants))) AS zeroResultSearches,
+       (SELECT COUNT (*) FROM logs.searchLog AS sl
+         WHERE sl.appUserId = u.appUserId AND sl.isDeleted = 0 AND sl.searchedUtc >= @since AND sl.existsElsewhere = 1
+           AND (@all = 1 OR EXISTS (SELECT 1 FROM @wholeRoots AS w WHERE w.rootTenantId = sl.rootTenantId)
+                OR sl.actingTenantId IN (SELECT tenantId FROM @auditScope)
+                OR sl.actingTenantId IN (SELECT tenantId FROM @secTenants))) AS outsideScopeSearches,
+       (SELECT COUNT (DISTINCT sv.sessionReference) FROM logs.screenVisit AS sv
+         WHERE @canUsage = 1 AND sv.appUserId = u.appUserId AND sv.isDeleted = 0 AND sv.eventUtc >= @since
+           AND sv.actingTenantId IN (SELECT tenantId FROM @usageTenants)) AS usageSessions,
+       (SELECT COUNT (*) FROM logs.screenVisit AS sv
+         WHERE @canUsage = 1 AND sv.appUserId = u.appUserId AND sv.isDeleted = 0 AND sv.eventUtc >= @since
+           AND sv.actingTenantId IN (SELECT tenantId FROM @usageTenants)) AS screenVisits
   FROM auth.appUser AS u
  WHERE u.appUserId = @appUserId AND u.isDeleted = 0;
 
--- 2. Audit ledger action breakdown
+-- 2. Event-scoped audit ledger action breakdown (requires audit.view + #270 event ownership scope)
 SELECT e.eventAction, e.entityType, COUNT (*) AS eventCount,
        SUM (COALESCE (e.recordCount, 1)) AS totalRecords,
        MAX (e.eventUtc) AS lastUtc
   FROM logs.auditEvent AS e
- WHERE e.appUserId = @appUserId AND e.eventUtc >= @since
+ WHERE @canAudit = 1 AND e.appUserId = @appUserId AND e.eventUtc >= @since
+   AND {AUDIT_PREDICATE_270}
  GROUP BY e.eventAction, e.entityType
  ORDER BY eventCount DESC, lastUtc DESC;
 
--- 3. Recent security findings for this user
+-- 3. Event-scoped recent security findings for this user
 SELECT TOP (25) f.securityFindingId, f.ruleCode, f.severity, f.title, f.status, f.detectedUtc
   FROM logs.securityFinding AS f
  WHERE f.appUserId = @appUserId AND f.isDeleted = 0 AND f.detectedUtc >= @since
+   AND (@all = 1
+        OR f.owningTenantId IN (SELECT tenantId FROM @secTenants)
+        OR (f.owningTenantId IS NULL AND f.rootTenantId IN (SELECT rootTenantId FROM @wholeSecRoots)))
  ORDER BY f.detectedUtc DESC;
 
--- 4. Recent screen-usage sessions for this user
+-- 4. Event-scoped recent screen-usage sessions (requires usage.view + actingTenantId scope)
 SELECT TOP (25) v.sessionReference, MIN (v.eventUtc) AS firstUtc, MAX (v.eventUtc) AS lastUtc, COUNT (*) AS visits
   FROM logs.screenVisit AS v
- WHERE v.appUserId = @appUserId AND v.isDeleted = 0 AND v.eventUtc >= @since
+ WHERE @canUsage = 1 AND v.appUserId = @appUserId AND v.isDeleted = 0 AND v.eventUtc >= @since
+   AND v.actingTenantId IN (SELECT tenantId FROM @usageTenants)
  GROUP BY v.sessionReference
  ORDER BY MAX (v.eventUtc) DESC;
 """,
     },
     {
         "schema": "logs", "name": "uspGetOperationalLogs", "kind": "read", "grants": WEB, "ticket": "330",
-        "permission": "security.investigate",
+        "permission": "security.investigate", "execute_as_owner": True,
         "desc": "Platform-admin operational log summary: allowlisted logs.ExecutionLog failures (#338), recent logs.DdlChange "
-                "events, and logs.uspDdlAuditVerify integrity posture (#330).",
+                "events, and logs.uspDdlAuditVerify integrity posture (runs WITH EXECUTE AS OWNER after permission check "
+                "so catalog metadata is visible identically to db_owner, #330, Codex #5).",
         "params": """@hours INT = 24
 , @top   INT = 100""",
         "key": "CONCAT (N'hours=', @hours, N', top=', @top)",
@@ -787,11 +947,28 @@ SELECT TOP (25) v.sessionReference, MIN (v.eventUtc) AS firstUtc, MAX (v.eventUt
 DECLARE @since DATETIME2 (3) = DATEADD (HOUR, -CASE WHEN @hours BETWEEN 1 AND 720 THEN @hours ELSE 24 END, SYSUTCDATETIME ());
 DECLARE @limit INT = CASE WHEN @top BETWEEN 1 AND 500 THEN @top ELSE 100 END;
 
--- 1. Allowlisted ExecutionLog failure diagnostics (#338): procedure identity, timing, error code/line/procedure, allowlisted KeyParameters, actor.
---    Raw ErrorMessage, DynamicSql, and ContextMessage are excluded from operational reports/exports.
+-- 1. Allowlisted ExecutionLog failure diagnostics (#338): project only validated key parameters, even on legacy rows.
 SELECT TOP (@limit)
        ExecutionLogId, ProcedureName, StartDateUtc, EndDateUtc, ElapsedMilliseconds,
-       ReCreatedAfterRollback, ErrorNumber, ErrorLine, ErrorProcedure, KeyParameters, createdBy
+       ReCreatedAfterRollback, ErrorNumber, ErrorLine, ErrorProcedure,
+       CASE
+           WHEN KeyParameters IS NULL OR CHARINDEX (N'=', KeyParameters) = 0 THEN LEFT (KeyParameters, 200)
+           WHEN EXISTS (
+                SELECT 1
+                  FROM STRING_SPLIT (LEFT (KeyParameters, 500), N',') AS tok
+                 CROSS APPLY (SELECT LTRIM (RTRIM (LEFT (tok.value, NULLIF (CHARINDEX (N'=', tok.value), 0) - 1))) AS k) AS kv
+                 WHERE kv.k IS NULL
+                    OR (    kv.k NOT LIKE N'%Id' AND kv.k NOT LIKE N'%Count' AND kv.k NOT LIKE N'%Number'
+                        AND kv.k NOT LIKE N'%Days' AND kv.k NOT LIKE N'%Hours' AND kv.k NOT LIKE N'%Minutes'
+                        AND kv.k NOT LIKE N'%Size' AND kv.k NOT LIKE N'%Rows' AND kv.k NOT LIKE N'%Code'
+                        AND kv.k NOT LIKE N'%Type' AND kv.k NOT LIKE N'%Action' AND kv.k NOT LIKE N'%Kind'
+                        AND kv.k NOT LIKE N'%Source' AND kv.k NOT LIKE N'%Role' AND kv.k NOT LIKE N'%By'
+                        AND kv.k NOT LIKE N'%Only' AND kv.k NOT LIKE N'%Fips'
+                        AND kv.k NOT IN (N'top', N'page', N'hasDob', N'includeProtected', N'includeSearchText', N'assignedToMe', N'classification', N'closureReason', N'resultRowStatus', N'viewKind', N'from', N'to'))
+           ) THEN N'[redacted: non-allowlisted diagnostic key]'
+           ELSE LEFT (KeyParameters, 500)
+       END AS KeyParameters,
+       createdBy
   FROM logs.ExecutionLog
  WHERE isDeleted = 0 AND Successful = 0 AND StartDateUtc >= @since
  ORDER BY ExecutionLogId DESC;
@@ -810,7 +987,9 @@ EXEC logs.uspDdlAuditVerify;
     },
     {
         "schema": "logs", "name": "uspCheckOperationalIntegrity", "kind": "read", "grants": WORKER, "ticket": "330",
-        "desc": "Worker-only operational integrity check: counts recent logs.ExecutionLog failures and runs logs.uspDdlAuditVerify @ProblemsOnly = 1 (#330).",
+        "execute_as_owner": True,
+        "desc": "Worker-only operational integrity check: counts recent logs.ExecutionLog failures and runs "
+                "logs.uspDdlAuditVerify @ProblemsOnly = 1 under owner catalog visibility (#330, Codex #5).",
         "params": "@minutes INT = 15",
         "key": "CONCAT (N'minutes=', @minutes)",
         "body": """

@@ -94,6 +94,14 @@ GO
 -- 4. Indexes. The clustered index leads with rootTenantId so each state's rows sit together and the
 --    row-level security predicate stays cheap. Unique indexes are filtered on isDeleted = 0.
 -- -------------------------------------------------------------------------------------------
+IF EXISTS (SELECT 1
+             FROM sys.indexes
+            WHERE name      = N'IX_logs_securityFinding_fingerprint'
+              AND object_id = OBJECT_ID (N'logs.securityFinding'))
+BEGIN
+    DROP INDEX IX_logs_securityFinding_fingerprint ON logs.securityFinding;
+END;
+GO
 IF NOT EXISTS (SELECT 1
                  FROM sys.indexes
                 WHERE name      = N'IX_logs_securityFinding_rootTenantId_securityFindingId'
@@ -125,12 +133,12 @@ END;
 GO
 IF NOT EXISTS (SELECT 1
                  FROM sys.indexes
-                WHERE name      = N'IX_logs_securityFinding_fingerprint'
+                WHERE name      = N'UX_logs_securityFinding_fingerprint'
                   AND object_id = OBJECT_ID (N'logs.securityFinding'))
 BEGIN
-    CREATE INDEX IX_logs_securityFinding_fingerprint
+    CREATE UNIQUE INDEX UX_logs_securityFinding_fingerprint
         ON logs.securityFinding (fingerprint)
-        WHERE isDeleted = 0;
+        WHERE isDeleted = 0 AND isDeleted = 0;
 END;
 GO
 IF NOT EXISTS (SELECT 1

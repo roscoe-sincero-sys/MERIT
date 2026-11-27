@@ -1907,10 +1907,11 @@ TABLES += [{
         c("fingerprint", "VARCHAR (128)", "Deterministic deduplication key for the finding within a scan window.", null=False),
     ],
     "fks": [],
+    "dropIndexes": ["IX_logs_securityFinding_fingerprint"],
     "indexes": [
         {"name": "IX_logs_securityFinding_rootTenantId_detectedUtc", "cols": "rootTenantId, detectedUtc", "filter": "isDeleted = 0"},
         {"name": "IX_logs_securityFinding_status_detectedUtc", "cols": "status, detectedUtc", "filter": "isDeleted = 0"},
-        {"name": "IX_logs_securityFinding_fingerprint", "cols": "fingerprint", "filter": "isDeleted = 0"},
+        {"name": "UX_logs_securityFinding_fingerprint", "cols": "fingerprint", "unique": True, "filter": "isDeleted = 0"},
         {"name": "IX_logs_securityFinding_appUserId_detectedUtc", "cols": "appUserId, detectedUtc", "filter": "isDeleted = 0"},
     ],
 }]

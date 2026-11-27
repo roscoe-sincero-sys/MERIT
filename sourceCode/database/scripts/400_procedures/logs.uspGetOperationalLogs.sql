@@ -13,7 +13,7 @@ CreateDate:   2026-10-24
 ========================================================================================================================
 Description:
 
-Platform-admin operational log summary: allowlisted logs.ExecutionLog failures (#338), recent logs.DdlChange events, and logs.uspDdlAuditVerify integrity posture (#330).
+Platform-admin operational log summary: allowlisted logs.ExecutionLog failures (#338), recent logs.DdlChange events, and logs.uspDdlAuditVerify integrity posture (runs WITH EXECUTE AS OWNER after permission check so catalog metadata is visible identically to db_owner, #330, Codex #5).
 
 ========================================================================================================================
 Requirements and Key Dependencies:
@@ -49,6 +49,7 @@ Description:	Initial version.
 CREATE OR ALTER PROCEDURE logs.uspGetOperationalLogs
       @hours INT = 24
       , @top   INT = 100
+WITH EXECUTE AS OWNER
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -87,11 +88,28 @@ BEGIN
         DECLARE @since DATETIME2 (3) = DATEADD (HOUR, -CASE WHEN @hours BETWEEN 1 AND 720 THEN @hours ELSE 24 END, SYSUTCDATETIME ());
         DECLARE @limit INT = CASE WHEN @top BETWEEN 1 AND 500 THEN @top ELSE 100 END;
 
-        -- 1. Allowlisted ExecutionLog failure diagnostics (#338): procedure identity, timing, error code/line/procedure, allowlisted KeyParameters, actor.
-        --    Raw ErrorMessage, DynamicSql, and ContextMessage are excluded from operational reports/exports.
+        -- 1. Allowlisted ExecutionLog failure diagnostics (#338): project only validated key parameters, even on legacy rows.
         SELECT TOP (@limit)
                ExecutionLogId, ProcedureName, StartDateUtc, EndDateUtc, ElapsedMilliseconds,
-               ReCreatedAfterRollback, ErrorNumber, ErrorLine, ErrorProcedure, KeyParameters, createdBy
+               ReCreatedAfterRollback, ErrorNumber, ErrorLine, ErrorProcedure,
+               CASE
+                   WHEN KeyParameters IS NULL OR CHARINDEX (N'=', KeyParameters) = 0 THEN LEFT (KeyParameters, 200)
+                   WHEN EXISTS (
+                        SELECT 1
+                          FROM STRING_SPLIT (LEFT (KeyParameters, 500), N',') AS tok
+                         CROSS APPLY (SELECT LTRIM (RTRIM (LEFT (tok.value, NULLIF (CHARINDEX (N'=', tok.value), 0) - 1))) AS k) AS kv
+                         WHERE kv.k IS NULL
+                            OR (    kv.k NOT LIKE N'%Id' AND kv.k NOT LIKE N'%Count' AND kv.k NOT LIKE N'%Number'
+                                AND kv.k NOT LIKE N'%Days' AND kv.k NOT LIKE N'%Hours' AND kv.k NOT LIKE N'%Minutes'
+                                AND kv.k NOT LIKE N'%Size' AND kv.k NOT LIKE N'%Rows' AND kv.k NOT LIKE N'%Code'
+                                AND kv.k NOT LIKE N'%Type' AND kv.k NOT LIKE N'%Action' AND kv.k NOT LIKE N'%Kind'
+                                AND kv.k NOT LIKE N'%Source' AND kv.k NOT LIKE N'%Role' AND kv.k NOT LIKE N'%By'
+                                AND kv.k NOT LIKE N'%Only' AND kv.k NOT LIKE N'%Fips'
+                                AND kv.k NOT IN (N'top', N'page', N'hasDob', N'includeProtected', N'includeSearchText', N'assignedToMe', N'classification', N'closureReason', N'resultRowStatus', N'viewKind', N'from', N'to'))
+                   ) THEN N'[redacted: non-allowlisted diagnostic key]'
+                   ELSE LEFT (KeyParameters, 500)
+               END AS KeyParameters,
+               createdBy
           FROM logs.ExecutionLog
          WHERE isDeleted = 0 AND Successful = 0 AND StartDateUtc >= @since
          ORDER BY ExecutionLogId DESC;
@@ -144,7 +162,7 @@ EXEC util.uspSetObjectDescription
       @SchemaName  = N'logs'
     , @ObjectType  = N'PROCEDURE'
     , @ObjectName  = N'uspGetOperationalLogs'
-    , @Description = N'Platform-admin operational log summary: allowlisted logs.ExecutionLog failures (#338), recent logs.DdlChange events, and logs.uspDdlAuditVerify integrity posture (#330).';
+    , @Description = N'Platform-admin operational log summary: allowlisted logs.ExecutionLog failures (#338), recent logs.DdlChange events, and logs.uspDdlAuditVerify integrity posture (runs WITH EXECUTE AS OWNER after permission check so catalog metadata is visible identically to db_owner, #330, Codex #5).';
 GO
 
 IF DATABASE_PRINCIPAL_ID (N'meritWebRole') IS NOT NULL

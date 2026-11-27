@@ -244,6 +244,7 @@ public sealed class LoggingAuditHardeningTests
             "SecurityMonitoringController.OperationsLog", // audited: SecurityMonitoringService (#330)
             "SecurityMonitoringController.OperationsLogCsv", // audited: audit.ExportedAsync (#330)
             "SecurityMonitoringController.OperationsLogJsonl", // audited: audit.ExportedAsync (#330)
+            "SecurityMonitoringController.AuditChanges", // audited: SecurityMonitoringService.GetAuditEventChangesAsync (#332)
         };
 
         var webAssembly = typeof(Merit.Web.Controllers.AdminController).Assembly;

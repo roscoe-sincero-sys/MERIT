@@ -13,7 +13,7 @@ CreateDate:   2026-10-24
 ========================================================================================================================
 Description:
 
-Cursor-paginated canonical export of logs.auditEvent rows for a UTC range within the caller's audit.view scope (#328).
+Cursor-paginated canonical export of logs.auditEvent rows over the half-open UTC range [@fromUtc, @toUtc) using the exact #270 audit review scope (#328, Claude I4, Codex #2).
 
 ========================================================================================================================
 Requirements and Key Dependencies:
@@ -88,9 +88,18 @@ BEGIN
         -- =========================================================================================
 
         DECLARE @limit INT = CASE WHEN @batchSize BETWEEN 1 AND 5000 THEN @batchSize ELSE 2000 END;
-        DECLARE @allAudit BIT = auth.udfHasPermission (N'security.investigate');
-        DECLARE @auditTenants TABLE (tenantId UNIQUEIDENTIFIER PRIMARY KEY);
-        INSERT @auditTenants SELECT tenantId FROM auth.tvfReviewTenants ('audit.view');
+        DECLARE @auditScope TABLE (tenantId UNIQUEIDENTIFIER PRIMARY KEY);
+        INSERT @auditScope SELECT tenantId FROM auth.tvfReviewTenants ('audit.view');
+        DECLARE @wholeRoots TABLE (rootTenantId UNIQUEIDENTIFIER PRIMARY KEY);
+        INSERT @wholeRoots SELECT t.tenantId FROM auth.tenant AS t JOIN @auditScope AS s ON s.tenantId = t.tenantId WHERE t.tenantId = t.rootTenantId;
+        DECLARE @partRoots TABLE (rootTenantId UNIQUEIDENTIFIER PRIMARY KEY);
+        INSERT @partRoots SELECT DISTINCT t.rootTenantId FROM auth.tenant AS t JOIN @auditScope AS s ON s.tenantId = t.tenantId
+         WHERE NOT EXISTS (SELECT 1 FROM @wholeRoots AS w WHERE w.rootTenantId = t.rootTenantId);
+        DECLARE @auditUsers TABLE (appUserId UNIQUEIDENTIFIER PRIMARY KEY);
+        INSERT @auditUsers SELECT u.appUserId FROM auth.appUser AS u
+         WHERE EXISTS (SELECT 1 FROM @partRoots)
+           AND (EXISTS (SELECT 1 FROM @auditScope AS s WHERE s.tenantId = u.homeTenantId)
+                OR EXISTS (SELECT 1 FROM auth.userAssignment AS ua JOIN @auditScope AS s ON s.tenantId = ua.tenantId WHERE ua.appUserId = u.appUserId AND ua.isDeleted = 0));
 
         SELECT TOP (@limit)
                e.auditEventId, e.eventUtc, e.eventAction, e.entityType, e.entityId, e.recordCount, e.viewKind,
@@ -99,13 +108,15 @@ BEGIN
                e.sessionReference, e.traceId, e.clientAddress, e.filterJson
           FROM logs.auditEvent AS e
           LEFT JOIN auth.appUser AS u ON u.appUserId = e.appUserId
-         WHERE e.eventUtc >= @fromUtc AND e.eventUtc <= @toUtc
+         WHERE e.eventUtc >= @fromUtc AND e.eventUtc < @toUtc
            AND (@afterAuditEventId IS NULL
                 OR e.eventUtc > @afterEventUtc
                 OR (e.eventUtc = @afterEventUtc AND e.auditEventId > @afterAuditEventId))
-           AND (@allAudit = 1
-                OR e.owningTenantId IN (SELECT tenantId FROM @auditTenants)
-                OR (e.owningTenantId IS NULL AND e.rootTenantId IN (SELECT tenantId FROM @auditTenants)))
+           AND (EXISTS (SELECT 1 FROM @wholeRoots AS w WHERE w.rootTenantId = e.rootTenantId)
+            OR (EXISTS (SELECT 1 FROM @partRoots AS p WHERE p.rootTenantId = e.rootTenantId)
+                AND ((e.owningTenantId IS NULL AND EXISTS (SELECT 1 FROM @auditUsers AS x WHERE x.appUserId = e.appUserId))
+                     OR EXISTS (SELECT 1 FROM @auditScope AS s WHERE s.tenantId = e.owningTenantId)
+                     OR (e.owningTenantId = e.rootTenantId AND e.entityType IN ('jurisdictionSetting', 'threshold', 'notificationRule')))))
          ORDER BY e.eventUtc ASC, e.auditEventId ASC;
 
         -- =========================================================================================
@@ -145,7 +156,7 @@ EXEC util.uspSetObjectDescription
       @SchemaName  = N'logs'
     , @ObjectType  = N'PROCEDURE'
     , @ObjectName  = N'uspExportAuditEvents'
-    , @Description = N'Cursor-paginated canonical export of logs.auditEvent rows for a UTC range within the caller''s audit.view scope (#328).';
+    , @Description = N'Cursor-paginated canonical export of logs.auditEvent rows over the half-open UTC range [@fromUtc, @toUtc) using the exact #270 audit review scope (#328, Claude I4, Codex #2).';
 GO
 
 IF DATABASE_PRINCIPAL_ID (N'meritWebRole') IS NOT NULL

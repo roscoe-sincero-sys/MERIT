@@ -13,7 +13,7 @@ CreateDate:   2026-10-24
 ========================================================================================================================
 Description:
 
-Unified per-user behavioral summary across sign-ins, active sessions, audit ledger actions, search volume, screen usage, and open security findings within the caller's review scope (#330).
+Unified per-user behavioral summary applying strict event-level tenant scope to audit, search, usage, and security-finding aggregates (#330, Codex #1).
 
 ========================================================================================================================
 Requirements and Key Dependencies:
@@ -86,21 +86,39 @@ BEGIN
 
         DECLARE @winDays INT = CASE WHEN @days BETWEEN 1 AND 365 THEN @days ELSE 30 END;
         DECLARE @since DATETIME2 (3) = DATEADD (DAY, -@winDays, SYSUTCDATETIME ());
+        DECLARE @canAudit BIT = auth.udfHasPermission (N'audit.view');
+        DECLARE @canUsage BIT = auth.udfHasPermission (N'usage.view');
         DECLARE @all BIT = auth.udfHasPermission (N'security.investigate');
         DECLARE @accounts TABLE (appUserId UNIQUEIDENTIFIER PRIMARY KEY);
         INSERT @accounts SELECT appUserId FROM auth.tvfReviewAccounts ('security.review');
-        DECLARE @allAudit BIT = auth.udfHasPermission (N'security.investigate');
-        DECLARE @auditTenants TABLE (tenantId UNIQUEIDENTIFIER PRIMARY KEY);
-        INSERT @auditTenants SELECT tenantId FROM auth.tvfReviewTenants ('audit.view');
+        DECLARE @auditScope TABLE (tenantId UNIQUEIDENTIFIER PRIMARY KEY);
+        INSERT @auditScope SELECT tenantId FROM auth.tvfReviewTenants ('audit.view');
+        DECLARE @wholeRoots TABLE (rootTenantId UNIQUEIDENTIFIER PRIMARY KEY);
+        INSERT @wholeRoots SELECT t.tenantId FROM auth.tenant AS t JOIN @auditScope AS s ON s.tenantId = t.tenantId WHERE t.tenantId = t.rootTenantId;
+        DECLARE @partRoots TABLE (rootTenantId UNIQUEIDENTIFIER PRIMARY KEY);
+        INSERT @partRoots SELECT DISTINCT t.rootTenantId FROM auth.tenant AS t JOIN @auditScope AS s ON s.tenantId = t.tenantId
+         WHERE NOT EXISTS (SELECT 1 FROM @wholeRoots AS w WHERE w.rootTenantId = t.rootTenantId);
+        DECLARE @auditUsers TABLE (appUserId UNIQUEIDENTIFIER PRIMARY KEY);
+        INSERT @auditUsers SELECT u.appUserId FROM auth.appUser AS u
+         WHERE EXISTS (SELECT 1 FROM @partRoots)
+           AND (EXISTS (SELECT 1 FROM @auditScope AS s WHERE s.tenantId = u.homeTenantId)
+                OR EXISTS (SELECT 1 FROM auth.userAssignment AS ua JOIN @auditScope AS s ON s.tenantId = ua.tenantId WHERE ua.appUserId = u.appUserId AND ua.isDeleted = 0));
+        DECLARE @secTenants TABLE (tenantId UNIQUEIDENTIFIER PRIMARY KEY);
+        INSERT @secTenants SELECT tenantId FROM auth.tvfReviewTenants ('security.review');
+        DECLARE @wholeSecRoots TABLE (rootTenantId UNIQUEIDENTIFIER PRIMARY KEY);
+        INSERT @wholeSecRoots SELECT t.tenantId FROM auth.tenant AS t JOIN @secTenants AS r ON r.tenantId = t.tenantId WHERE t.tenantId = t.rootTenantId;
+        DECLARE @usageTenants TABLE (tenantId UNIQUEIDENTIFIER PRIMARY KEY);
+        IF @canUsage = 1 INSERT @usageTenants SELECT tenantId FROM auth.tvfReviewTenants ('usage.view');
 
-        IF @all = 0 AND @allAudit = 0
+        IF @all = 0
            AND NOT EXISTS (SELECT 1 FROM @accounts WHERE appUserId = @appUserId)
-           AND NOT EXISTS (SELECT 1 FROM auth.appUser AS u WHERE u.appUserId = @appUserId AND u.homeTenantId IN (SELECT tenantId FROM @auditTenants))
+           AND NOT EXISTS (SELECT 1 FROM @auditUsers WHERE appUserId = @appUserId)
+           AND NOT EXISTS (SELECT 1 FROM auth.appUser AS u WHERE u.appUserId = @appUserId AND u.rootTenantId IN (SELECT rootTenantId FROM @wholeRoots))
         BEGIN
             ;THROW 51404, N'The user was not found, or you do not have access to review this account.', 1;
         END;
 
-        -- 1. Account overview & sign-in posture
+        -- 1. Account overview & event-scoped posture
         SELECT u.appUserId, u.userName, u.displayName, u.isActive, u.mfaEnabled, u.lastSignInUtc,
                (SELECT COUNT (*) FROM auth.sessionScope AS ss
                  WHERE ss.appUserId = u.appUserId AND ss.revokedUtc IS NULL AND ss.expiresUtc > SYSUTCDATETIME ()) AS activeSessions,
@@ -108,33 +126,58 @@ BEGIN
                (SELECT COUNT (*) FROM logs.signInEvent AS se WHERE se.appUserId = u.appUserId AND se.isDeleted = 0 AND se.eventUtc >= @since AND se.eventType IN ('passwordFailed', 'unknownUser', 'mfaFailed', 'attemptWhileLocked', 'accountInactive')) AS signInFailures,
                (SELECT COUNT (*) FROM logs.signInEvent AS se WHERE se.appUserId = u.appUserId AND se.isDeleted = 0 AND se.eventUtc >= @since AND se.eventType = 'accountLocked') AS lockouts,
                (SELECT COUNT (DISTINCT se.clientAddress) FROM logs.signInEvent AS se WHERE se.appUserId = u.appUserId AND se.isDeleted = 0 AND se.eventUtc >= @since AND se.clientAddress IS NOT NULL) AS distinctAddresses,
-               (SELECT COUNT (*) FROM logs.searchLog AS sl WHERE sl.appUserId = u.appUserId AND sl.isDeleted = 0 AND sl.searchedUtc >= @since) AS totalSearches,
-               (SELECT COUNT (*) FROM logs.searchLog AS sl WHERE sl.appUserId = u.appUserId AND sl.isDeleted = 0 AND sl.searchedUtc >= @since AND sl.resultCount = 0) AS zeroResultSearches,
-               (SELECT COUNT (*) FROM logs.searchLog AS sl WHERE sl.appUserId = u.appUserId AND sl.isDeleted = 0 AND sl.searchedUtc >= @since AND sl.existsElsewhere = 1) AS outsideScopeSearches,
-               (SELECT COUNT (DISTINCT sv.sessionReference) FROM logs.screenVisit AS sv WHERE sv.appUserId = u.appUserId AND sv.isDeleted = 0 AND sv.eventUtc >= @since) AS usageSessions,
-               (SELECT COUNT (*) FROM logs.screenVisit AS sv WHERE sv.appUserId = u.appUserId AND sv.isDeleted = 0 AND sv.eventUtc >= @since) AS screenVisits
+               (SELECT COUNT (*) FROM logs.searchLog AS sl
+                 WHERE sl.appUserId = u.appUserId AND sl.isDeleted = 0 AND sl.searchedUtc >= @since
+                   AND (@all = 1 OR EXISTS (SELECT 1 FROM @wholeRoots AS w WHERE w.rootTenantId = sl.rootTenantId)
+                        OR sl.actingTenantId IN (SELECT tenantId FROM @auditScope)
+                        OR sl.actingTenantId IN (SELECT tenantId FROM @secTenants))) AS totalSearches,
+               (SELECT COUNT (*) FROM logs.searchLog AS sl
+                 WHERE sl.appUserId = u.appUserId AND sl.isDeleted = 0 AND sl.searchedUtc >= @since AND sl.resultCount = 0
+                   AND (@all = 1 OR EXISTS (SELECT 1 FROM @wholeRoots AS w WHERE w.rootTenantId = sl.rootTenantId)
+                        OR sl.actingTenantId IN (SELECT tenantId FROM @auditScope)
+                        OR sl.actingTenantId IN (SELECT tenantId FROM @secTenants))) AS zeroResultSearches,
+               (SELECT COUNT (*) FROM logs.searchLog AS sl
+                 WHERE sl.appUserId = u.appUserId AND sl.isDeleted = 0 AND sl.searchedUtc >= @since AND sl.existsElsewhere = 1
+                   AND (@all = 1 OR EXISTS (SELECT 1 FROM @wholeRoots AS w WHERE w.rootTenantId = sl.rootTenantId)
+                        OR sl.actingTenantId IN (SELECT tenantId FROM @auditScope)
+                        OR sl.actingTenantId IN (SELECT tenantId FROM @secTenants))) AS outsideScopeSearches,
+               (SELECT COUNT (DISTINCT sv.sessionReference) FROM logs.screenVisit AS sv
+                 WHERE @canUsage = 1 AND sv.appUserId = u.appUserId AND sv.isDeleted = 0 AND sv.eventUtc >= @since
+                   AND sv.actingTenantId IN (SELECT tenantId FROM @usageTenants)) AS usageSessions,
+               (SELECT COUNT (*) FROM logs.screenVisit AS sv
+                 WHERE @canUsage = 1 AND sv.appUserId = u.appUserId AND sv.isDeleted = 0 AND sv.eventUtc >= @since
+                   AND sv.actingTenantId IN (SELECT tenantId FROM @usageTenants)) AS screenVisits
           FROM auth.appUser AS u
          WHERE u.appUserId = @appUserId AND u.isDeleted = 0;
 
-        -- 2. Audit ledger action breakdown
+        -- 2. Event-scoped audit ledger action breakdown (requires audit.view + #270 event ownership scope)
         SELECT e.eventAction, e.entityType, COUNT (*) AS eventCount,
                SUM (COALESCE (e.recordCount, 1)) AS totalRecords,
                MAX (e.eventUtc) AS lastUtc
           FROM logs.auditEvent AS e
-         WHERE e.appUserId = @appUserId AND e.eventUtc >= @since
+         WHERE @canAudit = 1 AND e.appUserId = @appUserId AND e.eventUtc >= @since
+           AND (EXISTS (SELECT 1 FROM @wholeRoots AS w WHERE w.rootTenantId = e.rootTenantId)
+            OR (EXISTS (SELECT 1 FROM @partRoots AS p WHERE p.rootTenantId = e.rootTenantId)
+                AND ((e.owningTenantId IS NULL AND EXISTS (SELECT 1 FROM @auditUsers AS x WHERE x.appUserId = e.appUserId))
+                     OR EXISTS (SELECT 1 FROM @auditScope AS s WHERE s.tenantId = e.owningTenantId)
+                     OR (e.owningTenantId = e.rootTenantId AND e.entityType IN ('jurisdictionSetting', 'threshold', 'notificationRule')))))
          GROUP BY e.eventAction, e.entityType
          ORDER BY eventCount DESC, lastUtc DESC;
 
-        -- 3. Recent security findings for this user
+        -- 3. Event-scoped recent security findings for this user
         SELECT TOP (25) f.securityFindingId, f.ruleCode, f.severity, f.title, f.status, f.detectedUtc
           FROM logs.securityFinding AS f
          WHERE f.appUserId = @appUserId AND f.isDeleted = 0 AND f.detectedUtc >= @since
+           AND (@all = 1
+                OR f.owningTenantId IN (SELECT tenantId FROM @secTenants)
+                OR (f.owningTenantId IS NULL AND f.rootTenantId IN (SELECT rootTenantId FROM @wholeSecRoots)))
          ORDER BY f.detectedUtc DESC;
 
-        -- 4. Recent screen-usage sessions for this user
+        -- 4. Event-scoped recent screen-usage sessions (requires usage.view + actingTenantId scope)
         SELECT TOP (25) v.sessionReference, MIN (v.eventUtc) AS firstUtc, MAX (v.eventUtc) AS lastUtc, COUNT (*) AS visits
           FROM logs.screenVisit AS v
-         WHERE v.appUserId = @appUserId AND v.isDeleted = 0 AND v.eventUtc >= @since
+         WHERE @canUsage = 1 AND v.appUserId = @appUserId AND v.isDeleted = 0 AND v.eventUtc >= @since
+           AND v.actingTenantId IN (SELECT tenantId FROM @usageTenants)
          GROUP BY v.sessionReference
          ORDER BY MAX (v.eventUtc) DESC;
 
@@ -175,7 +218,7 @@ EXEC util.uspSetObjectDescription
       @SchemaName  = N'logs'
     , @ObjectType  = N'PROCEDURE'
     , @ObjectName  = N'uspGetUserBehaviorSummary'
-    , @Description = N'Unified per-user behavioral summary across sign-ins, active sessions, audit ledger actions, search volume, screen usage, and open security findings within the caller''s review scope (#330).';
+    , @Description = N'Unified per-user behavioral summary applying strict event-level tenant scope to audit, search, usage, and security-finding aggregates (#330, Codex #1).';
 GO
 
 IF DATABASE_PRINCIPAL_ID (N'meritWebRole') IS NOT NULL

@@ -48,6 +48,13 @@ public sealed class LoggingWave2IntegrationTests(MeritFixture fixture)
         Assert.NotNull(createdAudit.afterJson);
         Assert.Contains("TxGuarantee", createdAudit.afterJson, StringComparison.Ordinal);
 
+        // S2: Row history is reachable via /admin/audit/{id}/changes.
+        using (var changesResp = await supervisor.Http.GetAsync($"/admin/audit/{createdAudit.auditEventId}/changes"))
+        {
+            Assert.Equal(HttpStatusCode.OK, changesResp.StatusCode);
+            Assert.Contains("TxGuarantee", await changesResp.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+        }
+
         // 2. Rolled-back write (future DOB triggers THROW 51422 inside dbo.uspSavePerson) leaves ZERO person and ZERO audit rows.
         Guid failedPersonId = TimeOrderedId.New();
         var supSession = await conn.QuerySingleAsync<(Guid appUserId, Guid rootTenantId, Guid scopeId)>(
@@ -175,27 +182,65 @@ public sealed class LoggingWave2IntegrationTests(MeritFixture fixture)
         var sup = await conn.QuerySingleAsync<(Guid appUserId, Guid rootTenantId)>(
             "SELECT TOP (1) appUserId, rootTenantId FROM auth.appUser WHERE userName = 'supervisor' AND isDeleted = 0");
 
-        // #327: Trigger midSessionIpDrift with two distinct IPs on one synthetic sessionReference.
+        // #327 (B1 / Codex #3 + I5): Seed 10 NULL-root permissionDenied rows (must NOT crash the scan),
+        // plus two distinct /24 prefixes on one sessionReference (triggers medium midSessionIpDrift).
         Guid driftSession = TimeOrderedId.New();
         await conn.ExecuteAsync(
             """
             INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, clientAddress, sessionReference)
             VALUES (@u, @r, 'view', 'person', '203.0.113.10', @s),
-                   (@u, @r, 'view', 'person', '203.0.113.20', @s);
+                   (@u, @r, 'view', 'person', '198.51.100.20', @s),
+                   (NULL, NULL, 'permissionDenied', 'auditEvent', NULL, NULL),
+                   (NULL, NULL, 'permissionDenied', 'auditEvent', NULL, NULL),
+                   (NULL, NULL, 'permissionDenied', 'auditEvent', NULL, NULL),
+                   (NULL, NULL, 'permissionDenied', 'auditEvent', NULL, NULL),
+                   (NULL, NULL, 'permissionDenied', 'auditEvent', NULL, NULL),
+                   (NULL, NULL, 'permissionDenied', 'auditEvent', NULL, NULL),
+                   (NULL, NULL, 'permissionDenied', 'auditEvent', NULL, NULL),
+                   (NULL, NULL, 'permissionDenied', 'auditEvent', NULL, NULL),
+                   (NULL, NULL, 'permissionDenied', 'auditEvent', NULL, NULL),
+                   (NULL, NULL, 'permissionDenied', 'auditEvent', NULL, NULL);
             """, new { u = sup.appUserId, r = sup.rootTenantId, s = driftSession });
 
         var firstScan = (await conn.QueryAsync<dynamic>("logs.uspRunSecurityFindingScan", new { hours = 24 }, commandType: CommandType.StoredProcedure)).ToList();
-        Assert.Contains(firstScan, r => (string)r.ruleCode == "midSessionIpDrift");
+        Assert.Contains(firstScan, r => (string)r.ruleCode == "midSessionIpDrift" && (string)r.severity == "medium");
+        Guid findingId = (Guid)firstScan.First(r => (string)r.ruleCode == "midSessionIpDrift").securityFindingId;
 
         using var alertsHtml = await admin.Http.GetAsync("/admin/security-alerts?hours=24");
         Assert.Equal(HttpStatusCode.OK, alertsHtml.StatusCode);
-        Assert.Contains("midSessionIpDrift", await alertsHtml.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+        string alertsBody = await alertsHtml.Content.ReadAsStringAsync();
+        Assert.Contains("midSessionIpDrift", alertsBody, StringComparison.Ordinal);
+
+        // Codex #4: Authorized admin can update finding status via antiforgery-protected POST; read-only reviewer cannot.
+        using (var statusPost = await admin.NoRedirect.PostAsync($"/admin/security-alerts/{findingId}/status",
+            MeritClient.Form(alertsBody, ("status", "acknowledged"), ("hours", "24"), ("days", "30"))))
+        {
+            Assert.Equal(HttpStatusCode.Redirect, statusPost.StatusCode);
+        }
+        string updatedStatus = await conn.ExecuteScalarAsync<string>("SELECT status FROM logs.securityFinding WHERE securityFindingId = @id", new { id = findingId }) ?? "";
+        Assert.Equal("acknowledged", updatedStatus);
+
+        var epi = await fixture.SignedInAsync("epi");
+        using (var deniedPost = await epi.NoRedirect.PostAsync($"/admin/security-alerts/{findingId}/status",
+            MeritClient.Form(alertsBody, ("status", "resolved"))))
+        {
+            Assert.True(deniedPost.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.BadRequest or HttpStatusCode.Redirect);
+        }
 
         using var alertsJsonl = await admin.Http.GetAsync("/admin/security-alerts.jsonl?hours=24");
         Assert.Equal(HttpStatusCode.OK, alertsJsonl.StatusCode);
         Assert.Contains("midSessionIpDrift", await alertsJsonl.Content.ReadAsStringAsync(), StringComparison.Ordinal);
 
-        // #328: Structured JSONL export with pseudonymization.
+        // #328 (Codex #2 + #8): Real SQL DbType.DateTime2 cursor paging across adjacent millisecond timestamps (.001, .002, .003) and midnight boundary.
+        await conn.ExecuteAsync(
+            """
+            INSERT logs.signInEvent (signInEventId, eventUtc, eventType, appUserId, rootTenantId, clientAddress)
+            VALUES (NEWID (), CAST ('2026-11-20T12:00:00.001' AS DATETIME2 (3)), 'passwordSucceeded', @u, @r, '192.0.2.1'),
+                   (NEWID (), CAST ('2026-11-20T12:00:00.002' AS DATETIME2 (3)), 'passwordSucceeded', @u, @r, '192.0.2.1'),
+                   (NEWID (), CAST ('2026-11-20T12:00:00.003' AS DATETIME2 (3)), 'passwordSucceeded', @u, @r, '192.0.2.1'),
+                   (NEWID (), CAST ('2026-11-21T00:00:00.000' AS DATETIME2 (3)), 'passwordSucceeded', @u, @r, '192.0.2.1');
+            """, new { u = sup.appUserId, r = sup.rootTenantId });
+
         var today = DateOnly.FromDateTime(DateTime.UtcNow).ToString("yyyy-MM-dd");
         using var exportResp = await admin.Http.GetAsync($"/admin/log-export/download?format=jsonl&streams=audit,signin,search&from={today}&to={today}&pseudonymize=true");
         Assert.Equal(HttpStatusCode.OK, exportResp.StatusCode);
@@ -206,6 +251,16 @@ public sealed class LoggingWave2IntegrationTests(MeritFixture fixture)
         Assert.True(sample.RootElement.TryGetProperty("stream", out _));
         Assert.DoesNotContain("203.0.113.10", ndjson, StringComparison.Ordinal);
 
+        // Verify identified export mode (pseudonymize=false) preserves exact ms timestamps and excludes next-day midnight (half-open range).
+        using var identifiedResp = await admin.Http.GetAsync($"/admin/log-export/download?format=csv&streams=signin&from=2026-11-20&to=2026-11-20&pseudonymize=false");
+        Assert.Equal(HttpStatusCode.OK, identifiedResp.StatusCode);
+        string identifiedCsv = await identifiedResp.Content.ReadAsStringAsync();
+        Assert.Contains("2026-11-20T12:00:00.001Z", identifiedCsv, StringComparison.Ordinal);
+        Assert.Contains("2026-11-20T12:00:00.002Z", identifiedCsv, StringComparison.Ordinal);
+        Assert.Contains("2026-11-20T12:00:00.003Z", identifiedCsv, StringComparison.Ordinal);
+        Assert.DoesNotContain("2026-11-21T00:00:00.000Z", identifiedCsv, StringComparison.Ordinal);
+        await conn.ExecuteAsync("UPDATE logs.signInEvent SET isDeleted = 1 WHERE clientAddress = '192.0.2.1'");
+
         // #330: Unified per-user activity summary + per-user usage filter + operational logs.
         using var userAct = await admin.Http.GetAsync($"/admin/users/{sup.appUserId}/activity?days=30");
         Assert.Equal(HttpStatusCode.OK, userAct.StatusCode);
@@ -214,10 +269,10 @@ public sealed class LoggingWave2IntegrationTests(MeritFixture fixture)
         using var usageFiltered = await admin.Http.GetAsync($"/admin/usage?days=30&userId={sup.appUserId}");
         Assert.Equal(HttpStatusCode.OK, usageFiltered.StatusCode);
 
-        // #338: Shared log writer redacts disallowed KeyParameters tokens.
+        // #338 (Codex #9): Shared log writer enforces true key-name allowlist (rejects arbitrary non-allowlisted key names like lastName=).
         var p = new DynamicParameters();
         p.Add("@ProcedureName", "[dbo].[uspSyntheticTest]");
-        p.Add("@KeyParameters", "password=SuperSecret123");
+        p.Add("@KeyParameters", "lastName=SensitiveName");
         p.Add("@StartDateUtc", DateTime.UtcNow);
         p.Add("@ReCreatedAfterRollback", false);
         p.Add("@ExecutionLogId", dbType: DbType.Int64, direction: ParameterDirection.Output);
@@ -225,8 +280,20 @@ public sealed class LoggingWave2IntegrationTests(MeritFixture fixture)
         long execId = p.Get<long>("@ExecutionLogId");
         string? storedKey = await conn.ExecuteScalarAsync<string?>("SELECT KeyParameters FROM logs.ExecutionLog WHERE ExecutionLogId = @id", new { id = execId });
         Assert.Equal("[redacted: disallowed diagnostic key]", storedKey);
-        Assert.DoesNotContain("SuperSecret123", storedKey ?? string.Empty, StringComparison.Ordinal);
+        Assert.DoesNotContain("SensitiveName", storedKey ?? string.Empty, StringComparison.Ordinal);
         await conn.ExecuteAsync("UPDATE logs.ExecutionLog SET isDeleted = 1 WHERE ExecutionLogId = @id", new { id = execId });
+
+        // #330 (Codex #5): Worker-role execution of logs.uspCheckOperationalIntegrity sees healthy DDL audit (0 problems).
+        await using (var workerCheck = new SqlConnection(TestEnvironment.AdminConnectionString()))
+        {
+            await workerCheck.OpenAsync();
+            await workerCheck.ExecuteAsync("EXECUTE AS USER = 'meritWorker';");
+            using var grid = await workerCheck.QueryMultipleAsync("logs.uspCheckOperationalIntegrity", new { minutes = 15 }, commandType: CommandType.StoredProcedure);
+            _ = await grid.ReadSingleAsync<dynamic>();
+            var ddlProblems = (await grid.ReadAsync<dynamic>()).ToList();
+            await workerCheck.ExecuteAsync("REVERT;");
+            Assert.Empty(ddlProblems);
+        }
 
         // #330: Platform-admin operational logs & DDL integrity check.
         var platform = await fixture.SignedInAsync("platform");
@@ -234,5 +301,6 @@ public sealed class LoggingWave2IntegrationTests(MeritFixture fixture)
         Assert.Equal(HttpStatusCode.OK, opsResp.StatusCode);
         string opsHtml = await opsResp.Content.ReadAsStringAsync();
         Assert.Contains("DDL audit integrity", opsHtml, StringComparison.Ordinal);
+        Assert.Contains("SYSTEM_VERSIONING", opsHtml, StringComparison.Ordinal);
     }
 }

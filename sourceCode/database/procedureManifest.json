@@ -8869,6 +8869,12 @@
     "type": "INT",
     "hasDefault": true,
     "isOutput": false
+   },
+   {
+    "name": "distributedFailThreshold",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
    }
   ]
  },
@@ -8964,7 +8970,7 @@
   "grants": [
    "meritWebRole"
   ],
-  "permission": "security.review or tenant.administer",
+  "permission": "tenant.administer or security.investigate",
   "params": [
    {
     "name": "securityFindingId",

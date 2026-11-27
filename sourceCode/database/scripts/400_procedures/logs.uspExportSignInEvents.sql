@@ -13,7 +13,7 @@ CreateDate:   2026-10-24
 ========================================================================================================================
 Description:
 
-Cursor-paginated canonical export of logs.signInEvent rows for a UTC range within the caller's security review scope. Never returns attempted names (#328).
+Cursor-paginated canonical export of logs.signInEvent rows over [@fromUtc, @toUtc) within the caller's security review scope. Never returns attempted names (#328).
 
 ========================================================================================================================
 Requirements and Key Dependencies:
@@ -99,7 +99,7 @@ BEGIN
                e.failedSignInCount, e.lockoutEndUtc
           FROM logs.signInEvent AS e
           LEFT JOIN auth.appUser AS u ON u.appUserId = e.appUserId
-         WHERE e.isDeleted = 0 AND e.eventUtc >= @fromUtc AND e.eventUtc <= @toUtc
+         WHERE e.isDeleted = 0 AND e.eventUtc >= @fromUtc AND e.eventUtc < @toUtc
            AND (@afterSignInEventId IS NULL
                 OR e.eventUtc > @afterEventUtc
                 OR (e.eventUtc = @afterEventUtc AND e.signInEventId > @afterSignInEventId))
@@ -143,7 +143,7 @@ EXEC util.uspSetObjectDescription
       @SchemaName  = N'logs'
     , @ObjectType  = N'PROCEDURE'
     , @ObjectName  = N'uspExportSignInEvents'
-    , @Description = N'Cursor-paginated canonical export of logs.signInEvent rows for a UTC range within the caller''s security review scope. Never returns attempted names (#328).';
+    , @Description = N'Cursor-paginated canonical export of logs.signInEvent rows over [@fromUtc, @toUtc) within the caller''s security review scope. Never returns attempted names (#328).';
 GO
 
 IF DATABASE_PRINCIPAL_ID (N'meritWebRole') IS NOT NULL

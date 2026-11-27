@@ -13,7 +13,7 @@ CreateDate:   2026-10-24
 ========================================================================================================================
 Description:
 
-Updates the review status of a persisted security finding and audits the transition in the same transaction (#327).
+Updates the review status of a persisted security finding (requires tenant.administer or security.investigate, not read-only security.review) and audits the transition in the same transaction (#327, Codex #4).
 
 ========================================================================================================================
 Requirements and Key Dependencies:
@@ -25,7 +25,7 @@ logs.uspStartExecutionLogging and logs.uspRecordExecutionError (scripts/000_infr
 ========================================================================================================================
 Notes:
 
-Requires permission security.review or tenant.administer (auth.udfHasPermission); refuses with 51403 otherwise.
+Requires permission tenant.administer or security.investigate (auth.udfHasPermission); refuses with 51403 otherwise.
 
 Rule 8 full instrumentation, generated from templates/procedure.sql by tools/generateProcedures.py. Row-level security applies to every table read
 or written here: SESSION_CONTEXT (N'scopeKey') decides what the caller can see.
@@ -73,7 +73,7 @@ BEGIN
           , @ErrorLine      INT            = NULL;
 
     -- Identifiers and counts ONLY. Never a credential, a payload, or patient data.
-    SET @KeyParameters = CONCAT (N'securityFindingId=', @securityFindingId, N', status=', @status);
+    SET @KeyParameters = CONCAT (N'securityFindingId=', @securityFindingId);
 
     BEGIN TRY
 
@@ -84,9 +84,9 @@ BEGIN
             , @ReCreatedAfterRollback = 0
             , @ExecutionLogId         = @ExecutionId OUTPUT;
 
-        IF auth.udfHasPermission (N'security.review') = 0 AND auth.udfHasPermission (N'tenant.administer') = 0
+        IF auth.udfHasPermission (N'tenant.administer') = 0 AND auth.udfHasPermission (N'security.investigate') = 0
         BEGIN
-            ;THROW 51403, N'You do not have permission to do this (security.review or tenant.administer).', 1;
+            ;THROW 51403, N'You do not have permission to do this (tenant.administer or security.investigate).', 1;
         END;
 
         IF @status NOT IN ('open', 'acknowledged', 'resolved', 'falsePositive')
@@ -101,23 +101,22 @@ BEGIN
         -- =========================================================================================
 
         DECLARE @all BIT = auth.udfHasPermission (N'security.investigate');
-        DECLARE @accounts TABLE (appUserId UNIQUEIDENTIFIER PRIMARY KEY);
-        INSERT @accounts SELECT appUserId FROM auth.tvfReviewAccounts ('security.review');
-        DECLARE @reviewTenants TABLE (tenantId UNIQUEIDENTIFIER PRIMARY KEY);
-        INSERT @reviewTenants SELECT tenantId FROM auth.tvfReviewTenants ('security.review');
+        DECLARE @adminTenants TABLE (tenantId UNIQUEIDENTIFIER PRIMARY KEY);
+        INSERT @adminTenants SELECT tenantId FROM auth.tvfSessionWritePermission ('tenant.administer');
+        DECLARE @wholeAdminRoots TABLE (rootTenantId UNIQUEIDENTIFIER PRIMARY KEY);
+        INSERT @wholeAdminRoots SELECT t.tenantId FROM auth.tenant AS t JOIN @adminTenants AS a ON a.tenantId = t.tenantId WHERE t.tenantId = t.rootTenantId;
 
         DECLARE @root UNIQUEIDENTIFIER, @owner UNIQUEIDENTIFIER;
         SELECT @root = f.rootTenantId, @owner = f.owningTenantId
           FROM logs.securityFinding AS f
          WHERE f.securityFindingId = @securityFindingId AND f.isDeleted = 0
            AND (@all = 1
-                OR f.appUserId IN (SELECT appUserId FROM @accounts)
-                OR f.owningTenantId IN (SELECT tenantId FROM @reviewTenants)
-                OR f.rootTenantId IN (SELECT tenantId FROM @reviewTenants));
+                OR f.owningTenantId IN (SELECT tenantId FROM @adminTenants)
+                OR (f.owningTenantId IS NULL AND f.rootTenantId IN (SELECT rootTenantId FROM @wholeAdminRoots)));
 
         IF @root IS NULL
         BEGIN
-            ;THROW 51404, N'The security finding was not found, or you do not have access to it.', 1;
+            ;THROW 51404, N'The security finding was not found, or you do not have permission to update it.', 1;
         END;
 
         UPDATE logs.securityFinding
@@ -221,7 +220,7 @@ EXEC util.uspSetObjectDescription
       @SchemaName  = N'logs'
     , @ObjectType  = N'PROCEDURE'
     , @ObjectName  = N'uspUpdateSecurityFindingStatus'
-    , @Description = N'Updates the review status of a persisted security finding and audits the transition in the same transaction (#327).';
+    , @Description = N'Updates the review status of a persisted security finding (requires tenant.administer or security.investigate, not read-only security.review) and audits the transition in the same transaction (#327, Codex #4).';
 GO
 
 IF DATABASE_PRINCIPAL_ID (N'meritWebRole') IS NOT NULL

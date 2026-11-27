@@ -8,7 +8,7 @@ MERIT provides a unified, cursor-paginated structured log export at `/admin/log-
 | --- | --- | --- | --- |
 | `format` | `jsonl`, `csv` | `jsonl` | `jsonl` emits UTF-8 NDJSON (`application/x-ndjson`); `csv` emits canonical lossless CSV with formula-injection protection. |
 | `streams` | Comma-separated subset of `audit`, `signin`, `usage`, `search` | `audit` | Each requested stream is authorized independently against `audit.view`, `security.review`/`tenant.administer`, and `usage.view`. |
-| `from`, `to` | `YYYY-MM-DD` (UTC inclusive) | Last 7 days | Cursor-paginated in 2,000-row batches; no 1,000 or 10,000 row silent truncation. |
+| `from`, `to` | `YYYY-MM-DD` (UTC inclusive, max 31 days per request) | Last 7 days | Evaluated as the half-open UTC interval `[from 00:00:00.000Z, (to + 1 day) 00:00:00.000Z)`, streamed directly to the HTTP response in 2,000-row cursor-paginated batches (`DbType.DateTime2` cursors) without buffering the full export in memory. |
 | `pseudonymize` | `true`, `false` | `true` | Enables deterministic keyed pseudonymization (AI-agent-safe mode). |
 
 Every export is recorded in the tamper-evident `logs.auditEvent` ledger (`eventAction = 'export'`, `entityType = 'structuredLogExport'`, `recordCount = <exported rows>`).
@@ -25,6 +25,7 @@ Every export is recorded in the tamper-evident `logs.auditEvent` ledger (`eventA
 - `appUserId`, `actorUserId`, and `viewAsUserId` are replaced with deterministic per-export keyed HMAC-SHA256 tokens (`usr_<16 hex>`), preserving cross-stream joins without revealing account GUIDs.
 - `userName`, `displayName`, and `filterJson` are omitted (`null`).
 - `clientAddress` is replaced with `<subnet prefix>|ip_<12 hex>` (`/24` for IPv4, `/48` for IPv6), preserving subnet and exact-IP grouping without exposing raw client IPs.
+- **Identifiers preserved for behavioral joins:** `entityId`, `sessionReference`, `traceId`, `attemptId`, and `userAgent` remain raw so external agents can correlate activity across streams and detect automated user-agents or bulk record scraping. Because each export uses a fresh random HMAC key, user/IP pseudonyms are consistent within a single export and do not link across separate exports.
 
 ## JSONL Stream Schemas
 

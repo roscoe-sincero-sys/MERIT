@@ -139,6 +139,7 @@ BEGIN
             auth.udfSessionUserId ());
 END;
 
+DECLARE @supBeforeJson NVARCHAR (MAX) = NULL;
 IF @supersedesLabResultId IS NOT NULL
 BEGIN
     IF @intakeBatchId IS NOT NULL AND @originalRowVersion IS NULL
@@ -150,6 +151,7 @@ BEGIN
     BEGIN
         ;THROW 51422, N'A correction reason is required.', 1;
     END;
+    SET @supBeforeJson = (SELECT resultRowStatus, correctionReason FROM dbo.labResult WHERE labResultId = @supersedesLabResultId FOR JSON PATH, WITHOUT_ARRAY_WRAPPER);
     UPDATE dbo.labResult SET resultRowStatus = 'superseded', correctionReason=@correctionReason,
         correctionByUserId=auth.udfSessionUserId(), correctionUtc=SYSUTCDATETIME()
      WHERE labResultId = @supersedesLabResultId AND personId=@personId AND resultRowStatus = 'valid' AND isDeleted = 0
@@ -205,7 +207,7 @@ BEGIN
     INSERT logs.auditEventChange (auditEventChangeId, auditEventId, rootTenantId, owningTenantId, entityType, entityId,
                                   beforeJson, afterJson)
     VALUES ({NEWID}, @supAuditEventId, @root, @resultAuditOwner, 'labResult', @supersedesLabResultId,
-            N'{{"resultRowStatus":"valid"}}',
+            @supBeforeJson,
             (SELECT resultRowStatus, correctionReason FROM dbo.labResult WHERE labResultId = @supersedesLabResultId FOR JSON PATH, WITHOUT_ARRAY_WRAPPER));
 END;
 

@@ -58,14 +58,23 @@ public sealed class StructuredLogExportService(ISecurityMonitoringData data, Aud
     public static string? FormatUtc(DateTime? utc)
         => utc is DateTime d ? FormatUtc(d) : null;
 
+    public void AuthorizeStreams(IReadOnlySet<string> streams)
+    {
+        if (streams.Contains("audit")) session.Require(Permissions.AuditView);
+        if (streams.Contains("signin")) session.RequireAny(Permissions.SecurityReview, Permissions.TenantAdminister);
+        if (streams.Contains("usage")) session.Require(Permissions.UsageView);
+        if (streams.Contains("search")) session.RequireAny(Permissions.SecurityReview, Permissions.AuditView);
+    }
+
     /// <summary>
     /// Streams canonical JSONL (NDJSON) records across the requested streams, cursor-paged without hard truncation.
-    /// Audited as an <c>export</c> event with total exported row count.
+    /// Pre-authorizes all requested streams before writing any bytes and audits the export.
     /// </summary>
     public async Task<int> WriteJsonlAsync(Stream output, DateTime fromUtc, DateTime toUtc, IReadOnlySet<string> streams,
                                            bool pseudonymize, byte[]? pseudonymKey = null, int batchSize = 2000,
                                            CancellationToken ct = default)
     {
+        AuthorizeStreams(streams);
         var pseudo = pseudonymize ? new LogPseudonymizer(pseudonymKey) : null;
         int total = 0;
         await using var writer = new StreamWriter(output, new UTF8Encoding(false), bufferSize: 16384, leaveOpen: true);
@@ -242,15 +251,17 @@ public sealed class StructuredLogExportService(ISecurityMonitoringData data, Aud
 
     /// <summary>
     /// Streams canonical lossless CSV across the requested streams using unified envelope columns and cursor pagination.
+    /// Preserves all JSONL correlation and state fields (viewAsUserId, actorUserId, lockoutEndUtc, userAgent).
     /// </summary>
     public async Task<int> WriteCsvAsync(Stream output, DateTime fromUtc, DateTime toUtc, IReadOnlySet<string> streams,
                                          bool pseudonymize, byte[]? pseudonymKey = null, int batchSize = 2000,
                                          CancellationToken ct = default)
     {
+        AuthorizeStreams(streams);
         var pseudo = pseudonymize ? new LogPseudonymizer(pseudonymKey) : null;
         int total = 0;
         await using var writer = new StreamWriter(output, new UTF8Encoding(false), bufferSize: 16384, leaveOpen: true);
-        await writer.WriteLineAsync("stream,eventId,eventUtc,actionOrType,entityOrScreen,entityId,recordCount,appUserId,userName,rootTenantId,owningTenantId,actingTenantId,sessionReference,traceId,attemptId,clientAddress,detail").ConfigureAwait(false);
+        await writer.WriteLineAsync("stream,eventId,eventUtc,actionOrType,entityOrScreen,entityId,recordCount,appUserId,userName,actorUserId,viewAsUserId,rootTenantId,owningTenantId,actingTenantId,sessionReference,traceId,attemptId,clientAddress,userAgent,lockoutEndUtc,detail").ConfigureAwait(false);
 
         static string Csv(object? value)
         {
@@ -264,7 +275,6 @@ public sealed class StructuredLogExportService(ISecurityMonitoringData data, Aud
 
         if (streams.Contains("audit"))
         {
-            session.Require(Permissions.AuditView);
             DateTime? cursorUtc = null;
             long? cursorId = null;
             while (true)
@@ -276,9 +286,11 @@ public sealed class StructuredLogExportService(ISecurityMonitoringData data, Aud
                     await WriteRow("auditEvent", r.AuditEventId, FormatUtc(r.EventUtc), r.EventAction, r.EntityType, r.EntityId, r.RecordCount,
                         pseudo is not null ? pseudo.PseudonymizeUser(r.AppUserId) : r.AppUserId?.ToString(),
                         pseudo is not null ? null : r.UserName,
+                        null,
+                        pseudo is not null ? pseudo.PseudonymizeUser(r.ViewAsUserId) : r.ViewAsUserId?.ToString(),
                         r.RootTenantId, r.OwningTenantId, r.ActingTenantId, r.SessionReference, r.TraceId, null,
                         pseudo is not null ? pseudo.PseudonymizeIp(r.ClientAddress) : r.ClientAddress,
-                        r.ViewKind).ConfigureAwait(false);
+                        null, null, r.ViewKind).ConfigureAwait(false);
                     total++;
                 }
 
@@ -290,7 +302,6 @@ public sealed class StructuredLogExportService(ISecurityMonitoringData data, Aud
 
         if (streams.Contains("signin"))
         {
-            session.RequireAny(Permissions.SecurityReview, Permissions.TenantAdminister);
             DateTime? cursorUtc = null;
             Guid? cursorId = null;
             while (true)
@@ -302,9 +313,11 @@ public sealed class StructuredLogExportService(ISecurityMonitoringData data, Aud
                     await WriteRow("signInEvent", r.SignInEventId, FormatUtc(r.EventUtc), r.EventType, r.Method ?? r.Step, null, r.FailedSignInCount,
                         pseudo is not null ? pseudo.PseudonymizeUser(r.AppUserId) : r.AppUserId?.ToString(),
                         pseudo is not null ? null : r.UserName,
+                        pseudo is not null ? pseudo.PseudonymizeUser(r.ActorUserId) : r.ActorUserId?.ToString(),
+                        null,
                         r.RootTenantId, null, null, r.SessionReference, r.TraceId, r.AttemptId,
                         pseudo is not null ? pseudo.PseudonymizeIp(r.ClientAddress) : r.ClientAddress,
-                        r.Reason).ConfigureAwait(false);
+                        r.UserAgent, FormatUtc(r.LockoutEndUtc), r.Reason).ConfigureAwait(false);
                     total++;
                 }
 
@@ -316,7 +329,6 @@ public sealed class StructuredLogExportService(ISecurityMonitoringData data, Aud
 
         if (streams.Contains("usage"))
         {
-            session.Require(Permissions.UsageView);
             DateTime? cursorUtc = null;
             Guid? cursorId = null;
             while (true)
@@ -328,7 +340,9 @@ public sealed class StructuredLogExportService(ISecurityMonitoringData data, Aud
                     await WriteRow("screenVisit", r.ScreenVisitId, FormatUtc(r.EventUtc), r.NavigationType, r.ScreenCode, r.PreviousVisitId, r.DurationMs,
                         pseudo is not null ? pseudo.PseudonymizeUser(r.AppUserId) : r.AppUserId?.ToString(),
                         pseudo is not null ? null : r.UserName,
-                        r.RootTenantId, null, r.ActingTenantId, r.SessionReference, null, null, null, r.RoleCodes).ConfigureAwait(false);
+                        null,
+                        pseudo is not null ? pseudo.PseudonymizeUser(r.ViewAsUserId) : r.ViewAsUserId?.ToString(),
+                        r.RootTenantId, null, r.ActingTenantId, r.SessionReference, null, null, null, null, null, r.RoleCodes).ConfigureAwait(false);
                     total++;
                 }
 
@@ -340,7 +354,6 @@ public sealed class StructuredLogExportService(ISecurityMonitoringData data, Aud
 
         if (streams.Contains("search"))
         {
-            session.RequireAny(Permissions.SecurityReview, Permissions.AuditView);
             DateTime? cursorUtc = null;
             Guid? cursorId = null;
             while (true)
@@ -352,9 +365,10 @@ public sealed class StructuredLogExportService(ISecurityMonitoringData data, Aud
                     await WriteRow("searchLog", r.SearchLogId, FormatUtc(r.SearchedUtc), r.SearchSource ?? "global", "searchLog", null, r.ResultCount,
                         pseudo is not null ? pseudo.PseudonymizeUser(r.AppUserId) : r.AppUserId.ToString(),
                         pseudo is not null ? null : r.UserName,
+                        null, null,
                         r.RootTenantId, null, r.ActingTenantId, r.SessionReference, null, null,
                         pseudo is not null ? pseudo.PseudonymizeIp(r.ClientAddress) : r.ClientAddress,
-                        r.ExistsElsewhere == true ? "existsElsewhere" : null).ConfigureAwait(false);
+                        null, null, r.ExistsElsewhere == true ? "existsElsewhere" : null).ConfigureAwait(false);
                     total++;
                 }
 

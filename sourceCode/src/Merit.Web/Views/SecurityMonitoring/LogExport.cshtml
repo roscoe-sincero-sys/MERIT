@@ -16,9 +16,10 @@
     </select>
     <label class="usa-label" for="streams">Streams (comma-separated: audit, signin, usage, search)</label>
     <input class="usa-input" id="streams" name="streams" value="@string.Join(",", new[] { Model.CanAudit ? "audit" : null, Model.CanSecurity ? "signin" : null, Model.CanUsage ? "usage" : null, (Model.CanAudit || Model.CanSecurity) ? "search" : null }.Where(x => x is not null))" />
-    <div class="usa-checkbox">
-        <input class="usa-checkbox__input" id="pseudonymize" name="pseudonymize" type="checkbox" value="true" checked />
-        <label class="usa-checkbox__label" for="pseudonymize">Pseudonymized / AI-agent safe mode (keyed pseudonyms for users, masked IP prefixes, no free-text search terms)</label>
-    </div>
+    <label class="usa-label" for="pseudonymize">Export mode</label>
+    <select class="usa-select" id="pseudonymize" name="pseudonymize">
+        <option value="true" selected>Pseudonymized / AI-agent safe (keyed user pseudonyms, masked IP prefixes, no free-text filters)</option>
+        <option value="false">Identified (authorized investigation; raw user IDs, names, and IPs)</option>
+    </select>
     <button class="usa-button" type="submit">Download export</button>
 </form>

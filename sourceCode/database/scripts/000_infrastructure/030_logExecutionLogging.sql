@@ -558,15 +558,33 @@ BEGIN
           , @Actor NVARCHAR (255) = COALESCE (NULLIF (CAST (SESSION_CONTEXT (N'AppUser') AS NVARCHAR (255)), N''), ORIGINAL_LOGIN ())
           , @SafeKeyParameters NVARCHAR (500) = LEFT (@KeyParameters, 500);
 
-    -- #338 allowlisted execution diagnostics: reject any sensitive/PHI key token before persistence.
-    IF @SafeKeyParameters IS NOT NULL
-       AND (   @SafeKeyParameters LIKE N'%password=%'
-            OR @SafeKeyParameters LIKE N'%secret=%'
-            OR @SafeKeyParameters LIKE N'%token=%'
-            OR @SafeKeyParameters LIKE N'%searchText=%'
-            OR @SafeKeyParameters LIKE N'%attemptedName=%'
-            OR @SafeKeyParameters LIKE N'%birthDate=%'
-            OR @SafeKeyParameters LIKE N'%ssn=%')
+    -- #338 allowlisted execution diagnostics: allow static labels (no '=') or comma-separated key=value pairs
+    -- where every key matches the approved identifier/count/window allowlist.
+    IF @SafeKeyParameters IS NOT NULL AND CHARINDEX (N'=', @SafeKeyParameters) > 0
+       AND EXISTS (
+            SELECT 1
+              FROM STRING_SPLIT (@SafeKeyParameters, N',') AS tok
+             CROSS APPLY (SELECT LTRIM (RTRIM (LEFT (tok.value, NULLIF (CHARINDEX (N'=', tok.value), 0) - 1))) AS k) AS kv
+             WHERE kv.k IS NULL
+                OR (    kv.k NOT LIKE N'%Id'
+                    AND kv.k NOT LIKE N'%Count'
+                    AND kv.k NOT LIKE N'%Number'
+                    AND kv.k NOT LIKE N'%Days'
+                    AND kv.k NOT LIKE N'%Hours'
+                    AND kv.k NOT LIKE N'%Minutes'
+                    AND kv.k NOT LIKE N'%Size'
+                    AND kv.k NOT LIKE N'%Rows'
+                    AND kv.k NOT LIKE N'%Code'
+                    AND kv.k NOT LIKE N'%Type'
+                    AND kv.k NOT LIKE N'%Action'
+                    AND kv.k NOT LIKE N'%Kind'
+                    AND kv.k NOT LIKE N'%Source'
+                    AND kv.k NOT LIKE N'%Role'
+                    AND kv.k NOT LIKE N'%By'
+                    AND kv.k NOT LIKE N'%Only'
+                    AND kv.k NOT LIKE N'%Fips'
+                    AND kv.k NOT IN (N'top', N'page', N'hasDob', N'includeProtected', N'includeSearchText', N'assignedToMe', N'classification', N'closureReason', N'resultRowStatus', N'viewKind', N'from', N'to'))
+       )
     BEGIN
         SET @SafeKeyParameters = N'[redacted: disallowed diagnostic key]';
     END;
@@ -818,15 +836,32 @@ BEGIN
               , @SafeContext       NVARCHAR (500) = LEFT (@ContextMessage, 500)
               , @SafeDynamicSql    NVARCHAR (100) = CASE WHEN @DynamicSql IS NULL THEN NULL ELSE N'[omitted by diagnostic minimization]' END;
 
-        -- #338 allowlisted execution diagnostics: enforce field-level minimization in the shared log writer.
-        IF @SafeKeyParameters IS NOT NULL
-           AND (   @SafeKeyParameters LIKE N'%password=%'
-                OR @SafeKeyParameters LIKE N'%secret=%'
-                OR @SafeKeyParameters LIKE N'%token=%'
-                OR @SafeKeyParameters LIKE N'%searchText=%'
-                OR @SafeKeyParameters LIKE N'%attemptedName=%'
-                OR @SafeKeyParameters LIKE N'%birthDate=%'
-                OR @SafeKeyParameters LIKE N'%ssn=%')
+        -- #338 allowlisted execution diagnostics: enforce true key-name allowlist in the shared error writer.
+        IF @SafeKeyParameters IS NOT NULL AND CHARINDEX (N'=', @SafeKeyParameters) > 0
+           AND EXISTS (
+                SELECT 1
+                  FROM STRING_SPLIT (@SafeKeyParameters, N',') AS tok
+                 CROSS APPLY (SELECT LTRIM (RTRIM (LEFT (tok.value, NULLIF (CHARINDEX (N'=', tok.value), 0) - 1))) AS k) AS kv
+                 WHERE kv.k IS NULL
+                    OR (    kv.k NOT LIKE N'%Id'
+                        AND kv.k NOT LIKE N'%Count'
+                        AND kv.k NOT LIKE N'%Number'
+                        AND kv.k NOT LIKE N'%Days'
+                        AND kv.k NOT LIKE N'%Hours'
+                        AND kv.k NOT LIKE N'%Minutes'
+                        AND kv.k NOT LIKE N'%Size'
+                        AND kv.k NOT LIKE N'%Rows'
+                        AND kv.k NOT LIKE N'%Code'
+                        AND kv.k NOT LIKE N'%Type'
+                        AND kv.k NOT LIKE N'%Action'
+                        AND kv.k NOT LIKE N'%Kind'
+                        AND kv.k NOT LIKE N'%Source'
+                        AND kv.k NOT LIKE N'%Role'
+                        AND kv.k NOT LIKE N'%By'
+                        AND kv.k NOT LIKE N'%Only'
+                        AND kv.k NOT LIKE N'%Fips'
+                        AND kv.k NOT IN (N'top', N'page', N'hasDob', N'includeProtected', N'includeSearchText', N'assignedToMe', N'classification', N'closureReason', N'resultRowStatus', N'viewKind', N'from', N'to'))
+           )
         BEGIN
             SET @SafeKeyParameters = N'[redacted: disallowed diagnostic key]';
         END;

@@ -13,7 +13,7 @@ CreateDate:   2026-10-24
 ========================================================================================================================
 Description:
 
-Returns purgeable before/after change snapshots from logs.auditEventChange for an auditEventId within the caller's review scope (#332).
+Returns purgeable before/after change snapshots from logs.auditEventChange for an auditEventId within the caller's #270 audit review scope (#332).
 
 ========================================================================================================================
 Requirements and Key Dependencies:
@@ -83,17 +83,28 @@ BEGIN
         -- ===== The procedure's own work starts here. Everything above and below is boilerplate. ==
         -- =========================================================================================
 
-        DECLARE @allAudit BIT = auth.udfHasPermission (N'security.investigate');
-        DECLARE @auditTenants TABLE (tenantId UNIQUEIDENTIFIER PRIMARY KEY);
-        INSERT @auditTenants SELECT tenantId FROM auth.tvfReviewTenants ('audit.view');
+        DECLARE @auditScope TABLE (tenantId UNIQUEIDENTIFIER PRIMARY KEY);
+        INSERT @auditScope SELECT tenantId FROM auth.tvfReviewTenants ('audit.view');
+        DECLARE @wholeRoots TABLE (rootTenantId UNIQUEIDENTIFIER PRIMARY KEY);
+        INSERT @wholeRoots SELECT t.tenantId FROM auth.tenant AS t JOIN @auditScope AS s ON s.tenantId = t.tenantId WHERE t.tenantId = t.rootTenantId;
+        DECLARE @partRoots TABLE (rootTenantId UNIQUEIDENTIFIER PRIMARY KEY);
+        INSERT @partRoots SELECT DISTINCT t.rootTenantId FROM auth.tenant AS t JOIN @auditScope AS s ON s.tenantId = t.tenantId
+         WHERE NOT EXISTS (SELECT 1 FROM @wholeRoots AS w WHERE w.rootTenantId = t.rootTenantId);
+        DECLARE @auditUsers TABLE (appUserId UNIQUEIDENTIFIER PRIMARY KEY);
+        INSERT @auditUsers SELECT u.appUserId FROM auth.appUser AS u
+         WHERE EXISTS (SELECT 1 FROM @partRoots)
+           AND (EXISTS (SELECT 1 FROM @auditScope AS s WHERE s.tenantId = u.homeTenantId)
+                OR EXISTS (SELECT 1 FROM auth.userAssignment AS ua JOIN @auditScope AS s ON s.tenantId = ua.tenantId WHERE ua.appUserId = u.appUserId AND ua.isDeleted = 0));
         SELECT c.auditEventChangeId, c.auditEventId, c.rootTenantId, c.owningTenantId,
                c.entityType, c.entityId, c.changedUtc, c.beforeJson, c.afterJson
           FROM logs.auditEventChange AS c
           JOIN logs.auditEvent AS e ON e.auditEventId = c.auditEventId
          WHERE c.auditEventId = @auditEventId AND c.isDeleted = 0
-           AND (@allAudit = 1
-                OR e.owningTenantId IN (SELECT tenantId FROM @auditTenants)
-                OR (e.owningTenantId IS NULL AND e.rootTenantId IN (SELECT tenantId FROM @auditTenants)))
+           AND (EXISTS (SELECT 1 FROM @wholeRoots AS w WHERE w.rootTenantId = e.rootTenantId)
+            OR (EXISTS (SELECT 1 FROM @partRoots AS p WHERE p.rootTenantId = e.rootTenantId)
+                AND ((e.owningTenantId IS NULL AND EXISTS (SELECT 1 FROM @auditUsers AS x WHERE x.appUserId = e.appUserId))
+                     OR EXISTS (SELECT 1 FROM @auditScope AS s WHERE s.tenantId = e.owningTenantId)
+                     OR (e.owningTenantId = e.rootTenantId AND e.entityType IN ('jurisdictionSetting', 'threshold', 'notificationRule')))))
          ORDER BY c.changedUtc, c.auditEventChangeId;
 
         -- =========================================================================================
@@ -133,7 +144,7 @@ EXEC util.uspSetObjectDescription
       @SchemaName  = N'logs'
     , @ObjectType  = N'PROCEDURE'
     , @ObjectName  = N'uspGetAuditEventChanges'
-    , @Description = N'Returns purgeable before/after change snapshots from logs.auditEventChange for an auditEventId within the caller''s review scope (#332).';
+    , @Description = N'Returns purgeable before/after change snapshots from logs.auditEventChange for an auditEventId within the caller''s #270 audit review scope (#332).';
 GO
 
 IF DATABASE_PRINCIPAL_ID (N'meritWebRole') IS NOT NULL
