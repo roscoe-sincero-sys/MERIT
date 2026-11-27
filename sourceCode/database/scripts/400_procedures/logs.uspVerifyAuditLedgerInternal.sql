@@ -48,6 +48,8 @@ CREATE OR ALTER PROCEDURE logs.uspVerifyAuditLedgerInternal
       @digestJson          NVARCHAR (MAX) = NULL
       , @useAutomaticStorage BIT = 0
       , @requireDigest       BIT = 0
+      , @anchorSource        VARCHAR (30) = NULL
+      , @digestFileCount     INT = NULL
 WITH EXECUTE AS OWNER
 AS
 BEGIN
@@ -162,12 +164,31 @@ BEGIN
             SET @detail = CONCAT (N'Ledger verification failed (error ', ERROR_NUMBER (), N').');
         END CATCH;
 
+        DECLARE @outcomeRecorded BIT = 0;
+        IF @verified = 0
+        BEGIN
+            DECLARE @effectiveAnchor VARCHAR (30) = CASE
+                WHEN @anchorSource IN ('automaticStorage', 'digestDirectory', 'unanchored') THEN @anchorSource
+                WHEN @useAutomaticStorage = 1 THEN 'automaticStorage'
+                WHEN @requireDigest = 1 THEN 'digestDirectory'
+                ELSE 'unanchored'
+            END;
+            EXEC logs.uspRecordLedgerVerificationOutcome
+                 @anchorSource        = @effectiveAnchor,
+                 @verified            = 0,
+                 @lastVerifiedBlockId = @lastBlockId,
+                 @digestFileCount     = @digestFileCount,
+                 @detail              = @detail;
+            SET @outcomeRecorded = 1;
+        END;
+
         SELECT @verified AS verified,
                @lastBlockId AS lastVerifiedBlockId,
                @effectiveDigest AS digestJson,
                @now AS verifiedUtc,
                @detail AS detail,
-               @hasAutoDigest AS hasAutomaticDigestStorage;
+               @hasAutoDigest AS hasAutomaticDigestStorage,
+               @outcomeRecorded AS outcomeRecorded;
 
         -- =========================================================================================
         -- ===== End of the procedure's own work. ===================================================

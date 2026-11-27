@@ -109,8 +109,8 @@ public sealed class SecurityMonitoringData(Db db) : ISecurityMonitoringData
     public Task<LedgerVerificationStateRow> GetLedgerVerificationStateAsync(CancellationToken ct = default)
         => db.QuerySingleAsync<LedgerVerificationStateRow>("logs.uspGetLedgerVerificationState", null, ct)!;
 
-    public Task<AuditLedgerVerificationRow> VerifyAuditLedgerAsync(string? digestJson = null, bool useAutomaticStorage = false, bool requireDigest = false, CancellationToken ct = default)
-        => db.MultipleAsync("logs.uspVerifyAuditLedger", new { digestJson, useAutomaticStorage, requireDigest }, async g =>
+    public Task<AuditLedgerVerificationRow> VerifyAuditLedgerAsync(string? digestJson = null, bool useAutomaticStorage = false, bool requireDigest = false, string? anchorSource = null, int? digestFileCount = null, CancellationToken ct = default)
+        => db.MultipleAsync("logs.uspVerifyAuditLedger", new { digestJson, useAutomaticStorage, requireDigest, anchorSource, digestFileCount }, async g =>
         {
             // sys.sp_verify_database_ledger(_from_digest_storage) emits a native result set containing
             // last_verified_block_id before our summary row. Carry the engine's native block id directly.
@@ -135,6 +135,7 @@ public sealed class SecurityMonitoringData(Db db) : ISecurityMonitoringData
                             VerifiedUtc = dict.TryGetValue("verifiedUtc", out object? vu) && vu is not null ? Convert.ToDateTime(vu) : DateTime.UtcNow,
                             Detail = dict.TryGetValue("detail", out object? dt) ? dt as string ?? string.Empty : string.Empty,
                             HasAutomaticDigestStorage = dict.TryGetValue("hasAutomaticDigestStorage", out object? ha) && ha is not null && Convert.ToBoolean(ha),
+                            OutcomeRecorded = dict.TryGetValue("outcomeRecorded", out object? orObj) && orObj is not null && Convert.ToBoolean(orObj),
                         };
                     }
                 }
@@ -152,6 +153,7 @@ public sealed class SecurityMonitoringData(Db db) : ISecurityMonitoringData
                     VerifiedUtc = summary.VerifiedUtc,
                     Detail = $"{summary.Detail.TrimEnd('.')} (block {nativeVerifiedBlockId}).",
                     HasAutomaticDigestStorage = summary.HasAutomaticDigestStorage,
+                    OutcomeRecorded = summary.OutcomeRecorded,
                 }
                 : summary;
         }, ct);
@@ -160,9 +162,9 @@ public sealed class SecurityMonitoringData(Db db) : ISecurityMonitoringData
         => db.QuerySingleAsync<LedgerVerificationOutcomeRow>("logs.uspRecordLedgerVerificationOutcome",
             new { anchorSource, verified, lastVerifiedBlockId, digestFileCount, detail }, ct)!;
 
-    public Task<IReadOnlyList<NewSecurityFindingRow>> GetPendingLedgerAlertsAsync(CancellationToken ct = default)
-        => db.QueryAsync<NewSecurityFindingRow>("logs.uspGetPendingLedgerAlerts", null, ct);
+    public Task<IReadOnlyList<NewSecurityFindingRow>> ClaimPendingLedgerAlertsAsync(int batchSize = 10, int leaseSeconds = 300, CancellationToken ct = default)
+        => db.QueryAsync<NewSecurityFindingRow>("logs.uspClaimPendingLedgerAlerts", new { batchSize, leaseSeconds }, ct);
 
-    public Task MarkSecurityFindingWebhookDeliveredAsync(Guid securityFindingId, CancellationToken ct = default)
-        => db.ExecuteAsync("logs.uspMarkSecurityFindingWebhookDelivered", new { securityFindingId }, ct);
+    public Task MarkSecurityFindingWebhookDeliveredAsync(Guid securityFindingId, Guid? claimToken = null, CancellationToken ct = default)
+        => db.ExecuteAsync("logs.uspMarkSecurityFindingWebhookDelivered", new { securityFindingId, claimToken }, ct);
 }

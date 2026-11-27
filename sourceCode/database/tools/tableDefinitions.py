@@ -1913,6 +1913,8 @@ TABLES += [{
         c("acknowledgedByUserId", UUID, "User who last updated the finding status."),
         c("acknowledgedUtc", "DATETIME2 (3)", "UTC timestamp of the last status update."),
         c("webhookDeliveredUtc", "DATETIME2 (3)", "UTC timestamp when an outbound webhook alert was delivered for this finding; NULL while pending (#354)."),
+        c("webhookClaimToken", UUID, "Opaque lease token held by the worker currently delivering this alert; NULL when unclaimed (#354)."),
+        c("webhookLeaseUntilUtc", "DATETIME2 (3)", "UTC lease expiry for the active webhook delivery claim; NULL when unclaimed (#354)."),
         c("fingerprint", "VARCHAR (128)", "Deterministic deduplication key for the finding within a scan window.", null=False),
     ],
     "fks": [],
@@ -1922,6 +1924,7 @@ TABLES += [{
         {"name": "IX_logs_securityFinding_status_detectedUtc", "cols": "status, detectedUtc", "filter": "isDeleted = 0"},
         {"name": "UX_logs_securityFinding_fingerprint", "cols": "fingerprint", "unique": True},
         {"name": "IX_logs_securityFinding_appUserId_detectedUtc", "cols": "appUserId, detectedUtc", "filter": "isDeleted = 0"},
+        {"name": "IX_logs_securityFinding_pendingWebhook", "cols": "ruleCode, status, webhookLeaseUntilUtc, detectedUtc", "filter": "isDeleted = 0 AND webhookDeliveredUtc IS NULL"},
     ],
 }]
 

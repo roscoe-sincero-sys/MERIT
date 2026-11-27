@@ -62,13 +62,10 @@ public sealed partial class SecurityFindingScanner : BackgroundService
                 {
                     foreach (var finding in high)
                     {
-                        await data.MarkSecurityFindingWebhookDeliveredAsync(finding.SecurityFindingId, stoppingToken).ConfigureAwait(false);
+                        await data.MarkSecurityFindingWebhookDeliveredAsync(finding.SecurityFindingId, null, stoppingToken).ConfigureAwait(false);
                     }
                 }
             }
-
-            // #354 (I22): retry any undelivered ledger alerts on the scanner's 15-minute cadence instead of waiting 24h.
-            await SecurityAlertWebhookNotifier.DrainPendingLedgerAlertsAsync(data, _notifier, _logger, null, stoppingToken).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is not OperationCanceledException || !stoppingToken.IsCancellationRequested)
         {

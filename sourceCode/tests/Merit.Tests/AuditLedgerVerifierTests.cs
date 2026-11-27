@@ -39,8 +39,8 @@ public sealed class AuditLedgerVerifierTests
         public Func<LedgerVerificationStateRow> OnGetState { get; set; } = () => new LedgerVerificationStateRow();
         public Func<VerifyCall, AuditLedgerVerificationRow> OnVerify { get; set; } = _ => new AuditLedgerVerificationRow();
         public Func<OutcomeRecord, LedgerVerificationOutcomeRow> OnRecord { get; set; } = _ => new LedgerVerificationOutcomeRow { LedgerVerificationRunId = Guid.NewGuid() };
-        public Func<IReadOnlyList<NewSecurityFindingRow>> OnGetPendingAlerts { get; set; } = () => [];
-        public Action<Guid> OnMarkDelivered { get; set; } = _ => { };
+        public Func<int, int, IReadOnlyList<NewSecurityFindingRow>> OnClaimPendingAlerts { get; set; } = (_, _) => [];
+        public Action<Guid, Guid?> OnMarkDelivered { get; set; } = (_, _) => { };
 
         protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
         {
@@ -58,13 +58,13 @@ public sealed class AuditLedgerVerifierTests
                 var rec = new OutcomeRecord((string)args![0]!, (bool)args[1]!, (long?)args[2], (int?)args[3], (string)args[4]!);
                 return Task.FromResult(OnRecord(rec));
             }
-            if (targetMethod?.Name == nameof(ISecurityMonitoringData.GetPendingLedgerAlertsAsync))
+            if (targetMethod?.Name == nameof(ISecurityMonitoringData.ClaimPendingLedgerAlertsAsync))
             {
-                return Task.FromResult(OnGetPendingAlerts());
+                return Task.FromResult(OnClaimPendingAlerts((int)args![0]!, (int)args[1]!));
             }
             if (targetMethod?.Name == nameof(ISecurityMonitoringData.MarkSecurityFindingWebhookDeliveredAsync))
             {
-                OnMarkDelivered((Guid)args![0]!);
+                OnMarkDelivered((Guid)args![0]!, (Guid?)args[1]);
                 return Task.CompletedTask;
             }
 
@@ -75,15 +75,15 @@ public sealed class AuditLedgerVerifierTests
             Func<LedgerVerificationStateRow> onGetState,
             Func<VerifyCall, AuditLedgerVerificationRow> onVerify,
             Func<OutcomeRecord, LedgerVerificationOutcomeRow> onRecord,
-            Func<IReadOnlyList<NewSecurityFindingRow>>? onGetPendingAlerts = null,
-            Action<Guid>? onMarkDelivered = null)
+            Func<int, int, IReadOnlyList<NewSecurityFindingRow>>? onClaimPendingAlerts = null,
+            Action<Guid, Guid?>? onMarkDelivered = null)
         {
             var proxy = DispatchProxy.Create<ISecurityMonitoringData, StubLedgerMonitoringProxy>();
             var impl = (StubLedgerMonitoringProxy)(object)proxy;
             impl.OnGetState = onGetState;
             impl.OnVerify = onVerify;
             impl.OnRecord = onRecord;
-            if (onGetPendingAlerts is not null) impl.OnGetPendingAlerts = onGetPendingAlerts;
+            if (onClaimPendingAlerts is not null) impl.OnClaimPendingAlerts = onClaimPendingAlerts;
             if (onMarkDelivered is not null) impl.OnMarkDelivered = onMarkDelivered;
             return proxy;
         }
@@ -91,10 +91,64 @@ public sealed class AuditLedgerVerifierTests
 
     private sealed class InMemoryLedgerStore
     {
+        private readonly object _gate = new();
         public int? DurableLastGoodCount { get; set; }
         public bool FindingCreatedToday { get; set; }
         public List<NewSecurityFindingRow> PendingAlerts { get; } = [];
         public HashSet<Guid> DeliveredFindingIds { get; } = [];
+        private readonly Dictionary<Guid, (Guid Token, DateTime LeaseUntilUtc)> _leases = [];
+
+        public void ExpireAllLeases()
+        {
+            lock (_gate)
+            {
+                _leases.Clear();
+            }
+        }
+
+        public IReadOnlyList<NewSecurityFindingRow> Claim(int batchSize, int leaseSeconds)
+        {
+            lock (_gate)
+            {
+                var now = DateTime.UtcNow;
+                var token = Guid.NewGuid();
+                var leaseUntil = now.AddSeconds(leaseSeconds);
+                var claimed = new List<NewSecurityFindingRow>();
+                foreach (var alert in PendingAlerts)
+                {
+                    if (claimed.Count >= batchSize) break;
+                    if (DeliveredFindingIds.Contains(alert.SecurityFindingId)) continue;
+                    if (_leases.TryGetValue(alert.SecurityFindingId, out var lease) && lease.LeaseUntilUtc >= now) continue;
+                    _leases[alert.SecurityFindingId] = (token, leaseUntil);
+                    claimed.Add(new NewSecurityFindingRow
+                    {
+                        SecurityFindingId = alert.SecurityFindingId,
+                        RootTenantId = alert.RootTenantId,
+                        AppUserId = alert.AppUserId,
+                        RuleCode = alert.RuleCode,
+                        Severity = alert.Severity,
+                        Title = alert.Title,
+                        DetailJson = alert.DetailJson,
+                        DetectedUtc = alert.DetectedUtc,
+                        ClaimToken = token,
+                    });
+                }
+                return claimed;
+            }
+        }
+
+        public void MarkDelivered(Guid id, Guid? claimToken)
+        {
+            lock (_gate)
+            {
+                if (claimToken is not null && (!_leases.TryGetValue(id, out var lease) || lease.Token != claimToken.Value))
+                {
+                    return;
+                }
+                DeliveredFindingIds.Add(id);
+                _leases.Remove(id);
+            }
+        }
     }
 
     private static (AuditLedgerVerifier verifier, CapturingLogger logger, List<VerifyCall> verifyCalls, List<OutcomeRecord> outcomes)
@@ -151,8 +205,8 @@ public sealed class AuditLedgerVerifierTests
                     DetectedUtc = now,
                 };
             },
-            () => store.PendingAlerts.Where(a => !store.DeliveredFindingIds.Contains(a.SecurityFindingId)).ToList(),
-            id => store.DeliveredFindingIds.Add(id)));
+            (batchSize, leaseSeconds) => store.Claim(batchSize, leaseSeconds),
+            (id, claimToken) => store.MarkDelivered(id, claimToken)));
         var provider = services.BuildServiceProvider();
         var dict = new Dictionary<string, string?>();
         if (digestDir is not null) dict["LedgerVerification:DigestDirectory"] = digestDir;
@@ -447,7 +501,8 @@ public sealed class AuditLedgerVerifierTests
         Assert.Single(store.PendingAlerts);
         Assert.Empty(store.DeliveredFindingIds);
 
-        // Simulate worker restart after receiver recovers: next cycle drains the pending finding with the SAME deliveryKey!
+        // Simulate lease expiry after receiver recovers: next cycle re-claims and delivers with the SAME deliveryKey!
+        store.ExpireAllLeases();
         receiverHealthy = true;
         var (verifier2, _, _, _) = CreateVerifier(
             missingDir,
@@ -465,5 +520,68 @@ public sealed class AuditLedgerVerifierTests
         // Subsequent same-day cycle: already delivered -> ZERO additional posts.
         await verifier2.RunVerificationCycleAsync(CancellationToken.None);
         Assert.Equal(4, httpPosts);
+    }
+
+    [Fact]
+    public async Task ConcurrentDrainers_ClaimAtomically_AndPostEachFindingExactlyOnce()
+    {
+        var store = new InMemoryLedgerStore();
+        var findingId = Guid.NewGuid();
+        store.PendingAlerts.Add(new NewSecurityFindingRow
+        {
+            SecurityFindingId = findingId,
+            RootTenantId = Guid.NewGuid(),
+            RuleCode = "ledgerVerificationFailed",
+            Severity = "critical",
+            Title = "Audit ledger verification failed",
+            DetectedUtc = DateTime.UtcNow,
+        });
+
+        int httpPosts = 0;
+        var client = new HttpClient(new StubHttpMessageHandler(async (_, ct) =>
+        {
+            Interlocked.Increment(ref httpPosts);
+            await Task.Delay(50, ct);
+            return new HttpResponseMessage(HttpStatusCode.OK);
+        }));
+
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["SecurityAlerts:WebhookUrl"] = "https://alerts.example.test/merit" })
+            .Build();
+        var logger = new CapturingLogger();
+        var notifier = new SecurityAlertWebhookNotifier(config, logger, client, [TimeSpan.Zero, TimeSpan.Zero, TimeSpan.Zero]);
+        var data = StubLedgerMonitoringProxy.Create(
+            () => new LedgerVerificationStateRow(),
+            _ => new AuditLedgerVerificationRow { Verified = true },
+            _ => new LedgerVerificationOutcomeRow { LedgerVerificationRunId = Guid.NewGuid() },
+            (batchSize, leaseSeconds) => store.Claim(batchSize, leaseSeconds),
+            (id, claimToken) => store.MarkDelivered(id, claimToken));
+
+        // Two overlapping drainers race against the same pending finding -> atomic lease guarantees exactly 1 HTTP POST.
+        await Task.WhenAll(
+            SecurityAlertWebhookNotifier.DrainPendingLedgerAlertsAsync(data, notifier, logger, batchSize: 10, leaseSeconds: 300, ct: CancellationToken.None),
+            SecurityAlertWebhookNotifier.DrainPendingLedgerAlertsAsync(data, notifier, logger, batchSize: 10, leaseSeconds: 300, ct: CancellationToken.None));
+
+        Assert.Equal(1, httpPosts);
+        Assert.Contains(findingId, store.DeliveredFindingIds);
+    }
+
+    [Fact]
+    public async Task ShutdownCancellationAfterNegativeSqlResult_StillPersistsFailureOutcome()
+    {
+        using var cts = new CancellationTokenSource();
+        var (verifier, _, _, outcomes) = CreateVerifier(
+            null,
+            _ =>
+            {
+                // Host begins shutting down immediately as SQL returns Verified = false.
+                cts.Cancel();
+                return new AuditLedgerVerificationRow { Verified = false, Detail = "Hash mismatch", OutcomeRecorded = false };
+            });
+
+        await verifier.RunVerificationCycleAsync(cts.Token);
+
+        Assert.Single(outcomes);
+        Assert.False(outcomes[0].Verified);
     }
 }

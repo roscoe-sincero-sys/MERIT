@@ -1235,7 +1235,9 @@ SET @Comments = CONCAT (N'Purged ', @total, N' ExecutionLog rows older than ', @
                 "external digest when @requireDigest = 1, or generates and verifies a fresh digest (#334).",
         "params": """@digestJson          NVARCHAR (MAX) = NULL
 , @useAutomaticStorage BIT = 0
-, @requireDigest       BIT = 0""",
+, @requireDigest       BIT = 0
+, @anchorSource        VARCHAR (30) = NULL
+, @digestFileCount     INT = NULL""",
         "key": "CONCAT (N'useAutomaticStorage=', @useAutomaticStorage, N', requireDigest=', @requireDigest)",
         "body": """
 DECLARE @effectiveDigest NVARCHAR (MAX) = NULLIF (LTRIM (RTRIM (@digestJson)), N'');
@@ -1313,12 +1315,31 @@ BEGIN CATCH
     SET @detail = CONCAT (N'Ledger verification failed (error ', ERROR_NUMBER (), N').');
 END CATCH;
 
+DECLARE @outcomeRecorded BIT = 0;
+IF @verified = 0
+BEGIN
+    DECLARE @effectiveAnchor VARCHAR (30) = CASE
+        WHEN @anchorSource IN ('automaticStorage', 'digestDirectory', 'unanchored') THEN @anchorSource
+        WHEN @useAutomaticStorage = 1 THEN 'automaticStorage'
+        WHEN @requireDigest = 1 THEN 'digestDirectory'
+        ELSE 'unanchored'
+    END;
+    EXEC logs.uspRecordLedgerVerificationOutcome
+         @anchorSource        = @effectiveAnchor,
+         @verified            = 0,
+         @lastVerifiedBlockId = @lastBlockId,
+         @digestFileCount     = @digestFileCount,
+         @detail              = @detail;
+    SET @outcomeRecorded = 1;
+END;
+
 SELECT @verified AS verified,
        @lastBlockId AS lastVerifiedBlockId,
        @effectiveDigest AS digestJson,
        @now AS verifiedUtc,
        @detail AS detail,
-       @hasAutoDigest AS hasAutomaticDigestStorage;
+       @hasAutoDigest AS hasAutomaticDigestStorage,
+       @outcomeRecorded AS outcomeRecorded;
 """,
     },
     {
@@ -1327,11 +1348,14 @@ SELECT @verified AS verified,
                 "(@useAutomaticStorage = 1), required external digest verification (@requireDigest = 1), or fresh generation.",
         "params": """@digestJson          NVARCHAR (MAX) = NULL
 , @useAutomaticStorage BIT = 0
-, @requireDigest       BIT = 0""",
+, @requireDigest       BIT = 0
+, @anchorSource        VARCHAR (30) = NULL
+, @digestFileCount     INT = NULL""",
         "key": "CONCAT (N'useAutomaticStorage=', @useAutomaticStorage, N', requireDigest=', @requireDigest)",
         "body": """
 EXEC logs.uspVerifyAuditLedgerInternal @digestJson = @digestJson,
-     @useAutomaticStorage = @useAutomaticStorage, @requireDigest = @requireDigest;
+     @useAutomaticStorage = @useAutomaticStorage, @requireDigest = @requireDigest,
+     @anchorSource = @anchorSource, @digestFileCount = @digestFileCount;
 """,
     },
     {
@@ -1413,32 +1437,64 @@ SET @Comments = CONCAT (N'Recorded ledger verification outcome: ', @anchorSource
 """,
     },
     {
-        "schema": "logs", "name": "uspGetPendingLedgerAlerts", "kind": "read", "grants": WORKER, "ticket": "354",
-        "desc": "Worker-only reader returning open, undelivered critical ledgerVerificationFailed findings "
-                "(webhookDeliveredUtc IS NULL) for durable outbox retry across cycles and restarts (#354).",
-        "params": "",
-        "key": "N'pendingLedgerAlerts=1'",
+        "schema": "logs", "name": "uspClaimPendingLedgerAlerts", "kind": "write", "grants": WORKER, "ticket": "354",
+        "desc": "Worker-only atomic claim-and-lease procedure for open, undelivered critical ledgerVerificationFailed "
+                "findings (#354). Uses UPDLOCK/READPAST/ROWLOCK so concurrent drainers never send the same alert.",
+        "params": """@batchSize    INT = 10
+, @leaseSeconds INT = 300""",
+        "key": "CONCAT (N'batchSize=', @batchSize, N', leaseSeconds=', @leaseSeconds)",
         "body": """
-SELECT securityFindingId, rootTenantId, appUserId, ruleCode, severity, title, detailJson, detectedUtc
-  FROM logs.securityFinding
- WHERE isDeleted = 0
-   AND status = 'open'
-   AND ruleCode = 'ledgerVerificationFailed'
-   AND webhookDeliveredUtc IS NULL
- ORDER BY detectedUtc ASC;
+DECLARE @top INT = CASE WHEN @batchSize BETWEEN 1 AND 100 THEN @batchSize ELSE 10 END;
+DECLARE @lease INT = CASE WHEN @leaseSeconds BETWEEN 10 AND 3600 THEN @leaseSeconds ELSE 300 END;
+DECLARE @now DATETIME2 (3) = SYSUTCDATETIME ();
+DECLARE @leaseUntil DATETIME2 (3) = DATEADD (SECOND, @lease, @now);
+DECLARE @claimToken UNIQUEIDENTIFIER = NEWID ();
+
+DECLARE @claimed TABLE (securityFindingId UNIQUEIDENTIFIER NOT NULL);
+
+;WITH candidate AS
+(
+    SELECT TOP (@top) f.securityFindingId
+      FROM logs.securityFinding AS f WITH (UPDLOCK, READPAST, ROWLOCK)
+     WHERE f.isDeleted = 0
+       AND f.ruleCode = 'ledgerVerificationFailed'
+       AND f.status = 'open'
+       AND f.webhookDeliveredUtc IS NULL
+       AND (f.webhookLeaseUntilUtc IS NULL OR f.webhookLeaseUntilUtc < @now)
+     ORDER BY f.detectedUtc ASC
+)
+UPDATE f
+   SET webhookClaimToken    = @claimToken,
+       webhookLeaseUntilUtc = @leaseUntil
+OUTPUT inserted.securityFindingId INTO @claimed
+  FROM logs.securityFinding AS f
+  JOIN candidate AS c ON c.securityFindingId = f.securityFindingId;
+
+SELECT f.securityFindingId, f.rootTenantId, f.appUserId, f.ruleCode, f.severity, f.title, f.detailJson,
+       f.detectedUtc, f.webhookClaimToken AS claimToken
+  FROM logs.securityFinding AS f
+  JOIN @claimed AS c ON c.securityFindingId = f.securityFindingId
+ ORDER BY f.detectedUtc ASC;
+
+SET @Comments = CONCAT ((SELECT COUNT (*) FROM @claimed), N' pending ledger alert(s) claimed.');
 """,
     },
     {
         "schema": "logs", "name": "uspMarkSecurityFindingWebhookDelivered", "kind": "write", "grants": WORKER, "ticket": "354",
-        "desc": "Worker-only marker recording webhookDeliveredUtc after a confirmed 2xx outbound webhook delivery (#354).",
-        "params": "@securityFindingId UNIQUEIDENTIFIER",
+        "desc": "Worker-only marker recording webhookDeliveredUtc after a confirmed 2xx outbound webhook delivery (#354). "
+                "When @claimToken is supplied, requires matching active lease ownership and clears the claim.",
+        "params": """@securityFindingId UNIQUEIDENTIFIER
+, @claimToken        UNIQUEIDENTIFIER = NULL""",
         "key": "CONCAT (N'securityFindingId=', @securityFindingId)",
         "body": """
 UPDATE logs.securityFinding
-   SET webhookDeliveredUtc = SYSUTCDATETIME ()
+   SET webhookDeliveredUtc  = SYSUTCDATETIME (),
+       webhookClaimToken    = NULL,
+       webhookLeaseUntilUtc = NULL
  WHERE securityFindingId = @securityFindingId
    AND isDeleted = 0
-   AND webhookDeliveredUtc IS NULL;
+   AND webhookDeliveredUtc IS NULL
+   AND (@claimToken IS NULL OR webhookClaimToken = @claimToken);
 
 SET @Comments = CONCAT (N'Marked webhook delivered for securityFindingId=', @securityFindingId);
 """,

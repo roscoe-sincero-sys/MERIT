@@ -42,6 +42,7 @@ builder.Services.AddHostedService<SearchLogPurger>();
 builder.Services.AddSingleton<ISecurityAlertNotifier, SecurityAlertWebhookNotifier>();
 builder.Services.AddHostedService<ExecutionLogPurger>();
 builder.Services.AddHostedService<AuditLedgerVerifier>();
+builder.Services.AddHostedService<LedgerAlertOutboxWorker>();
 builder.Services.AddHostedService<SecurityFindingScanner>();
 builder.Services.AddHostedService<OperationalIntegrityMonitor>();
 builder.Services.AddHealthChecks().AddCheck<QueueHealthCheck>("queues");

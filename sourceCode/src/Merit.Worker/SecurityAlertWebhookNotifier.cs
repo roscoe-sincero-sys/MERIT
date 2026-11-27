@@ -127,35 +127,33 @@ public sealed partial class SecurityAlertWebhookNotifier : ISecurityAlertNotifie
     }
 
     /// <summary>
-    /// Drains open, undelivered <c>ledgerVerificationFailed</c> findings from the SQL outbox, marking each delivered
-    /// only after HTTP 2xx (#354). Shared by <see cref="AuditLedgerVerifier"/> and <see cref="SecurityFindingScanner"/>
-    /// so transient receiver outages retry on the 15-minute scan cadence instead of waiting for the next daily ledger cycle.
+    /// Atomically claims a bounded batch of open, undelivered <c>ledgerVerificationFailed</c> findings via
+    /// <c>logs.uspClaimPendingLedgerAlerts</c> (UPDLOCK/READPAST/ROWLOCK lease), posts each to the webhook, and marks
+    /// delivery with its claim token only after HTTP 2xx (#354). Safe under concurrent drainers and worker replicas.
     /// </summary>
-    internal static async Task DrainPendingLedgerAlertsAsync(
+    internal static async Task<int> DrainPendingLedgerAlertsAsync(
         ISecurityMonitoringData data,
         ISecurityAlertNotifier? notifier,
         ILogger logger,
-        HashSet<Guid>? attemptedAlertIds,
-        CancellationToken ct)
+        int batchSize = 10,
+        int leaseSeconds = 300,
+        CancellationToken ct = default)
     {
         if (notifier is null)
         {
-            return;
+            return 0;
         }
 
+        int deliveredCount = 0;
         try
         {
-            var pending = await data.GetPendingLedgerAlertsAsync(ct).ConfigureAwait(false);
-            foreach (var finding in pending)
+            var claimed = await data.ClaimPendingLedgerAlertsAsync(batchSize, leaseSeconds, ct).ConfigureAwait(false);
+            foreach (var finding in claimed)
             {
-                if (attemptedAlertIds is not null && !attemptedAlertIds.Add(finding.SecurityFindingId))
-                {
-                    continue;
-                }
-
                 if (await notifier.NotifyAsync([finding], ct).ConfigureAwait(false))
                 {
-                    await data.MarkSecurityFindingWebhookDeliveredAsync(finding.SecurityFindingId, ct).ConfigureAwait(false);
+                    await data.MarkSecurityFindingWebhookDeliveredAsync(finding.SecurityFindingId, finding.ClaimToken, CancellationToken.None).ConfigureAwait(false);
+                    deliveredCount++;
                 }
             }
         }
@@ -163,6 +161,8 @@ public sealed partial class SecurityAlertWebhookNotifier : ISecurityAlertNotifie
         {
             LedgerAlertOutboxError(logger, ex.GetType().Name);
         }
+
+        return deliveredCount;
     }
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Security alert webhook skipped: URL must be absolute HTTPS")]

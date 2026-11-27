@@ -13,7 +13,7 @@ CreateDate:   2026-10-24
 ========================================================================================================================
 Description:
 
-Worker-only marker recording webhookDeliveredUtc after a confirmed 2xx outbound webhook delivery (#354).
+Worker-only marker recording webhookDeliveredUtc after a confirmed 2xx outbound webhook delivery (#354). When @claimToken is supplied, requires matching active lease ownership and clears the claim.
 
 ========================================================================================================================
 Requirements and Key Dependencies:
@@ -46,6 +46,7 @@ Description:	Initial version.
 ***********************************************************************************************************************/
 CREATE OR ALTER PROCEDURE logs.uspMarkSecurityFindingWebhookDelivered
       @securityFindingId UNIQUEIDENTIFIER
+      , @claimToken        UNIQUEIDENTIFIER = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -88,10 +89,13 @@ BEGIN
         -- =========================================================================================
 
         UPDATE logs.securityFinding
-           SET webhookDeliveredUtc = SYSUTCDATETIME ()
+           SET webhookDeliveredUtc  = SYSUTCDATETIME (),
+               webhookClaimToken    = NULL,
+               webhookLeaseUntilUtc = NULL
          WHERE securityFindingId = @securityFindingId
            AND isDeleted = 0
-           AND webhookDeliveredUtc IS NULL;
+           AND webhookDeliveredUtc IS NULL
+           AND (@claimToken IS NULL OR webhookClaimToken = @claimToken);
 
         SET @Comments = CONCAT (N'Marked webhook delivered for securityFindingId=', @securityFindingId);
 
@@ -176,7 +180,7 @@ EXEC util.uspSetObjectDescription
       @SchemaName  = N'logs'
     , @ObjectType  = N'PROCEDURE'
     , @ObjectName  = N'uspMarkSecurityFindingWebhookDelivered'
-    , @Description = N'Worker-only marker recording webhookDeliveredUtc after a confirmed 2xx outbound webhook delivery (#354).';
+    , @Description = N'Worker-only marker recording webhookDeliveredUtc after a confirmed 2xx outbound webhook delivery (#354). When @claimToken is supplied, requires matching active lease ownership and clears the claim.';
 GO
 
 IF DATABASE_PRINCIPAL_ID (N'meritWorkerRole') IS NOT NULL

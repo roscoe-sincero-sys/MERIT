@@ -35,10 +35,10 @@ public interface ISecurityMonitoringData
     // #334 / #354 ExecutionLog retention, audit ledger digest verification, and durable webhook outbox
     Task<int> PurgeExecutionLogAsync(int retentionDays, CancellationToken ct = default);
     Task<LedgerVerificationStateRow> GetLedgerVerificationStateAsync(CancellationToken ct = default);
-    Task<AuditLedgerVerificationRow> VerifyAuditLedgerAsync(string? digestJson = null, bool useAutomaticStorage = false, bool requireDigest = false, CancellationToken ct = default);
+    Task<AuditLedgerVerificationRow> VerifyAuditLedgerAsync(string? digestJson = null, bool useAutomaticStorage = false, bool requireDigest = false, string? anchorSource = null, int? digestFileCount = null, CancellationToken ct = default);
     Task<LedgerVerificationOutcomeRow> RecordLedgerVerificationOutcomeAsync(string anchorSource, bool verified, long? lastVerifiedBlockId, int? digestFileCount, string detail, CancellationToken ct = default);
-    Task<IReadOnlyList<NewSecurityFindingRow>> GetPendingLedgerAlertsAsync(CancellationToken ct = default);
-    Task MarkSecurityFindingWebhookDeliveredAsync(Guid securityFindingId, CancellationToken ct = default);
+    Task<IReadOnlyList<NewSecurityFindingRow>> ClaimPendingLedgerAlertsAsync(int batchSize = 10, int leaseSeconds = 300, CancellationToken ct = default);
+    Task MarkSecurityFindingWebhookDeliveredAsync(Guid securityFindingId, Guid? claimToken = null, CancellationToken ct = default);
 }
 
 public sealed record BehaviorAnomalyQuery(
@@ -101,6 +101,7 @@ public sealed class NewSecurityFindingRow
     public string Title { get; init; } = string.Empty;
     public string? DetailJson { get; init; }
     public DateTime DetectedUtc { get; init; }
+    public Guid? ClaimToken { get; init; }
 }
 
 public sealed class SearchLogSummaryRow
@@ -354,6 +355,7 @@ public sealed class AuditLedgerVerificationRow
     public DateTime VerifiedUtc { get; init; }
     public string Detail { get; init; } = string.Empty;
     public bool HasAutomaticDigestStorage { get; init; }
+    public bool OutcomeRecorded { get; init; }
 }
 
 public sealed class LedgerVerificationOutcomeRow
