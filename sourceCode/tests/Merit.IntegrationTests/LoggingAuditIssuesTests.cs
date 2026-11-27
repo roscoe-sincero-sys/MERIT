@@ -253,7 +253,13 @@ public sealed class LoggingAuditIssuesTests(MeritFixture fixture)
 
         // 2. Held-row batch rejection writes update stagingRow with recordCount = 2 and 2 manifest rows.
         long afterReject = await MaxAuditIdAsync();
-        Guid batchId = await ScalarAsync<Guid>("SELECT TOP (1) intakeBatchId FROM dbo.intakeBatch WHERE isDeleted = 0");
+        Guid batchId = await ScalarAsync<Guid>("""
+            SELECT TOP (1) b.intakeBatchId
+              FROM dbo.intakeBatch AS b
+             WHERE b.rootTenantId = (SELECT rootTenantId FROM auth.appUser WHERE userName = 'supervisor' AND isDeleted = 0)
+               AND b.isDeleted = 0
+             ORDER BY b.receivedUtc DESC
+            """);
         Guid rootId = await ScalarAsync<Guid>("SELECT rootTenantId FROM dbo.intakeBatch WHERE intakeBatchId = @b", ("@b", batchId));
         Guid ownerId = await ScalarAsync<Guid>("SELECT owningTenantId FROM dbo.intakeBatch WHERE intakeBatchId = @b", ("@b", batchId));
         Guid row1 = Guid.NewGuid(), row2 = Guid.NewGuid();

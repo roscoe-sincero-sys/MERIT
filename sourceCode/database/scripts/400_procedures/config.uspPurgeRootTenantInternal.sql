@@ -13,7 +13,7 @@ CreateDate:   2026-10-24
 ========================================================================================================================
 Description:
 
-Ungranted owner-context helper for config.uspPurgeRootTenant: scrubs every PHI, free-text, binary, geocode, and credential column across all 70 mutable tenant/auth tables (including previously soft-deleted rows) in independently committed 5,000-row batches with post-purge verification (#346, B4, I16).
+Ungranted owner-context helper for config.uspPurgeRootTenant: fences tenants/sessions/jobs first, scrubs every PHI, free-text, binary, geocode, and credential column across all 70 mutable tenant/auth tables (including previously soft-deleted rows) in independently committed 5,000-row batches (or rolls back all work when @dryRun = 1), and runs a final post-purge verification pass (#346, B4, B5, I16, I18).
 
 ========================================================================================================================
 Requirements and Key Dependencies:
@@ -47,6 +47,7 @@ Description:	Initial version.
 CREATE OR ALTER PROCEDURE config.uspPurgeRootTenantInternal
       @rootTenantId        UNIQUEIDENTIFIER
       , @backupRetentionDays INT = 35
+      , @dryRun              BIT = 0
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -71,7 +72,7 @@ BEGIN
           , @ErrorLine      INT            = NULL;
 
     -- Identifiers and counts ONLY. Never a credential, a payload, or patient data.
-    SET @KeyParameters = CONCAT (N'rootTenantId=', @rootTenantId, N', backupRetentionDays=', @backupRetentionDays);
+    SET @KeyParameters = CONCAT (N'rootTenantId=', @rootTenantId, N', backupRetentionDays=', @backupRetentionDays, N', dryRun=', @dryRun);
 
     BEGIN TRY
 
@@ -87,13 +88,27 @@ BEGIN
         -- =========================================================================================
 
         DECLARE @report TABLE (
-            tableName           NVARCHAR (128) NOT NULL,
+            tableName           NVARCHAR (128) NOT NULL PRIMARY KEY,
             rowsAffected        INT NOT NULL,
             remainingUnscrubbed INT NOT NULL,
             disposition         VARCHAR (40) NOT NULL
         );
         DECLARE @n INT = 0, @batch INT = 0, @rem INT = 0;
+        DECLARE @startedDryRunTx BIT = 0;
+        IF @dryRun = 1
+        BEGIN
+            BEGIN TRANSACTION;
+            SET @startedDryRunTx = 1;
+        END;
 
+        -- Step 1 (I18): Fence the root BEFORE purging any table so active users and queued jobs cannot insert late rows.
+        BEGIN TRANSACTION;
+        UPDATE auth.tenant SET isActive = 0, modifiedBy = N'MERIT tenant purge' WHERE rootTenantId = @rootTenantId AND isActive = 1;
+        UPDATE auth.sessionScope SET revokedUtc = COALESCE (revokedUtc, SYSUTCDATETIME ()), modifiedBy = N'MERIT tenant purge' WHERE rootTenantId = @rootTenantId AND revokedUtc IS NULL;
+        UPDATE dbo.jobQueue SET jobStatus = 'failed', modifiedBy = N'MERIT tenant purge' WHERE rootTenantId = @rootTenantId AND jobStatus IN ('queued', 'running');
+        COMMIT TRANSACTION;
+
+        -- Step 2 (B4, I16): Scrub and soft-delete all 70 mutable tenant/auth tables in independently committed 5,000-row batches.
         SET @batch = 1; SET @n = 0;
         WHILE @batch > 0
         BEGIN
@@ -105,13 +120,12 @@ BEGIN
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
-            IF @batch = 5000
+            IF @batch = 5000 AND @dryRun = 0
             BEGIN
                 WAITFOR DELAY '00:00:00.050';
             END;
         END;
-        SELECT @rem = COUNT (*) FROM auth.mfaRecoveryCode WHERE (appUserId IN (SELECT appUserId FROM auth.appUser WHERE rootTenantId = @rootTenantId)) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
-        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'auth.mfaRecoveryCode', @n, @rem, 'scrubbedAndSoftDeleted');
+        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'auth.mfaRecoveryCode', @n, 0, 'scrubbedAndSoftDeleted');
         SET @batch = 1; SET @n = 0;
         WHILE @batch > 0
         BEGIN
@@ -123,13 +137,12 @@ BEGIN
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
-            IF @batch = 5000
+            IF @batch = 5000 AND @dryRun = 0
             BEGIN
                 WAITFOR DELAY '00:00:00.050';
             END;
         END;
-        SELECT @rem = COUNT (*) FROM auth.passwordReset WHERE (appUserId IN (SELECT appUserId FROM auth.appUser WHERE rootTenantId = @rootTenantId)) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
-        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'auth.passwordReset', @n, @rem, 'scrubbedAndSoftDeleted');
+        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'auth.passwordReset', @n, 0, 'scrubbedAndSoftDeleted');
         SET @batch = 1; SET @n = 0;
         WHILE @batch > 0
         BEGIN
@@ -141,13 +154,12 @@ BEGIN
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
-            IF @batch = 5000
+            IF @batch = 5000 AND @dryRun = 0
             BEGIN
                 WAITFOR DELAY '00:00:00.050';
             END;
         END;
-        SELECT @rem = COUNT (*) FROM auth.mfaEmailChallenge WHERE (appUserId IN (SELECT appUserId FROM auth.appUser WHERE rootTenantId = @rootTenantId)) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
-        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'auth.mfaEmailChallenge', @n, @rem, 'scrubbedAndSoftDeleted');
+        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'auth.mfaEmailChallenge', @n, 0, 'scrubbedAndSoftDeleted');
         SET @batch = 1; SET @n = 0;
         WHILE @batch > 0
         BEGIN
@@ -159,13 +171,12 @@ BEGIN
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
-            IF @batch = 5000
+            IF @batch = 5000 AND @dryRun = 0
             BEGIN
                 WAITFOR DELAY '00:00:00.050';
             END;
         END;
-        SELECT @rem = COUNT (*) FROM auth.userProfileGrant WHERE (userProfileId IN (SELECT up.userProfileId FROM auth.userProfile AS up JOIN auth.appUser AS u ON u.appUserId = up.appUserId WHERE u.rootTenantId = @rootTenantId)) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
-        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'auth.userProfileGrant', @n, @rem, 'scrubbedAndSoftDeleted');
+        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'auth.userProfileGrant', @n, 0, 'scrubbedAndSoftDeleted');
         SET @batch = 1; SET @n = 0;
         WHILE @batch > 0
         BEGIN
@@ -177,13 +188,12 @@ BEGIN
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
-            IF @batch = 5000
+            IF @batch = 5000 AND @dryRun = 0
             BEGIN
                 WAITFOR DELAY '00:00:00.050';
             END;
         END;
-        SELECT @rem = COUNT (*) FROM auth.userProfile WHERE (appUserId IN (SELECT appUserId FROM auth.appUser WHERE rootTenantId = @rootTenantId)) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
-        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'auth.userProfile', @n, @rem, 'scrubbedAndSoftDeleted');
+        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'auth.userProfile', @n, 0, 'scrubbedAndSoftDeleted');
         SET @batch = 1; SET @n = 0;
         WHILE @batch > 0
         BEGIN
@@ -195,13 +205,12 @@ BEGIN
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
-            IF @batch = 5000
+            IF @batch = 5000 AND @dryRun = 0
             BEGIN
                 WAITFOR DELAY '00:00:00.050';
             END;
         END;
-        SELECT @rem = COUNT (*) FROM auth.userAssignment WHERE (appUserId IN (SELECT appUserId FROM auth.appUser WHERE rootTenantId = @rootTenantId) OR tenantId IN (SELECT tenantId FROM auth.tenant WHERE rootTenantId = @rootTenantId)) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
-        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'auth.userAssignment', @n, @rem, 'scrubbedAndSoftDeleted');
+        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'auth.userAssignment', @n, 0, 'scrubbedAndSoftDeleted');
         SET @batch = 1; SET @n = 0;
         WHILE @batch > 0
         BEGIN
@@ -213,13 +222,12 @@ BEGIN
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
-            IF @batch = 5000
+            IF @batch = 5000 AND @dryRun = 0
             BEGIN
                 WAITFOR DELAY '00:00:00.050';
             END;
         END;
-        SELECT @rem = COUNT (*) FROM auth.sessionScopeTenant WHERE (sessionScopeId IN (SELECT sessionScopeId FROM auth.sessionScope WHERE rootTenantId = @rootTenantId)) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
-        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'auth.sessionScopeTenant', @n, @rem, 'scrubbedAndSoftDeleted');
+        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'auth.sessionScopeTenant', @n, 0, 'scrubbedAndSoftDeleted');
         SET @batch = 1; SET @n = 0;
         WHILE @batch > 0
         BEGIN
@@ -231,13 +239,12 @@ BEGIN
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
-            IF @batch = 5000
+            IF @batch = 5000 AND @dryRun = 0
             BEGIN
                 WAITFOR DELAY '00:00:00.050';
             END;
         END;
-        SELECT @rem = COUNT (*) FROM auth.sessionScopePermission WHERE (sessionScopeId IN (SELECT sessionScopeId FROM auth.sessionScope WHERE rootTenantId = @rootTenantId)) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
-        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'auth.sessionScopePermission', @n, @rem, 'scrubbedAndSoftDeleted');
+        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'auth.sessionScopePermission', @n, 0, 'scrubbedAndSoftDeleted');
         SET @batch = 1; SET @n = 0;
         WHILE @batch > 0
         BEGIN
@@ -249,13 +256,12 @@ BEGIN
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
-            IF @batch = 5000
+            IF @batch = 5000 AND @dryRun = 0
             BEGIN
                 WAITFOR DELAY '00:00:00.050';
             END;
         END;
-        SELECT @rem = COUNT (*) FROM auth.sessionScopeAdminTenant WHERE (sessionScopeId IN (SELECT sessionScopeId FROM auth.sessionScope WHERE rootTenantId = @rootTenantId)) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
-        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'auth.sessionScopeAdminTenant', @n, @rem, 'scrubbedAndSoftDeleted');
+        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'auth.sessionScopeAdminTenant', @n, 0, 'scrubbedAndSoftDeleted');
         SET @batch = 1; SET @n = 0;
         WHILE @batch > 0
         BEGIN
@@ -267,13 +273,12 @@ BEGIN
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
-            IF @batch = 5000
+            IF @batch = 5000 AND @dryRun = 0
             BEGIN
                 WAITFOR DELAY '00:00:00.050';
             END;
         END;
-        SELECT @rem = COUNT (*) FROM auth.rolePermission WHERE (roleId IN (SELECT roleId FROM auth.role WHERE rootTenantId = @rootTenantId)) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
-        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'auth.rolePermission', @n, @rem, 'scrubbedAndSoftDeleted');
+        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'auth.rolePermission', @n, 0, 'scrubbedAndSoftDeleted');
         SET @batch = 1; SET @n = 0;
         WHILE @batch > 0
         BEGIN
@@ -285,13 +290,12 @@ BEGIN
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
-            IF @batch = 5000
+            IF @batch = 5000 AND @dryRun = 0
             BEGIN
                 WAITFOR DELAY '00:00:00.050';
             END;
         END;
-        SELECT @rem = COUNT (*) FROM auth.tenantJurisdiction WHERE (tenantId IN (SELECT tenantId FROM auth.tenant WHERE rootTenantId = @rootTenantId)) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
-        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'auth.tenantJurisdiction', @n, @rem, 'scrubbedAndSoftDeleted');
+        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'auth.tenantJurisdiction', @n, 0, 'scrubbedAndSoftDeleted');
         SET @batch = 1; SET @n = 0;
         WHILE @batch > 0
         BEGIN
@@ -303,13 +307,12 @@ BEGIN
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
-            IF @batch = 5000
+            IF @batch = 5000 AND @dryRun = 0
             BEGIN
                 WAITFOR DELAY '00:00:00.050';
             END;
         END;
-        SELECT @rem = COUNT (*) FROM auth.tenantClosure WHERE (ancestorTenantId IN (SELECT tenantId FROM auth.tenant WHERE rootTenantId = @rootTenantId) OR descendantTenantId IN (SELECT tenantId FROM auth.tenant WHERE rootTenantId = @rootTenantId)) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
-        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'auth.tenantClosure', @n, @rem, 'scrubbedAndSoftDeleted');
+        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'auth.tenantClosure', @n, 0, 'scrubbedAndSoftDeleted');
         SET @batch = 1; SET @n = 0;
         WHILE @batch > 0
         BEGIN
@@ -321,13 +324,12 @@ BEGIN
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
-            IF @batch = 5000
+            IF @batch = 5000 AND @dryRun = 0
             BEGIN
                 WAITFOR DELAY '00:00:00.050';
             END;
         END;
-        SELECT @rem = COUNT (*) FROM logs.auditEventChange WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
-        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'logs.auditEventChange', @n, @rem, 'scrubbedAndSoftDeleted');
+        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'logs.auditEventChange', @n, 0, 'scrubbedAndSoftDeleted');
         SET @batch = 1; SET @n = 0;
         WHILE @batch > 0
         BEGIN
@@ -339,13 +341,12 @@ BEGIN
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
-            IF @batch = 5000
+            IF @batch = 5000 AND @dryRun = 0
             BEGIN
                 WAITFOR DELAY '00:00:00.050';
             END;
         END;
-        SELECT @rem = COUNT (*) FROM logs.auditEventRecord WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
-        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'logs.auditEventRecord', @n, @rem, 'scrubbedAndSoftDeleted');
+        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'logs.auditEventRecord', @n, 0, 'scrubbedAndSoftDeleted');
         SET @batch = 1; SET @n = 0;
         WHILE @batch > 0
         BEGIN
@@ -357,13 +358,12 @@ BEGIN
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
-            IF @batch = 5000
+            IF @batch = 5000 AND @dryRun = 0
             BEGIN
                 WAITFOR DELAY '00:00:00.050';
             END;
         END;
-        SELECT @rem = COUNT (*) FROM logs.securityFinding WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
-        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'logs.securityFinding', @n, @rem, 'scrubbedAndSoftDeleted');
+        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'logs.securityFinding', @n, 0, 'scrubbedAndSoftDeleted');
         SET @batch = 1; SET @n = 0;
         WHILE @batch > 0
         BEGIN
@@ -375,13 +375,12 @@ BEGIN
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
-            IF @batch = 5000
+            IF @batch = 5000 AND @dryRun = 0
             BEGIN
                 WAITFOR DELAY '00:00:00.050';
             END;
         END;
-        SELECT @rem = COUNT (*) FROM logs.searchLog WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
-        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'logs.searchLog', @n, @rem, 'scrubbedAndSoftDeleted');
+        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'logs.searchLog', @n, 0, 'scrubbedAndSoftDeleted');
         SET @batch = 1; SET @n = 0;
         WHILE @batch > 0
         BEGIN
@@ -393,13 +392,12 @@ BEGIN
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
-            IF @batch = 5000
+            IF @batch = 5000 AND @dryRun = 0
             BEGIN
                 WAITFOR DELAY '00:00:00.050';
             END;
         END;
-        SELECT @rem = COUNT (*) FROM logs.screenVisit WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
-        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'logs.screenVisit', @n, @rem, 'scrubbedAndSoftDeleted');
+        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'logs.screenVisit', @n, 0, 'scrubbedAndSoftDeleted');
         SET @batch = 1; SET @n = 0;
         WHILE @batch > 0
         BEGIN
@@ -411,13 +409,12 @@ BEGIN
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
-            IF @batch = 5000
+            IF @batch = 5000 AND @dryRun = 0
             BEGIN
                 WAITFOR DELAY '00:00:00.050';
             END;
         END;
-        SELECT @rem = COUNT (*) FROM logs.signInEvent WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
-        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'logs.signInEvent', @n, @rem, 'scrubbedAndSoftDeleted');
+        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'logs.signInEvent', @n, 0, 'scrubbedAndSoftDeleted');
         SET @batch = 1; SET @n = 0;
         WHILE @batch > 0
         BEGIN
@@ -429,13 +426,12 @@ BEGIN
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
-            IF @batch = 5000
+            IF @batch = 5000 AND @dryRun = 0
             BEGIN
                 WAITFOR DELAY '00:00:00.050';
             END;
         END;
-        SELECT @rem = COUNT (*) FROM dbo.contactCorrection WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
-        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'dbo.contactCorrection', @n, @rem, 'scrubbedAndSoftDeleted');
+        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'dbo.contactCorrection', @n, 0, 'scrubbedAndSoftDeleted');
         SET @batch = 1; SET @n = 0;
         WHILE @batch > 0
         BEGIN
@@ -447,13 +443,12 @@ BEGIN
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
-            IF @batch = 5000
+            IF @batch = 5000 AND @dryRun = 0
             BEGIN
                 WAITFOR DELAY '00:00:00.050';
             END;
         END;
-        SELECT @rem = COUNT (*) FROM dbo.caseResultLink WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
-        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'dbo.caseResultLink', @n, @rem, 'scrubbedAndSoftDeleted');
+        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'dbo.caseResultLink', @n, 0, 'scrubbedAndSoftDeleted');
         SET @batch = 1; SET @n = 0;
         WHILE @batch > 0
         BEGIN
@@ -465,13 +460,12 @@ BEGIN
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
-            IF @batch = 5000
+            IF @batch = 5000 AND @dryRun = 0
             BEGIN
                 WAITFOR DELAY '00:00:00.050';
             END;
         END;
-        SELECT @rem = COUNT (*) FROM dbo.notificationObligation WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
-        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'dbo.notificationObligation', @n, @rem, 'scrubbedAndSoftDeleted');
+        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'dbo.notificationObligation', @n, 0, 'scrubbedAndSoftDeleted');
         SET @batch = 1; SET @n = 0;
         WHILE @batch > 0
         BEGIN
@@ -483,13 +477,12 @@ BEGIN
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
-            IF @batch = 5000
+            IF @batch = 5000 AND @dryRun = 0
             BEGIN
                 WAITFOR DELAY '00:00:00.050';
             END;
         END;
-        SELECT @rem = COUNT (*) FROM dbo.personDocument WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
-        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'dbo.personDocument', @n, @rem, 'scrubbedAndSoftDeleted');
+        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'dbo.personDocument', @n, 0, 'scrubbedAndSoftDeleted');
         SET @batch = 1; SET @n = 0;
         WHILE @batch > 0
         BEGIN
@@ -501,13 +494,12 @@ BEGIN
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
-            IF @batch = 5000
+            IF @batch = 5000 AND @dryRun = 0
             BEGIN
                 WAITFOR DELAY '00:00:00.050';
             END;
         END;
-        SELECT @rem = COUNT (*) FROM dbo.personActivity WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
-        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'dbo.personActivity', @n, @rem, 'scrubbedAndSoftDeleted');
+        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'dbo.personActivity', @n, 0, 'scrubbedAndSoftDeleted');
         SET @batch = 1; SET @n = 0;
         WHILE @batch > 0
         BEGIN
@@ -519,13 +511,12 @@ BEGIN
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
-            IF @batch = 5000
+            IF @batch = 5000 AND @dryRun = 0
             BEGIN
                 WAITFOR DELAY '00:00:00.050';
             END;
         END;
-        SELECT @rem = COUNT (*) FROM dbo.matchExclusion WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
-        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'dbo.matchExclusion', @n, @rem, 'scrubbedAndSoftDeleted');
+        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'dbo.matchExclusion', @n, 0, 'scrubbedAndSoftDeleted');
         SET @batch = 1; SET @n = 0;
         WHILE @batch > 0
         BEGIN
@@ -537,13 +528,12 @@ BEGIN
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
-            IF @batch = 5000
+            IF @batch = 5000 AND @dryRun = 0
             BEGIN
                 WAITFOR DELAY '00:00:00.050';
             END;
         END;
-        SELECT @rem = COUNT (*) FROM dbo.extractRun WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
-        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'dbo.extractRun', @n, @rem, 'scrubbedAndSoftDeleted');
+        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'dbo.extractRun', @n, 0, 'scrubbedAndSoftDeleted');
         SET @batch = 1; SET @n = 0;
         WHILE @batch > 0
         BEGIN
@@ -555,13 +545,12 @@ BEGIN
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
-            IF @batch = 5000
+            IF @batch = 5000 AND @dryRun = 0
             BEGIN
                 WAITFOR DELAY '00:00:00.050';
             END;
         END;
-        SELECT @rem = COUNT (*) FROM dbo.jobQueue WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
-        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'dbo.jobQueue', @n, @rem, 'scrubbedAndSoftDeleted');
+        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'dbo.jobQueue', @n, 0, 'scrubbedAndSoftDeleted');
         SET @batch = 1; SET @n = 0;
         WHILE @batch > 0
         BEGIN
@@ -573,13 +562,12 @@ BEGIN
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
-            IF @batch = 5000
+            IF @batch = 5000 AND @dryRun = 0
             BEGIN
                 WAITFOR DELAY '00:00:00.050';
             END;
         END;
-        SELECT @rem = COUNT (*) FROM dbo.workTask WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
-        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'dbo.workTask', @n, @rem, 'scrubbedAndSoftDeleted');
+        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'dbo.workTask', @n, 0, 'scrubbedAndSoftDeleted');
         SET @batch = 1; SET @n = 0;
         WHILE @batch > 0
         BEGIN
@@ -591,13 +579,12 @@ BEGIN
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
-            IF @batch = 5000
+            IF @batch = 5000 AND @dryRun = 0
             BEGIN
                 WAITFOR DELAY '00:00:00.050';
             END;
         END;
-        SELECT @rem = COUNT (*) FROM dbo.caseCluster WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
-        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'dbo.caseCluster', @n, @rem, 'scrubbedAndSoftDeleted');
+        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'dbo.caseCluster', @n, 0, 'scrubbedAndSoftDeleted');
         SET @batch = 1; SET @n = 0;
         WHILE @batch > 0
         BEGIN
@@ -609,13 +596,12 @@ BEGIN
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
-            IF @batch = 5000
+            IF @batch = 5000 AND @dryRun = 0
             BEGIN
                 WAITFOR DELAY '00:00:00.050';
             END;
         END;
-        SELECT @rem = COUNT (*) FROM dbo.cluster WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
-        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'dbo.cluster', @n, @rem, 'scrubbedAndSoftDeleted');
+        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'dbo.cluster', @n, 0, 'scrubbedAndSoftDeleted');
         SET @batch = 1; SET @n = 0;
         WHILE @batch > 0
         BEGIN
@@ -627,13 +613,12 @@ BEGIN
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
-            IF @batch = 5000
+            IF @batch = 5000 AND @dryRun = 0
             BEGIN
                 WAITFOR DELAY '00:00:00.050';
             END;
         END;
-        SELECT @rem = COUNT (*) FROM dbo.environmentalSample WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
-        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'dbo.environmentalSample', @n, @rem, 'scrubbedAndSoftDeleted');
+        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'dbo.environmentalSample', @n, 0, 'scrubbedAndSoftDeleted');
         SET @batch = 1; SET @n = 0;
         WHILE @batch > 0
         BEGIN
@@ -645,13 +630,12 @@ BEGIN
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
-            IF @batch = 5000
+            IF @batch = 5000 AND @dryRun = 0
             BEGIN
                 WAITFOR DELAY '00:00:00.050';
             END;
         END;
-        SELECT @rem = COUNT (*) FROM dbo.investigationCase WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
-        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'dbo.investigationCase', @n, @rem, 'scrubbedAndSoftDeleted');
+        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'dbo.investigationCase', @n, 0, 'scrubbedAndSoftDeleted');
         SET @batch = 1; SET @n = 0;
         WHILE @batch > 0
         BEGIN
@@ -663,13 +647,12 @@ BEGIN
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
-            IF @batch = 5000
+            IF @batch = 5000 AND @dryRun = 0
             BEGIN
                 WAITFOR DELAY '00:00:00.050';
             END;
         END;
-        SELECT @rem = COUNT (*) FROM dbo.investigation WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
-        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'dbo.investigation', @n, @rem, 'scrubbedAndSoftDeleted');
+        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'dbo.investigation', @n, 0, 'scrubbedAndSoftDeleted');
         SET @batch = 1; SET @n = 0;
         WHILE @batch > 0
         BEGIN
@@ -681,13 +664,12 @@ BEGIN
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
-            IF @batch = 5000
+            IF @batch = 5000 AND @dryRun = 0
             BEGIN
                 WAITFOR DELAY '00:00:00.050';
             END;
         END;
-        SELECT @rem = COUNT (*) FROM dbo.exposureSource WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
-        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'dbo.exposureSource', @n, @rem, 'scrubbedAndSoftDeleted');
+        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'dbo.exposureSource', @n, 0, 'scrubbedAndSoftDeleted');
         SET @batch = 1; SET @n = 0;
         WHILE @batch > 0
         BEGIN
@@ -699,31 +681,29 @@ BEGIN
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
-            IF @batch = 5000
+            IF @batch = 5000 AND @dryRun = 0
             BEGIN
                 WAITFOR DELAY '00:00:00.050';
             END;
         END;
-        SELECT @rem = COUNT (*) FROM dbo.caseActivity WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
-        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'dbo.caseActivity', @n, @rem, 'scrubbedAndSoftDeleted');
+        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'dbo.caseActivity', @n, 0, 'scrubbedAndSoftDeleted');
         SET @batch = 1; SET @n = 0;
         WHILE @batch > 0
         BEGIN
             BEGIN TRANSACTION;
             UPDATE TOP (5000) dbo.exposureCase
-               SET caseNumber = '[purged]', overrideReason = NULL, workflowTemplate = '[purged]', closedDate = NULL, closureReason = NULL, isDeleted = 1, modifiedBy = N'MERIT tenant purge'
+               SET caseNumber = '[purged]', overrideReason = NULL, caseStatus = 'open', workflowTemplate = '[purged]', closedDate = NULL, closureReason = NULL, isDeleted = 1, modifiedBy = N'MERIT tenant purge'
              WHERE (rootTenantId = @rootTenantId)
                AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
-            IF @batch = 5000
+            IF @batch = 5000 AND @dryRun = 0
             BEGIN
                 WAITFOR DELAY '00:00:00.050';
             END;
         END;
-        SELECT @rem = COUNT (*) FROM dbo.exposureCase WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
-        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'dbo.exposureCase', @n, @rem, 'scrubbedAndSoftDeleted');
+        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'dbo.exposureCase', @n, 0, 'scrubbedAndSoftDeleted');
         SET @batch = 1; SET @n = 0;
         WHILE @batch > 0
         BEGIN
@@ -735,13 +715,12 @@ BEGIN
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
-            IF @batch = 5000
+            IF @batch = 5000 AND @dryRun = 0
             BEGIN
                 WAITFOR DELAY '00:00:00.050';
             END;
         END;
-        SELECT @rem = COUNT (*) FROM dbo.stagingHoldReason WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
-        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'dbo.stagingHoldReason', @n, @rem, 'scrubbedAndSoftDeleted');
+        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'dbo.stagingHoldReason', @n, 0, 'scrubbedAndSoftDeleted');
         SET @batch = 1; SET @n = 0;
         WHILE @batch > 0
         BEGIN
@@ -753,31 +732,29 @@ BEGIN
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
-            IF @batch = 5000
+            IF @batch = 5000 AND @dryRun = 0
             BEGIN
                 WAITFOR DELAY '00:00:00.050';
             END;
         END;
-        SELECT @rem = COUNT (*) FROM dbo.stagingRow WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
-        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'dbo.stagingRow', @n, @rem, 'scrubbedAndSoftDeleted');
+        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'dbo.stagingRow', @n, 0, 'scrubbedAndSoftDeleted');
         SET @batch = 1; SET @n = 0;
         WHILE @batch > 0
         BEGIN
             BEGIN TRANSACTION;
             UPDATE TOP (5000) dbo.labResult
-               SET collectedDate = '1900-01-01', analyzedDate = NULL, reportedDate = NULL, reportingFinalDateVerified = NULL, reportingVerifiedPolicyId = NULL, reportingVerifiedByUserId = NULL, reportingVerifiedUtc = NULL, correctionReason = NULL, correctionByUserId = NULL, correctionUtc = NULL, classificationSnapshotJson = NULL, valueReported = NULL, valueText = NULL, unitReported = N'[purged]', valueCanonical = NULL, unitCanonical = N'[purged]', sampleType = NULL, testMethod = NULL, deviceModel = NULL, deviceSerial = NULL, kitLot = NULL, speciation = NULL, creatinineValue = NULL, valueCreatinineAdj = NULL, reasonForTest = NULL, payerType = NULL, accessionNumber = NULL, loincReported = NULL, reportedSnapshotJson = N'{}', ageAtCollectionMonths = NULL, population = 'unknown', isDeleted = 1, modifiedBy = N'MERIT tenant purge'
+               SET collectedDate = '1900-01-01', analyzedDate = NULL, reportedDate = NULL, reportingFinalDateVerified = NULL, reportingVerifiedPolicyId = NULL, reportingVerifiedByUserId = NULL, reportingVerifiedUtc = NULL, correctionReason = NULL, correctionByUserId = NULL, correctionUtc = NULL, classificationSnapshotJson = NULL, valueReported = NULL, valueText = N'[purged]', unitReported = N'[purged]', valueCanonical = NULL, unitCanonical = N'[purged]', sampleType = NULL, testMethod = NULL, deviceModel = NULL, deviceSerial = NULL, kitLot = NULL, speciation = NULL, creatinineValue = NULL, valueCreatinineAdj = NULL, reasonForTest = NULL, payerType = NULL, accessionNumber = NULL, loincReported = NULL, reportedSnapshotJson = N'{}', ageAtCollectionMonths = NULL, population = 'unknown', isDeleted = 1, modifiedBy = N'MERIT tenant purge'
              WHERE (rootTenantId = @rootTenantId)
                AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
-            IF @batch = 5000
+            IF @batch = 5000 AND @dryRun = 0
             BEGIN
                 WAITFOR DELAY '00:00:00.050';
             END;
         END;
-        SELECT @rem = COUNT (*) FROM dbo.labResult WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
-        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'dbo.labResult', @n, @rem, 'scrubbedAndSoftDeleted');
+        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'dbo.labResult', @n, 0, 'scrubbedAndSoftDeleted');
         SET @batch = 1; SET @n = 0;
         WHILE @batch > 0
         BEGIN
@@ -789,13 +766,12 @@ BEGIN
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
-            IF @batch = 5000
+            IF @batch = 5000 AND @dryRun = 0
             BEGIN
                 WAITFOR DELAY '00:00:00.050';
             END;
         END;
-        SELECT @rem = COUNT (*) FROM dbo.intakeBatch WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
-        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'dbo.intakeBatch', @n, @rem, 'scrubbedAndSoftDeleted');
+        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'dbo.intakeBatch', @n, 0, 'scrubbedAndSoftDeleted');
         SET @batch = 1; SET @n = 0;
         WHILE @batch > 0
         BEGIN
@@ -807,13 +783,12 @@ BEGIN
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
-            IF @batch = 5000
+            IF @batch = 5000 AND @dryRun = 0
             BEGIN
                 WAITFOR DELAY '00:00:00.050';
             END;
         END;
-        SELECT @rem = COUNT (*) FROM dbo.intakeProfile WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
-        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'dbo.intakeProfile', @n, @rem, 'scrubbedAndSoftDeleted');
+        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'dbo.intakeProfile', @n, 0, 'scrubbedAndSoftDeleted');
         SET @batch = 1; SET @n = 0;
         WHILE @batch > 0
         BEGIN
@@ -825,13 +800,12 @@ BEGIN
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
-            IF @batch = 5000
+            IF @batch = 5000 AND @dryRun = 0
             BEGIN
                 WAITFOR DELAY '00:00:00.050';
             END;
         END;
-        SELECT @rem = COUNT (*) FROM dbo.provider WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
-        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'dbo.provider', @n, @rem, 'scrubbedAndSoftDeleted');
+        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'dbo.provider', @n, 0, 'scrubbedAndSoftDeleted');
         SET @batch = 1; SET @n = 0;
         WHILE @batch > 0
         BEGIN
@@ -843,13 +817,12 @@ BEGIN
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
-            IF @batch = 5000
+            IF @batch = 5000 AND @dryRun = 0
             BEGIN
                 WAITFOR DELAY '00:00:00.050';
             END;
         END;
-        SELECT @rem = COUNT (*) FROM dbo.product WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
-        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'dbo.product', @n, @rem, 'scrubbedAndSoftDeleted');
+        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'dbo.product', @n, 0, 'scrubbedAndSoftDeleted');
         SET @batch = 1; SET @n = 0;
         WHILE @batch > 0
         BEGIN
@@ -861,13 +834,12 @@ BEGIN
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
-            IF @batch = 5000
+            IF @batch = 5000 AND @dryRun = 0
             BEGIN
                 WAITFOR DELAY '00:00:00.050';
             END;
         END;
-        SELECT @rem = COUNT (*) FROM dbo.employmentAnalyte WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
-        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'dbo.employmentAnalyte', @n, @rem, 'scrubbedAndSoftDeleted');
+        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'dbo.employmentAnalyte', @n, 0, 'scrubbedAndSoftDeleted');
         SET @batch = 1; SET @n = 0;
         WHILE @batch > 0
         BEGIN
@@ -879,13 +851,12 @@ BEGIN
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
-            IF @batch = 5000
+            IF @batch = 5000 AND @dryRun = 0
             BEGIN
                 WAITFOR DELAY '00:00:00.050';
             END;
         END;
-        SELECT @rem = COUNT (*) FROM dbo.employment WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
-        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'dbo.employment', @n, @rem, 'scrubbedAndSoftDeleted');
+        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'dbo.employment', @n, 0, 'scrubbedAndSoftDeleted');
         SET @batch = 1; SET @n = 0;
         WHILE @batch > 0
         BEGIN
@@ -897,13 +868,12 @@ BEGIN
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
-            IF @batch = 5000
+            IF @batch = 5000 AND @dryRun = 0
             BEGIN
                 WAITFOR DELAY '00:00:00.050';
             END;
         END;
-        SELECT @rem = COUNT (*) FROM dbo.personLocation WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
-        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'dbo.personLocation', @n, @rem, 'scrubbedAndSoftDeleted');
+        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'dbo.personLocation', @n, 0, 'scrubbedAndSoftDeleted');
         SET @batch = 1; SET @n = 0;
         WHILE @batch > 0
         BEGIN
@@ -915,13 +885,12 @@ BEGIN
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
-            IF @batch = 5000
+            IF @batch = 5000 AND @dryRun = 0
             BEGIN
                 WAITFOR DELAY '00:00:00.050';
             END;
         END;
-        SELECT @rem = COUNT (*) FROM dbo.locationOwner WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
-        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'dbo.locationOwner', @n, @rem, 'scrubbedAndSoftDeleted');
+        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'dbo.locationOwner', @n, 0, 'scrubbedAndSoftDeleted');
         SET @batch = 1; SET @n = 0;
         WHILE @batch > 0
         BEGIN
@@ -933,13 +902,12 @@ BEGIN
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
-            IF @batch = 5000
+            IF @batch = 5000 AND @dryRun = 0
             BEGIN
                 WAITFOR DELAY '00:00:00.050';
             END;
         END;
-        SELECT @rem = COUNT (*) FROM dbo.organizationSite WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
-        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'dbo.organizationSite', @n, @rem, 'scrubbedAndSoftDeleted');
+        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'dbo.organizationSite', @n, 0, 'scrubbedAndSoftDeleted');
         SET @batch = 1; SET @n = 0;
         WHILE @batch > 0
         BEGIN
@@ -951,13 +919,12 @@ BEGIN
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
-            IF @batch = 5000
+            IF @batch = 5000 AND @dryRun = 0
             BEGIN
                 WAITFOR DELAY '00:00:00.050';
             END;
         END;
-        SELECT @rem = COUNT (*) FROM dbo.location WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
-        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'dbo.location', @n, @rem, 'scrubbedAndSoftDeleted');
+        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'dbo.location', @n, 0, 'scrubbedAndSoftDeleted');
         SET @batch = 1; SET @n = 0;
         WHILE @batch > 0
         BEGIN
@@ -969,13 +936,12 @@ BEGIN
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
-            IF @batch = 5000
+            IF @batch = 5000 AND @dryRun = 0
             BEGIN
                 WAITFOR DELAY '00:00:00.050';
             END;
         END;
-        SELECT @rem = COUNT (*) FROM dbo.organizationType WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
-        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'dbo.organizationType', @n, @rem, 'scrubbedAndSoftDeleted');
+        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'dbo.organizationType', @n, 0, 'scrubbedAndSoftDeleted');
         SET @batch = 1; SET @n = 0;
         WHILE @batch > 0
         BEGIN
@@ -987,13 +953,12 @@ BEGIN
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
-            IF @batch = 5000
+            IF @batch = 5000 AND @dryRun = 0
             BEGIN
                 WAITFOR DELAY '00:00:00.050';
             END;
         END;
-        SELECT @rem = COUNT (*) FROM dbo.organization WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
-        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'dbo.organization', @n, @rem, 'scrubbedAndSoftDeleted');
+        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'dbo.organization', @n, 0, 'scrubbedAndSoftDeleted');
         SET @batch = 1; SET @n = 0;
         WHILE @batch > 0
         BEGIN
@@ -1005,13 +970,12 @@ BEGIN
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
-            IF @batch = 5000
+            IF @batch = 5000 AND @dryRun = 0
             BEGIN
                 WAITFOR DELAY '00:00:00.050';
             END;
         END;
-        SELECT @rem = COUNT (*) FROM dbo.personRelationship WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
-        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'dbo.personRelationship', @n, @rem, 'scrubbedAndSoftDeleted');
+        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'dbo.personRelationship', @n, 0, 'scrubbedAndSoftDeleted');
         SET @batch = 1; SET @n = 0;
         WHILE @batch > 0
         BEGIN
@@ -1023,13 +987,12 @@ BEGIN
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
-            IF @batch = 5000
+            IF @batch = 5000 AND @dryRun = 0
             BEGIN
                 WAITFOR DELAY '00:00:00.050';
             END;
         END;
-        SELECT @rem = COUNT (*) FROM dbo.pregnancyEpisode WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
-        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'dbo.pregnancyEpisode', @n, @rem, 'scrubbedAndSoftDeleted');
+        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'dbo.pregnancyEpisode', @n, 0, 'scrubbedAndSoftDeleted');
         SET @batch = 1; SET @n = 0;
         WHILE @batch > 0
         BEGIN
@@ -1041,13 +1004,12 @@ BEGIN
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
-            IF @batch = 5000
+            IF @batch = 5000 AND @dryRun = 0
             BEGIN
                 WAITFOR DELAY '00:00:00.050';
             END;
         END;
-        SELECT @rem = COUNT (*) FROM dbo.personIdentifier WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
-        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'dbo.personIdentifier', @n, @rem, 'scrubbedAndSoftDeleted');
+        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'dbo.personIdentifier', @n, 0, 'scrubbedAndSoftDeleted');
         SET @batch = 1; SET @n = 0;
         WHILE @batch > 0
         BEGIN
@@ -1059,13 +1021,12 @@ BEGIN
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
-            IF @batch = 5000
+            IF @batch = 5000 AND @dryRun = 0
             BEGIN
                 WAITFOR DELAY '00:00:00.050';
             END;
         END;
-        SELECT @rem = COUNT (*) FROM dbo.personContactMethod WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
-        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'dbo.personContactMethod', @n, @rem, 'scrubbedAndSoftDeleted');
+        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'dbo.personContactMethod', @n, 0, 'scrubbedAndSoftDeleted');
         SET @batch = 1; SET @n = 0;
         WHILE @batch > 0
         BEGIN
@@ -1077,13 +1038,12 @@ BEGIN
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
-            IF @batch = 5000
+            IF @batch = 5000 AND @dryRun = 0
             BEGIN
                 WAITFOR DELAY '00:00:00.050';
             END;
         END;
-        SELECT @rem = COUNT (*) FROM dbo.personRace WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
-        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'dbo.personRace', @n, @rem, 'scrubbedAndSoftDeleted');
+        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'dbo.personRace', @n, 0, 'scrubbedAndSoftDeleted');
         SET @batch = 1; SET @n = 0;
         WHILE @batch > 0
         BEGIN
@@ -1095,13 +1055,12 @@ BEGIN
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
-            IF @batch = 5000
+            IF @batch = 5000 AND @dryRun = 0
             BEGIN
                 WAITFOR DELAY '00:00:00.050';
             END;
         END;
-        SELECT @rem = COUNT (*) FROM dbo.personAlias WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
-        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'dbo.personAlias', @n, @rem, 'scrubbedAndSoftDeleted');
+        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'dbo.personAlias', @n, 0, 'scrubbedAndSoftDeleted');
         SET @batch = 1; SET @n = 0;
         WHILE @batch > 0
         BEGIN
@@ -1113,13 +1072,12 @@ BEGIN
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
-            IF @batch = 5000
+            IF @batch = 5000 AND @dryRun = 0
             BEGIN
                 WAITFOR DELAY '00:00:00.050';
             END;
         END;
-        SELECT @rem = COUNT (*) FROM dbo.personMatchKey WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
-        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'dbo.personMatchKey', @n, @rem, 'scrubbedAndSoftDeleted');
+        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'dbo.personMatchKey', @n, 0, 'scrubbedAndSoftDeleted');
         SET @batch = 1; SET @n = 0;
         WHILE @batch > 0
         BEGIN
@@ -1131,13 +1089,12 @@ BEGIN
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
-            IF @batch = 5000
+            IF @batch = 5000 AND @dryRun = 0
             BEGIN
                 WAITFOR DELAY '00:00:00.050';
             END;
         END;
-        SELECT @rem = COUNT (*) FROM dbo.personAccess WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
-        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'dbo.personAccess', @n, @rem, 'scrubbedAndSoftDeleted');
+        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'dbo.personAccess', @n, 0, 'scrubbedAndSoftDeleted');
         SET @batch = 1; SET @n = 0;
         WHILE @batch > 0
         BEGIN
@@ -1149,13 +1106,12 @@ BEGIN
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
-            IF @batch = 5000
+            IF @batch = 5000 AND @dryRun = 0
             BEGIN
                 WAITFOR DELAY '00:00:00.050';
             END;
         END;
-        SELECT @rem = COUNT (*) FROM dbo.person WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
-        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'dbo.person', @n, @rem, 'scrubbedAndSoftDeleted');
+        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'dbo.person', @n, 0, 'scrubbedAndSoftDeleted');
         SET @batch = 1; SET @n = 0;
         WHILE @batch > 0
         BEGIN
@@ -1167,13 +1123,12 @@ BEGIN
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
-            IF @batch = 5000
+            IF @batch = 5000 AND @dryRun = 0
             BEGIN
                 WAITFOR DELAY '00:00:00.050';
             END;
         END;
-        SELECT @rem = COUNT (*) FROM config.workflowDefinition WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
-        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'config.workflowDefinition', @n, @rem, 'scrubbedAndSoftDeleted');
+        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'config.workflowDefinition', @n, 0, 'scrubbedAndSoftDeleted');
         SET @batch = 1; SET @n = 0;
         WHILE @batch > 0
         BEGIN
@@ -1185,13 +1140,12 @@ BEGIN
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
-            IF @batch = 5000
+            IF @batch = 5000 AND @dryRun = 0
             BEGIN
                 WAITFOR DELAY '00:00:00.050';
             END;
         END;
-        SELECT @rem = COUNT (*) FROM config.notificationRule WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
-        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'config.notificationRule', @n, @rem, 'scrubbedAndSoftDeleted');
+        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'config.notificationRule', @n, 0, 'scrubbedAndSoftDeleted');
         SET @batch = 1; SET @n = 0;
         WHILE @batch > 0
         BEGIN
@@ -1203,13 +1157,12 @@ BEGIN
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
-            IF @batch = 5000
+            IF @batch = 5000 AND @dryRun = 0
             BEGIN
                 WAITFOR DELAY '00:00:00.050';
             END;
         END;
-        SELECT @rem = COUNT (*) FROM config.environmentalStandard WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
-        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'config.environmentalStandard', @n, @rem, 'scrubbedAndSoftDeleted');
+        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'config.environmentalStandard', @n, 0, 'scrubbedAndSoftDeleted');
         SET @batch = 1; SET @n = 0;
         WHILE @batch > 0
         BEGIN
@@ -1221,13 +1174,12 @@ BEGIN
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
-            IF @batch = 5000
+            IF @batch = 5000 AND @dryRun = 0
             BEGIN
                 WAITFOR DELAY '00:00:00.050';
             END;
         END;
-        SELECT @rem = COUNT (*) FROM config.threshold WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
-        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'config.threshold', @n, @rem, 'scrubbedAndSoftDeleted');
+        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'config.threshold', @n, 0, 'scrubbedAndSoftDeleted');
         SET @batch = 1; SET @n = 0;
         WHILE @batch > 0
         BEGIN
@@ -1239,13 +1191,12 @@ BEGIN
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
-            IF @batch = 5000
+            IF @batch = 5000 AND @dryRun = 0
             BEGIN
                 WAITFOR DELAY '00:00:00.050';
             END;
         END;
-        SELECT @rem = COUNT (*) FROM config.jurisdictionSetting WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
-        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'config.jurisdictionSetting', @n, @rem, 'scrubbedAndSoftDeleted');
+        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'config.jurisdictionSetting', @n, 0, 'scrubbedAndSoftDeleted');
         SET @batch = 1; SET @n = 0;
         WHILE @batch > 0
         BEGIN
@@ -1257,13 +1208,12 @@ BEGIN
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
-            IF @batch = 5000
+            IF @batch = 5000 AND @dryRun = 0
             BEGIN
                 WAITFOR DELAY '00:00:00.050';
             END;
         END;
-        SELECT @rem = COUNT (*) FROM config.subJurisdiction WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
-        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'config.subJurisdiction', @n, @rem, 'scrubbedAndSoftDeleted');
+        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'config.subJurisdiction', @n, 0, 'scrubbedAndSoftDeleted');
         SET @batch = 1; SET @n = 0;
         WHILE @batch > 0
         BEGIN
@@ -1275,13 +1225,12 @@ BEGIN
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
-            IF @batch = 5000
+            IF @batch = 5000 AND @dryRun = 0
             BEGIN
                 WAITFOR DELAY '00:00:00.050';
             END;
         END;
-        SELECT @rem = COUNT (*) FROM auth.sessionScopeRoot WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
-        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'auth.sessionScopeRoot', @n, @rem, 'scrubbedAndSoftDeleted');
+        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'auth.sessionScopeRoot', @n, 0, 'scrubbedAndSoftDeleted');
         SET @batch = 1; SET @n = 0;
         WHILE @batch > 0
         BEGIN
@@ -1293,13 +1242,12 @@ BEGIN
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
-            IF @batch = 5000
+            IF @batch = 5000 AND @dryRun = 0
             BEGIN
                 WAITFOR DELAY '00:00:00.050';
             END;
         END;
-        SELECT @rem = COUNT (*) FROM auth.sessionScope WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
-        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'auth.sessionScope', @n, @rem, 'scrubbedAndSoftDeleted');
+        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'auth.sessionScope', @n, 0, 'scrubbedAndSoftDeleted');
         SET @batch = 1; SET @n = 0;
         WHILE @batch > 0
         BEGIN
@@ -1311,13 +1259,12 @@ BEGIN
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
-            IF @batch = 5000
+            IF @batch = 5000 AND @dryRun = 0
             BEGIN
                 WAITFOR DELAY '00:00:00.050';
             END;
         END;
-        SELECT @rem = COUNT (*) FROM auth.appUser WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
-        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'auth.appUser', @n, @rem, 'scrubbedAndSoftDeleted');
+        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'auth.appUser', @n, 0, 'scrubbedAndSoftDeleted');
         SET @batch = 1; SET @n = 0;
         WHILE @batch > 0
         BEGIN
@@ -1329,13 +1276,12 @@ BEGIN
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
-            IF @batch = 5000
+            IF @batch = 5000 AND @dryRun = 0
             BEGIN
                 WAITFOR DELAY '00:00:00.050';
             END;
         END;
-        SELECT @rem = COUNT (*) FROM auth.role WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
-        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'auth.role', @n, @rem, 'scrubbedAndSoftDeleted');
+        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'auth.role', @n, 0, 'scrubbedAndSoftDeleted');
         SET @batch = 1; SET @n = 0;
         WHILE @batch > 0
         BEGIN
@@ -1347,24 +1293,102 @@ BEGIN
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
-            IF @batch = 5000
+            IF @batch = 5000 AND @dryRun = 0
             BEGIN
                 WAITFOR DELAY '00:00:00.050';
             END;
         END;
-        SELECT @rem = COUNT (*) FROM auth.tenant WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
-        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'auth.tenant', @n, @rem, 'scrubbedAndSoftDeleted');
+        INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'auth.tenant', @n, 0, 'scrubbedAndSoftDeleted');
+
+        -- Step 3 (I18): Final verification pass over all 70 mutable tables after fencing and purging.
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM auth.mfaRecoveryCode WHERE (appUserId IN (SELECT appUserId FROM auth.appUser WHERE rootTenantId = @rootTenantId)) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'auth.mfaRecoveryCode';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM auth.passwordReset WHERE (appUserId IN (SELECT appUserId FROM auth.appUser WHERE rootTenantId = @rootTenantId)) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'auth.passwordReset';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM auth.mfaEmailChallenge WHERE (appUserId IN (SELECT appUserId FROM auth.appUser WHERE rootTenantId = @rootTenantId)) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'auth.mfaEmailChallenge';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM auth.userProfileGrant WHERE (userProfileId IN (SELECT up.userProfileId FROM auth.userProfile AS up JOIN auth.appUser AS u ON u.appUserId = up.appUserId WHERE u.rootTenantId = @rootTenantId)) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'auth.userProfileGrant';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM auth.userProfile WHERE (appUserId IN (SELECT appUserId FROM auth.appUser WHERE rootTenantId = @rootTenantId)) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'auth.userProfile';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM auth.userAssignment WHERE (appUserId IN (SELECT appUserId FROM auth.appUser WHERE rootTenantId = @rootTenantId) OR tenantId IN (SELECT tenantId FROM auth.tenant WHERE rootTenantId = @rootTenantId)) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'auth.userAssignment';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM auth.sessionScopeTenant WHERE (sessionScopeId IN (SELECT sessionScopeId FROM auth.sessionScope WHERE rootTenantId = @rootTenantId)) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'auth.sessionScopeTenant';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM auth.sessionScopePermission WHERE (sessionScopeId IN (SELECT sessionScopeId FROM auth.sessionScope WHERE rootTenantId = @rootTenantId)) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'auth.sessionScopePermission';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM auth.sessionScopeAdminTenant WHERE (sessionScopeId IN (SELECT sessionScopeId FROM auth.sessionScope WHERE rootTenantId = @rootTenantId)) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'auth.sessionScopeAdminTenant';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM auth.rolePermission WHERE (roleId IN (SELECT roleId FROM auth.role WHERE rootTenantId = @rootTenantId)) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'auth.rolePermission';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM auth.tenantJurisdiction WHERE (tenantId IN (SELECT tenantId FROM auth.tenant WHERE rootTenantId = @rootTenantId)) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'auth.tenantJurisdiction';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM auth.tenantClosure WHERE (ancestorTenantId IN (SELECT tenantId FROM auth.tenant WHERE rootTenantId = @rootTenantId) OR descendantTenantId IN (SELECT tenantId FROM auth.tenant WHERE rootTenantId = @rootTenantId)) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'auth.tenantClosure';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM logs.auditEventChange WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'logs.auditEventChange';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM logs.auditEventRecord WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'logs.auditEventRecord';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM logs.securityFinding WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'logs.securityFinding';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM logs.searchLog WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'logs.searchLog';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM logs.screenVisit WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'logs.screenVisit';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM logs.signInEvent WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'logs.signInEvent';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.contactCorrection WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'dbo.contactCorrection';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.caseResultLink WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'dbo.caseResultLink';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.notificationObligation WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'dbo.notificationObligation';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.personDocument WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'dbo.personDocument';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.personActivity WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'dbo.personActivity';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.matchExclusion WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'dbo.matchExclusion';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.extractRun WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'dbo.extractRun';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.jobQueue WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'dbo.jobQueue';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.workTask WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'dbo.workTask';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.caseCluster WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'dbo.caseCluster';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.cluster WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'dbo.cluster';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.environmentalSample WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'dbo.environmentalSample';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.investigationCase WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'dbo.investigationCase';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.investigation WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'dbo.investigation';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.exposureSource WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'dbo.exposureSource';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.caseActivity WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'dbo.caseActivity';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.exposureCase WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'dbo.exposureCase';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.stagingHoldReason WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'dbo.stagingHoldReason';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.stagingRow WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'dbo.stagingRow';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.labResult WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'dbo.labResult';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.intakeBatch WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'dbo.intakeBatch';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.intakeProfile WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'dbo.intakeProfile';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.provider WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'dbo.provider';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.product WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'dbo.product';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.employmentAnalyte WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'dbo.employmentAnalyte';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.employment WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'dbo.employment';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.personLocation WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'dbo.personLocation';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.locationOwner WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'dbo.locationOwner';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.organizationSite WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'dbo.organizationSite';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.location WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'dbo.location';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.organizationType WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'dbo.organizationType';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.organization WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'dbo.organization';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.personRelationship WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'dbo.personRelationship';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.pregnancyEpisode WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'dbo.pregnancyEpisode';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.personIdentifier WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'dbo.personIdentifier';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.personContactMethod WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'dbo.personContactMethod';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.personRace WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'dbo.personRace';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.personAlias WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'dbo.personAlias';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.personMatchKey WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'dbo.personMatchKey';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.personAccess WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'dbo.personAccess';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.person WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'dbo.person';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM config.workflowDefinition WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'config.workflowDefinition';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM config.notificationRule WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'config.notificationRule';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM config.environmentalStandard WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'config.environmentalStandard';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM config.threshold WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'config.threshold';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM config.jurisdictionSetting WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'config.jurisdictionSetting';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM config.subJurisdiction WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'config.subJurisdiction';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM auth.sessionScopeRoot WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'auth.sessionScopeRoot';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM auth.sessionScope WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'auth.sessionScope';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM auth.appUser WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'auth.appUser';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM auth.role WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'auth.role';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM auth.tenant WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'auth.tenant';
         DECLARE @ledgerRows INT = (SELECT COUNT (*) FROM logs.auditEvent WHERE rootTenantId = @rootTenantId);
         INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'logs.auditEvent', @ledgerRows, 0, 'retainedAppendOnlyLedger');
 
+        DECLARE @targetCode VARCHAR (30) = (SELECT tenantCode FROM auth.tenant WHERE tenantId = @rootTenantId);
+        IF @startedDryRunTx = 1 AND @@TRANCOUNT > 0
+        BEGIN
+            ROLLBACK TRANSACTION;
+        END;
+
         SELECT tableName, rowsAffected, remainingUnscrubbed, disposition FROM @report ORDER BY tableName;
         SELECT @rootTenantId AS rootTenantId,
-               (SELECT tenantCode FROM auth.tenant WHERE tenantId = @rootTenantId) AS tenantCode,
+               @targetCode AS tenantCode,
+               @dryRun AS isDryRun,
                (SELECT SUM (rowsAffected) FROM @report WHERE disposition = 'scrubbedAndSoftDeleted') AS totalRowsPurged,
                (SELECT SUM (remainingUnscrubbed) FROM @report WHERE disposition = 'scrubbedAndSoftDeleted') AS totalRemainingUnscrubbed,
                @ledgerRows AS ledgerRowsRetained,
                DATEADD (DAY, @backupRetentionDays, SYSUTCDATETIME ()) AS backupAgeOutUtc;
-        SET @Comments = CONCAT (N'Purged rootTenantId=', @rootTenantId);
+        SET @Comments = CONCAT (CASE WHEN @dryRun = 1 THEN N'Dry-run purge ' ELSE N'Purged ' END, N'rootTenantId=', @rootTenantId);
 
         -- =========================================================================================
         -- ===== End of the procedure's own work. ===================================================
@@ -1442,5 +1466,5 @@ EXEC util.uspSetObjectDescription
       @SchemaName  = N'config'
     , @ObjectType  = N'PROCEDURE'
     , @ObjectName  = N'uspPurgeRootTenantInternal'
-    , @Description = N'Ungranted owner-context helper for config.uspPurgeRootTenant: scrubs every PHI, free-text, binary, geocode, and credential column across all 70 mutable tenant/auth tables (including previously soft-deleted rows) in independently committed 5,000-row batches with post-purge verification (#346, B4, I16).';
+    , @Description = N'Ungranted owner-context helper for config.uspPurgeRootTenant: fences tenants/sessions/jobs first, scrubs every PHI, free-text, binary, geocode, and credential column across all 70 mutable tenant/auth tables (including previously soft-deleted rows) in independently committed 5,000-row batches (or rolls back all work when @dryRun = 1), and runs a final post-purge verification pass (#346, B4, B5, I16, I18).';
 GO

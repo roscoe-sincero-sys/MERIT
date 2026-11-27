@@ -1603,6 +1603,12 @@
     "type": "INT",
     "hasDefault": true,
     "isOutput": false
+   },
+   {
+    "name": "dryRun",
+    "type": "BIT",
+    "hasDefault": true,
+    "isOutput": false
    }
   ]
  },
@@ -1621,6 +1627,12 @@
    {
     "name": "backupRetentionDays",
     "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "dryRun",
+    "type": "BIT",
     "hasDefault": true,
     "isOutput": false
    }

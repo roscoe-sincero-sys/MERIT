@@ -183,113 +183,151 @@ public sealed class LoggingWave4IntegrationTests(MeritFixture fixture)
         int mdPersonsBefore = await conn.ExecuteScalarAsync<int>(
             "SELECT COUNT (*) FROM dbo.person WHERE rootTenantId = (SELECT rootTenantId FROM auth.tenant WHERE tenantCode = 'MD') AND isDeleted = 0");
 
-        // 1. Non-platform meritWeb caller without platform permissions is denied (51403).
-        await using (var denyConn = new SqlConnection(TestEnvironment.AdminConnectionString()))
+        try
         {
-            await denyConn.OpenAsync();
-            await denyConn.ExecuteAsync("EXECUTE AS USER = 'meritWeb';");
-            var ex = await Assert.ThrowsAsync<SqlException>(() =>
-                denyConn.ExecuteAsync("config.uspExportRootTenant", new { rootTenantId = synRoot }, commandType: CommandType.StoredProcedure));
-            Assert.Equal(51403, ex.Number);
-            await denyConn.ExecuteAsync("REVERT;");
+            // 1. Non-platform meritWeb caller without platform permissions is denied (51403).
+            await using (var denyConn = new SqlConnection(TestEnvironment.AdminConnectionString()))
+            {
+                await denyConn.OpenAsync();
+                await denyConn.ExecuteAsync("EXECUTE AS USER = 'meritWeb';");
+                var ex = await Assert.ThrowsAsync<SqlException>(() =>
+                    denyConn.ExecuteAsync("config.uspExportRootTenant", new { rootTenantId = synRoot }, commandType: CommandType.StoredProcedure));
+                Assert.Equal(51403, ex.Number);
+                await denyConn.ExecuteAsync("REVERT;");
+            }
+
+            // 2. Platform export manifest covers all 71 tenant/auth tables (active + soft-deleted counts) and streams
+            //    individual tables without credential columns while including soft-deleted history (I17).
+            var manifest = (await conn.QueryAsync<(string tableName, int activeRows, int deletedRows, int totalRows, string disposition)>(
+                "config.uspExportRootTenant", new { rootTenantId = synRoot }, commandType: CommandType.StoredProcedure)).ToList();
+            Assert.Equal(71, manifest.Count);
+            var personManifest = Assert.Single(manifest, r => r.tableName == "dbo.person");
+            Assert.Equal(1, personManifest.activeRows);
+            Assert.Equal(1, personManifest.deletedRows);
+            Assert.Equal(2, personManifest.totalRows);
+            var ledgerManifest = Assert.Single(manifest, r => r.tableName == "logs.auditEvent");
+            Assert.Equal("ledgerReadOnly", ledgerManifest.disposition);
+            Assert.True(ledgerManifest.totalRows >= 2);
+
+            // Stream dbo.person: returns BOTH active and soft-deleted rows.
+            var exportedPeople = (await conn.QueryAsync<dynamic>(
+                "config.uspExportRootTenant", new { rootTenantId = synRoot, tableName = "dbo.person", pageNumber = 1, pageSize = 100 }, commandType: CommandType.StoredProcedure)).ToList();
+            Assert.Equal(2, exportedPeople.Count);
+
+            // Stream auth.appUser: must NOT include credential columns (passwordHash, mfaSecretProtected, securityStamp).
+            var exportedUser = (IDictionary<string, object>)Assert.Single(await conn.QueryAsync<dynamic>(
+                "config.uspExportRootTenant", new { rootTenantId = synRoot, tableName = "auth.appUser", pageNumber = 1, pageSize = 100 }, commandType: CommandType.StoredProcedure));
+            Assert.DoesNotContain("passwordHash", exportedUser.Keys, StringComparer.OrdinalIgnoreCase);
+            Assert.DoesNotContain("mfaSecretProtected", exportedUser.Keys, StringComparer.OrdinalIgnoreCase);
+            Assert.DoesNotContain("securityStamp", exportedUser.Keys, StringComparer.OrdinalIgnoreCase);
+
+            // 3. Purge rejects mismatched confirmation code (51422).
+            var badConfirm = await Assert.ThrowsAsync<SqlException>(() =>
+                conn.ExecuteAsync("config.uspPurgeRootTenant", new { rootTenantId = synRoot, confirmationCode = "PURGE:WRONG", backupRetentionDays = 35 }, commandType: CommandType.StoredProcedure));
+            Assert.Equal(51422, badConfirm.Number);
+
+            // 4. Confirmed per-batch purge scrubs live AND previously soft-deleted PHI, geocodes, raw intake files,
+            //    credentials, recovery codes, and assignments, verifies 0 unscrubbed rows remain, and isolates Maryland.
+            using (var grid = await conn.QueryMultipleAsync(
+                "config.uspPurgeRootTenant", new { rootTenantId = synRoot, confirmationCode = $"PURGE:{synCode}", backupRetentionDays = 35 }, commandType: CommandType.StoredProcedure))
+            {
+                var tableReport = (await grid.ReadAsync<(string tableName, int rowsAffected, int remainingUnscrubbed, string disposition)>()).ToList();
+                var summary = await grid.ReadSingleAsync<(Guid rootTenantId, string tenantCode, bool isDryRun, int totalRowsPurged, int totalRemainingUnscrubbed, int ledgerRowsRetained, DateTime backupAgeOutUtc)>();
+                Assert.Equal(71, tableReport.Count);
+                Assert.Equal(synRoot, summary.rootTenantId);
+                Assert.Equal(synCode, summary.tenantCode);
+                Assert.False(summary.isDryRun);
+                Assert.True(summary.totalRowsPurged >= 9);
+                Assert.Equal(0, summary.totalRemainingUnscrubbed);
+                Assert.True(summary.ledgerRowsRetained >= 2);
+                Assert.True(summary.backupAgeOutUtc > DateTime.UtcNow.AddDays(34));
+            }
+
+            // Verify BOTH live and previously soft-deleted persons are fully scrubbed (B4).
+            foreach (Guid pid in new[] { synPerson, synDeletedPerson })
+            {
+                var pRow = await conn.QuerySingleAsync<(bool isDeleted, string lastName, string? firstName, DateTime? dob, string sex, string ethnicity)>(
+                    "SELECT isDeleted, lastName, firstName, dob, sex, ethnicity FROM dbo.person WHERE personId = @p", new { p = pid });
+                Assert.True(pRow.isDeleted);
+                Assert.Equal("[purged]", pRow.lastName);
+                Assert.Null(pRow.firstName);
+                Assert.Null(pRow.dob);
+                Assert.Equal("unknown", pRow.sex);
+                Assert.Equal("unknown", pRow.ethnicity);
+            }
+
+            // Verify location geocodes/ZIP, intakeBatch.rawContent, appUser credentials, recoveryCode, and userAssignment are scrubbed (B4).
+            var locRow = await conn.QuerySingleAsync<(bool isDeleted, string? postalCode, decimal? latitude, decimal? longitude, string? censusTract)>(
+                "SELECT isDeleted, postalCode, latitude, longitude, censusTract FROM dbo.location WHERE locationId = @id", new { id = synLocation });
+            Assert.True(locRow.isDeleted);
+            Assert.Null(locRow.postalCode);
+            Assert.Null(locRow.latitude);
+            Assert.Null(locRow.longitude);
+            Assert.Null(locRow.censusTract);
+
+            var batchRow = await conn.QuerySingleAsync<(bool isDeleted, byte[]? rawContent)>(
+                "SELECT isDeleted, rawContent FROM dbo.intakeBatch WHERE intakeBatchId = @id", new { id = synBatch });
+            Assert.True(batchRow.isDeleted);
+            Assert.Null(batchRow.rawContent);
+
+            var userRow = await conn.QuerySingleAsync<(bool isDeleted, bool isActive, string displayName, string passwordHash, string? mfaSecretProtected)>(
+                "SELECT isDeleted, isActive, displayName, passwordHash, mfaSecretProtected FROM auth.appUser WHERE appUserId = @id", new { id = synUser });
+            Assert.True(userRow.isDeleted);
+            Assert.False(userRow.isActive);
+            Assert.Equal("[purged]", userRow.displayName);
+            Assert.Equal("[purged]", userRow.passwordHash);
+            Assert.Null(userRow.mfaSecretProtected);
+
+            var recRow = await conn.QuerySingleAsync<(bool isDeleted, string codeHash)>(
+                "SELECT isDeleted, codeHash FROM auth.mfaRecoveryCode WHERE mfaRecoveryCodeId = @id", new { id = synRecovery });
+            Assert.True(recRow.isDeleted);
+            Assert.Equal("[purged]", recRow.codeHash);
+
+            Assert.True(await conn.ExecuteScalarAsync<bool>("SELECT isDeleted FROM auth.userAssignment WHERE userAssignmentId = @id", new { id = synAssign }));
+
+            var purgedSearch = await conn.QuerySingleAsync<(bool isDeleted, string searchText)>(
+                "SELECT isDeleted, searchText FROM logs.searchLog WHERE searchLogId = @s", new { s = synSearch });
+            Assert.True(purgedSearch.isDeleted);
+            Assert.Equal(string.Empty, purgedSearch.searchText);
+
+            // 5. Dry-run rehearsal against the full demo MD-LEAD root (real lab results, closed cases, raw intake files,
+            //    investigations, assignments, recovery codes): must pass every CHECK constraint, report 0 unscrubbed,
+            //    and roll back completely leaving MD-LEAD untouched (B5).
+            var mdRoot = await conn.QuerySingleAsync<(Guid tenantId, string tenantCode)>(
+                "SELECT TOP (1) tenantId, tenantCode FROM auth.tenant WHERE tenantId = rootTenantId AND tenantCode LIKE 'MD%' AND isDeleted = 0 ORDER BY tenantCode");
+            int mdLiveBeforeDryRun = await conn.ExecuteScalarAsync<int>(
+                "SELECT COUNT (*) FROM dbo.person WHERE rootTenantId = @r AND isDeleted = 0", new { r = mdRoot.tenantId });
+            using (var dryGrid = await conn.QueryMultipleAsync(
+                "config.uspPurgeRootTenant",
+                new { rootTenantId = mdRoot.tenantId, confirmationCode = $"PURGE:{mdRoot.tenantCode}", backupRetentionDays = 35, dryRun = true },
+                commandTimeout: 180,
+                commandType: CommandType.StoredProcedure))
+            {
+                var dryTableReport = (await dryGrid.ReadAsync<(string tableName, int rowsAffected, int remainingUnscrubbed, string disposition)>()).ToList();
+                var drySummary = await dryGrid.ReadSingleAsync<(Guid rootTenantId, string tenantCode, bool isDryRun, int totalRowsPurged, int totalRemainingUnscrubbed, int ledgerRowsRetained, DateTime backupAgeOutUtc)>();
+                Assert.Equal(71, dryTableReport.Count);
+                Assert.True(drySummary.isDryRun);
+                Assert.Equal(0, drySummary.totalRemainingUnscrubbed);
+                Assert.True(drySummary.totalRowsPurged > 0);
+            }
+            int mdLiveAfterDryRun = await conn.ExecuteScalarAsync<int>(
+                "SELECT COUNT (*) FROM dbo.person WHERE rootTenantId = @r AND isDeleted = 0", new { r = mdRoot.tenantId });
+            Assert.Equal(mdLiveBeforeDryRun, mdLiveAfterDryRun);
+
+            // Verify Maryland root is 100% untouched.
+            int mdPersonsAfter = await conn.ExecuteScalarAsync<int>(
+                "SELECT COUNT (*) FROM dbo.person WHERE rootTenantId = (SELECT rootTenantId FROM auth.tenant WHERE tenantCode = 'MD') AND isDeleted = 0");
+            Assert.Equal(mdPersonsBefore, mdPersonsAfter);
         }
-
-        // 2. Platform export manifest covers all 71 tenant/auth tables (active + soft-deleted counts) and streams
-        //    individual tables without credential columns while including soft-deleted history (I17).
-        var manifest = (await conn.QueryAsync<(string tableName, int activeRows, int deletedRows, int totalRows, string disposition)>(
-            "config.uspExportRootTenant", new { rootTenantId = synRoot }, commandType: CommandType.StoredProcedure)).ToList();
-        Assert.Equal(71, manifest.Count);
-        var personManifest = Assert.Single(manifest, r => r.tableName == "dbo.person");
-        Assert.Equal(1, personManifest.activeRows);
-        Assert.Equal(1, personManifest.deletedRows);
-        Assert.Equal(2, personManifest.totalRows);
-        var ledgerManifest = Assert.Single(manifest, r => r.tableName == "logs.auditEvent");
-        Assert.Equal("ledgerReadOnly", ledgerManifest.disposition);
-        Assert.True(ledgerManifest.totalRows >= 2);
-
-        // Stream dbo.person: returns BOTH active and soft-deleted rows.
-        var exportedPeople = (await conn.QueryAsync<dynamic>(
-            "config.uspExportRootTenant", new { rootTenantId = synRoot, tableName = "dbo.person", pageNumber = 1, pageSize = 100 }, commandType: CommandType.StoredProcedure)).ToList();
-        Assert.Equal(2, exportedPeople.Count);
-
-        // Stream auth.appUser: must NOT include credential columns (passwordHash, mfaSecretProtected, securityStamp).
-        var exportedUser = (IDictionary<string, object>)Assert.Single(await conn.QueryAsync<dynamic>(
-            "config.uspExportRootTenant", new { rootTenantId = synRoot, tableName = "auth.appUser", pageNumber = 1, pageSize = 100 }, commandType: CommandType.StoredProcedure));
-        Assert.DoesNotContain("passwordHash", exportedUser.Keys, StringComparer.OrdinalIgnoreCase);
-        Assert.DoesNotContain("mfaSecretProtected", exportedUser.Keys, StringComparer.OrdinalIgnoreCase);
-        Assert.DoesNotContain("securityStamp", exportedUser.Keys, StringComparer.OrdinalIgnoreCase);
-
-        // 3. Purge rejects mismatched confirmation code (51422).
-        var badConfirm = await Assert.ThrowsAsync<SqlException>(() =>
-            conn.ExecuteAsync("config.uspPurgeRootTenant", new { rootTenantId = synRoot, confirmationCode = "PURGE:WRONG", backupRetentionDays = 35 }, commandType: CommandType.StoredProcedure));
-        Assert.Equal(51422, badConfirm.Number);
-
-        // 4. Confirmed per-batch purge scrubs live AND previously soft-deleted PHI, geocodes, raw intake files,
-        //    credentials, recovery codes, and assignments, verifies 0 unscrubbed rows remain, and isolates Maryland.
-        using (var grid = await conn.QueryMultipleAsync(
-            "config.uspPurgeRootTenant", new { rootTenantId = synRoot, confirmationCode = $"PURGE:{synCode}", backupRetentionDays = 35 }, commandType: CommandType.StoredProcedure))
+        finally
         {
-            var tableReport = (await grid.ReadAsync<(string tableName, int rowsAffected, int remainingUnscrubbed, string disposition)>()).ToList();
-            var summary = await grid.ReadSingleAsync<(Guid rootTenantId, string tenantCode, int totalRowsPurged, int totalRemainingUnscrubbed, int ledgerRowsRetained, DateTime backupAgeOutUtc)>();
-            Assert.Equal(71, tableReport.Count);
-            Assert.Equal(synRoot, summary.rootTenantId);
-            Assert.Equal(synCode, summary.tenantCode);
-            Assert.True(summary.totalRowsPurged >= 9);
-            Assert.Equal(0, summary.totalRemainingUnscrubbed);
-            Assert.True(summary.ledgerRowsRetained >= 2);
-            Assert.True(summary.backupAgeOutUtc > DateTime.UtcNow.AddDays(34));
+            // I19: Always ensure the synthetic root is purged/deactivated even if an assertion fails mid-test.
+            if (await conn.ExecuteScalarAsync<int>("SELECT COUNT (*) FROM auth.tenant WHERE tenantId = @r AND isDeleted = 0", new { r = synRoot }) > 0)
+            {
+                await conn.ExecuteAsync("config.uspPurgeRootTenant",
+                    new { rootTenantId = synRoot, confirmationCode = $"PURGE:{synCode}", backupRetentionDays = 35 },
+                    commandType: CommandType.StoredProcedure);
+            }
         }
-
-        // Verify BOTH live and previously soft-deleted persons are fully scrubbed (B4).
-        foreach (Guid pid in new[] { synPerson, synDeletedPerson })
-        {
-            var pRow = await conn.QuerySingleAsync<(bool isDeleted, string lastName, string? firstName, DateTime? dob, string sex, string ethnicity)>(
-                "SELECT isDeleted, lastName, firstName, dob, sex, ethnicity FROM dbo.person WHERE personId = @p", new { p = pid });
-            Assert.True(pRow.isDeleted);
-            Assert.Equal("[purged]", pRow.lastName);
-            Assert.Null(pRow.firstName);
-            Assert.Null(pRow.dob);
-            Assert.Equal("unknown", pRow.sex);
-            Assert.Equal("unknown", pRow.ethnicity);
-        }
-
-        // Verify location geocodes/ZIP, intakeBatch.rawContent, appUser credentials, recoveryCode, and userAssignment are scrubbed (B4).
-        var locRow = await conn.QuerySingleAsync<(bool isDeleted, string? postalCode, decimal? latitude, decimal? longitude, string? censusTract)>(
-            "SELECT isDeleted, postalCode, latitude, longitude, censusTract FROM dbo.location WHERE locationId = @id", new { id = synLocation });
-        Assert.True(locRow.isDeleted);
-        Assert.Null(locRow.postalCode);
-        Assert.Null(locRow.latitude);
-        Assert.Null(locRow.longitude);
-        Assert.Null(locRow.censusTract);
-
-        var batchRow = await conn.QuerySingleAsync<(bool isDeleted, byte[]? rawContent)>(
-            "SELECT isDeleted, rawContent FROM dbo.intakeBatch WHERE intakeBatchId = @id", new { id = synBatch });
-        Assert.True(batchRow.isDeleted);
-        Assert.Null(batchRow.rawContent);
-
-        var userRow = await conn.QuerySingleAsync<(bool isDeleted, bool isActive, string displayName, string passwordHash, string? mfaSecretProtected)>(
-            "SELECT isDeleted, isActive, displayName, passwordHash, mfaSecretProtected FROM auth.appUser WHERE appUserId = @id", new { id = synUser });
-        Assert.True(userRow.isDeleted);
-        Assert.False(userRow.isActive);
-        Assert.Equal("[purged]", userRow.displayName);
-        Assert.Equal("[purged]", userRow.passwordHash);
-        Assert.Null(userRow.mfaSecretProtected);
-
-        var recRow = await conn.QuerySingleAsync<(bool isDeleted, string codeHash)>(
-            "SELECT isDeleted, codeHash FROM auth.mfaRecoveryCode WHERE mfaRecoveryCodeId = @id", new { id = synRecovery });
-        Assert.True(recRow.isDeleted);
-        Assert.Equal("[purged]", recRow.codeHash);
-
-        Assert.True(await conn.ExecuteScalarAsync<bool>("SELECT isDeleted FROM auth.userAssignment WHERE userAssignmentId = @id", new { id = synAssign }));
-
-        var purgedSearch = await conn.QuerySingleAsync<(bool isDeleted, string searchText)>(
-            "SELECT isDeleted, searchText FROM logs.searchLog WHERE searchLogId = @s", new { s = synSearch });
-        Assert.True(purgedSearch.isDeleted);
-        Assert.Equal(string.Empty, purgedSearch.searchText);
-
-        // Verify Maryland root is 100% untouched.
-        int mdPersonsAfter = await conn.ExecuteScalarAsync<int>(
-            "SELECT COUNT (*) FROM dbo.person WHERE rootTenantId = (SELECT rootTenantId FROM auth.tenant WHERE tenantCode = 'MD') AND isDeleted = 0");
-        Assert.Equal(mdPersonsBefore, mdPersonsAfter);
     }
 }

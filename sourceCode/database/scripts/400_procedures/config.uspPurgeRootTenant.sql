@@ -13,7 +13,7 @@ CreateDate:   2026-10-24
 ========================================================================================================================
 Description:
 
-Platform-only, two-step confirmed, audited per-root-tenant purge (#346, B4, I16). Requires @confirmationCode = N'PURGE:' + tenantCode and refuses the platform root. Scrubs and soft-deletes all 70 mutable tenant/auth tables (live and previously soft-deleted rows) in independently committed 5,000-row batches, leaves append-only logs.auditEvent intact, verifies zero unscrubbed rows remain, and returns a purge report including when data ages out of backups.
+Platform-only, two-step confirmed, audited per-root-tenant purge (#346, B4, B5, I16, I18). Requires @confirmationCode = N'PURGE:' + tenantCode and refuses the platform root. Fences the root first (deactivates tenants, revokes sessions, fails queued/running jobs), scrubs and soft-deletes all 70 mutable tenant/auth tables in 5,000-row batches (or rehearses inside a rolled-back transaction when @dryRun = 1), verifies zero unscrubbed rows remain, and returns a purge report with backupAgeOutUtc.
 
 ========================================================================================================================
 Requirements and Key Dependencies:
@@ -48,6 +48,7 @@ CREATE OR ALTER PROCEDURE config.uspPurgeRootTenant
       @rootTenantId        UNIQUEIDENTIFIER
       , @confirmationCode    NVARCHAR (60)
       , @backupRetentionDays INT = 35
+      , @dryRun              BIT = 0
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -72,7 +73,7 @@ BEGIN
           , @ErrorLine      INT            = NULL;
 
     -- Identifiers and counts ONLY. Never a credential, a payload, or patient data.
-    SET @KeyParameters = CONCAT (N'rootTenantId=', @rootTenantId, N', backupRetentionDays=', @backupRetentionDays);
+    SET @KeyParameters = CONCAT (N'rootTenantId=', @rootTenantId, N', backupRetentionDays=', @backupRetentionDays, N', dryRun=', @dryRun);
 
     BEGIN TRY
 
@@ -114,8 +115,10 @@ BEGIN
         -- ===== The procedure's own work starts here. Everything above and below is boilerplate. ==
         -- =========================================================================================
 
-        BEGIN TRANSACTION;
-        DECLARE @auditScope UNIQUEIDENTIFIER = TRY_CAST (SESSION_CONTEXT (N'scopeKey') AS UNIQUEIDENTIFIER);
+        IF @dryRun = 0
+        BEGIN
+            BEGIN TRANSACTION;
+            DECLARE @auditScope UNIQUEIDENTIFIER = TRY_CAST (SESSION_CONTEXT (N'scopeKey') AS UNIQUEIDENTIFIER);
         DECLARE @auditSessionRef UNIQUEIDENTIFIER, @auditActingTenant UNIQUEIDENTIFIER, @auditViewAs UNIQUEIDENTIFIER;
         SELECT @auditSessionRef = sessionReference, @auditActingTenant = actingTenantId, @auditViewAs = viewAsUserId
           FROM auth.sessionScope
@@ -123,14 +126,15 @@ BEGIN
         DECLARE @auditClientAddress VARCHAR (45) = TRY_CAST (SESSION_CONTEXT (N'clientAddress') AS VARCHAR (45));
         DECLARE @auditTraceId VARCHAR (64) = TRY_CAST (SESSION_CONTEXT (N'traceId') AS VARCHAR (64));
         DECLARE @auditUserAgentHash CHAR (16) = TRY_CAST (SESSION_CONTEXT (N'userAgentHash') AS CHAR (16));
-        INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, clientAddress, owningTenantId,
-                                sessionReference, traceId, actingTenantId, viewAsUserId, userAgentHash)
-        VALUES (auth.udfSessionUserId (), @rootTenantId, 'delete', 'tenant', @rootTenantId, @auditClientAddress, @rootTenantId,
-                @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs, @auditUserAgentHash);
-        COMMIT TRANSACTION;
+            INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, clientAddress, owningTenantId,
+                                    sessionReference, traceId, actingTenantId, viewAsUserId, userAgentHash)
+            VALUES (auth.udfSessionUserId (), @rootTenantId, 'delete', 'tenant', @rootTenantId, @auditClientAddress, @rootTenantId,
+                    @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs, @auditUserAgentHash);
+            COMMIT TRANSACTION;
+        END;
 
-        EXEC config.uspPurgeRootTenantInternal @rootTenantId = @rootTenantId, @backupRetentionDays = @backupRetentionDays;
-        SET @Comments = CONCAT (N'Root tenant purge completed for ', @rootTenantId);
+        EXEC config.uspPurgeRootTenantInternal @rootTenantId = @rootTenantId, @backupRetentionDays = @backupRetentionDays, @dryRun = @dryRun;
+        SET @Comments = CONCAT (CASE WHEN @dryRun = 1 THEN N'Dry-run purge completed for ' ELSE N'Root tenant purge completed for ' END, @rootTenantId);
 
         -- =========================================================================================
         -- ===== End of the procedure's own work. ===================================================
@@ -208,7 +212,7 @@ EXEC util.uspSetObjectDescription
       @SchemaName  = N'config'
     , @ObjectType  = N'PROCEDURE'
     , @ObjectName  = N'uspPurgeRootTenant'
-    , @Description = N'Platform-only, two-step confirmed, audited per-root-tenant purge (#346, B4, I16). Requires @confirmationCode = N''PURGE:'' + tenantCode and refuses the platform root. Scrubs and soft-deletes all 70 mutable tenant/auth tables (live and previously soft-deleted rows) in independently committed 5,000-row batches, leaves append-only logs.auditEvent intact, verifies zero unscrubbed rows remain, and returns a purge report including when data ages out of backups.';
+    , @Description = N'Platform-only, two-step confirmed, audited per-root-tenant purge (#346, B4, B5, I16, I18). Requires @confirmationCode = N''PURGE:'' + tenantCode and refuses the platform root. Fences the root first (deactivates tenants, revokes sessions, fails queued/running jobs), scrubs and soft-deletes all 70 mutable tenant/auth tables in 5,000-row batches (or rehearses inside a rolled-back transaction when @dryRun = 1), verifies zero unscrubbed rows remain, and returns a purge report with backupAgeOutUtc.';
 GO
 
 IF DATABASE_PRINCIPAL_ID (N'meritWebRole') IS NOT NULL

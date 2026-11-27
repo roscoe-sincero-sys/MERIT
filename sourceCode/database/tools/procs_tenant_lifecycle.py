@@ -171,7 +171,9 @@ NON_NULL_SCRUB_OVERRIDES: dict[tuple[str, str], str] = {
     ("dbo.labResult", "population"): "'unknown'",
     ("dbo.labResult", "unitReported"): "N'[purged]'",
     ("dbo.labResult", "unitCanonical"): "N'[purged]'",
+    ("dbo.labResult", "valueText"): "N'[purged]'",
     ("dbo.labResult", "reportedSnapshotJson"): "N'{}'",
+    ("dbo.exposureCase", "caseStatus"): "'open'",
     ("dbo.stagingRow", "parsedJson"): "N'{}'",
     ("dbo.contactCorrection", "caregiverName"): "N'[purged]'",
     ("dbo.contactCorrection", "proposedValue"): "N'[purged]'",
@@ -326,13 +328,27 @@ def _export_body() -> str:
 def _purge_body() -> str:
     lines = [
         "DECLARE @report TABLE (",
-        "    tableName           NVARCHAR (128) NOT NULL,",
+        "    tableName           NVARCHAR (128) NOT NULL PRIMARY KEY,",
         "    rowsAffected        INT NOT NULL,",
         "    remainingUnscrubbed INT NOT NULL,",
         "    disposition         VARCHAR (40) NOT NULL",
         ");",
         "DECLARE @n INT = 0, @batch INT = 0, @rem INT = 0;",
+        "DECLARE @startedDryRunTx BIT = 0;",
+        "IF @dryRun = 1",
+        "BEGIN",
+        "    BEGIN TRANSACTION;",
+        "    SET @startedDryRunTx = 1;",
+        "END;",
         "",
+        "-- Step 1 (I18): Fence the root BEFORE purging any table so active users and queued jobs cannot insert late rows.",
+        "BEGIN TRANSACTION;",
+        "UPDATE auth.tenant SET isActive = 0, modifiedBy = N'MERIT tenant purge' WHERE rootTenantId = @rootTenantId AND isActive = 1;",
+        "UPDATE auth.sessionScope SET revokedUtc = COALESCE (revokedUtc, SYSUTCDATETIME ()), modifiedBy = N'MERIT tenant purge' WHERE rootTenantId = @rootTenantId AND revokedUtc IS NULL;",
+        "UPDATE dbo.jobQueue SET jobStatus = 'failed', modifiedBy = N'MERIT tenant purge' WHERE rootTenantId = @rootTenantId AND jobStatus IN ('queued', 'running');",
+        "COMMIT TRANSACTION;",
+        "",
+        "-- Step 2 (B4, I16): Scrub and soft-delete all 70 mutable tenant/auth tables in independently committed 5,000-row batches.",
     ]
     for s, n, pred in ALL_MUTABLE_SPECS:
         full = f"{s}.{n}"
@@ -349,13 +365,19 @@ def _purge_body() -> str:
             f"    SET @batch = @@ROWCOUNT;\n"
             f"    COMMIT TRANSACTION;\n"
             f"    SET @n += @batch;\n"
-            f"    IF @batch = 5000\n"
+            f"    IF @batch = 5000 AND @dryRun = 0\n"
             f"    BEGIN\n"
             f"        WAITFOR DELAY '00:00:00.050';\n"
             f"    END;\n"
             f"END;\n"
-            f"SELECT @rem = COUNT (*) FROM {full} WHERE ({pred}) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');\n"
-            f"INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'{full}', @n, @rem, 'scrubbedAndSoftDeleted');"
+            f"INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'{full}', @n, 0, 'scrubbedAndSoftDeleted');"
+        )
+    lines.append("")
+    lines.append("-- Step 3 (I18): Final verification pass over all 70 mutable tables after fencing and purging.")
+    for s, n, pred in ALL_MUTABLE_SPECS:
+        full = f"{s}.{n}"
+        lines.append(
+            f"UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM {full} WHERE ({pred}) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'{full}';"
         )
     for s, n in APPEND_ONLY_ROOT_TABLES:
         full = f"{s}.{n}"
@@ -364,16 +386,23 @@ def _purge_body() -> str:
             f"INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'{full}', @ledgerRows, 0, 'retainedAppendOnlyLedger');"
         )
     lines.append("")
+    lines.append("DECLARE @targetCode VARCHAR (30) = (SELECT tenantCode FROM auth.tenant WHERE tenantId = @rootTenantId);")
+    lines.append("IF @startedDryRunTx = 1 AND @@TRANCOUNT > 0")
+    lines.append("BEGIN")
+    lines.append("    ROLLBACK TRANSACTION;")
+    lines.append("END;")
+    lines.append("")
     lines.append("SELECT tableName, rowsAffected, remainingUnscrubbed, disposition FROM @report ORDER BY tableName;")
     lines.append(
         "SELECT @rootTenantId AS rootTenantId,\n"
-        "       (SELECT tenantCode FROM auth.tenant WHERE tenantId = @rootTenantId) AS tenantCode,\n"
+        "       @targetCode AS tenantCode,\n"
+        "       @dryRun AS isDryRun,\n"
         "       (SELECT SUM (rowsAffected) FROM @report WHERE disposition = 'scrubbedAndSoftDeleted') AS totalRowsPurged,\n"
         "       (SELECT SUM (remainingUnscrubbed) FROM @report WHERE disposition = 'scrubbedAndSoftDeleted') AS totalRemainingUnscrubbed,\n"
         "       @ledgerRows AS ledgerRowsRetained,\n"
         "       DATEADD (DAY, @backupRetentionDays, SYSUTCDATETIME ()) AS backupAgeOutUtc;"
     )
-    lines.append("SET @Comments = CONCAT (N'Purged rootTenantId=', @rootTenantId);")
+    lines.append("SET @Comments = CONCAT (CASE WHEN @dryRun = 1 THEN N'Dry-run purge ' ELSE N'Purged ' END, N'rootTenantId=', @rootTenantId);")
     return "\n".join(lines)
 
 
@@ -420,26 +449,29 @@ SET @Comments = CONCAT (N'Root tenant export completed for ', @rootTenantId);
     {
         "schema": "config", "name": "uspPurgeRootTenantInternal", "kind": "write", "no_tx": True, "grants": [], "execute_as": "OWNER",
         "ticket": "346",
-        "desc": "Ungranted owner-context helper for config.uspPurgeRootTenant: scrubs every PHI, free-text, binary, "
-                "geocode, and credential column across all 70 mutable tenant/auth tables (including previously soft-deleted "
-                "rows) in independently committed 5,000-row batches with post-purge verification (#346, B4, I16).",
+        "desc": "Ungranted owner-context helper for config.uspPurgeRootTenant: fences tenants/sessions/jobs first, scrubs "
+                "every PHI, free-text, binary, geocode, and credential column across all 70 mutable tenant/auth tables "
+                "(including previously soft-deleted rows) in independently committed 5,000-row batches (or rolls back "
+                "all work when @dryRun = 1), and runs a final post-purge verification pass (#346, B4, B5, I16, I18).",
         "params": """@rootTenantId        UNIQUEIDENTIFIER
-, @backupRetentionDays INT = 35""",
-        "key": "CONCAT (N'rootTenantId=', @rootTenantId, N', backupRetentionDays=', @backupRetentionDays)",
+, @backupRetentionDays INT = 35
+, @dryRun              BIT = 0""",
+        "key": "CONCAT (N'rootTenantId=', @rootTenantId, N', backupRetentionDays=', @backupRetentionDays, N', dryRun=', @dryRun)",
         "body": _purge_body(),
     },
     {
         "schema": "config", "name": "uspPurgeRootTenant", "kind": "write", "no_tx": True, "grants": BOTH, "ticket": "346",
         "permission_all": ["security.investigate", "tenant.create"],
-        "desc": "Platform-only, two-step confirmed, audited per-root-tenant purge (#346, B4, I16). Requires "
-                "@confirmationCode = N'PURGE:' + tenantCode and refuses the platform root. Scrubs and soft-deletes "
-                "all 70 mutable tenant/auth tables (live and previously soft-deleted rows) in independently committed "
-                "5,000-row batches, leaves append-only logs.auditEvent intact, verifies zero unscrubbed rows remain, "
-                "and returns a purge report including when data ages out of backups.",
+        "desc": "Platform-only, two-step confirmed, audited per-root-tenant purge (#346, B4, B5, I16, I18). Requires "
+                "@confirmationCode = N'PURGE:' + tenantCode and refuses the platform root. Fences the root first "
+                "(deactivates tenants, revokes sessions, fails queued/running jobs), scrubs and soft-deletes all 70 "
+                "mutable tenant/auth tables in 5,000-row batches (or rehearses inside a rolled-back transaction when "
+                "@dryRun = 1), verifies zero unscrubbed rows remain, and returns a purge report with backupAgeOutUtc.",
         "params": """@rootTenantId        UNIQUEIDENTIFIER
 , @confirmationCode    NVARCHAR (60)
-, @backupRetentionDays INT = 35""",
-        "key": "CONCAT (N'rootTenantId=', @rootTenantId, N', backupRetentionDays=', @backupRetentionDays)",
+, @backupRetentionDays INT = 35
+, @dryRun              BIT = 0""",
+        "key": "CONCAT (N'rootTenantId=', @rootTenantId, N', backupRetentionDays=', @backupRetentionDays, N', dryRun=', @dryRun)",
         "validate": """DECLARE @targetCode VARCHAR (30), @targetType VARCHAR (30);
 SELECT @targetCode = tenantCode, @targetType = tenantType
   FROM auth.tenant
@@ -462,16 +494,19 @@ BEGIN
     ;THROW 51422, N'@backupRetentionDays must be between 1 and 3650.', 1;
 END;""",
         "body": f"""
-BEGIN TRANSACTION;
-{AUDIT_SESSION_VARS}
-INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, clientAddress, owningTenantId,
-                        sessionReference, traceId, actingTenantId, viewAsUserId, userAgentHash)
-VALUES (auth.udfSessionUserId (), @rootTenantId, 'delete', 'tenant', @rootTenantId, @auditClientAddress, @rootTenantId,
-        @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs, @auditUserAgentHash);
-COMMIT TRANSACTION;
+IF @dryRun = 0
+BEGIN
+    BEGIN TRANSACTION;
+    {AUDIT_SESSION_VARS}
+    INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, clientAddress, owningTenantId,
+                            sessionReference, traceId, actingTenantId, viewAsUserId, userAgentHash)
+    VALUES (auth.udfSessionUserId (), @rootTenantId, 'delete', 'tenant', @rootTenantId, @auditClientAddress, @rootTenantId,
+            @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs, @auditUserAgentHash);
+    COMMIT TRANSACTION;
+END;
 
-EXEC config.uspPurgeRootTenantInternal @rootTenantId = @rootTenantId, @backupRetentionDays = @backupRetentionDays;
-SET @Comments = CONCAT (N'Root tenant purge completed for ', @rootTenantId);
+EXEC config.uspPurgeRootTenantInternal @rootTenantId = @rootTenantId, @backupRetentionDays = @backupRetentionDays, @dryRun = @dryRun;
+SET @Comments = CONCAT (CASE WHEN @dryRun = 1 THEN N'Dry-run purge completed for ' ELSE N'Root tenant purge completed for ' END, @rootTenantId);
 """,
     },
 ]
