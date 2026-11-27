@@ -89,6 +89,10 @@ BEGIN
             ;THROW 51403, N'You do not have permission to do this (security.investigate and tenant.create).', 1;
         END;
 
+        IF @dryRun IS NULL
+        BEGIN
+            ;THROW 51422, N'@dryRun must be 0 or 1.', 1;
+        END;
         DECLARE @targetCode VARCHAR (30), @targetType VARCHAR (30);
         SELECT @targetCode = tenantCode, @targetType = tenantType
           FROM auth.tenant
@@ -102,11 +106,27 @@ BEGIN
         BEGIN
             ;THROW 51422, N'The platform root tenant cannot be purged.', 1;
         END;
+        IF EXISTS (
+            SELECT 1
+              FROM auth.tenant AS child
+             WHERE child.rootTenantId <> @rootTenantId
+               AND child.isDeleted = 0
+               AND (   child.parentTenantId IN (SELECT tenantId FROM auth.tenant WHERE rootTenantId = @rootTenantId)
+                    OR EXISTS (SELECT 1
+                                 FROM auth.tenantClosure AS tc
+                                 JOIN auth.tenant        AS anc ON anc.tenantId = tc.ancestorTenantId
+                                WHERE tc.descendantTenantId = child.tenantId
+                                  AND tc.isDeleted = 0
+                                  AND anc.rootTenantId = @rootTenantId))
+        )
+        BEGIN
+            ;THROW 51422, N'This root tenant has live descendant data roots. Reparent or purge all child roots before purging this root.', 1;
+        END;
         IF COALESCE (@confirmationCode, N'') <> CONCAT (N'PURGE:', @targetCode)
         BEGIN
             ;THROW 51422, N'Confirmation code mismatch. Pass PURGE:<tenantCode> to confirm root tenant purge.', 1;
         END;
-        IF @backupRetentionDays NOT BETWEEN 1 AND 3650
+        IF @backupRetentionDays IS NULL OR @backupRetentionDays NOT BETWEEN 1 AND 3650
         BEGIN
             ;THROW 51422, N'@backupRetentionDays must be between 1 and 3650.', 1;
         END;

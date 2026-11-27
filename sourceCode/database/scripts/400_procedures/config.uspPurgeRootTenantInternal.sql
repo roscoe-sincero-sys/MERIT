@@ -87,6 +87,26 @@ BEGIN
         -- ===== The procedure's own work starts here. Everything above and below is boilerplate. ==
         -- =========================================================================================
 
+        IF @dryRun IS NULL
+        BEGIN
+            ;THROW 51422, N'@dryRun must be 0 or 1.', 1;
+        END;
+        IF EXISTS (
+            SELECT 1
+              FROM auth.tenant AS child
+             WHERE child.rootTenantId <> @rootTenantId
+               AND child.isDeleted = 0
+               AND (   child.parentTenantId IN (SELECT tenantId FROM auth.tenant WHERE rootTenantId = @rootTenantId)
+                    OR EXISTS (SELECT 1
+                                 FROM auth.tenantClosure AS tc
+                                 JOIN auth.tenant        AS anc ON anc.tenantId = tc.ancestorTenantId
+                                WHERE tc.descendantTenantId = child.tenantId
+                                  AND tc.isDeleted = 0
+                                  AND anc.rootTenantId = @rootTenantId))
+        )
+        BEGIN
+            ;THROW 51422, N'This root tenant has live descendant data roots. Reparent or purge all child roots before purging this root.', 1;
+        END;
         DECLARE @report TABLE (
             tableName           NVARCHAR (128) NOT NULL PRIMARY KEY,
             rowsAffected        INT NOT NULL,
@@ -101,11 +121,22 @@ BEGIN
             SET @startedDryRunTx = 1;
         END;
 
-        -- Step 1 (I18): Fence the root BEFORE purging any table so active users and queued jobs cannot insert late rows.
+        -- Step 1 (I18, Codex #2/#4): Fence the root under the MERIT.grants exclusive applock BEFORE purging any table.
+        -- Uses a distinct fence marker (N'MERIT tenant fence') so previously soft-deleted rows are never mistaken for scrubbed.
         BEGIN TRANSACTION;
-        UPDATE auth.tenant SET isActive = 0, modifiedBy = N'MERIT tenant purge' WHERE rootTenantId = @rootTenantId AND isActive = 1;
-        UPDATE auth.sessionScope SET revokedUtc = COALESCE (revokedUtc, SYSUTCDATETIME ()), modifiedBy = N'MERIT tenant purge' WHERE rootTenantId = @rootTenantId AND revokedUtc IS NULL;
-        UPDATE dbo.jobQueue SET jobStatus = 'failed', modifiedBy = N'MERIT tenant purge' WHERE rootTenantId = @rootTenantId AND jobStatus IN ('queued', 'running');
+        DECLARE @grantLock INT;
+        EXEC @grantLock = sys.sp_getapplock @Resource = N'MERIT.grants', @LockMode = 'Exclusive',
+             @LockOwner = 'Transaction', @LockTimeout = 10000;
+        IF @grantLock < 0
+        BEGIN
+            ;THROW 51409, N'Authorization changes are busy; please retry.', 1;
+        END;
+        UPDATE auth.tenant SET isActive = 0, modifiedBy = N'MERIT tenant fence' WHERE rootTenantId = @rootTenantId AND isActive = 1;
+        UPDATE auth.sessionScope SET revokedUtc = COALESCE (revokedUtc, SYSUTCDATETIME ()), modifiedBy = N'MERIT tenant fence' WHERE rootTenantId = @rootTenantId AND revokedUtc IS NULL;
+        UPDATE auth.sessionScopeRoot SET isDeleted = 1, modifiedBy = N'MERIT tenant fence' WHERE rootTenantId = @rootTenantId AND isDeleted = 0;
+        UPDATE auth.sessionScopeTenant SET isDeleted = 1, modifiedBy = N'MERIT tenant fence' WHERE tenantId IN (SELECT tenantId FROM auth.tenant WHERE rootTenantId = @rootTenantId) AND isDeleted = 0;
+        UPDATE auth.sessionScopeAdminTenant SET isDeleted = 1, modifiedBy = N'MERIT tenant fence' WHERE tenantId IN (SELECT tenantId FROM auth.tenant WHERE rootTenantId = @rootTenantId) AND isDeleted = 0;
+        UPDATE dbo.jobQueue SET jobStatus = 'failed', modifiedBy = N'MERIT tenant fence' WHERE rootTenantId = @rootTenantId AND jobStatus IN ('queued', 'running');
         COMMIT TRANSACTION;
 
         -- Step 2 (B4, I16): Scrub and soft-delete all 70 mutable tenant/auth tables in independently committed 5,000-row batches.
@@ -114,9 +145,9 @@ BEGIN
         BEGIN
             BEGIN TRANSACTION;
             UPDATE TOP (5000) auth.mfaRecoveryCode
-               SET codeHash = N'[purged]', usedUtc = NULL, isDeleted = 1, modifiedBy = N'MERIT tenant purge'
+               SET codeHash = N'[purged]', usedUtc = NULL, isDeleted = 1, createdBy = N'MERIT tenant purge', modifiedBy = N'MERIT tenant purge', deletedBy = N'MERIT tenant purge'
              WHERE (appUserId IN (SELECT appUserId FROM auth.appUser WHERE rootTenantId = @rootTenantId))
-               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
+               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge');
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
@@ -131,9 +162,9 @@ BEGIN
         BEGIN
             BEGIN TRANSACTION;
             UPDATE TOP (5000) auth.passwordReset
-               SET tokenVerifier = CAST (0x00 AS VARBINARY (32)), consumedUtc = NULL, supersededUtc = NULL, deliveryUpdatedUtc = NULL, failureKind = NULL, smtpReplyCode = NULL, supportReference = 'PURGED', correlationId = NULL, clientAddress = NULL, isDeleted = 1, modifiedBy = N'MERIT tenant purge'
+               SET tokenVerifier = CAST (0x00 AS VARBINARY (32)), consumedUtc = NULL, supersededUtc = NULL, deliveryUpdatedUtc = NULL, failureKind = NULL, smtpReplyCode = NULL, supportReference = 'PURGED', correlationId = NULL, clientAddress = NULL, isDeleted = 1, createdBy = N'MERIT tenant purge', modifiedBy = N'MERIT tenant purge', deletedBy = N'MERIT tenant purge'
              WHERE (appUserId IN (SELECT appUserId FROM auth.appUser WHERE rootTenantId = @rootTenantId))
-               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
+               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge');
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
@@ -148,9 +179,9 @@ BEGIN
         BEGIN
             BEGIN TRANSACTION;
             UPDATE TOP (5000) auth.mfaEmailChallenge
-               SET codeVerifier = CAST (0x00 AS VARBINARY (32)), consumedUtc = NULL, supersededUtc = NULL, deliveryUpdatedUtc = NULL, failureKind = NULL, smtpReplyCode = NULL, supportReference = 'PURGED', correlationId = NULL, clientAddress = NULL, isDeleted = 1, modifiedBy = N'MERIT tenant purge'
+               SET codeVerifier = CAST (0x00 AS VARBINARY (32)), consumedUtc = NULL, supersededUtc = NULL, deliveryUpdatedUtc = NULL, failureKind = NULL, smtpReplyCode = NULL, supportReference = 'PURGED', correlationId = NULL, clientAddress = NULL, isDeleted = 1, createdBy = N'MERIT tenant purge', modifiedBy = N'MERIT tenant purge', deletedBy = N'MERIT tenant purge'
              WHERE (appUserId IN (SELECT appUserId FROM auth.appUser WHERE rootTenantId = @rootTenantId))
-               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
+               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge');
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
@@ -165,9 +196,9 @@ BEGIN
         BEGIN
             BEGIN TRANSACTION;
             UPDATE TOP (5000) auth.userProfileGrant
-               SET isDeleted = 1, modifiedBy = N'MERIT tenant purge'
+               SET isDeleted = 1, createdBy = N'MERIT tenant purge', modifiedBy = N'MERIT tenant purge', deletedBy = N'MERIT tenant purge'
              WHERE (userProfileId IN (SELECT up.userProfileId FROM auth.userProfile AS up JOIN auth.appUser AS u ON u.appUserId = up.appUserId WHERE u.rootTenantId = @rootTenantId))
-               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
+               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge');
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
@@ -182,9 +213,9 @@ BEGIN
         BEGIN
             BEGIN TRANSACTION;
             UPDATE TOP (5000) auth.userProfile
-               SET profileName = N'[purged]', profileDescription = NULL, isActive = 0, isDeleted = 1, modifiedBy = N'MERIT tenant purge'
+               SET profileName = N'[purged]', profileDescription = NULL, isActive = 0, isDeleted = 1, createdBy = N'MERIT tenant purge', modifiedBy = N'MERIT tenant purge', deletedBy = N'MERIT tenant purge'
              WHERE (appUserId IN (SELECT appUserId FROM auth.appUser WHERE rootTenantId = @rootTenantId))
-               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
+               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge');
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
@@ -199,9 +230,9 @@ BEGIN
         BEGIN
             BEGIN TRANSACTION;
             UPDATE TOP (5000) auth.userAssignment
-               SET endDate = NULL, revokedUtc = NULL, isDeleted = 1, modifiedBy = N'MERIT tenant purge'
+               SET endDate = NULL, revokedUtc = NULL, isDeleted = 1, createdBy = N'MERIT tenant purge', modifiedBy = N'MERIT tenant purge', deletedBy = N'MERIT tenant purge'
              WHERE (appUserId IN (SELECT appUserId FROM auth.appUser WHERE rootTenantId = @rootTenantId) OR tenantId IN (SELECT tenantId FROM auth.tenant WHERE rootTenantId = @rootTenantId))
-               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
+               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge');
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
@@ -216,9 +247,9 @@ BEGIN
         BEGIN
             BEGIN TRANSACTION;
             UPDATE TOP (5000) auth.sessionScopeTenant
-               SET isDeleted = 1, modifiedBy = N'MERIT tenant purge'
-             WHERE (sessionScopeId IN (SELECT sessionScopeId FROM auth.sessionScope WHERE rootTenantId = @rootTenantId))
-               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
+               SET isDeleted = 1, createdBy = N'MERIT tenant purge', modifiedBy = N'MERIT tenant purge', deletedBy = N'MERIT tenant purge'
+             WHERE (sessionScopeId IN (SELECT sessionScopeId FROM auth.sessionScope WHERE rootTenantId = @rootTenantId) OR tenantId IN (SELECT tenantId FROM auth.tenant WHERE rootTenantId = @rootTenantId))
+               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge');
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
@@ -233,9 +264,9 @@ BEGIN
         BEGIN
             BEGIN TRANSACTION;
             UPDATE TOP (5000) auth.sessionScopePermission
-               SET permissionCode = '[purged]', isDeleted = 1, modifiedBy = N'MERIT tenant purge'
+               SET permissionCode = '[purged]', isDeleted = 1, createdBy = N'MERIT tenant purge', modifiedBy = N'MERIT tenant purge', deletedBy = N'MERIT tenant purge'
              WHERE (sessionScopeId IN (SELECT sessionScopeId FROM auth.sessionScope WHERE rootTenantId = @rootTenantId))
-               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
+               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge');
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
@@ -250,9 +281,9 @@ BEGIN
         BEGIN
             BEGIN TRANSACTION;
             UPDATE TOP (5000) auth.sessionScopeAdminTenant
-               SET isDeleted = 1, modifiedBy = N'MERIT tenant purge'
-             WHERE (sessionScopeId IN (SELECT sessionScopeId FROM auth.sessionScope WHERE rootTenantId = @rootTenantId))
-               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
+               SET isDeleted = 1, createdBy = N'MERIT tenant purge', modifiedBy = N'MERIT tenant purge', deletedBy = N'MERIT tenant purge'
+             WHERE (sessionScopeId IN (SELECT sessionScopeId FROM auth.sessionScope WHERE rootTenantId = @rootTenantId) OR tenantId IN (SELECT tenantId FROM auth.tenant WHERE rootTenantId = @rootTenantId))
+               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge');
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
@@ -267,9 +298,9 @@ BEGIN
         BEGIN
             BEGIN TRANSACTION;
             UPDATE TOP (5000) auth.rolePermission
-               SET isDeleted = 1, modifiedBy = N'MERIT tenant purge'
+               SET isDeleted = 1, createdBy = N'MERIT tenant purge', modifiedBy = N'MERIT tenant purge', deletedBy = N'MERIT tenant purge'
              WHERE (roleId IN (SELECT roleId FROM auth.role WHERE rootTenantId = @rootTenantId))
-               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
+               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge');
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
@@ -284,9 +315,9 @@ BEGIN
         BEGIN
             BEGIN TRANSACTION;
             UPDATE TOP (5000) auth.tenantJurisdiction
-               SET isDeleted = 1, modifiedBy = N'MERIT tenant purge'
+               SET isDeleted = 1, createdBy = N'MERIT tenant purge', modifiedBy = N'MERIT tenant purge', deletedBy = N'MERIT tenant purge'
              WHERE (tenantId IN (SELECT tenantId FROM auth.tenant WHERE rootTenantId = @rootTenantId))
-               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
+               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge');
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
@@ -301,9 +332,9 @@ BEGIN
         BEGIN
             BEGIN TRANSACTION;
             UPDATE TOP (5000) auth.tenantClosure
-               SET isDeleted = 1, modifiedBy = N'MERIT tenant purge'
+               SET isDeleted = 1, createdBy = N'MERIT tenant purge', modifiedBy = N'MERIT tenant purge', deletedBy = N'MERIT tenant purge'
              WHERE (ancestorTenantId IN (SELECT tenantId FROM auth.tenant WHERE rootTenantId = @rootTenantId) OR descendantTenantId IN (SELECT tenantId FROM auth.tenant WHERE rootTenantId = @rootTenantId))
-               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
+               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge');
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
@@ -318,9 +349,9 @@ BEGIN
         BEGIN
             BEGIN TRANSACTION;
             UPDATE TOP (5000) logs.auditEventChange
-               SET entityType = '[purged]', beforeJson = NULL, afterJson = NULL, isDeleted = 1, modifiedBy = N'MERIT tenant purge'
+               SET entityType = '[purged]', beforeJson = NULL, afterJson = NULL, isDeleted = 1, createdBy = N'MERIT tenant purge', modifiedBy = N'MERIT tenant purge', deletedBy = N'MERIT tenant purge'
              WHERE (rootTenantId = @rootTenantId)
-               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
+               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge');
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
@@ -335,9 +366,9 @@ BEGIN
         BEGIN
             BEGIN TRANSACTION;
             UPDATE TOP (5000) logs.auditEventRecord
-               SET entityType = '[purged]', entityId = '00000000-0000-0000-0000-000000000000', isDeleted = 1, modifiedBy = N'MERIT tenant purge'
+               SET entityType = '[purged]', entityId = '00000000-0000-0000-0000-000000000000', isDeleted = 1, createdBy = N'MERIT tenant purge', modifiedBy = N'MERIT tenant purge', deletedBy = N'MERIT tenant purge'
              WHERE (rootTenantId = @rootTenantId)
-               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
+               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge');
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
@@ -352,9 +383,9 @@ BEGIN
         BEGIN
             BEGIN TRANSACTION;
             UPDATE TOP (5000) logs.securityFinding
-               SET appUserId = NULL, clientAddress = NULL, sessionReference = NULL, title = N'[purged]', detailJson = NULL, acknowledgedByUserId = NULL, acknowledgedUtc = NULL, fingerprint = CONCAT ('purged|', CONVERT (VARCHAR (36), securityFindingId)), isDeleted = 1, modifiedBy = N'MERIT tenant purge'
+               SET appUserId = NULL, clientAddress = NULL, sessionReference = NULL, title = N'[purged]', detailJson = NULL, acknowledgedByUserId = NULL, acknowledgedUtc = NULL, fingerprint = CONCAT ('purged|', CONVERT (VARCHAR (36), securityFindingId)), isDeleted = 1, createdBy = N'MERIT tenant purge', modifiedBy = N'MERIT tenant purge', deletedBy = N'MERIT tenant purge'
              WHERE (rootTenantId = @rootTenantId)
-               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
+               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge');
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
@@ -369,9 +400,9 @@ BEGIN
         BEGIN
             BEGIN TRANSACTION;
             UPDATE TOP (5000) logs.searchLog
-               SET searchText = N'', sessionReference = NULL, clientAddress = NULL, actingTenantId = NULL, existsElsewhere = NULL, searchSource = NULL, isDeleted = 1, modifiedBy = N'MERIT tenant purge'
+               SET searchText = N'', sessionReference = NULL, clientAddress = NULL, actingTenantId = NULL, existsElsewhere = NULL, searchSource = NULL, isDeleted = 1, createdBy = N'MERIT tenant purge', modifiedBy = N'MERIT tenant purge', deletedBy = N'MERIT tenant purge'
              WHERE (rootTenantId = @rootTenantId)
-               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
+               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge');
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
@@ -386,9 +417,9 @@ BEGIN
         BEGIN
             BEGIN TRANSACTION;
             UPDATE TOP (5000) logs.screenVisit
-               SET actingTenantId = NULL, appUserId = NULL, sessionReference = NULL, profileId = NULL, viewAsUserId = NULL, roleCodes = NULL, tabId = NULL, previousVisitId = NULL, durationMs = NULL, isDeleted = 1, modifiedBy = N'MERIT tenant purge'
+               SET actingTenantId = NULL, appUserId = NULL, sessionReference = NULL, profileId = NULL, viewAsUserId = NULL, roleCodes = NULL, tabId = NULL, previousVisitId = NULL, durationMs = NULL, isDeleted = 1, createdBy = N'MERIT tenant purge', modifiedBy = N'MERIT tenant purge', deletedBy = N'MERIT tenant purge'
              WHERE (rootTenantId = @rootTenantId)
-               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
+               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge');
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
@@ -403,9 +434,9 @@ BEGIN
         BEGIN
             BEGIN TRANSACTION;
             UPDATE TOP (5000) logs.signInEvent
-               SET step = NULL, method = NULL, reason = NULL, appUserId = NULL, actorUserId = NULL, attemptedNameHash = NULL, attemptedNameProtected = NULL, clientAddress = NULL, forwardedFor = NULL, userAgent = NULL, sessionReference = NULL, attemptId = NULL, traceId = NULL, failedSignInCount = NULL, lockoutEndUtc = NULL, isDeleted = 1, modifiedBy = N'MERIT tenant purge'
+               SET step = NULL, method = NULL, reason = NULL, appUserId = NULL, actorUserId = NULL, attemptedNameHash = NULL, attemptedNameProtected = NULL, clientAddress = NULL, forwardedFor = NULL, userAgent = NULL, sessionReference = NULL, attemptId = NULL, traceId = NULL, failedSignInCount = NULL, lockoutEndUtc = NULL, isDeleted = 1, createdBy = N'MERIT tenant purge', modifiedBy = N'MERIT tenant purge', deletedBy = N'MERIT tenant purge'
              WHERE (rootTenantId = @rootTenantId)
-               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
+               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge');
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
@@ -420,9 +451,9 @@ BEGIN
         BEGIN
             BEGIN TRANSACTION;
             UPDATE TOP (5000) dbo.contactCorrection
-               SET caregiverName = N'[purged]', proposedValue = N'[purged]', city = NULL, state = NULL, zip5 = NULL, unit = NULL, proposedAddressKey = NULL, sourceNote = N'[purged]', beforeJson = N'{}', afterJson = NULL, reviewNote = NULL, reviewedByUserId = NULL, reviewedUtc = NULL, isDeleted = 1, modifiedBy = N'MERIT tenant purge'
+               SET caregiverName = N'[purged]', proposedValue = N'[purged]', city = NULL, state = NULL, zip5 = NULL, unit = NULL, proposedAddressKey = NULL, sourceNote = N'[purged]', beforeJson = N'{}', afterJson = NULL, reviewNote = NULL, reviewedByUserId = NULL, reviewedUtc = NULL, isDeleted = 1, createdBy = N'MERIT tenant purge', modifiedBy = N'MERIT tenant purge', deletedBy = N'MERIT tenant purge'
              WHERE (rootTenantId = @rootTenantId)
-               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
+               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge');
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
@@ -437,9 +468,9 @@ BEGIN
         BEGIN
             BEGIN TRANSACTION;
             UPDATE TOP (5000) dbo.caseResultLink
-               SET isDeleted = 1, modifiedBy = N'MERIT tenant purge'
+               SET isDeleted = 1, createdBy = N'MERIT tenant purge', modifiedBy = N'MERIT tenant purge', deletedBy = N'MERIT tenant purge'
              WHERE (rootTenantId = @rootTenantId)
-               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
+               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge');
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
@@ -454,9 +485,9 @@ BEGIN
         BEGIN
             BEGIN TRANSACTION;
             UPDATE TOP (5000) dbo.notificationObligation
-               SET policySnapshotJson = N'{}', ruleName = N'[purged]', recipientKind = '[purged]', triggerEvent = '[purged]', timeZoneId = '[purged]', reviewReason = NULL, completedDate = NULL, isDeleted = 1, modifiedBy = N'MERIT tenant purge'
+               SET policySnapshotJson = N'{}', ruleName = N'[purged]', recipientKind = '[purged]', triggerEvent = '[purged]', timeZoneId = '[purged]', reviewReason = NULL, completedDate = NULL, isDeleted = 1, createdBy = N'MERIT tenant purge', modifiedBy = N'MERIT tenant purge', deletedBy = N'MERIT tenant purge'
              WHERE (rootTenantId = @rootTenantId)
-               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
+               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge');
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
@@ -471,9 +502,9 @@ BEGIN
         BEGIN
             BEGIN TRANSACTION;
             UPDATE TOP (5000) dbo.personDocument
-               SET title = N'[purged]', fileName = N'purged', contentType = '[purged]', category = '[purged]', source = N'[purged]', description = NULL, contentHash = CAST (0x00 AS BINARY (32)), content = 0x00, isDeleted = 1, modifiedBy = N'MERIT tenant purge'
+               SET title = N'[purged]', fileName = N'purged', contentType = '[purged]', category = '[purged]', source = N'[purged]', description = NULL, contentHash = CAST (0x00 AS BINARY (32)), content = 0x00, isDeleted = 1, createdBy = N'MERIT tenant purge', modifiedBy = N'MERIT tenant purge', deletedBy = N'MERIT tenant purge'
              WHERE (rootTenantId = @rootTenantId)
-               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
+               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge');
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
@@ -488,9 +519,9 @@ BEGIN
         BEGIN
             BEGIN TRANSACTION;
             UPDATE TOP (5000) dbo.personActivity
-               SET recipientLabel = NULL, noticeFormReference = NULL, note = NULL, voidReason = NULL, isDeleted = 1, modifiedBy = N'MERIT tenant purge'
+               SET recipientLabel = NULL, noticeFormReference = NULL, note = NULL, voidReason = NULL, isDeleted = 1, createdBy = N'MERIT tenant purge', modifiedBy = N'MERIT tenant purge', deletedBy = N'MERIT tenant purge'
              WHERE (rootTenantId = @rootTenantId)
-               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
+               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge');
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
@@ -505,9 +536,9 @@ BEGIN
         BEGIN
             BEGIN TRANSACTION;
             UPDATE TOP (5000) dbo.matchExclusion
-               SET incomingKey = N'[purged]', decisionNote = NULL, isDeleted = 1, modifiedBy = N'MERIT tenant purge'
+               SET incomingKey = N'[purged]', decisionNote = NULL, isDeleted = 1, createdBy = N'MERIT tenant purge', modifiedBy = N'MERIT tenant purge', deletedBy = N'MERIT tenant purge'
              WHERE (rootTenantId = @rootTenantId)
-               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
+               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge');
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
@@ -522,9 +553,9 @@ BEGIN
         BEGIN
             BEGIN TRANSACTION;
             UPDATE TOP (5000) dbo.extractRun
-               SET recordCount = NULL, errorCount = NULL, validationReportJson = NULL, fileName = NULL, fileContent = NULL, isDeleted = 1, modifiedBy = N'MERIT tenant purge'
+               SET recordCount = NULL, errorCount = NULL, validationReportJson = NULL, fileName = NULL, fileContent = NULL, isDeleted = 1, createdBy = N'MERIT tenant purge', modifiedBy = N'MERIT tenant purge', deletedBy = N'MERIT tenant purge'
              WHERE (rootTenantId = @rootTenantId)
-               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
+               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge');
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
@@ -539,9 +570,9 @@ BEGIN
         BEGIN
             BEGIN TRANSACTION;
             UPDATE TOP (5000) dbo.jobQueue
-               SET jobType = '[purged]', payloadJson = N'{}', claimedBy = NULL, claimedUtc = NULL, claimToken = NULL, completedUtc = NULL, lastError = NULL, resultJson = NULL, isDeleted = 1, modifiedBy = N'MERIT tenant purge'
+               SET jobType = '[purged]', payloadJson = N'{}', claimedBy = NULL, claimedUtc = NULL, claimToken = NULL, completedUtc = NULL, lastError = NULL, resultJson = NULL, isDeleted = 1, createdBy = N'MERIT tenant purge', modifiedBy = N'MERIT tenant purge', deletedBy = N'MERIT tenant purge'
              WHERE (rootTenantId = @rootTenantId)
-               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
+               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge');
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
@@ -556,9 +587,9 @@ BEGIN
         BEGIN
             BEGIN TRANSACTION;
             UPDATE TOP (5000) dbo.workTask
-               SET queueCode = '[purged]', title = N'[purged]', detail = NULL, dueDate = NULL, completedUtc = NULL, completedByUserId = NULL, resolutionNote = NULL, testingPlanJson = NULL, workflowDefinitionId = NULL, workflowSnapshotJson = NULL, workflowOccurrenceKey = NULL, completionActivityId = NULL, resolutionKind = NULL, isDeleted = 1, modifiedBy = N'MERIT tenant purge'
+               SET queueCode = '[purged]', title = N'[purged]', detail = NULL, dueDate = NULL, completedUtc = NULL, completedByUserId = NULL, resolutionNote = NULL, testingPlanJson = NULL, workflowDefinitionId = NULL, workflowSnapshotJson = NULL, workflowOccurrenceKey = NULL, completionActivityId = NULL, resolutionKind = NULL, isDeleted = 1, createdBy = N'MERIT tenant purge', modifiedBy = N'MERIT tenant purge', deletedBy = N'MERIT tenant purge'
              WHERE (rootTenantId = @rootTenantId)
-               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
+               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge');
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
@@ -573,9 +604,9 @@ BEGIN
         BEGIN
             BEGIN TRANSACTION;
             UPDATE TOP (5000) dbo.caseCluster
-               SET leftDate = NULL, isDeleted = 1, modifiedBy = N'MERIT tenant purge'
+               SET leftDate = NULL, isDeleted = 1, createdBy = N'MERIT tenant purge', modifiedBy = N'MERIT tenant purge', deletedBy = N'MERIT tenant purge'
              WHERE (rootTenantId = @rootTenantId)
-               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
+               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge');
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
@@ -590,9 +621,9 @@ BEGIN
         BEGIN
             BEGIN TRANSACTION;
             UPDATE TOP (5000) dbo.cluster
-               SET clusterType = '[purged]', title = N'[purged]', notes = NULL, isDeleted = 1, modifiedBy = N'MERIT tenant purge'
+               SET clusterType = '[purged]', title = N'[purged]', notes = NULL, isDeleted = 1, createdBy = N'MERIT tenant purge', modifiedBy = N'MERIT tenant purge', deletedBy = N'MERIT tenant purge'
              WHERE (rootTenantId = @rootTenantId)
-               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
+               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge');
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
@@ -607,9 +638,9 @@ BEGIN
         BEGIN
             BEGIN TRANSACTION;
             UPDATE TOP (5000) dbo.environmentalSample
-               SET sampleType = '[purged]', roomOrComponent = NULL, surface = NULL, unit = N'[purged]', exceedsStandard = NULL, notes = NULL, isDeleted = 1, modifiedBy = N'MERIT tenant purge'
+               SET sampleType = '[purged]', roomOrComponent = NULL, surface = NULL, unit = N'[purged]', exceedsStandard = NULL, notes = NULL, isDeleted = 1, createdBy = N'MERIT tenant purge', modifiedBy = N'MERIT tenant purge', deletedBy = N'MERIT tenant purge'
              WHERE (rootTenantId = @rootTenantId)
-               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
+               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge');
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
@@ -624,9 +655,9 @@ BEGIN
         BEGIN
             BEGIN TRANSACTION;
             UPDATE TOP (5000) dbo.investigationCase
-               SET isDeleted = 1, modifiedBy = N'MERIT tenant purge'
+               SET isDeleted = 1, createdBy = N'MERIT tenant purge', modifiedBy = N'MERIT tenant purge', deletedBy = N'MERIT tenant purge'
              WHERE (rootTenantId = @rootTenantId)
-               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
+               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge');
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
@@ -641,9 +672,9 @@ BEGIN
         BEGIN
             BEGIN TRANSACTION;
             UPDATE TOP (5000) dbo.investigation
-               SET investigationNumber = '[purged]', scheduledDate = NULL, completedDate = NULL, findings = NULL, regulatoryAction = NULL, referralDate = NULL, referralOutcome = NULL, isDeleted = 1, modifiedBy = N'MERIT tenant purge'
+               SET investigationNumber = '[purged]', scheduledDate = NULL, completedDate = NULL, findings = NULL, regulatoryAction = NULL, referralDate = NULL, referralOutcome = NULL, isDeleted = 1, createdBy = N'MERIT tenant purge', modifiedBy = N'MERIT tenant purge', deletedBy = N'MERIT tenant purge'
              WHERE (rootTenantId = @rootTenantId)
-               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
+               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge');
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
@@ -658,9 +689,9 @@ BEGIN
         BEGIN
             BEGIN TRANSACTION;
             UPDATE TOP (5000) dbo.exposureSource
-               SET sourceType = '[purged]', sourceDescription = NULL, startDate = NULL, endDate = NULL, isDeleted = 1, modifiedBy = N'MERIT tenant purge'
+               SET sourceType = '[purged]', sourceDescription = NULL, startDate = NULL, endDate = NULL, isDeleted = 1, createdBy = N'MERIT tenant purge', modifiedBy = N'MERIT tenant purge', deletedBy = N'MERIT tenant purge'
              WHERE (rootTenantId = @rootTenantId)
-               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
+               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge');
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
@@ -675,9 +706,9 @@ BEGIN
         BEGIN
             BEGIN TRANSACTION;
             UPDATE TOP (5000) dbo.caseActivity
-               SET lifecycleKind = NULL, voidReason = NULL, activityType = '[purged]', outcome = NULL, note = NULL, isDeleted = 1, modifiedBy = N'MERIT tenant purge'
+               SET lifecycleKind = NULL, voidReason = NULL, activityType = '[purged]', outcome = NULL, note = NULL, isDeleted = 1, createdBy = N'MERIT tenant purge', modifiedBy = N'MERIT tenant purge', deletedBy = N'MERIT tenant purge'
              WHERE (rootTenantId = @rootTenantId)
-               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
+               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge');
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
@@ -692,9 +723,9 @@ BEGIN
         BEGIN
             BEGIN TRANSACTION;
             UPDATE TOP (5000) dbo.exposureCase
-               SET caseNumber = '[purged]', overrideReason = NULL, caseStatus = 'open', workflowTemplate = '[purged]', closedDate = NULL, closureReason = NULL, isDeleted = 1, modifiedBy = N'MERIT tenant purge'
+               SET caseNumber = '[purged]', overrideReason = NULL, caseStatus = 'closed', workflowTemplate = '[purged]', closedDate = CAST (SYSUTCDATETIME () AS DATE), closureReason = 'other', isDeleted = 1, createdBy = N'MERIT tenant purge', modifiedBy = N'MERIT tenant purge', deletedBy = N'MERIT tenant purge'
              WHERE (rootTenantId = @rootTenantId)
-               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
+               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge');
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
@@ -709,9 +740,9 @@ BEGIN
         BEGIN
             BEGIN TRANSACTION;
             UPDATE TOP (5000) dbo.stagingHoldReason
-               SET fieldName = NULL, reasonMessage = N'[purged]', reportedValue = NULL, isDeleted = 1, modifiedBy = N'MERIT tenant purge'
+               SET fieldName = NULL, reasonMessage = N'[purged]', reportedValue = NULL, isDeleted = 1, createdBy = N'MERIT tenant purge', modifiedBy = N'MERIT tenant purge', deletedBy = N'MERIT tenant purge'
              WHERE (rootTenantId = @rootTenantId)
-               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
+               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge');
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
@@ -726,9 +757,9 @@ BEGIN
         BEGIN
             BEGIN TRANSACTION;
             UPDATE TOP (5000) dbo.stagingRow
-               SET parsedJson = N'{}', correctedJson = NULL, rejectReason = NULL, assignedToUserId = NULL, heldSinceUtc = NULL, isDeleted = 1, modifiedBy = N'MERIT tenant purge'
+               SET parsedJson = N'{}', correctedJson = NULL, rejectReason = NULL, assignedToUserId = NULL, heldSinceUtc = NULL, isDeleted = 1, createdBy = N'MERIT tenant purge', modifiedBy = N'MERIT tenant purge', deletedBy = N'MERIT tenant purge'
              WHERE (rootTenantId = @rootTenantId)
-               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
+               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge');
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
@@ -743,9 +774,9 @@ BEGIN
         BEGIN
             BEGIN TRANSACTION;
             UPDATE TOP (5000) dbo.labResult
-               SET collectedDate = '1900-01-01', analyzedDate = NULL, reportedDate = NULL, reportingFinalDateVerified = NULL, reportingVerifiedPolicyId = NULL, reportingVerifiedByUserId = NULL, reportingVerifiedUtc = NULL, correctionReason = NULL, correctionByUserId = NULL, correctionUtc = NULL, classificationSnapshotJson = NULL, valueReported = NULL, valueText = N'[purged]', unitReported = N'[purged]', valueCanonical = NULL, unitCanonical = N'[purged]', sampleType = NULL, testMethod = NULL, deviceModel = NULL, deviceSerial = NULL, kitLot = NULL, speciation = NULL, creatinineValue = NULL, valueCreatinineAdj = NULL, reasonForTest = NULL, payerType = NULL, accessionNumber = NULL, loincReported = NULL, reportedSnapshotJson = N'{}', ageAtCollectionMonths = NULL, population = 'unknown', isDeleted = 1, modifiedBy = N'MERIT tenant purge'
+               SET collectedDate = '1900-01-01', analyzedDate = NULL, reportedDate = NULL, reportingFinalDateVerified = NULL, reportingVerifiedPolicyId = NULL, reportingVerifiedByUserId = NULL, reportingVerifiedUtc = NULL, correctionReason = NULL, correctionByUserId = NULL, correctionUtc = NULL, classificationSnapshotJson = NULL, valueReported = NULL, valueText = N'[purged]', unitReported = N'[purged]', valueCanonical = NULL, unitCanonical = N'[purged]', sampleType = NULL, testMethod = NULL, deviceModel = NULL, deviceSerial = NULL, kitLot = NULL, speciation = NULL, creatinineValue = NULL, valueCreatinineAdj = NULL, reasonForTest = NULL, payerType = NULL, accessionNumber = NULL, loincReported = NULL, reportedSnapshotJson = N'{}', ageAtCollectionMonths = NULL, population = 'unknown', isDeleted = 1, createdBy = N'MERIT tenant purge', modifiedBy = N'MERIT tenant purge', deletedBy = N'MERIT tenant purge'
              WHERE (rootTenantId = @rootTenantId)
-               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
+               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge');
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
@@ -760,9 +791,9 @@ BEGIN
         BEGIN
             BEGIN TRANSACTION;
             UPDATE TOP (5000) dbo.intakeBatch
-               SET fileName = NULL, rawContent = NULL, contentSha256 = NULL, departmentReceivedUtc = NULL, receiptEvidence = NULL, receiptTimeZone = NULL, pauseReason = NULL, submittedByUserId = NULL, isDeleted = 1, modifiedBy = N'MERIT tenant purge'
+               SET fileName = NULL, rawContent = NULL, contentSha256 = NULL, departmentReceivedUtc = NULL, receiptEvidence = NULL, receiptTimeZone = NULL, pauseReason = NULL, submittedByUserId = NULL, isDeleted = 1, createdBy = N'MERIT tenant purge', modifiedBy = N'MERIT tenant purge', deletedBy = N'MERIT tenant purge'
              WHERE (rootTenantId = @rootTenantId)
-               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
+               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge');
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
@@ -777,9 +808,9 @@ BEGIN
         BEGIN
             BEGIN TRANSACTION;
             UPDATE TOP (5000) dbo.intakeProfile
-               SET profileName = N'[purged]', dateFormats = NULL, columnMapJson = N'{}', valueTranslationsJson = NULL, constantsJson = NULL, headerSignature = NULL, isActive = 0, isDeleted = 1, modifiedBy = N'MERIT tenant purge'
+               SET profileName = N'[purged]', dateFormats = NULL, columnMapJson = N'{}', valueTranslationsJson = NULL, constantsJson = NULL, headerSignature = NULL, isActive = 0, isDeleted = 1, createdBy = N'MERIT tenant purge', modifiedBy = N'MERIT tenant purge', deletedBy = N'MERIT tenant purge'
              WHERE (rootTenantId = @rootTenantId)
-               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
+               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge');
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
@@ -794,9 +825,9 @@ BEGIN
         BEGIN
             BEGIN TRANSACTION;
             UPDATE TOP (5000) dbo.provider
-               SET npi = NULL, lastName = N'[purged]', firstName = NULL, credential = NULL, primaryTaxonomy = NULL, registryStatus = '[purged]', registryCheckedUtc = NULL, localOverridesJson = NULL, isDeleted = 1, modifiedBy = N'MERIT tenant purge'
+               SET npi = NULL, lastName = N'[purged]', firstName = NULL, credential = NULL, primaryTaxonomy = NULL, registryStatus = '[purged]', registryCheckedUtc = NULL, localOverridesJson = NULL, isDeleted = 1, createdBy = N'MERIT tenant purge', modifiedBy = N'MERIT tenant purge', deletedBy = N'MERIT tenant purge'
              WHERE (rootTenantId = @rootTenantId)
-               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
+               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge');
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
@@ -811,9 +842,9 @@ BEGIN
         BEGIN
             BEGIN TRANSACTION;
             UPDATE TOP (5000) dbo.product
-               SET brand = NULL, productName = N'[purged]', countryOfOrigin = NULL, productType = NULL, notes = NULL, isDeleted = 1, modifiedBy = N'MERIT tenant purge'
+               SET brand = NULL, productName = N'[purged]', countryOfOrigin = NULL, productType = NULL, notes = NULL, isDeleted = 1, createdBy = N'MERIT tenant purge', modifiedBy = N'MERIT tenant purge', deletedBy = N'MERIT tenant purge'
              WHERE (rootTenantId = @rootTenantId)
-               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
+               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge');
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
@@ -828,9 +859,9 @@ BEGIN
         BEGIN
             BEGIN TRANSACTION;
             UPDATE TOP (5000) dbo.employmentAnalyte
-               SET isDeleted = 1, modifiedBy = N'MERIT tenant purge'
+               SET isDeleted = 1, createdBy = N'MERIT tenant purge', modifiedBy = N'MERIT tenant purge', deletedBy = N'MERIT tenant purge'
              WHERE (rootTenantId = @rootTenantId)
-               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
+               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge');
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
@@ -845,9 +876,9 @@ BEGIN
         BEGIN
             BEGIN TRANSACTION;
             UPDATE TOP (5000) dbo.employment
-               SET jobTitle = NULL, industryText = NULL, occupationCode = NULL, occupationCodeVersion = NULL, naicsOverride = NULL, metalTasks = NULL, ppeNotes = NULL, hoursPerWeek = NULL, startDate = NULL, endDate = NULL, source = '[purged]', verifiedDate = NULL, isDeleted = 1, modifiedBy = N'MERIT tenant purge'
+               SET jobTitle = NULL, industryText = NULL, occupationCode = NULL, occupationCodeVersion = NULL, naicsOverride = NULL, metalTasks = NULL, ppeNotes = NULL, hoursPerWeek = NULL, startDate = NULL, endDate = NULL, source = '[purged]', verifiedDate = NULL, isDeleted = 1, createdBy = N'MERIT tenant purge', modifiedBy = N'MERIT tenant purge', deletedBy = N'MERIT tenant purge'
              WHERE (rootTenantId = @rootTenantId)
-               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
+               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge');
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
@@ -862,9 +893,9 @@ BEGIN
         BEGIN
             BEGIN TRANSACTION;
             UPDATE TOP (5000) dbo.personLocation
-               SET primaryReason = NULL, scheduleType = NULL, hoursPerWeek = NULL, scheduleNote = NULL, endDate = NULL, source = '[purged]', verifiedDate = NULL, isDeleted = 1, modifiedBy = N'MERIT tenant purge'
+               SET primaryReason = NULL, scheduleType = NULL, hoursPerWeek = NULL, scheduleNote = NULL, endDate = NULL, source = '[purged]', verifiedDate = NULL, isDeleted = 1, createdBy = N'MERIT tenant purge', modifiedBy = N'MERIT tenant purge', deletedBy = N'MERIT tenant purge'
              WHERE (rootTenantId = @rootTenantId)
-               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
+               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge');
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
@@ -879,9 +910,9 @@ BEGIN
         BEGIN
             BEGIN TRANSACTION;
             UPDATE TOP (5000) dbo.locationOwner
-               SET startDate = NULL, endDate = NULL, source = '[purged]', isDeleted = 1, modifiedBy = N'MERIT tenant purge'
+               SET startDate = NULL, endDate = NULL, source = '[purged]', isDeleted = 1, createdBy = N'MERIT tenant purge', modifiedBy = N'MERIT tenant purge', deletedBy = N'MERIT tenant purge'
              WHERE (rootTenantId = @rootTenantId)
-               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
+               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge');
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
@@ -896,9 +927,9 @@ BEGIN
         BEGIN
             BEGIN TRANSACTION;
             UPDATE TOP (5000) dbo.organizationSite
-               SET siteName = NULL, startDate = NULL, endDate = NULL, isDeleted = 1, modifiedBy = N'MERIT tenant purge'
+               SET siteName = NULL, startDate = NULL, endDate = NULL, isDeleted = 1, createdBy = N'MERIT tenant purge', modifiedBy = N'MERIT tenant purge', deletedBy = N'MERIT tenant purge'
              WHERE (rootTenantId = @rootTenantId)
-               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
+               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge');
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
@@ -913,9 +944,9 @@ BEGIN
         BEGIN
             BEGIN TRANSACTION;
             UPDATE TOP (5000) dbo.location
-               SET country = 'XX', addressLine1 = NULL, unit = NULL, city = N'[purged]', state = NULL, zip5 = NULL, region = NULL, postalCode = NULL, countyFips = NULL, stdStatus = '[purged]', latitude = NULL, longitude = NULL, geocodeQuality = NULL, censusTract = NULL, censusVintage = NULL, yearBuilt = NULL, yearBuiltSource = NULL, housingType = NULL, tenure = NULL, addressKey = CONCAT (N'purged-', CAST (locationId AS NVARCHAR (36))), isDeleted = 1, modifiedBy = N'MERIT tenant purge'
+               SET country = 'XX', addressLine1 = NULL, unit = NULL, city = N'[purged]', state = NULL, zip5 = NULL, region = NULL, postalCode = NULL, countyFips = NULL, stdStatus = '[purged]', latitude = NULL, longitude = NULL, geocodeQuality = NULL, censusTract = NULL, censusVintage = NULL, yearBuilt = NULL, yearBuiltSource = NULL, housingType = NULL, tenure = NULL, addressKey = CONCAT (N'purged-', CAST (locationId AS NVARCHAR (36))), isDeleted = 1, createdBy = N'MERIT tenant purge', modifiedBy = N'MERIT tenant purge', deletedBy = N'MERIT tenant purge'
              WHERE (rootTenantId = @rootTenantId)
-               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
+               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge');
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
@@ -930,9 +961,9 @@ BEGIN
         BEGIN
             BEGIN TRANSACTION;
             UPDATE TOP (5000) dbo.organizationType
-               SET organizationTypeCode = '[purged]', isDeleted = 1, modifiedBy = N'MERIT tenant purge'
+               SET organizationTypeCode = '[purged]', isDeleted = 1, createdBy = N'MERIT tenant purge', modifiedBy = N'MERIT tenant purge', deletedBy = N'MERIT tenant purge'
              WHERE (rootTenantId = @rootTenantId)
-               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
+               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge');
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
@@ -947,9 +978,9 @@ BEGIN
         BEGIN
             BEGIN TRANSACTION;
             UPDATE TOP (5000) dbo.organization
-               SET organizationName = N'[purged]', organizationNameKey = N'[purged]', naicsCode = NULL, naicsVersion = NULL, npi = NULL, cliaNumber = NULL, contactName = NULL, phone = NULL, email = NULL, isActive = 0, isDeleted = 1, modifiedBy = N'MERIT tenant purge'
+               SET organizationName = N'[purged]', organizationNameKey = N'[purged]', naicsCode = NULL, naicsVersion = NULL, npi = NULL, cliaNumber = NULL, contactName = NULL, phone = NULL, email = NULL, isActive = 0, isDeleted = 1, createdBy = N'MERIT tenant purge', modifiedBy = N'MERIT tenant purge', deletedBy = N'MERIT tenant purge'
              WHERE (rootTenantId = @rootTenantId)
-               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
+               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge');
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
@@ -964,9 +995,9 @@ BEGIN
         BEGIN
             BEGIN TRANSACTION;
             UPDATE TOP (5000) dbo.personRelationship
-               SET role = '[purged]', startDate = NULL, endDate = NULL, source = '[purged]', verifiedDate = NULL, isDeleted = 1, modifiedBy = N'MERIT tenant purge'
+               SET role = '[purged]', startDate = NULL, endDate = NULL, source = '[purged]', verifiedDate = NULL, isDeleted = 1, createdBy = N'MERIT tenant purge', modifiedBy = N'MERIT tenant purge', deletedBy = N'MERIT tenant purge'
              WHERE (rootTenantId = @rootTenantId)
-               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
+               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge');
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
@@ -981,9 +1012,9 @@ BEGIN
         BEGIN
             BEGIN TRANSACTION;
             UPDATE TOP (5000) dbo.pregnancyEpisode
-               SET expectedEndDate = NULL, actualEndDate = NULL, outcome = NULL, source = '[purged]', isDeleted = 1, modifiedBy = N'MERIT tenant purge'
+               SET expectedEndDate = NULL, actualEndDate = NULL, outcome = NULL, source = '[purged]', isDeleted = 1, createdBy = N'MERIT tenant purge', modifiedBy = N'MERIT tenant purge', deletedBy = N'MERIT tenant purge'
              WHERE (rootTenantId = @rootTenantId)
-               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
+               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge');
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
@@ -998,9 +1029,9 @@ BEGIN
         BEGIN
             BEGIN TRANSACTION;
             UPDATE TOP (5000) dbo.personIdentifier
-               SET identifierType = '[purged]', identifierValue = N'[purged]', assigningFacility = NULL, source = '[purged]', isDeleted = 1, modifiedBy = N'MERIT tenant purge'
+               SET identifierType = '[purged]', identifierValue = N'[purged]', assigningFacility = NULL, source = '[purged]', isDeleted = 1, createdBy = N'MERIT tenant purge', modifiedBy = N'MERIT tenant purge', deletedBy = N'MERIT tenant purge'
              WHERE (rootTenantId = @rootTenantId)
-               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
+               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge');
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
@@ -1015,9 +1046,9 @@ BEGIN
         BEGIN
             BEGIN TRANSACTION;
             UPDATE TOP (5000) dbo.personContactMethod
-               SET contactValue = N'[purged]', isDeleted = 1, modifiedBy = N'MERIT tenant purge'
+               SET contactValue = N'[purged]', isDeleted = 1, createdBy = N'MERIT tenant purge', modifiedBy = N'MERIT tenant purge', deletedBy = N'MERIT tenant purge'
              WHERE (rootTenantId = @rootTenantId)
-               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
+               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge');
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
@@ -1032,9 +1063,9 @@ BEGIN
         BEGIN
             BEGIN TRANSACTION;
             UPDATE TOP (5000) dbo.personRace
-               SET raceCode = '[purged]', isDeleted = 1, modifiedBy = N'MERIT tenant purge'
+               SET raceCode = '[purged]', isDeleted = 1, createdBy = N'MERIT tenant purge', modifiedBy = N'MERIT tenant purge', deletedBy = N'MERIT tenant purge'
              WHERE (rootTenantId = @rootTenantId)
-               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
+               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge');
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
@@ -1049,9 +1080,9 @@ BEGIN
         BEGIN
             BEGIN TRANSACTION;
             UPDATE TOP (5000) dbo.personAlias
-               SET lastName = N'[purged]', firstName = NULL, middleName = NULL, lastNameKey = N'PURGED', firstNameKey = NULL, aliasType = '[purged]', source = '[purged]', sourceLabResultId = NULL, isDeleted = 1, modifiedBy = N'MERIT tenant purge'
+               SET lastName = N'[purged]', firstName = NULL, middleName = NULL, lastNameKey = N'PURGED', firstNameKey = NULL, aliasType = '[purged]', source = '[purged]', sourceLabResultId = NULL, isDeleted = 1, createdBy = N'MERIT tenant purge', modifiedBy = N'MERIT tenant purge', deletedBy = N'MERIT tenant purge'
              WHERE (rootTenantId = @rootTenantId)
-               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
+               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge');
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
@@ -1066,9 +1097,9 @@ BEGIN
         BEGIN
             BEGIN TRANSACTION;
             UPDATE TOP (5000) dbo.personMatchKey
-               SET lastNameKey = N'PURGED', firstNameKey = NULL, dob = NULL, isDeleted = 1, modifiedBy = N'MERIT tenant purge'
+               SET lastNameKey = N'PURGED', firstNameKey = NULL, dob = NULL, isDeleted = 1, createdBy = N'MERIT tenant purge', modifiedBy = N'MERIT tenant purge', deletedBy = N'MERIT tenant purge'
              WHERE (rootTenantId = @rootTenantId)
-               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
+               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge');
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
@@ -1083,9 +1114,9 @@ BEGIN
         BEGIN
             BEGIN TRANSACTION;
             UPDATE TOP (5000) dbo.personAccess
-               SET isDeleted = 1, modifiedBy = N'MERIT tenant purge'
+               SET isDeleted = 1, createdBy = N'MERIT tenant purge', modifiedBy = N'MERIT tenant purge', deletedBy = N'MERIT tenant purge'
              WHERE (rootTenantId = @rootTenantId)
-               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
+               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge');
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
@@ -1100,9 +1131,9 @@ BEGIN
         BEGIN
             BEGIN TRANSACTION;
             UPDATE TOP (5000) dbo.person
-               SET lastName = N'[purged]', firstName = NULL, middleName = NULL, lastNameKey = N'PURGED', firstNameKey = NULL, dob = NULL, sex = 'unknown', ethnicity = 'unknown', preferredLanguage = NULL, deceasedDate = NULL, legacyId = NULL, isDeleted = 1, modifiedBy = N'MERIT tenant purge'
+               SET lastName = N'[purged]', firstName = NULL, middleName = NULL, lastNameKey = N'PURGED', firstNameKey = NULL, dob = NULL, sex = 'unknown', ethnicity = 'unknown', preferredLanguage = NULL, deceasedDate = NULL, legacyId = NULL, isDeleted = 1, createdBy = N'MERIT tenant purge', modifiedBy = N'MERIT tenant purge', deletedBy = N'MERIT tenant purge'
              WHERE (rootTenantId = @rootTenantId)
-               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
+               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge');
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
@@ -1117,9 +1148,9 @@ BEGIN
         BEGIN
             BEGIN TRANSACTION;
             UPDATE TOP (5000) config.workflowDefinition
-               SET name = N'[purged]', description = N'[purged]', minimumAgeMonths = NULL, maximumAgeMonths = NULL, minimumValue = NULL, maximumValue = NULL, evidenceFieldsJson = N'{}', assignmentRoleCode = NULL, dueInDays = NULL, recurrenceDays = NULL, timeZoneId = '[purged]', holidayDatesJson = N'{}', closureReason = '[purged]', effectiveTo = NULL, approvalReference = NULL, publishedByUserId = NULL, publishedUtc = NULL, isDeleted = 1, modifiedBy = N'MERIT tenant purge'
+               SET name = N'[purged]', description = N'[purged]', minimumAgeMonths = NULL, maximumAgeMonths = NULL, minimumValue = NULL, maximumValue = NULL, evidenceFieldsJson = N'{}', assignmentRoleCode = NULL, dueInDays = NULL, recurrenceDays = NULL, timeZoneId = '[purged]', holidayDatesJson = N'{}', closureReason = '[purged]', effectiveTo = NULL, approvalReference = NULL, publishedByUserId = NULL, publishedUtc = NULL, isDeleted = 1, createdBy = N'MERIT tenant purge', modifiedBy = N'MERIT tenant purge', deletedBy = N'MERIT tenant purge'
              WHERE (rootTenantId = @rootTenantId)
-               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
+               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge');
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
@@ -1134,9 +1165,9 @@ BEGIN
         BEGIN
             BEGIN TRANSACTION;
             UPDATE TOP (5000) config.notificationRule
-               SET ruleName = N'[purged]', population = '[purged]', requiredFieldsCsv = NULL, minimumAgeMonths = NULL, maximumAgeMonths = NULL, maximumValue = NULL, timeZoneId = '[purged]', calendarName = N'[purged]', holidayDatesJson = N'{}', effectiveTo = NULL, approvalReference = N'[purged]', isActive = 0, isDeleted = 1, modifiedBy = N'MERIT tenant purge'
+               SET ruleName = N'[purged]', population = '[purged]', requiredFieldsCsv = NULL, minimumAgeMonths = NULL, maximumAgeMonths = NULL, maximumValue = NULL, timeZoneId = '[purged]', calendarName = N'[purged]', holidayDatesJson = N'{}', effectiveTo = NULL, approvalReference = N'[purged]', isActive = 0, isDeleted = 1, createdBy = N'MERIT tenant purge', modifiedBy = N'MERIT tenant purge', deletedBy = N'MERIT tenant purge'
              WHERE (rootTenantId = @rootTenantId)
-               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
+               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge');
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
@@ -1151,9 +1182,9 @@ BEGIN
         BEGIN
             BEGIN TRANSACTION;
             UPDATE TOP (5000) config.environmentalStandard
-               SET sampleType = '[purged]', surface = NULL, unit = N'[purged]', authority = NULL, effectiveTo = NULL, isDeleted = 1, modifiedBy = N'MERIT tenant purge'
+               SET sampleType = '[purged]', surface = NULL, unit = N'[purged]', authority = NULL, effectiveTo = NULL, isDeleted = 1, createdBy = N'MERIT tenant purge', modifiedBy = N'MERIT tenant purge', deletedBy = N'MERIT tenant purge'
              WHERE (rootTenantId = @rootTenantId)
-               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
+               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge');
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
@@ -1168,9 +1199,9 @@ BEGIN
         BEGIN
             BEGIN TRANSACTION;
             UPDATE TOP (5000) config.threshold
-               SET ageMinMonths = NULL, ageMaxMonths = NULL, speciation = NULL, sampleType = NULL, dueIntervalDays = NULL, upperValue = NULL, unit = N'[purged]', effectiveTo = NULL, authority = NULL, isActive = 0, isDeleted = 1, modifiedBy = N'MERIT tenant purge'
+               SET ageMinMonths = NULL, ageMaxMonths = NULL, speciation = NULL, sampleType = NULL, dueIntervalDays = NULL, upperValue = NULL, unit = N'[purged]', effectiveTo = NULL, authority = NULL, isActive = 0, isDeleted = 1, createdBy = N'MERIT tenant purge', modifiedBy = N'MERIT tenant purge', deletedBy = N'MERIT tenant purge'
              WHERE (rootTenantId = @rootTenantId)
-               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
+               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge');
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
@@ -1185,9 +1216,9 @@ BEGIN
         BEGIN
             BEGIN TRANSACTION;
             UPDATE TOP (5000) config.jurisdictionSetting
-               SET settingKey = '[purged]', settingValue = N'[purged]', effectiveTo = NULL, settingDescription = NULL, isDeleted = 1, modifiedBy = N'MERIT tenant purge'
+               SET settingKey = '[purged]', settingValue = N'[purged]', effectiveTo = NULL, settingDescription = NULL, isDeleted = 1, createdBy = N'MERIT tenant purge', modifiedBy = N'MERIT tenant purge', deletedBy = N'MERIT tenant purge'
              WHERE (rootTenantId = @rootTenantId)
-               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
+               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge');
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
@@ -1202,9 +1233,9 @@ BEGIN
         BEGIN
             BEGIN TRANSACTION;
             UPDATE TOP (5000) config.subJurisdiction
-               SET subJurisdictionName = N'[purged]', boundary = NULL, labelLatitude = NULL, labelLongitude = NULL, isDeleted = 1, modifiedBy = N'MERIT tenant purge'
+               SET subJurisdictionName = N'[purged]', boundary = NULL, labelLatitude = NULL, labelLongitude = NULL, isDeleted = 1, createdBy = N'MERIT tenant purge', modifiedBy = N'MERIT tenant purge', deletedBy = N'MERIT tenant purge'
              WHERE (rootTenantId = @rootTenantId)
-               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
+               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge');
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
@@ -1219,9 +1250,9 @@ BEGIN
         BEGIN
             BEGIN TRANSACTION;
             UPDATE TOP (5000) auth.sessionScopeRoot
-               SET isDeleted = 1, modifiedBy = N'MERIT tenant purge'
+               SET isDeleted = 1, createdBy = N'MERIT tenant purge', modifiedBy = N'MERIT tenant purge', deletedBy = N'MERIT tenant purge'
              WHERE (rootTenantId = @rootTenantId)
-               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
+               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge');
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
@@ -1236,9 +1267,9 @@ BEGIN
         BEGIN
             BEGIN TRANSACTION;
             UPDATE TOP (5000) auth.sessionScope
-               SET actingTenantId = NULL, userProfileId = NULL, viewAsUserId = NULL, revokedUtc = COALESCE (revokedUtc, SYSUTCDATETIME ()), isDeleted = 1, modifiedBy = N'MERIT tenant purge'
+               SET actingTenantId = NULL, userProfileId = NULL, viewAsUserId = NULL, revokedUtc = COALESCE (revokedUtc, SYSUTCDATETIME ()), isDeleted = 1, createdBy = N'MERIT tenant purge', modifiedBy = N'MERIT tenant purge', deletedBy = N'MERIT tenant purge'
              WHERE (rootTenantId = @rootTenantId)
-               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
+               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge');
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
@@ -1253,9 +1284,9 @@ BEGIN
         BEGIN
             BEGIN TRANSACTION;
             UPDATE TOP (5000) auth.appUser
-               SET userName = CONCAT (N'purged-', CAST (appUserId AS NVARCHAR (36))), displayName = N'[purged]', email = NULL, passwordHash = N'[purged]', securityStamp = '00000000-0000-0000-0000-000000000000', mfaSecretProtected = NULL, mfaEnabled = 0, failedSignInCount = 0, lockoutEndUtc = NULL, lastSignInUtc = NULL, isActive = 0, mfaEmailVerifiedUtc = NULL, passwordChangedUtc = NULL, lastTotpStep = NULL, isDeleted = 1, modifiedBy = N'MERIT tenant purge'
+               SET userName = CONCAT (N'purged-', CAST (appUserId AS NVARCHAR (36))), displayName = N'[purged]', email = NULL, passwordHash = N'[purged]', securityStamp = '00000000-0000-0000-0000-000000000000', mfaSecretProtected = NULL, mfaEnabled = 0, failedSignInCount = 0, lockoutEndUtc = NULL, lastSignInUtc = NULL, isActive = 0, mfaEmailVerifiedUtc = NULL, passwordChangedUtc = NULL, lastTotpStep = NULL, isDeleted = 1, createdBy = N'MERIT tenant purge', modifiedBy = N'MERIT tenant purge', deletedBy = N'MERIT tenant purge'
              WHERE (rootTenantId = @rootTenantId)
-               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
+               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge');
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
@@ -1270,9 +1301,9 @@ BEGIN
         BEGIN
             BEGIN TRANSACTION;
             UPDATE TOP (5000) auth.role
-               SET roleName = N'[purged]', isDeleted = 1, modifiedBy = N'MERIT tenant purge'
+               SET roleName = N'[purged]', isDeleted = 1, createdBy = N'MERIT tenant purge', modifiedBy = N'MERIT tenant purge', deletedBy = N'MERIT tenant purge'
              WHERE (rootTenantId = @rootTenantId)
-               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
+               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge');
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
@@ -1287,9 +1318,9 @@ BEGIN
         BEGIN
             BEGIN TRANSACTION;
             UPDATE TOP (5000) auth.tenant
-               SET tenantName = N'[purged]', statePostalCode = NULL, timeZone = NULL, isActive = 0, isDeleted = 1, modifiedBy = N'MERIT tenant purge'
+               SET tenantName = N'[purged]', statePostalCode = NULL, timeZone = NULL, isActive = 0, isDeleted = 1, createdBy = N'MERIT tenant purge', modifiedBy = N'MERIT tenant purge', deletedBy = N'MERIT tenant purge'
              WHERE (rootTenantId = @rootTenantId)
-               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');
+               AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge');
             SET @batch = @@ROWCOUNT;
             COMMIT TRANSACTION;
             SET @n += @batch;
@@ -1300,84 +1331,89 @@ BEGIN
         END;
         INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'auth.tenant', @n, 0, 'scrubbedAndSoftDeleted');
 
-        -- Step 3 (I18): Final verification pass over all 70 mutable tables after fencing and purging.
-        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM auth.mfaRecoveryCode WHERE (appUserId IN (SELECT appUserId FROM auth.appUser WHERE rootTenantId = @rootTenantId)) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'auth.mfaRecoveryCode';
-        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM auth.passwordReset WHERE (appUserId IN (SELECT appUserId FROM auth.appUser WHERE rootTenantId = @rootTenantId)) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'auth.passwordReset';
-        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM auth.mfaEmailChallenge WHERE (appUserId IN (SELECT appUserId FROM auth.appUser WHERE rootTenantId = @rootTenantId)) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'auth.mfaEmailChallenge';
-        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM auth.userProfileGrant WHERE (userProfileId IN (SELECT up.userProfileId FROM auth.userProfile AS up JOIN auth.appUser AS u ON u.appUserId = up.appUserId WHERE u.rootTenantId = @rootTenantId)) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'auth.userProfileGrant';
-        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM auth.userProfile WHERE (appUserId IN (SELECT appUserId FROM auth.appUser WHERE rootTenantId = @rootTenantId)) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'auth.userProfile';
-        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM auth.userAssignment WHERE (appUserId IN (SELECT appUserId FROM auth.appUser WHERE rootTenantId = @rootTenantId) OR tenantId IN (SELECT tenantId FROM auth.tenant WHERE rootTenantId = @rootTenantId)) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'auth.userAssignment';
-        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM auth.sessionScopeTenant WHERE (sessionScopeId IN (SELECT sessionScopeId FROM auth.sessionScope WHERE rootTenantId = @rootTenantId)) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'auth.sessionScopeTenant';
-        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM auth.sessionScopePermission WHERE (sessionScopeId IN (SELECT sessionScopeId FROM auth.sessionScope WHERE rootTenantId = @rootTenantId)) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'auth.sessionScopePermission';
-        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM auth.sessionScopeAdminTenant WHERE (sessionScopeId IN (SELECT sessionScopeId FROM auth.sessionScope WHERE rootTenantId = @rootTenantId)) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'auth.sessionScopeAdminTenant';
-        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM auth.rolePermission WHERE (roleId IN (SELECT roleId FROM auth.role WHERE rootTenantId = @rootTenantId)) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'auth.rolePermission';
-        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM auth.tenantJurisdiction WHERE (tenantId IN (SELECT tenantId FROM auth.tenant WHERE rootTenantId = @rootTenantId)) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'auth.tenantJurisdiction';
-        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM auth.tenantClosure WHERE (ancestorTenantId IN (SELECT tenantId FROM auth.tenant WHERE rootTenantId = @rootTenantId) OR descendantTenantId IN (SELECT tenantId FROM auth.tenant WHERE rootTenantId = @rootTenantId)) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'auth.tenantClosure';
-        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM logs.auditEventChange WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'logs.auditEventChange';
-        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM logs.auditEventRecord WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'logs.auditEventRecord';
-        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM logs.securityFinding WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'logs.securityFinding';
-        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM logs.searchLog WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'logs.searchLog';
-        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM logs.screenVisit WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'logs.screenVisit';
-        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM logs.signInEvent WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'logs.signInEvent';
-        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.contactCorrection WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'dbo.contactCorrection';
-        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.caseResultLink WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'dbo.caseResultLink';
-        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.notificationObligation WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'dbo.notificationObligation';
-        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.personDocument WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'dbo.personDocument';
-        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.personActivity WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'dbo.personActivity';
-        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.matchExclusion WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'dbo.matchExclusion';
-        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.extractRun WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'dbo.extractRun';
-        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.jobQueue WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'dbo.jobQueue';
-        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.workTask WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'dbo.workTask';
-        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.caseCluster WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'dbo.caseCluster';
-        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.cluster WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'dbo.cluster';
-        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.environmentalSample WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'dbo.environmentalSample';
-        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.investigationCase WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'dbo.investigationCase';
-        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.investigation WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'dbo.investigation';
-        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.exposureSource WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'dbo.exposureSource';
-        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.caseActivity WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'dbo.caseActivity';
-        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.exposureCase WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'dbo.exposureCase';
-        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.stagingHoldReason WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'dbo.stagingHoldReason';
-        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.stagingRow WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'dbo.stagingRow';
-        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.labResult WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'dbo.labResult';
-        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.intakeBatch WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'dbo.intakeBatch';
-        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.intakeProfile WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'dbo.intakeProfile';
-        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.provider WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'dbo.provider';
-        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.product WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'dbo.product';
-        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.employmentAnalyte WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'dbo.employmentAnalyte';
-        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.employment WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'dbo.employment';
-        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.personLocation WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'dbo.personLocation';
-        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.locationOwner WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'dbo.locationOwner';
-        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.organizationSite WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'dbo.organizationSite';
-        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.location WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'dbo.location';
-        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.organizationType WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'dbo.organizationType';
-        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.organization WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'dbo.organization';
-        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.personRelationship WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'dbo.personRelationship';
-        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.pregnancyEpisode WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'dbo.pregnancyEpisode';
-        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.personIdentifier WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'dbo.personIdentifier';
-        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.personContactMethod WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'dbo.personContactMethod';
-        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.personRace WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'dbo.personRace';
-        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.personAlias WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'dbo.personAlias';
-        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.personMatchKey WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'dbo.personMatchKey';
-        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.personAccess WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'dbo.personAccess';
-        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.person WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'dbo.person';
-        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM config.workflowDefinition WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'config.workflowDefinition';
-        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM config.notificationRule WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'config.notificationRule';
-        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM config.environmentalStandard WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'config.environmentalStandard';
-        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM config.threshold WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'config.threshold';
-        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM config.jurisdictionSetting WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'config.jurisdictionSetting';
-        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM config.subJurisdiction WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'config.subJurisdiction';
-        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM auth.sessionScopeRoot WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'auth.sessionScopeRoot';
-        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM auth.sessionScope WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'auth.sessionScope';
-        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM auth.appUser WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'auth.appUser';
-        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM auth.role WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'auth.role';
-        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM auth.tenant WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'auth.tenant';
+        -- Step 3 (I18, Codex #2/#4): Final verification pass over all 70 mutable tables after fencing and purging.
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM auth.mfaRecoveryCode WHERE (appUserId IN (SELECT appUserId FROM auth.appUser WHERE rootTenantId = @rootTenantId)) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge')) WHERE tableName = N'auth.mfaRecoveryCode';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM auth.passwordReset WHERE (appUserId IN (SELECT appUserId FROM auth.appUser WHERE rootTenantId = @rootTenantId)) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge')) WHERE tableName = N'auth.passwordReset';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM auth.mfaEmailChallenge WHERE (appUserId IN (SELECT appUserId FROM auth.appUser WHERE rootTenantId = @rootTenantId)) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge')) WHERE tableName = N'auth.mfaEmailChallenge';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM auth.userProfileGrant WHERE (userProfileId IN (SELECT up.userProfileId FROM auth.userProfile AS up JOIN auth.appUser AS u ON u.appUserId = up.appUserId WHERE u.rootTenantId = @rootTenantId)) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge')) WHERE tableName = N'auth.userProfileGrant';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM auth.userProfile WHERE (appUserId IN (SELECT appUserId FROM auth.appUser WHERE rootTenantId = @rootTenantId)) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge')) WHERE tableName = N'auth.userProfile';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM auth.userAssignment WHERE (appUserId IN (SELECT appUserId FROM auth.appUser WHERE rootTenantId = @rootTenantId) OR tenantId IN (SELECT tenantId FROM auth.tenant WHERE rootTenantId = @rootTenantId)) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge')) WHERE tableName = N'auth.userAssignment';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM auth.sessionScopeTenant WHERE (sessionScopeId IN (SELECT sessionScopeId FROM auth.sessionScope WHERE rootTenantId = @rootTenantId) OR tenantId IN (SELECT tenantId FROM auth.tenant WHERE rootTenantId = @rootTenantId)) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge')) WHERE tableName = N'auth.sessionScopeTenant';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM auth.sessionScopePermission WHERE (sessionScopeId IN (SELECT sessionScopeId FROM auth.sessionScope WHERE rootTenantId = @rootTenantId)) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge')) WHERE tableName = N'auth.sessionScopePermission';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM auth.sessionScopeAdminTenant WHERE (sessionScopeId IN (SELECT sessionScopeId FROM auth.sessionScope WHERE rootTenantId = @rootTenantId) OR tenantId IN (SELECT tenantId FROM auth.tenant WHERE rootTenantId = @rootTenantId)) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge')) WHERE tableName = N'auth.sessionScopeAdminTenant';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM auth.rolePermission WHERE (roleId IN (SELECT roleId FROM auth.role WHERE rootTenantId = @rootTenantId)) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge')) WHERE tableName = N'auth.rolePermission';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM auth.tenantJurisdiction WHERE (tenantId IN (SELECT tenantId FROM auth.tenant WHERE rootTenantId = @rootTenantId)) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge')) WHERE tableName = N'auth.tenantJurisdiction';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM auth.tenantClosure WHERE (ancestorTenantId IN (SELECT tenantId FROM auth.tenant WHERE rootTenantId = @rootTenantId) OR descendantTenantId IN (SELECT tenantId FROM auth.tenant WHERE rootTenantId = @rootTenantId)) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge')) WHERE tableName = N'auth.tenantClosure';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM logs.auditEventChange WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge')) WHERE tableName = N'logs.auditEventChange';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM logs.auditEventRecord WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge')) WHERE tableName = N'logs.auditEventRecord';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM logs.securityFinding WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge')) WHERE tableName = N'logs.securityFinding';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM logs.searchLog WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge')) WHERE tableName = N'logs.searchLog';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM logs.screenVisit WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge')) WHERE tableName = N'logs.screenVisit';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM logs.signInEvent WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge')) WHERE tableName = N'logs.signInEvent';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.contactCorrection WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge')) WHERE tableName = N'dbo.contactCorrection';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.caseResultLink WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge')) WHERE tableName = N'dbo.caseResultLink';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.notificationObligation WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge')) WHERE tableName = N'dbo.notificationObligation';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.personDocument WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge')) WHERE tableName = N'dbo.personDocument';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.personActivity WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge')) WHERE tableName = N'dbo.personActivity';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.matchExclusion WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge')) WHERE tableName = N'dbo.matchExclusion';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.extractRun WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge')) WHERE tableName = N'dbo.extractRun';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.jobQueue WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge')) WHERE tableName = N'dbo.jobQueue';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.workTask WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge')) WHERE tableName = N'dbo.workTask';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.caseCluster WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge')) WHERE tableName = N'dbo.caseCluster';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.cluster WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge')) WHERE tableName = N'dbo.cluster';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.environmentalSample WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge')) WHERE tableName = N'dbo.environmentalSample';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.investigationCase WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge')) WHERE tableName = N'dbo.investigationCase';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.investigation WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge')) WHERE tableName = N'dbo.investigation';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.exposureSource WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge')) WHERE tableName = N'dbo.exposureSource';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.caseActivity WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge')) WHERE tableName = N'dbo.caseActivity';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.exposureCase WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge')) WHERE tableName = N'dbo.exposureCase';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.stagingHoldReason WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge')) WHERE tableName = N'dbo.stagingHoldReason';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.stagingRow WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge')) WHERE tableName = N'dbo.stagingRow';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.labResult WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge')) WHERE tableName = N'dbo.labResult';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.intakeBatch WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge')) WHERE tableName = N'dbo.intakeBatch';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.intakeProfile WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge')) WHERE tableName = N'dbo.intakeProfile';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.provider WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge')) WHERE tableName = N'dbo.provider';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.product WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge')) WHERE tableName = N'dbo.product';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.employmentAnalyte WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge')) WHERE tableName = N'dbo.employmentAnalyte';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.employment WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge')) WHERE tableName = N'dbo.employment';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.personLocation WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge')) WHERE tableName = N'dbo.personLocation';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.locationOwner WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge')) WHERE tableName = N'dbo.locationOwner';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.organizationSite WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge')) WHERE tableName = N'dbo.organizationSite';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.location WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge')) WHERE tableName = N'dbo.location';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.organizationType WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge')) WHERE tableName = N'dbo.organizationType';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.organization WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge')) WHERE tableName = N'dbo.organization';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.personRelationship WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge')) WHERE tableName = N'dbo.personRelationship';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.pregnancyEpisode WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge')) WHERE tableName = N'dbo.pregnancyEpisode';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.personIdentifier WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge')) WHERE tableName = N'dbo.personIdentifier';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.personContactMethod WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge')) WHERE tableName = N'dbo.personContactMethod';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.personRace WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge')) WHERE tableName = N'dbo.personRace';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.personAlias WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge')) WHERE tableName = N'dbo.personAlias';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.personMatchKey WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge')) WHERE tableName = N'dbo.personMatchKey';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.personAccess WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge')) WHERE tableName = N'dbo.personAccess';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM dbo.person WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge')) WHERE tableName = N'dbo.person';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM config.workflowDefinition WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge')) WHERE tableName = N'config.workflowDefinition';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM config.notificationRule WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge')) WHERE tableName = N'config.notificationRule';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM config.environmentalStandard WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge')) WHERE tableName = N'config.environmentalStandard';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM config.threshold WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge')) WHERE tableName = N'config.threshold';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM config.jurisdictionSetting WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge')) WHERE tableName = N'config.jurisdictionSetting';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM config.subJurisdiction WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge')) WHERE tableName = N'config.subJurisdiction';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM auth.sessionScopeRoot WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge')) WHERE tableName = N'auth.sessionScopeRoot';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM auth.sessionScope WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge')) WHERE tableName = N'auth.sessionScope';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM auth.appUser WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge')) WHERE tableName = N'auth.appUser';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM auth.role WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge')) WHERE tableName = N'auth.role';
+        UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM auth.tenant WHERE (rootTenantId = @rootTenantId) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge')) WHERE tableName = N'auth.tenant';
         DECLARE @ledgerRows INT = (SELECT COUNT (*) FROM logs.auditEvent WHERE rootTenantId = @rootTenantId);
         INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'logs.auditEvent', @ledgerRows, 0, 'retainedAppendOnlyLedger');
 
         DECLARE @targetCode VARCHAR (30) = (SELECT tenantCode FROM auth.tenant WHERE tenantId = @rootTenantId);
+        DECLARE @totalRemaining INT = (SELECT COALESCE (SUM (remainingUnscrubbed), 0) FROM @report WHERE disposition = 'scrubbedAndSoftDeleted');
         IF @startedDryRunTx = 1 AND @@TRANCOUNT > 0
         BEGIN
             ROLLBACK TRANSACTION;
+        END;
+        IF @totalRemaining > 0
+        BEGIN
+            ;THROW 51409, N'Root tenant purge incomplete: residual unscrubbed rows remain after fencing and scrubbing. Drain in-flight writers and re-run.', 1;
         END;
 
         SELECT tableName, rowsAffected, remainingUnscrubbed, disposition FROM @report ORDER BY tableName;
@@ -1385,7 +1421,7 @@ BEGIN
                @targetCode AS tenantCode,
                @dryRun AS isDryRun,
                (SELECT SUM (rowsAffected) FROM @report WHERE disposition = 'scrubbedAndSoftDeleted') AS totalRowsPurged,
-               (SELECT SUM (remainingUnscrubbed) FROM @report WHERE disposition = 'scrubbedAndSoftDeleted') AS totalRemainingUnscrubbed,
+               @totalRemaining AS totalRemainingUnscrubbed,
                @ledgerRows AS ledgerRowsRetained,
                DATEADD (DAY, @backupRetentionDays, SYSUTCDATETIME ()) AS backupAgeOutUtc;
         SET @Comments = CONCAT (CASE WHEN @dryRun = 1 THEN N'Dry-run purge ' ELSE N'Purged ' END, N'rootTenantId=', @rootTenantId);

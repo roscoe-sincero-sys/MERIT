@@ -35,9 +35,9 @@ CHILD_AUTH_TABLES: list[tuple[str, str, str]] = [
     ("auth", "userProfileGrant", "userProfileId IN (SELECT up.userProfileId FROM auth.userProfile AS up JOIN auth.appUser AS u ON u.appUserId = up.appUserId WHERE u.rootTenantId = @rootTenantId)"),
     ("auth", "userProfile", "appUserId IN (SELECT appUserId FROM auth.appUser WHERE rootTenantId = @rootTenantId)"),
     ("auth", "userAssignment", "appUserId IN (SELECT appUserId FROM auth.appUser WHERE rootTenantId = @rootTenantId) OR tenantId IN (SELECT tenantId FROM auth.tenant WHERE rootTenantId = @rootTenantId)"),
-    ("auth", "sessionScopeTenant", "sessionScopeId IN (SELECT sessionScopeId FROM auth.sessionScope WHERE rootTenantId = @rootTenantId)"),
+    ("auth", "sessionScopeTenant", "sessionScopeId IN (SELECT sessionScopeId FROM auth.sessionScope WHERE rootTenantId = @rootTenantId) OR tenantId IN (SELECT tenantId FROM auth.tenant WHERE rootTenantId = @rootTenantId)"),
     ("auth", "sessionScopePermission", "sessionScopeId IN (SELECT sessionScopeId FROM auth.sessionScope WHERE rootTenantId = @rootTenantId)"),
-    ("auth", "sessionScopeAdminTenant", "sessionScopeId IN (SELECT sessionScopeId FROM auth.sessionScope WHERE rootTenantId = @rootTenantId)"),
+    ("auth", "sessionScopeAdminTenant", "sessionScopeId IN (SELECT sessionScopeId FROM auth.sessionScope WHERE rootTenantId = @rootTenantId) OR tenantId IN (SELECT tenantId FROM auth.tenant WHERE rootTenantId = @rootTenantId)"),
     ("auth", "rolePermission", "roleId IN (SELECT roleId FROM auth.role WHERE rootTenantId = @rootTenantId)"),
     ("auth", "tenantJurisdiction", "tenantId IN (SELECT tenantId FROM auth.tenant WHERE rootTenantId = @rootTenantId)"),
     ("auth", "tenantClosure", "ancestorTenantId IN (SELECT tenantId FROM auth.tenant WHERE rootTenantId = @rootTenantId) OR descendantTenantId IN (SELECT tenantId FROM auth.tenant WHERE rootTenantId = @rootTenantId)"),
@@ -173,7 +173,9 @@ NON_NULL_SCRUB_OVERRIDES: dict[tuple[str, str], str] = {
     ("dbo.labResult", "unitCanonical"): "N'[purged]'",
     ("dbo.labResult", "valueText"): "N'[purged]'",
     ("dbo.labResult", "reportedSnapshotJson"): "N'{}'",
-    ("dbo.exposureCase", "caseStatus"): "'open'",
+    ("dbo.exposureCase", "caseStatus"): "'closed'",
+    ("dbo.exposureCase", "closureReason"): "'other'",
+    ("dbo.exposureCase", "closedDate"): "CAST (SYSUTCDATETIME () AS DATE)",
     ("dbo.stagingRow", "parsedJson"): "N'{}'",
     ("dbo.contactCorrection", "caregiverName"): "N'[purged]'",
     ("dbo.contactCorrection", "proposedValue"): "N'[purged]'",
@@ -233,7 +235,9 @@ def _scrub_assignments(full: str) -> list[str]:
         elif cname == "isActive":
             assigns.append(f"{cname} = 0")
     assigns.append("isDeleted = 1")
+    assigns.append("createdBy = N'MERIT tenant purge'")
     assigns.append("modifiedBy = N'MERIT tenant purge'")
+    assigns.append("deletedBy = N'MERIT tenant purge'")
     return assigns
 
 
@@ -326,7 +330,28 @@ def _export_body() -> str:
 
 
 def _purge_body() -> str:
+    unscrubbed = "(isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge' OR createdBy <> N'MERIT tenant purge' OR COALESCE (deletedBy, N'') <> N'MERIT tenant purge')"
     lines = [
+        "IF @dryRun IS NULL",
+        "BEGIN",
+        "    ;THROW 51422, N'@dryRun must be 0 or 1.', 1;",
+        "END;",
+        "IF EXISTS (",
+        "    SELECT 1",
+        "      FROM auth.tenant AS child",
+        "     WHERE child.rootTenantId <> @rootTenantId",
+        "       AND child.isDeleted = 0",
+        "       AND (   child.parentTenantId IN (SELECT tenantId FROM auth.tenant WHERE rootTenantId = @rootTenantId)",
+        "            OR EXISTS (SELECT 1",
+        "                         FROM auth.tenantClosure AS tc",
+        "                         JOIN auth.tenant        AS anc ON anc.tenantId = tc.ancestorTenantId",
+        "                        WHERE tc.descendantTenantId = child.tenantId",
+        "                          AND tc.isDeleted = 0",
+        "                          AND anc.rootTenantId = @rootTenantId))",
+        ")",
+        "BEGIN",
+        "    ;THROW 51422, N'This root tenant has live descendant data roots. Reparent or purge all child roots before purging this root.', 1;",
+        "END;",
         "DECLARE @report TABLE (",
         "    tableName           NVARCHAR (128) NOT NULL PRIMARY KEY,",
         "    rowsAffected        INT NOT NULL,",
@@ -341,11 +366,22 @@ def _purge_body() -> str:
         "    SET @startedDryRunTx = 1;",
         "END;",
         "",
-        "-- Step 1 (I18): Fence the root BEFORE purging any table so active users and queued jobs cannot insert late rows.",
+        "-- Step 1 (I18, Codex #2/#4): Fence the root under the MERIT.grants exclusive applock BEFORE purging any table.",
+        "-- Uses a distinct fence marker (N'MERIT tenant fence') so previously soft-deleted rows are never mistaken for scrubbed.",
         "BEGIN TRANSACTION;",
-        "UPDATE auth.tenant SET isActive = 0, modifiedBy = N'MERIT tenant purge' WHERE rootTenantId = @rootTenantId AND isActive = 1;",
-        "UPDATE auth.sessionScope SET revokedUtc = COALESCE (revokedUtc, SYSUTCDATETIME ()), modifiedBy = N'MERIT tenant purge' WHERE rootTenantId = @rootTenantId AND revokedUtc IS NULL;",
-        "UPDATE dbo.jobQueue SET jobStatus = 'failed', modifiedBy = N'MERIT tenant purge' WHERE rootTenantId = @rootTenantId AND jobStatus IN ('queued', 'running');",
+        "DECLARE @grantLock INT;",
+        "EXEC @grantLock = sys.sp_getapplock @Resource = N'MERIT.grants', @LockMode = 'Exclusive',",
+        "     @LockOwner = 'Transaction', @LockTimeout = 10000;",
+        "IF @grantLock < 0",
+        "BEGIN",
+        "    ;THROW 51409, N'Authorization changes are busy; please retry.', 1;",
+        "END;",
+        "UPDATE auth.tenant SET isActive = 0, modifiedBy = N'MERIT tenant fence' WHERE rootTenantId = @rootTenantId AND isActive = 1;",
+        "UPDATE auth.sessionScope SET revokedUtc = COALESCE (revokedUtc, SYSUTCDATETIME ()), modifiedBy = N'MERIT tenant fence' WHERE rootTenantId = @rootTenantId AND revokedUtc IS NULL;",
+        "UPDATE auth.sessionScopeRoot SET isDeleted = 1, modifiedBy = N'MERIT tenant fence' WHERE rootTenantId = @rootTenantId AND isDeleted = 0;",
+        "UPDATE auth.sessionScopeTenant SET isDeleted = 1, modifiedBy = N'MERIT tenant fence' WHERE tenantId IN (SELECT tenantId FROM auth.tenant WHERE rootTenantId = @rootTenantId) AND isDeleted = 0;",
+        "UPDATE auth.sessionScopeAdminTenant SET isDeleted = 1, modifiedBy = N'MERIT tenant fence' WHERE tenantId IN (SELECT tenantId FROM auth.tenant WHERE rootTenantId = @rootTenantId) AND isDeleted = 0;",
+        "UPDATE dbo.jobQueue SET jobStatus = 'failed', modifiedBy = N'MERIT tenant fence' WHERE rootTenantId = @rootTenantId AND jobStatus IN ('queued', 'running');",
         "COMMIT TRANSACTION;",
         "",
         "-- Step 2 (B4, I16): Scrub and soft-delete all 70 mutable tenant/auth tables in independently committed 5,000-row batches.",
@@ -361,7 +397,7 @@ def _purge_body() -> str:
             f"    UPDATE TOP (5000) {full}\n"
             f"       SET {set_clause}\n"
             f"     WHERE ({pred})\n"
-            f"       AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge');\n"
+            f"       AND {unscrubbed};\n"
             f"    SET @batch = @@ROWCOUNT;\n"
             f"    COMMIT TRANSACTION;\n"
             f"    SET @n += @batch;\n"
@@ -373,11 +409,11 @@ def _purge_body() -> str:
             f"INSERT @report (tableName, rowsAffected, remainingUnscrubbed, disposition) VALUES (N'{full}', @n, 0, 'scrubbedAndSoftDeleted');"
         )
     lines.append("")
-    lines.append("-- Step 3 (I18): Final verification pass over all 70 mutable tables after fencing and purging.")
+    lines.append("-- Step 3 (I18, Codex #2/#4): Final verification pass over all 70 mutable tables after fencing and purging.")
     for s, n, pred in ALL_MUTABLE_SPECS:
         full = f"{s}.{n}"
         lines.append(
-            f"UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM {full} WHERE ({pred}) AND (isDeleted = 0 OR modifiedBy <> N'MERIT tenant purge')) WHERE tableName = N'{full}';"
+            f"UPDATE @report SET remainingUnscrubbed = (SELECT COUNT (*) FROM {full} WHERE ({pred}) AND {unscrubbed}) WHERE tableName = N'{full}';"
         )
     for s, n in APPEND_ONLY_ROOT_TABLES:
         full = f"{s}.{n}"
@@ -387,9 +423,14 @@ def _purge_body() -> str:
         )
     lines.append("")
     lines.append("DECLARE @targetCode VARCHAR (30) = (SELECT tenantCode FROM auth.tenant WHERE tenantId = @rootTenantId);")
+    lines.append("DECLARE @totalRemaining INT = (SELECT COALESCE (SUM (remainingUnscrubbed), 0) FROM @report WHERE disposition = 'scrubbedAndSoftDeleted');")
     lines.append("IF @startedDryRunTx = 1 AND @@TRANCOUNT > 0")
     lines.append("BEGIN")
     lines.append("    ROLLBACK TRANSACTION;")
+    lines.append("END;")
+    lines.append("IF @totalRemaining > 0")
+    lines.append("BEGIN")
+    lines.append("    ;THROW 51409, N'Root tenant purge incomplete: residual unscrubbed rows remain after fencing and scrubbing. Drain in-flight writers and re-run.', 1;")
     lines.append("END;")
     lines.append("")
     lines.append("SELECT tableName, rowsAffected, remainingUnscrubbed, disposition FROM @report ORDER BY tableName;")
@@ -398,7 +439,7 @@ def _purge_body() -> str:
         "       @targetCode AS tenantCode,\n"
         "       @dryRun AS isDryRun,\n"
         "       (SELECT SUM (rowsAffected) FROM @report WHERE disposition = 'scrubbedAndSoftDeleted') AS totalRowsPurged,\n"
-        "       (SELECT SUM (remainingUnscrubbed) FROM @report WHERE disposition = 'scrubbedAndSoftDeleted') AS totalRemainingUnscrubbed,\n"
+        "       @totalRemaining AS totalRemainingUnscrubbed,\n"
         "       @ledgerRows AS ledgerRowsRetained,\n"
         "       DATEADD (DAY, @backupRetentionDays, SYSUTCDATETIME ()) AS backupAgeOutUtc;"
     )
@@ -420,26 +461,40 @@ PROCS = [
         "body": _export_body(),
     },
     {
-        "schema": "config", "name": "uspExportRootTenant", "kind": "write", "grants": BOTH, "ticket": "346",
+        "schema": "config", "name": "uspExportRootTenant", "kind": "write", "no_tx": True, "grants": BOTH, "ticket": "346",
         "permission_all": ["security.investigate", "tenant.create"],
         "desc": "Platform-only, audited per-root-tenant data export covering all 70 mutable tenant/auth tables plus "
-                "read-only logs.auditEvent (#346, I17). Pass @tableName = NULL for the full manifest (active + "
+                "read-only logs.auditEvent (#346, I17). Commits its durable export audit event before streaming rows "
+                "and rejects enclosing transactions. Pass @tableName = NULL for the full manifest (active + "
                 "soft-deleted counts) or a table name to stream paginated rows with credential columns excluded.",
         "params": """@rootTenantId UNIQUEIDENTIFIER
 , @tableName    NVARCHAR (128) = NULL
 , @pageNumber   INT = 1
 , @pageSize     INT = 1000""",
         "key": "CONCAT (N'rootTenantId=', @rootTenantId, N', pageNumber=', @pageNumber, N', pageSize=', @pageSize)",
-        "validate": """IF NOT EXISTS (SELECT 1 FROM auth.tenant WHERE tenantId = @rootTenantId AND tenantId = rootTenantId)
+        "validate": """IF @@TRANCOUNT > 0
+BEGIN
+    ;THROW 51422, N'config.uspExportRootTenant must not be called inside an enclosing transaction; it commits its export audit event before streaming rows.', 1;
+END;
+IF NOT EXISTS (SELECT 1 FROM auth.tenant WHERE tenantId = @rootTenantId AND tenantId = rootTenantId)
 BEGIN
     ;THROW 51404, N'The root tenant was not found.', 1;
 END;""",
         "body": f"""
+DECLARE @exportFilterJson NVARCHAR (MAX) = (
+    SELECT @rootTenantId AS rootTenantId,
+           COALESCE (@tableName, N'[manifest]') AS tableName,
+           @pageNumber AS pageNumber,
+           @pageSize AS pageSize
+    FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
+);
+BEGIN TRANSACTION;
 {AUDIT_SESSION_VARS}
 INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, clientAddress, owningTenantId,
-                        sessionReference, traceId, actingTenantId, viewAsUserId, userAgentHash)
+                        sessionReference, traceId, actingTenantId, viewAsUserId, userAgentHash, filterJson)
 VALUES (auth.udfSessionUserId (), @rootTenantId, 'export', 'tenant', @rootTenantId, @auditClientAddress, @rootTenantId,
-        @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs, @auditUserAgentHash);
+        @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs, @auditUserAgentHash, @exportFilterJson);
+COMMIT TRANSACTION;
 
 EXEC config.uspExportRootTenantInternal @rootTenantId = @rootTenantId, @tableName = @tableName,
      @pageNumber = @pageNumber, @pageSize = @pageSize;
@@ -472,7 +527,11 @@ SET @Comments = CONCAT (N'Root tenant export completed for ', @rootTenantId);
 , @backupRetentionDays INT = 35
 , @dryRun              BIT = 0""",
         "key": "CONCAT (N'rootTenantId=', @rootTenantId, N', backupRetentionDays=', @backupRetentionDays, N', dryRun=', @dryRun)",
-        "validate": """DECLARE @targetCode VARCHAR (30), @targetType VARCHAR (30);
+        "validate": """IF @dryRun IS NULL
+BEGIN
+    ;THROW 51422, N'@dryRun must be 0 or 1.', 1;
+END;
+DECLARE @targetCode VARCHAR (30), @targetType VARCHAR (30);
 SELECT @targetCode = tenantCode, @targetType = tenantType
   FROM auth.tenant
  WHERE tenantId = @rootTenantId AND tenantId = rootTenantId;
@@ -485,11 +544,27 @@ IF @targetType = 'platform'
 BEGIN
     ;THROW 51422, N'The platform root tenant cannot be purged.', 1;
 END;
+IF EXISTS (
+    SELECT 1
+      FROM auth.tenant AS child
+     WHERE child.rootTenantId <> @rootTenantId
+       AND child.isDeleted = 0
+       AND (   child.parentTenantId IN (SELECT tenantId FROM auth.tenant WHERE rootTenantId = @rootTenantId)
+            OR EXISTS (SELECT 1
+                         FROM auth.tenantClosure AS tc
+                         JOIN auth.tenant        AS anc ON anc.tenantId = tc.ancestorTenantId
+                        WHERE tc.descendantTenantId = child.tenantId
+                          AND tc.isDeleted = 0
+                          AND anc.rootTenantId = @rootTenantId))
+)
+BEGIN
+    ;THROW 51422, N'This root tenant has live descendant data roots. Reparent or purge all child roots before purging this root.', 1;
+END;
 IF COALESCE (@confirmationCode, N'') <> CONCAT (N'PURGE:', @targetCode)
 BEGIN
     ;THROW 51422, N'Confirmation code mismatch. Pass PURGE:<tenantCode> to confirm root tenant purge.', 1;
 END;
-IF @backupRetentionDays NOT BETWEEN 1 AND 3650
+IF @backupRetentionDays IS NULL OR @backupRetentionDays NOT BETWEEN 1 AND 3650
 BEGIN
     ;THROW 51422, N'@backupRetentionDays must be between 1 and 3650.', 1;
 END;""",

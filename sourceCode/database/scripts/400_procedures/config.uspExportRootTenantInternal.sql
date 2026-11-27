@@ -132,7 +132,7 @@ BEGIN
                    COALESCE (SUM (CASE WHEN isDeleted = 0 THEN 1 ELSE 0 END), 0),
                    COALESCE (SUM (CASE WHEN isDeleted = 1 THEN 1 ELSE 0 END), 0),
                    COUNT (*), 'exportable'
-              FROM auth.sessionScopeTenant WHERE sessionScopeId IN (SELECT sessionScopeId FROM auth.sessionScope WHERE rootTenantId = @rootTenantId);
+              FROM auth.sessionScopeTenant WHERE sessionScopeId IN (SELECT sessionScopeId FROM auth.sessionScope WHERE rootTenantId = @rootTenantId) OR tenantId IN (SELECT tenantId FROM auth.tenant WHERE rootTenantId = @rootTenantId);
             INSERT @manifest (tableName, activeRows, deletedRows, totalRows, disposition)
             SELECT N'auth.sessionScopePermission',
                    COALESCE (SUM (CASE WHEN isDeleted = 0 THEN 1 ELSE 0 END), 0),
@@ -144,7 +144,7 @@ BEGIN
                    COALESCE (SUM (CASE WHEN isDeleted = 0 THEN 1 ELSE 0 END), 0),
                    COALESCE (SUM (CASE WHEN isDeleted = 1 THEN 1 ELSE 0 END), 0),
                    COUNT (*), 'exportable'
-              FROM auth.sessionScopeAdminTenant WHERE sessionScopeId IN (SELECT sessionScopeId FROM auth.sessionScope WHERE rootTenantId = @rootTenantId);
+              FROM auth.sessionScopeAdminTenant WHERE sessionScopeId IN (SELECT sessionScopeId FROM auth.sessionScope WHERE rootTenantId = @rootTenantId) OR tenantId IN (SELECT tenantId FROM auth.tenant WHERE rootTenantId = @rootTenantId);
             INSERT @manifest (tableName, activeRows, deletedRows, totalRows, disposition)
             SELECT N'auth.rolePermission',
                    COALESCE (SUM (CASE WHEN isDeleted = 0 THEN 1 ELSE 0 END), 0),
@@ -570,7 +570,7 @@ BEGIN
         BEGIN
             SELECT sessionScopeTenantId, tenantId, accessLevel, canReadRelatedContacts, canReadIdentifiedResults, canReadIdentifiedCases, isDeleted, createdBy, createdDateUtc, modifiedBy, modifiedDateUtc, deletedBy, deletedDateUtc
               FROM auth.sessionScopeTenant
-             WHERE sessionScopeId IN (SELECT sessionScopeId FROM auth.sessionScope WHERE rootTenantId = @rootTenantId)
+             WHERE sessionScopeId IN (SELECT sessionScopeId FROM auth.sessionScope WHERE rootTenantId = @rootTenantId) OR tenantId IN (SELECT tenantId FROM auth.tenant WHERE rootTenantId = @rootTenantId)
              ORDER BY sessionScopeTenantId
             OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY;
         END
@@ -586,7 +586,7 @@ BEGIN
         BEGIN
             SELECT sessionScopeAdminTenantId, tenantId, isDeleted, createdBy, createdDateUtc, modifiedBy, modifiedDateUtc, deletedBy, deletedDateUtc
               FROM auth.sessionScopeAdminTenant
-             WHERE sessionScopeId IN (SELECT sessionScopeId FROM auth.sessionScope WHERE rootTenantId = @rootTenantId)
+             WHERE sessionScopeId IN (SELECT sessionScopeId FROM auth.sessionScope WHERE rootTenantId = @rootTenantId) OR tenantId IN (SELECT tenantId FROM auth.tenant WHERE rootTenantId = @rootTenantId)
              ORDER BY sessionScopeAdminTenantId
             OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY;
         END

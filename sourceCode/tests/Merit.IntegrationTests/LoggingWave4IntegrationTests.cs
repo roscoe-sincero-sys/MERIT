@@ -100,7 +100,8 @@ public sealed class LoggingWave4IntegrationTests(MeritFixture fixture)
                 new { cid = changeId, dsk = deidScope, isk = idScope });
         }
 
-        // 2. Quoted and parenthesized data values in SQL Server error messages (e.g. 2627) are masked before storage in logs.ExecutionLog.
+        // 2. SQL Server system error messages (non-50000..51999) are always redacted before storage in logs.ExecutionLog,
+        //    including unclosed delimiters and values beyond 1,000 characters, while approved application messages (50000..51999) are preserved.
         var p = new DynamicParameters();
         p.Add("@ProcedureName", "[dbo].[uspSyntheticError345]");
         p.Add("@KeyParameters", "personId=123");
@@ -110,23 +111,51 @@ public sealed class LoggingWave4IntegrationTests(MeritFixture fixture)
         await conn.ExecuteAsync("logs.uspStartExecutionLogging", p, commandType: CommandType.StoredProcedure);
         long execId = p.Get<long>("@ExecutionLogId");
 
+        string longPrefix = new string('x', 980);
         await conn.ExecuteAsync("logs.uspRecordExecutionError", new
         {
             ExecutionLogId = execId,
             ProcedureName = "[dbo].[uspSyntheticError345]",
             KeyParameters = "personId=123",
             ErrorNumber = 2627,
-            ErrorMessage = "Violation of UNIQUE KEY constraint 'UX_person_test'. Cannot insert duplicate key in object 'dbo.person'. The duplicate key value is (SensitiveDupName345, '1990-01-01').",
+            ErrorMessage = longPrefix + " The duplicate key value is (SensitiveDupName345, 'UnclosedSensitiveQuote345",
             ErrorProcedure = "[dbo].[uspSyntheticError345]",
             ErrorLine = 42,
         }, commandType: CommandType.StoredProcedure);
 
-        string storedMsg = await conn.ExecuteScalarAsync<string>(
-            "SELECT ErrorMessage FROM logs.ExecutionLog WHERE ExecutionLogId = @id", new { id = execId }) ?? "";
-        Assert.DoesNotContain("SensitiveDupName345", storedMsg, StringComparison.Ordinal);
-        Assert.DoesNotContain("1990-01-01", storedMsg, StringComparison.Ordinal);
-        Assert.Contains("[redacted]", storedMsg, StringComparison.Ordinal);
+        var errRow = await conn.QuerySingleAsync<(string? ErrorMessage, int? ErrorNumber, string? ErrorProcedure, int? ErrorLine)>(
+            "SELECT ErrorMessage, ErrorNumber, ErrorProcedure, ErrorLine FROM logs.ExecutionLog WHERE ExecutionLogId = @id", new { id = execId });
+        Assert.DoesNotContain("SensitiveDupName345", errRow.ErrorMessage ?? "", StringComparison.Ordinal);
+        Assert.DoesNotContain("UnclosedSensitiveQuote345", errRow.ErrorMessage ?? "", StringComparison.Ordinal);
+        Assert.Contains("[redacted", errRow.ErrorMessage ?? "", StringComparison.Ordinal);
+        Assert.Equal(2627, errRow.ErrorNumber);
+        Assert.Equal("[dbo].[uspSyntheticError345]", errRow.ErrorProcedure);
+        Assert.Equal(42, errRow.ErrorLine);
         await conn.ExecuteAsync("UPDATE logs.ExecutionLog SET isDeleted = 1 WHERE ExecutionLogId = @id", new { id = execId });
+
+        // Approved application message (51422) remains intact.
+        var pApp = new DynamicParameters();
+        pApp.Add("@ProcedureName", "[dbo].[uspSyntheticError345App]");
+        pApp.Add("@KeyParameters", "personId=123");
+        pApp.Add("@StartDateUtc", DateTime.UtcNow);
+        pApp.Add("@ReCreatedAfterRollback", false);
+        pApp.Add("@ExecutionLogId", dbType: DbType.Int64, direction: ParameterDirection.Output);
+        await conn.ExecuteAsync("logs.uspStartExecutionLogging", pApp, commandType: CommandType.StoredProcedure);
+        long appExecId = pApp.Get<long>("@ExecutionLogId");
+        await conn.ExecuteAsync("logs.uspRecordExecutionError", new
+        {
+            ExecutionLogId = appExecId,
+            ProcedureName = "[dbo].[uspSyntheticError345App]",
+            KeyParameters = "personId=123",
+            ErrorNumber = 51422,
+            ErrorMessage = "Confirmation code mismatch.",
+            ErrorProcedure = "[dbo].[uspSyntheticError345App]",
+            ErrorLine = 10,
+        }, commandType: CommandType.StoredProcedure);
+        string appMsg = await conn.ExecuteScalarAsync<string>(
+            "SELECT ErrorMessage FROM logs.ExecutionLog WHERE ExecutionLogId = @id", new { id = appExecId }) ?? "";
+        Assert.Equal("Confirmation code mismatch.", appMsg);
+        await conn.ExecuteAsync("UPDATE logs.ExecutionLog SET isDeleted = 1 WHERE ExecutionLogId = @id", new { id = appExecId });
     }
 
     [SqlFact]
@@ -137,6 +166,8 @@ public sealed class LoggingWave4IntegrationTests(MeritFixture fixture)
 
         Guid synRoot = TimeOrderedId.New();
         string synCode = "OFFB" + Guid.NewGuid().ToString("N")[..6].ToUpperInvariant();
+        Guid synRegion = TimeOrderedId.New();
+        string synRegionCode = "REG" + Guid.NewGuid().ToString("N")[..6].ToUpperInvariant();
         Guid synPerson = TimeOrderedId.New();
         Guid synDeletedPerson = TimeOrderedId.New();
         Guid synLocation = TimeOrderedId.New();
@@ -146,13 +177,31 @@ public sealed class LoggingWave4IntegrationTests(MeritFixture fixture)
         Guid synRole = TimeOrderedId.New();
         Guid synAssign = TimeOrderedId.New();
         Guid synRecovery = TimeOrderedId.New();
+        Guid synDeletedQueuedJob = TimeOrderedId.New();
+        Guid synOrg = TimeOrderedId.New();
+        Guid synLabResult = TimeOrderedId.New();
+        Guid synCase = TimeOrderedId.New();
+        Guid crossRootSession = TimeOrderedId.New();
+        Guid crossRootScopeRoot = TimeOrderedId.New();
+        Guid crossRootScopeTenant = TimeOrderedId.New();
 
-        // Seed a synthetic root tenant with live + previously soft-deleted PHI, geocodes, raw intake file,
-        // credentials, recovery codes, live assignments, searchLog, and append-only auditEvent (B4, I17).
+        var mdAdmin = await conn.QuerySingleAsync<(Guid appUserId, Guid rootTenantId)>(
+            "SELECT TOP (1) appUserId, rootTenantId FROM auth.appUser WHERE userName = 'admin' AND isDeleted = 0");
+        var analyteInfo = await conn.QuerySingleAsync<(Guid analyteId, Guid analyteSpecimenId)>(
+            "SELECT TOP (1) analyteId, analyteSpecimenId FROM config.analyteSpecimen WHERE isDeleted = 0 ORDER BY analyteSpecimenId");
+
+        // Seed a parent region root and a synthetic child data root with live + previously soft-deleted PHI,
+        // actor createdBy stamps, a previously soft-deleted queued job with payload, a labResult + exposureCase,
+        // a cross-root session grant acting in MD with write access to synRoot, geocodes, raw intake file,
+        // credentials, recovery codes, live assignments, searchLog, and append-only auditEvent (B4, I17, Codex #1-#5, S20).
         await conn.ExecuteAsync(
             """
             INSERT auth.tenant (tenantId, rootTenantId, tenantCode, tenantName, tenantType, isActive)
-            VALUES (@r, @r, @code, N'Synthetic Offboarding Root', 'state', 1);
+            VALUES (@reg, @reg, @regCode, N'Synthetic Offboarding Region', 'region', 1);
+            INSERT auth.tenant (tenantId, rootTenantId, parentTenantId, tenantCode, tenantName, tenantType, isActive)
+            VALUES (@r, @r, @reg, @code, N'Synthetic Offboarding Root', 'state', 1);
+            INSERT auth.tenantClosure (tenantClosureId, ancestorTenantId, descendantTenantId, depth)
+            VALUES (NEWID (), @reg, @reg, 0), (NEWID (), @r, @r, 0), (NEWID (), @reg, @r, 1);
             INSERT auth.role (roleId, rootTenantId, roleCode, roleName)
             VALUES (@role, @r, 'stateAdmin', N'State Admin');
             INSERT auth.appUser (appUserId, rootTenantId, homeTenantId, userName, displayName, email, passwordHash, mfaSecretProtected, securityStamp, isActive)
@@ -161,22 +210,39 @@ public sealed class LoggingWave4IntegrationTests(MeritFixture fixture)
             VALUES (@assign, @u, @role, @r, 1, 'full', '2026-01-01');
             INSERT auth.mfaRecoveryCode (mfaRecoveryCodeId, appUserId, codeHash)
             VALUES (@rec, @u, N'recovery-hash-secret');
-            INSERT dbo.person (personId, rootTenantId, owningTenantId, lastName, firstName, lastNameKey, firstNameKey, dob, sex, ethnicity)
-            VALUES (@p, @r, @r, N'OffboardSecretName', N'Jane', N'OFFBOARDSECRETNAME', N'JANE', '2021-02-03', 'female', 'hispanic');
-            INSERT dbo.person (personId, rootTenantId, owningTenantId, lastName, firstName, lastNameKey, firstNameKey, dob, sex, ethnicity, isDeleted)
-            VALUES (@pd, @r, @r, N'PreviouslyDeletedPhi', N'Merged', N'PREVIOUSLYDELETEDPHI', N'MERGED', '2019-07-08', 'male', 'notHispanic', 1);
+            INSERT dbo.person (personId, rootTenantId, owningTenantId, lastName, firstName, lastNameKey, firstNameKey, dob, sex, ethnicity, createdBy)
+            VALUES (@p, @r, @r, N'OffboardSecretName', N'Jane', N'OFFBOARDSECRETNAME', N'JANE', '2021-02-03', 'female', 'hispanic', N'jdoe@example.org');
+            INSERT dbo.person (personId, rootTenantId, owningTenantId, lastName, firstName, lastNameKey, firstNameKey, dob, sex, ethnicity, isDeleted, createdBy)
+            VALUES (@pd, @r, @r, N'PreviouslyDeletedPhi', N'Merged', N'PREVIOUSLYDELETEDPHI', N'MERGED', '2019-07-08', 'male', 'notHispanic', 1, N'jdoe@example.org');
             INSERT dbo.location (locationId, rootTenantId, owningTenantId, addressLine1, city, state, postalCode, country, stdStatus, latitude, longitude, censusTract, addressKey)
             VALUES (@loc, @r, @r, N'123 Secret St', N'Baltimore', 'MD', '21201', 'US', 'raw', 39.2904, -76.6122, '24510010100', N'123-SECRET-ST');
+            INSERT dbo.organization (organizationId, rootTenantId, owningTenantId, organizationName, organizationNameKey)
+            VALUES (@org, @r, @r, N'Synthetic Lab', N'SYNTHETIC-LAB');
             INSERT dbo.intakeBatch (intakeBatchId, rootTenantId, owningTenantId, sourceChannel, receivedUtc, batchStatus, fileName, rawContent, receivedCount, loadedCount, heldCount, rejectedCount)
             VALUES (@batch, @r, @r, 'upload', SYSUTCDATETIME (), 'loaded', N'secret-lab.hl7', CONVERT (VARBINARY (MAX), 'MSH|^~\&|SECRET_LAB_FILE'), 1, 1, 0, 0);
+            INSERT dbo.labResult (labResultId, rootTenantId, owningTenantId, personId, analyteSpecimenId, collectedDate, receivedUtc, resultStatus, valueReported, unitReported, unitCanonical, labOrganizationId, reportedSnapshotJson, intakeBatchId)
+            VALUES (@lr, @r, @r, @p, @aspec, '2026-01-05', SYSUTCDATETIME (), 'final', 12.5, N'ug/dL', N'ug/dL', @org, N'{"name":"OffboardSecretName"}', @batch);
+            INSERT dbo.exposureCase (exposureCaseId, rootTenantId, owningTenantId, caseNumber, personId, analyteId, population, classification, computedClassification, caseStatus, qualifyingLabResultId, workflowTemplate, openedDate, createdBy)
+            VALUES (@ec, @r, @r, @caseNum, @p, @analyte, 'child', 'confirmed', 'confirmed', 'open', @lr, 'lead-child', '2026-01-10', N'jdoe@example.org');
+            INSERT dbo.jobQueue (jobId, rootTenantId, owningTenantId, jobType, jobStatus, payloadJson, availableUtc, requestedByUserId, isDeleted, createdBy)
+            VALUES (@jq, @r, @r, 'intake', 'queued', N'{"secret":"DeletedQueuedJobPayload346"}', SYSUTCDATETIME (), @u, 1, N'jdoe@example.org');
+            INSERT auth.sessionScope (sessionScopeId, appUserId, rootTenantId, actingTenantId, sessionReference, isDeidentified, expiresUtc)
+            VALUES (@crSess, @mdUser, @mdRoot, @mdRoot, NEWID (), 0, DATEADD (HOUR, 1, SYSUTCDATETIME ()));
+            INSERT auth.sessionScopeRoot (sessionScopeRootId, sessionScopeId, rootTenantId)
+            VALUES (@crRoot, @crSess, @r);
+            INSERT auth.sessionScopeTenant (sessionScopeTenantId, sessionScopeId, tenantId, accessLevel, canReadIdentifiedResults, canReadIdentifiedCases)
+            VALUES (@crTen, @crSess, @r, 'write', 1, 1);
             INSERT logs.searchLog (searchLogId, appUserId, rootTenantId, searchText, resultCount, searchedUtc)
             VALUES (@s, @u, @r, N'OffboardSecretQuery', 1, SYSUTCDATETIME ());
             INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId)
             VALUES (@u, @r, 'view', 'person', @p);
             """, new
             {
-                r = synRoot, code = synCode, role = synRole, u = synUser, uname = "u_" + synCode,
-                assign = synAssign, rec = synRecovery, p = synPerson, pd = synDeletedPerson,
+                reg = synRegion, regCode = synRegionCode, r = synRoot, code = synCode, role = synRole, u = synUser, uname = "u_" + synCode,
+                assign = synAssign, rec = synRecovery, p = synPerson, pd = synDeletedPerson, org = synOrg, lr = synLabResult,
+                aspec = analyteInfo.analyteSpecimenId, ec = synCase, caseNum = "C-" + synCode, analyte = analyteInfo.analyteId,
+                jq = synDeletedQueuedJob, crSess = crossRootSession, mdUser = mdAdmin.appUserId, mdRoot = mdAdmin.rootTenantId,
+                crRoot = crossRootScopeRoot, crTen = crossRootScopeTenant,
                 loc = synLocation, batch = synBatch, s = synSearch,
             });
 
@@ -221,10 +287,41 @@ public sealed class LoggingWave4IntegrationTests(MeritFixture fixture)
             Assert.DoesNotContain("mfaSecretProtected", exportedUser.Keys, StringComparer.OrdinalIgnoreCase);
             Assert.DoesNotContain("securityStamp", exportedUser.Keys, StringComparer.OrdinalIgnoreCase);
 
-            // 3. Purge rejects mismatched confirmation code (51422).
+            // 2b. Export rejects enclosing transactions (Codex #5) and commits durable export audit with filterJson context.
+            using (var tx = conn.BeginTransaction())
+            {
+                var txEx = await Assert.ThrowsAsync<SqlException>(() =>
+                    conn.ExecuteAsync("config.uspExportRootTenant", new { rootTenantId = synRoot }, transaction: tx, commandType: CommandType.StoredProcedure));
+                Assert.Equal(51422, txEx.Number);
+                tx.Rollback();
+            }
+
+            string? exportFilterJson = await conn.ExecuteScalarAsync<string?>(
+                "SELECT TOP (1) filterJson FROM logs.auditEvent WHERE rootTenantId = @r AND eventAction = 'export' AND entityType = 'tenant' ORDER BY auditEventId DESC",
+                new { r = synRoot });
+            Assert.NotNull(exportFilterJson);
+            Assert.Contains("auth.appUser", exportFilterJson, StringComparison.Ordinal);
+
+            // 3. Purge rejects mismatched confirmation code (51422), NULL @dryRun (Codex #1), and parent region with live child root (Codex #3).
             var badConfirm = await Assert.ThrowsAsync<SqlException>(() =>
                 conn.ExecuteAsync("config.uspPurgeRootTenant", new { rootTenantId = synRoot, confirmationCode = "PURGE:WRONG", backupRetentionDays = 35 }, commandType: CommandType.StoredProcedure));
             Assert.Equal(51422, badConfirm.Number);
+
+            int deleteEventsBeforeNull = await conn.ExecuteScalarAsync<int>(
+                "SELECT COUNT (*) FROM logs.auditEvent WHERE rootTenantId = @r AND eventAction = 'delete' AND entityType = 'tenant'",
+                new { r = synRoot });
+            var nullModeEx = await Assert.ThrowsAsync<SqlException>(() =>
+                conn.ExecuteAsync("config.uspPurgeRootTenant", new { rootTenantId = synRoot, confirmationCode = $"PURGE:{synCode}", backupRetentionDays = 35, dryRun = (bool?)null }, commandType: CommandType.StoredProcedure));
+            Assert.Equal(51422, nullModeEx.Number);
+            Assert.Equal(deleteEventsBeforeNull, await conn.ExecuteScalarAsync<int>(
+                "SELECT COUNT (*) FROM logs.auditEvent WHERE rootTenantId = @r AND eventAction = 'delete' AND entityType = 'tenant'",
+                new { r = synRoot }));
+            Assert.Equal(1, await conn.ExecuteScalarAsync<int>(
+                "SELECT COUNT (*) FROM dbo.person WHERE personId = @p AND isDeleted = 0", new { p = synPerson }));
+
+            var regionEx = await Assert.ThrowsAsync<SqlException>(() =>
+                conn.ExecuteAsync("config.uspPurgeRootTenant", new { rootTenantId = synRegion, confirmationCode = $"PURGE:{synRegionCode}", backupRetentionDays = 35 }, commandType: CommandType.StoredProcedure));
+            Assert.Equal(51422, regionEx.Number);
 
             // 4. Confirmed per-batch purge scrubs live AND previously soft-deleted PHI, geocodes, raw intake files,
             //    credentials, recovery codes, and assignments, verifies 0 unscrubbed rows remain, and isolates Maryland.
@@ -243,18 +340,41 @@ public sealed class LoggingWave4IntegrationTests(MeritFixture fixture)
                 Assert.True(summary.backupAgeOutUtc > DateTime.UtcNow.AddDays(34));
             }
 
-            // Verify BOTH live and previously soft-deleted persons are fully scrubbed (B4).
+            // Verify BOTH live and previously soft-deleted persons are fully scrubbed including createdBy/modifiedBy/deletedBy (B4, Codex #4).
             foreach (Guid pid in new[] { synPerson, synDeletedPerson })
             {
-                var pRow = await conn.QuerySingleAsync<(bool isDeleted, string lastName, string? firstName, DateTime? dob, string sex, string ethnicity)>(
-                    "SELECT isDeleted, lastName, firstName, dob, sex, ethnicity FROM dbo.person WHERE personId = @p", new { p = pid });
+                var pRow = await conn.QuerySingleAsync<(bool isDeleted, string lastName, string? firstName, DateTime? dob, string sex, string ethnicity, string createdBy, string modifiedBy, string? deletedBy)>(
+                    "SELECT isDeleted, lastName, firstName, dob, sex, ethnicity, createdBy, modifiedBy, deletedBy FROM dbo.person WHERE personId = @p", new { p = pid });
                 Assert.True(pRow.isDeleted);
                 Assert.Equal("[purged]", pRow.lastName);
                 Assert.Null(pRow.firstName);
                 Assert.Null(pRow.dob);
                 Assert.Equal("unknown", pRow.sex);
                 Assert.Equal("unknown", pRow.ethnicity);
+                Assert.Equal("MERIT tenant purge", pRow.createdBy);
+                Assert.Equal("MERIT tenant purge", pRow.modifiedBy);
+                Assert.Equal("MERIT tenant purge", pRow.deletedBy);
             }
+
+            // Verify previously soft-deleted queued job had its payload and actor fields scrubbed (Codex #4).
+            var jobRow = await conn.QuerySingleAsync<(bool isDeleted, string payloadJson, string createdBy, string modifiedBy)>(
+                "SELECT isDeleted, payloadJson, createdBy, modifiedBy FROM dbo.jobQueue WHERE jobId = @id", new { id = synDeletedQueuedJob });
+            Assert.True(jobRow.isDeleted);
+            Assert.Equal("{}", jobRow.payloadJson);
+            Assert.Equal("MERIT tenant purge", jobRow.createdBy);
+            Assert.Equal("MERIT tenant purge", jobRow.modifiedBy);
+
+            // Verify purged exposureCase is closed with closureReason = 'other' (S20).
+            var caseRow = await conn.QuerySingleAsync<(bool isDeleted, string caseStatus, string? closureReason, DateTime? closedDate)>(
+                "SELECT isDeleted, caseStatus, closureReason, closedDate FROM dbo.exposureCase WHERE exposureCaseId = @id", new { id = synCase });
+            Assert.True(caseRow.isDeleted);
+            Assert.Equal("closed", caseRow.caseStatus);
+            Assert.Equal("other", caseRow.closureReason);
+            Assert.NotNull(caseRow.closedDate);
+
+            // Verify cross-root session grants pointing to synRoot were revoked & scrubbed (Codex #2).
+            Assert.True(await conn.ExecuteScalarAsync<bool>("SELECT isDeleted FROM auth.sessionScopeRoot WHERE sessionScopeRootId = @id", new { id = crossRootScopeRoot }));
+            Assert.True(await conn.ExecuteScalarAsync<bool>("SELECT isDeleted FROM auth.sessionScopeTenant WHERE sessionScopeTenantId = @id", new { id = crossRootScopeTenant }));
 
             // Verify location geocodes/ZIP, intakeBatch.rawContent, appUser credentials, recoveryCode, and userAssignment are scrubbed (B4).
             var locRow = await conn.QuerySingleAsync<(bool isDeleted, string? postalCode, decimal? latitude, decimal? longitude, string? censusTract)>(
@@ -321,11 +441,18 @@ public sealed class LoggingWave4IntegrationTests(MeritFixture fixture)
         }
         finally
         {
-            // I19: Always ensure the synthetic root is purged/deactivated even if an assertion fails mid-test.
+            // I19: Always ensure synthetic roots and cross-root session are cleaned up even if an assertion fails mid-test.
+            await conn.ExecuteAsync("UPDATE auth.sessionScope SET revokedUtc = COALESCE (revokedUtc, SYSUTCDATETIME ()) WHERE sessionScopeId = @s;", new { s = crossRootSession });
             if (await conn.ExecuteScalarAsync<int>("SELECT COUNT (*) FROM auth.tenant WHERE tenantId = @r AND isDeleted = 0", new { r = synRoot }) > 0)
             {
                 await conn.ExecuteAsync("config.uspPurgeRootTenant",
                     new { rootTenantId = synRoot, confirmationCode = $"PURGE:{synCode}", backupRetentionDays = 35 },
+                    commandType: CommandType.StoredProcedure);
+            }
+            if (await conn.ExecuteScalarAsync<int>("SELECT COUNT (*) FROM auth.tenant WHERE tenantId = @r AND isDeleted = 0", new { r = synRegion }) > 0)
+            {
+                await conn.ExecuteAsync("config.uspPurgeRootTenant",
+                    new { rootTenantId = synRegion, confirmationCode = $"PURGE:{synRegionCode}", backupRetentionDays = 35 },
                     commandType: CommandType.StoredProcedure);
             }
         }

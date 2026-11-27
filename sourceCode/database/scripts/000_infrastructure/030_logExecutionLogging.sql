@@ -834,35 +834,17 @@ BEGIN
               , @SafeContext       NVARCHAR (500) = LEFT (@ContextMessage, 500)
               , @SafeDynamicSql    NVARCHAR (100) = CASE WHEN @DynamicSql IS NULL THEN NULL ELSE N'[omitted by diagnostic minimization]' END;
 
-        -- #345: Mask quoted/parenthesized data values in SQL Server system error messages (non-50000..51999) so
-        -- duplicate-key values, conversion inputs, or constraint payloads are never persisted in logs.ExecutionLog.
+        -- #345: Never persist raw SQL Server system error messages (non-50000..51999) in logs.ExecutionLog;
+        -- system errors can embed patient/user data values anywhere in the text or across truncation boundaries.
+        -- Preserve ErrorNumber, ErrorProcedure, and ErrorLine for triage while keeping approved application
+        -- messages (50000..51999) on their existing path.
         IF @SafeErrorMessage IS NOT NULL AND (@ErrorNumber IS NULL OR @ErrorNumber NOT BETWEEN 50000 AND 51999)
         BEGIN
-            DECLARE @pos INT = 1, @end INT, @guard INT = 0;
-            -- Mask single-quoted literals ('...' -> '[redacted]').
-            WHILE @guard < 20
-            BEGIN
-                SET @pos = CHARINDEX (N'''', @SafeErrorMessage, @pos);
-                IF @pos = 0 BREAK;
-                SET @end = CHARINDEX (N'''', @SafeErrorMessage, @pos + 1);
-                IF @end = 0 BREAK;
-                SET @SafeErrorMessage = STUFF (@SafeErrorMessage, @pos, @end - @pos + 1, N'''[redacted]''');
-                SET @pos = @pos + 12;
-                SET @guard += 1;
-            END;
-            -- Mask parenthesized value lists (e.g. "The duplicate key value is (...)" -> "([redacted])").
-            SET @pos = 1; SET @guard = 0;
-            WHILE @guard < 20
-            BEGIN
-                SET @pos = CHARINDEX (N'(', @SafeErrorMessage, @pos);
-                IF @pos = 0 BREAK;
-                SET @end = CHARINDEX (N')', @SafeErrorMessage, @pos + 1);
-                IF @end = 0 BREAK;
-                SET @SafeErrorMessage = STUFF (@SafeErrorMessage, @pos, @end - @pos + 1, N'([redacted])');
-                SET @pos = @pos + 12;
-                SET @guard += 1;
-            END;
-            SET @SafeErrorMessage = LEFT (@SafeErrorMessage, 1000);
+            SET @SafeErrorMessage = CONCAT (
+                N'SQL Server system error ',
+                COALESCE (CAST (@ErrorNumber AS NVARCHAR (20)), N'unknown'),
+                N' [redacted for PHI safety; see ErrorNumber, ErrorProcedure, ErrorLine]'
+            );
         END;
 
         -- #338 allowlisted execution diagnostics (per-token filtering, deny-first, ordinal-preserving) in the shared error writer.

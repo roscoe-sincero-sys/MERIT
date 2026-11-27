@@ -13,7 +13,7 @@ CreateDate:   2026-10-24
 ========================================================================================================================
 Description:
 
-Platform-only, audited per-root-tenant data export covering all 70 mutable tenant/auth tables plus read-only logs.auditEvent (#346, I17). Pass @tableName = NULL for the full manifest (active + soft-deleted counts) or a table name to stream paginated rows with credential columns excluded.
+Platform-only, audited per-root-tenant data export covering all 70 mutable tenant/auth tables plus read-only logs.auditEvent (#346, I17). Commits its durable export audit event before streaming rows and rejects enclosing transactions. Pass @tableName = NULL for the full manifest (active + soft-deleted counts) or a table name to stream paginated rows with credential columns excluded.
 
 ========================================================================================================================
 Requirements and Key Dependencies:
@@ -89,17 +89,27 @@ BEGIN
             ;THROW 51403, N'You do not have permission to do this (security.investigate and tenant.create).', 1;
         END;
 
+        IF @@TRANCOUNT > 0
+        BEGIN
+            ;THROW 51422, N'config.uspExportRootTenant must not be called inside an enclosing transaction; it commits its export audit event before streaming rows.', 1;
+        END;
         IF NOT EXISTS (SELECT 1 FROM auth.tenant WHERE tenantId = @rootTenantId AND tenantId = rootTenantId)
         BEGIN
             ;THROW 51404, N'The root tenant was not found.', 1;
         END;
 
-        BEGIN TRANSACTION;
-
         -- =========================================================================================
         -- ===== The procedure's own work starts here. Everything above and below is boilerplate. ==
         -- =========================================================================================
 
+        DECLARE @exportFilterJson NVARCHAR (MAX) = (
+            SELECT @rootTenantId AS rootTenantId,
+                   COALESCE (@tableName, N'[manifest]') AS tableName,
+                   @pageNumber AS pageNumber,
+                   @pageSize AS pageSize
+            FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
+        );
+        BEGIN TRANSACTION;
         DECLARE @auditScope UNIQUEIDENTIFIER = TRY_CAST (SESSION_CONTEXT (N'scopeKey') AS UNIQUEIDENTIFIER);
         DECLARE @auditSessionRef UNIQUEIDENTIFIER, @auditActingTenant UNIQUEIDENTIFIER, @auditViewAs UNIQUEIDENTIFIER;
         SELECT @auditSessionRef = sessionReference, @auditActingTenant = actingTenantId, @auditViewAs = viewAsUserId
@@ -109,9 +119,10 @@ BEGIN
         DECLARE @auditTraceId VARCHAR (64) = TRY_CAST (SESSION_CONTEXT (N'traceId') AS VARCHAR (64));
         DECLARE @auditUserAgentHash CHAR (16) = TRY_CAST (SESSION_CONTEXT (N'userAgentHash') AS CHAR (16));
         INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, clientAddress, owningTenantId,
-                                sessionReference, traceId, actingTenantId, viewAsUserId, userAgentHash)
+                                sessionReference, traceId, actingTenantId, viewAsUserId, userAgentHash, filterJson)
         VALUES (auth.udfSessionUserId (), @rootTenantId, 'export', 'tenant', @rootTenantId, @auditClientAddress, @rootTenantId,
-                @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs, @auditUserAgentHash);
+                @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs, @auditUserAgentHash, @exportFilterJson);
+        COMMIT TRANSACTION;
 
         EXEC config.uspExportRootTenantInternal @rootTenantId = @rootTenantId, @tableName = @tableName,
              @pageNumber = @pageNumber, @pageSize = @pageSize;
@@ -120,11 +131,6 @@ BEGIN
         -- =========================================================================================
         -- ===== End of the procedure's own work. ===================================================
         -- =========================================================================================
-
-        IF @@TRANCOUNT > 0
-        BEGIN
-            COMMIT TRANSACTION;
-        END;
 
         -- Completion. Deliberately after the COMMIT.
         SET @EndTimeUtc = SYSUTCDATETIME ();
@@ -198,7 +204,7 @@ EXEC util.uspSetObjectDescription
       @SchemaName  = N'config'
     , @ObjectType  = N'PROCEDURE'
     , @ObjectName  = N'uspExportRootTenant'
-    , @Description = N'Platform-only, audited per-root-tenant data export covering all 70 mutable tenant/auth tables plus read-only logs.auditEvent (#346, I17). Pass @tableName = NULL for the full manifest (active + soft-deleted counts) or a table name to stream paginated rows with credential columns excluded.';
+    , @Description = N'Platform-only, audited per-root-tenant data export covering all 70 mutable tenant/auth tables plus read-only logs.auditEvent (#346, I17). Commits its durable export audit event before streaming rows and rejects enclosing transactions. Pass @tableName = NULL for the full manifest (active + soft-deleted counts) or a table name to stream paginated rows with credential columns excluded.';
 GO
 
 IF DATABASE_PRINCIPAL_ID (N'meritWebRole') IS NOT NULL

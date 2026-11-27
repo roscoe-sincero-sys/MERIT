@@ -7,55 +7,85 @@ namespace Merit.Worker;
 /// Periodically runs behavioral anomaly detection across active tenants, persists new findings in
 /// <c>logs.securityFinding</c>, logs structured alerts, and optionally posts high-severity alerts to a webhook (#327).
 /// </summary>
-public sealed partial class SecurityFindingScanner(
-    IServiceScopeFactory scopes,
-    IConfiguration configuration,
-    ILogger<SecurityFindingScanner> logger) : BackgroundService
+public sealed partial class SecurityFindingScanner : BackgroundService
 {
-    private static readonly HttpClient WebhookClient = new() { Timeout = TimeSpan.FromSeconds(10) };
+    private static readonly HttpClient DefaultWebhookClient = new() { Timeout = TimeSpan.FromSeconds(10) };
+    private static readonly TimeSpan[] DefaultRetryDelays = [TimeSpan.Zero, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(3)];
+
+    private readonly IServiceScopeFactory _scopes;
+    private readonly IConfiguration _configuration;
+    private readonly ILogger<SecurityFindingScanner> _logger;
+    private readonly HttpClient _webhookClient;
+    private readonly TimeSpan[] _retryDelays;
+
+    public SecurityFindingScanner(
+        IServiceScopeFactory scopes,
+        IConfiguration configuration,
+        ILogger<SecurityFindingScanner> logger)
+        : this(scopes, configuration, logger, DefaultWebhookClient, DefaultRetryDelays)
+    {
+    }
+
+    internal SecurityFindingScanner(
+        IServiceScopeFactory scopes,
+        IConfiguration configuration,
+        ILogger<SecurityFindingScanner> logger,
+        HttpClient webhookClient,
+        TimeSpan[] retryDelays)
+    {
+        _scopes = scopes;
+        _configuration = configuration;
+        _logger = logger;
+        _webhookClient = webhookClient;
+        _retryDelays = retryDelays;
+    }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         await Task.Delay(TimeSpan.FromMinutes(1), stoppingToken).ConfigureAwait(false);
         while (!stoppingToken.IsCancellationRequested)
         {
-            int intervalMinutes = Math.Clamp(configuration.GetValue("SecurityAlerts:ScanIntervalMinutes", 15), 5, 1440);
-            try
-            {
-                using var scope = scopes.CreateScope();
-                int windowHours = Math.Clamp(configuration.GetValue("SecurityAlerts:WindowHours", 24), 1, 168);
-                var inserted = await scope.ServiceProvider.GetRequiredService<ISecurityMonitoringData>()
-                    .RunSecurityFindingScanAsync(windowHours, stoppingToken).ConfigureAwait(false);
-                if (inserted.Count > 0)
-                {
-                    FindingsDetected(logger, inserted.Count, windowHours);
-                    string? webhookUrl = configuration["SecurityAlerts:WebhookUrl"];
-                    if (!string.IsNullOrWhiteSpace(webhookUrl))
-                    {
-                        var high = inserted.Where(f => f.Severity is "high" or "critical").ToList();
-                        if (high.Count > 0)
-                        {
-                            await NotifyWebhookAsync(webhookUrl, high, stoppingToken).ConfigureAwait(false);
-                        }
-                    }
-                }
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                ScanFailed(logger, ex.GetType().Name);
-            }
-
+            int intervalMinutes = Math.Clamp(_configuration.GetValue("SecurityAlerts:ScanIntervalMinutes", 15), 5, 1440);
+            await RunScanCycleAsync(stoppingToken).ConfigureAwait(false);
             await Task.Delay(TimeSpan.FromMinutes(intervalMinutes), stoppingToken).ConfigureAwait(false);
         }
     }
 
-    private async Task NotifyWebhookAsync(string webhookUrl, IReadOnlyList<NewSecurityFindingRow> findings, CancellationToken ct)
+    internal async Task RunScanCycleAsync(CancellationToken stoppingToken)
+    {
+        try
+        {
+            using var scope = _scopes.CreateScope();
+            int windowHours = Math.Clamp(_configuration.GetValue("SecurityAlerts:WindowHours", 24), 1, 168);
+            var inserted = await scope.ServiceProvider.GetRequiredService<ISecurityMonitoringData>()
+                .RunSecurityFindingScanAsync(windowHours, stoppingToken).ConfigureAwait(false);
+            if (inserted.Count > 0)
+            {
+                FindingsDetected(_logger, inserted.Count, windowHours);
+                string? webhookUrl = _configuration["SecurityAlerts:WebhookUrl"];
+                if (!string.IsNullOrWhiteSpace(webhookUrl))
+                {
+                    var high = inserted.Where(f => f.Severity is "high" or "critical").ToList();
+                    if (high.Count > 0)
+                    {
+                        await NotifyWebhookAsync(webhookUrl, high, stoppingToken).ConfigureAwait(false);
+                    }
+                }
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException || !stoppingToken.IsCancellationRequested)
+        {
+            ScanFailed(_logger, ex.GetType().Name);
+        }
+    }
+
+    internal async Task NotifyWebhookAsync(string webhookUrl, IReadOnlyList<NewSecurityFindingRow> findings, CancellationToken ct)
     {
         try
         {
             if (!Uri.TryCreate(webhookUrl, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps)
             {
-                WebhookSkipped(logger);
+                WebhookSkipped(_logger);
                 return;
             }
 
@@ -75,18 +105,17 @@ public sealed partial class SecurityFindingScanner(
                 }),
             };
 
-            // #347: Bounded retry (3 attempts: immediate, +1s, +3s) for transient 5xx/429/network errors.
-            TimeSpan[] delays = [TimeSpan.Zero, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(3)];
-            for (int attempt = 0; attempt < delays.Length; attempt++)
+            // #347: Bounded retry (3 attempts: immediate, +1s, +3s) for transient 5xx/429/network/timeout errors.
+            for (int attempt = 0; attempt < _retryDelays.Length; attempt++)
             {
-                if (delays[attempt] > TimeSpan.Zero)
+                if (_retryDelays[attempt] > TimeSpan.Zero)
                 {
-                    await Task.Delay(delays[attempt], ct).ConfigureAwait(false);
+                    await Task.Delay(_retryDelays[attempt], ct).ConfigureAwait(false);
                 }
 
                 try
                 {
-                    using var resp = await WebhookClient.PostAsJsonAsync(uri, payload, ct).ConfigureAwait(false);
+                    using var resp = await _webhookClient.PostAsJsonAsync(uri, payload, ct).ConfigureAwait(false);
                     if (resp.IsSuccessStatusCode)
                     {
                         return;
@@ -94,21 +123,21 @@ public sealed partial class SecurityFindingScanner(
 
                     int code = (int)resp.StatusCode;
                     bool transient = code == 429 || code >= 500;
-                    if (!transient || attempt == delays.Length - 1)
+                    if (!transient || attempt == _retryDelays.Length - 1)
                     {
-                        WebhookFailed(logger, code);
+                        WebhookFailed(_logger, code);
                         return;
                     }
                 }
-                catch (Exception ex) when (ex is not OperationCanceledException && attempt < delays.Length - 1)
+                catch (Exception ex) when ((ex is not OperationCanceledException || !ct.IsCancellationRequested) && attempt < _retryDelays.Length - 1)
                 {
-                    // Retry transient transport/timeout errors up to delays.Length attempts.
+                    // Retry transient transport/timeout errors up to _retryDelays.Length attempts.
                 }
             }
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
-            WebhookException(logger, ex.GetType().Name);
+            WebhookException(_logger, ex.GetType().Name);
         }
     }
 
