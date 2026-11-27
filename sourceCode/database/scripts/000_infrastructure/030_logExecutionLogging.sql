@@ -555,7 +555,21 @@ BEGIN
     -- One value per fact, so StartDateUtc and the two audit timestamps cannot disagree by a millisecond and a
     -- reader cannot mistake three near-identical times for three separate events.
     DECLARE @Now   DATETIME2 (3)  = SYSUTCDATETIME ()
-          , @Actor NVARCHAR (255) = COALESCE (NULLIF (CAST (SESSION_CONTEXT (N'AppUser') AS NVARCHAR (255)), N''), ORIGINAL_LOGIN ());
+          , @Actor NVARCHAR (255) = COALESCE (NULLIF (CAST (SESSION_CONTEXT (N'AppUser') AS NVARCHAR (255)), N''), ORIGINAL_LOGIN ())
+          , @SafeKeyParameters NVARCHAR (500) = LEFT (@KeyParameters, 500);
+
+    -- #338 allowlisted execution diagnostics: reject any sensitive/PHI key token before persistence.
+    IF @SafeKeyParameters IS NOT NULL
+       AND (   @SafeKeyParameters LIKE N'%password=%'
+            OR @SafeKeyParameters LIKE N'%secret=%'
+            OR @SafeKeyParameters LIKE N'%token=%'
+            OR @SafeKeyParameters LIKE N'%searchText=%'
+            OR @SafeKeyParameters LIKE N'%attemptedName=%'
+            OR @SafeKeyParameters LIKE N'%birthDate=%'
+            OR @SafeKeyParameters LIKE N'%ssn=%')
+    BEGIN
+        SET @SafeKeyParameters = N'[redacted: disallowed diagnostic key]';
+    END;
 
     SET @StartDateUtc = ISNULL (@StartDateUtc, @Now);
 
@@ -569,7 +583,7 @@ BEGIN
     )
     VALUES
     (
-        @ProcedureName, @KeyParameters, @StartDateUtc, ISNULL (@ReCreatedAfterRollback, 0),
+        @ProcedureName, @SafeKeyParameters, @StartDateUtc, ISNULL (@ReCreatedAfterRollback, 0),
         @Actor, @Now, @Actor, @Now
     );
 
@@ -798,7 +812,24 @@ BEGIN
         -- One value per fact.  EndDateUtc, ElapsedMilliseconds and modifiedDateUtc all derive from @Now, so the
         -- recorded end time and the recorded duration cannot contradict each other.
         DECLARE @Now   DATETIME2 (3)  = SYSUTCDATETIME ()
-              , @Actor NVARCHAR (255) = COALESCE (NULLIF (CAST (SESSION_CONTEXT (N'AppUser') AS NVARCHAR (255)), N''), ORIGINAL_LOGIN ());
+              , @Actor NVARCHAR (255) = COALESCE (NULLIF (CAST (SESSION_CONTEXT (N'AppUser') AS NVARCHAR (255)), N''), ORIGINAL_LOGIN ())
+              , @SafeKeyParameters NVARCHAR (500) = LEFT (@KeyParameters, 500)
+              , @SafeErrorMessage  NVARCHAR (1000) = LEFT (@ErrorMessage, 1000)
+              , @SafeContext       NVARCHAR (500) = LEFT (@ContextMessage, 500)
+              , @SafeDynamicSql    NVARCHAR (100) = CASE WHEN @DynamicSql IS NULL THEN NULL ELSE N'[omitted by diagnostic minimization]' END;
+
+        -- #338 allowlisted execution diagnostics: enforce field-level minimization in the shared log writer.
+        IF @SafeKeyParameters IS NOT NULL
+           AND (   @SafeKeyParameters LIKE N'%password=%'
+                OR @SafeKeyParameters LIKE N'%secret=%'
+                OR @SafeKeyParameters LIKE N'%token=%'
+                OR @SafeKeyParameters LIKE N'%searchText=%'
+                OR @SafeKeyParameters LIKE N'%attemptedName=%'
+                OR @SafeKeyParameters LIKE N'%birthDate=%'
+                OR @SafeKeyParameters LIKE N'%ssn=%')
+        BEGIN
+            SET @SafeKeyParameters = N'[redacted: disallowed diagnostic key]';
+        END;
 
         -- Stated as a fact, not as an accusation -- see "THE ORPHAN ROW IS NOT ALWAYS A DEFECT" in the header.
         DECLARE @NoStartRowPrefix NVARCHAR (200) =
@@ -817,12 +848,12 @@ BEGIN
                 , T.ElapsedMilliseconds   = CAST (LEAST (DATEDIFF_BIG (MILLISECOND, T.StartDateUtc, @Now)
                                                        , CAST (2147483647 AS BIGINT)) AS INT)
                 , T.Successful            = 0
-                , T.ErrorMessage          = @ErrorMessage
+                , T.ErrorMessage          = @SafeErrorMessage
                 , T.ErrorProcedure        = @ErrorProcedure
                 , T.ErrorNumber           = @ErrorNumber
                 , T.ErrorLine             = @ErrorLine
-                , T.DynamicSql            = @DynamicSql
-                , T.ContextMessage        = @ContextMessage
+                , T.DynamicSql            = @SafeDynamicSql
+                , T.ContextMessage        = @SafeContext
                   -- Written explicitly because the DEFAULT fires on INSERT only.  SKILL.md rule 1: an UPDATE that does
                   -- not set auditModified* leaves the row claiming it was last touched when it was created.
                 , T.modifiedBy       = @Actor
@@ -839,24 +870,24 @@ BEGIN
                   -- groups by ProcedureName, attributed the failure to the wrong procedure.  @ErrorProcedure is still
                   -- recorded, in its own column, where it belongs.
                     COALESCE (@ProcedureName, @ErrorProcedure, N'[unknown].[unknown]')
-                  , @KeyParameters
+                  , @SafeKeyParameters
                   -- No start row means no start time.  @Now is the only honest value available, and ElapsedMilliseconds
                   -- is therefore 0 rather than a duration invented from it.
                   , @Now
                   , @Now
                   , 0
                   , 0
-                  , @NoStartRowPrefix + ISNULL (@ErrorMessage, N'')
+                  , LEFT (@NoStartRowPrefix + ISNULL (@SafeErrorMessage, N''), 1000)
                   , @ErrorProcedure
                   , @ErrorNumber
                   , @ErrorLine
-                  , @DynamicSql
+                  , @SafeDynamicSql
                   -- CONCAT_WS drops NULLs, so a caller that passed no @ContextMessage gets just the ExecutionLogId
                   -- note, and one that did -- every error-only read does -- keeps its own text first.
-                  , CONCAT_WS (N'; '
-                             , @ContextMessage
-                             , N'ExecutionLogId passed by the caller: '
-                               + ISNULL (CONVERT (NVARCHAR (20), @ExecutionLogId), N'NULL'))
+                  , LEFT (CONCAT_WS (N'; '
+                                   , @SafeContext
+                                   , N'ExecutionLogId passed by the caller: '
+                                     + ISNULL (CONVERT (NVARCHAR (20), @ExecutionLogId), N'NULL')), 500)
                   , @Actor
                   , @Now
                   , @Actor

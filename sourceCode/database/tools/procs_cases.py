@@ -12,7 +12,10 @@ PROCS = [
         "key": "CONCAT (N'exposureCaseId=', @exposureCaseId)", "validate": CASE_VISIBLE,
         "body": f"""
 DECLARE @person UNIQUEIDENTIFIER, @analyte UNIQUEIDENTIFIER, @root UNIQUEIDENTIFIER, @owner UNIQUEIDENTIFIER;
-SELECT @person = personId, @analyte = analyteId, @root = rootTenantId, @owner = owningTenantId FROM dbo.exposureCase WITH (UPDLOCK, HOLDLOCK) WHERE exposureCaseId = @exposureCaseId;
+DECLARE @beforeReopenJson NVARCHAR (MAX);
+SELECT @person = personId, @analyte = analyteId, @root = rootTenantId, @owner = owningTenantId,
+       @beforeReopenJson = (SELECT caseStatus, closedDate, closureReason FROM dbo.exposureCase WHERE exposureCaseId = @exposureCaseId FOR JSON PATH, WITHOUT_ARRAY_WRAPPER)
+  FROM dbo.exposureCase WITH (UPDLOCK, HOLDLOCK) WHERE exposureCaseId = @exposureCaseId;
 IF EXISTS (SELECT 1 FROM dbo.exposureCase WITH (UPDLOCK, HOLDLOCK) WHERE personId = @person AND analyteId = @analyte AND caseStatus <> 'closed' AND isDeleted = 0)
 BEGIN
     ;THROW 51422, N'An open case already exists for this person and analyte.', 1;
@@ -24,6 +27,15 @@ INSERT dbo.caseActivity (caseActivityId, rootTenantId, owningTenantId, exposureC
 VALUES ({NEWID}, @root, @owner, @exposureCaseId, 'statusChange', auth.udfSessionToday (), auth.udfSessionUserId (), CONCAT (N'Reopened: ', @reason), 'reopened');
 INSERT dbo.workTask (workTaskId, rootTenantId, owningTenantId, queueCode, title, exposureCaseId, personId)
 VALUES ({NEWID}, @root, @owner, 'caseFollowUp', N'Review reopened case', @exposureCaseId, @person);
+{AUDIT_SESSION_VARS}
+INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, clientAddress, owningTenantId,
+                        sessionReference, traceId, actingTenantId, viewAsUserId)
+VALUES (auth.udfSessionUserId (), @root, 'update', 'exposureCase', @exposureCaseId, @auditClientAddress, @owner,
+        @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs);
+DECLARE @reopenAuditId BIGINT = SCOPE_IDENTITY ();
+INSERT logs.auditEventChange (auditEventChangeId, auditEventId, rootTenantId, owningTenantId, entityType, entityId, beforeJson, afterJson)
+VALUES ({NEWID}, @reopenAuditId, @root, @owner, 'exposureCase', @exposureCaseId, @beforeReopenJson,
+        (SELECT caseStatus, closedDate, closureReason FROM dbo.exposureCase WHERE exposureCaseId = @exposureCaseId FOR JSON PATH, WITHOUT_ARRAY_WRAPPER));
 SET @Comments = N'Case reopened with review task.';
 """,
     },
@@ -406,10 +418,25 @@ IF @assignedToUserId IS NOT NULL
 BEGIN
     ;THROW 51422, N'Choose a worker who can view and edit this case in its owning agency. No changes were saved.', 1;
 END;
+DECLARE @updRoot UNIQUEIDENTIFIER, @updOwner UNIQUEIDENTIFIER, @updBeforeJson NVARCHAR (MAX);
+SELECT @updRoot = rootTenantId, @updOwner = owningTenantId,
+       @updBeforeJson = (SELECT assignedToUserId, exposureCategory, caseStatus FROM dbo.exposureCase WHERE exposureCaseId = @exposureCaseId FOR JSON PATH, WITHOUT_ARRAY_WRAPPER)
+  FROM dbo.exposureCase WHERE exposureCaseId = @exposureCaseId;
+
 UPDATE dbo.exposureCase
    SET assignedToUserId = @assignedToUserId, exposureCategory = @exposureCategory, caseStatus = @caseStatus
  WHERE exposureCaseId = @exposureCaseId AND isDeleted = 0 AND caseStatus <> 'closed' AND rowVersion = @rowVersion;
 {CONCURRENCY}
+
+{AUDIT_SESSION_VARS}
+INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, clientAddress, owningTenantId,
+                        sessionReference, traceId, actingTenantId, viewAsUserId)
+VALUES (auth.udfSessionUserId (), @updRoot, 'update', 'exposureCase', @exposureCaseId, @auditClientAddress, @updOwner,
+        @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs);
+DECLARE @updAuditId BIGINT = SCOPE_IDENTITY ();
+INSERT logs.auditEventChange (auditEventChangeId, auditEventId, rootTenantId, owningTenantId, entityType, entityId, beforeJson, afterJson)
+VALUES ({NEWID}, @updAuditId, @updRoot, @updOwner, 'exposureCase', @exposureCaseId, @updBeforeJson,
+        (SELECT assignedToUserId, exposureCategory, caseStatus FROM dbo.exposureCase WHERE exposureCaseId = @exposureCaseId FOR JSON PATH, WITHOUT_ARRAY_WRAPPER));
 
 SET @Comments = N'Case updated.';
 """,
@@ -432,8 +459,9 @@ BEGIN
     ;THROW 51422, N'A reason is required to override a classification or population.', 1;
 END;""",
         "body": f"""
-DECLARE @root UNIQUEIDENTIFIER, @owner UNIQUEIDENTIFIER, @before VARCHAR (12), @beforePop VARCHAR (10);
-SELECT @root = rootTenantId, @owner = owningTenantId, @before = classification, @beforePop = population
+DECLARE @root UNIQUEIDENTIFIER, @owner UNIQUEIDENTIFIER, @before VARCHAR (12), @beforePop VARCHAR (10), @ovrBeforeJson NVARCHAR (MAX);
+SELECT @root = rootTenantId, @owner = owningTenantId, @before = classification, @beforePop = population,
+       @ovrBeforeJson = (SELECT classification, population, overrideReason FROM dbo.exposureCase WHERE exposureCaseId = @exposureCaseId FOR JSON PATH, WITHOUT_ARRAY_WRAPPER)
   FROM dbo.exposureCase WHERE exposureCaseId = @exposureCaseId;
 
 UPDATE dbo.exposureCase
@@ -446,6 +474,16 @@ INSERT dbo.caseActivity (caseActivityId, rootTenantId, owningTenantId, exposureC
 VALUES ({NEWID}, @root, @owner, @exposureCaseId, 'statusChange', auth.udfSessionToday (),
         auth.udfSessionUserId (),
         CONCAT (N'Override: ', @before, N'/', @beforePop, N' to ', @classification, N'/', @population, N'. Reason: ', @reason));
+
+{AUDIT_SESSION_VARS}
+INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, clientAddress, owningTenantId,
+                        sessionReference, traceId, actingTenantId, viewAsUserId)
+VALUES (auth.udfSessionUserId (), @root, 'update', 'exposureCase', @exposureCaseId, @auditClientAddress, @owner,
+        @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs);
+DECLARE @ovrAuditId BIGINT = SCOPE_IDENTITY ();
+INSERT logs.auditEventChange (auditEventChangeId, auditEventId, rootTenantId, owningTenantId, entityType, entityId, beforeJson, afterJson)
+VALUES ({NEWID}, @ovrAuditId, @root, @owner, 'exposureCase', @exposureCaseId, @ovrBeforeJson,
+        (SELECT classification, population, overrideReason FROM dbo.exposureCase WHERE exposureCaseId = @exposureCaseId FOR JSON PATH, WITHOUT_ARRAY_WRAPPER));
 
 SET @Comments = N'Classification overridden.';
 """,
@@ -615,6 +653,22 @@ IF @mdClosure=1 AND NOT EXISTS (SELECT 1 FROM dbo.workTask WHERE exposureCaseId=
       N'COMAR 26.16.08.05D: verify primary-residence ownership. If not owned by caregiver/pregnant patient, send the owner a first-class letter explaining inability to contact and closure without an investigation. Complete with recipient, address and letter evidence; otherwise dismiss with the source-based ownership reason. No numeric deadline is inferred.',@personId,@exposureCaseId);
 
 EXEC dbo.uspRefreshPersonAccess @personId = @personId;
+
+DECLARE @auditClientAddress VARCHAR (45) = NULLIF (CAST (SESSION_CONTEXT (N'clientAddress') AS VARCHAR (45)), '');
+DECLARE @auditSessionRef UNIQUEIDENTIFIER = TRY_CAST (SESSION_CONTEXT (N'sessionReference') AS UNIQUEIDENTIFIER);
+DECLARE @auditTraceId VARCHAR (64) = NULLIF (CAST (SESSION_CONTEXT (N'traceId') AS VARCHAR (64)), '');
+DECLARE @auditActingTenant UNIQUEIDENTIFIER = TRY_CAST (SESSION_CONTEXT (N'actingTenantId') AS UNIQUEIDENTIFIER);
+DECLARE @auditViewAs UNIQUEIDENTIFIER = TRY_CAST (SESSION_CONTEXT (N'viewAsUserId') AS UNIQUEIDENTIFIER);
+INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, clientAddress, owningTenantId,
+                        sessionReference, traceId, actingTenantId, viewAsUserId)
+VALUES (auth.udfSessionUserId (), @root, 'update', 'exposureCase', @exposureCaseId, @auditClientAddress, @owner,
+        @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs);
+DECLARE @closeAuditId BIGINT = SCOPE_IDENTITY ();
+INSERT logs.auditEventChange (auditEventChangeId, auditEventId, rootTenantId, owningTenantId, entityType, entityId, beforeJson, afterJson)
+VALUES (CAST (CAST (NEWID () AS BINARY (10)) + CAST (DATEDIFF_BIG (MILLISECOND, '19700101', SYSUTCDATETIME ()) AS BINARY (6)) AS UNIQUEIDENTIFIER),
+        @closeAuditId, @root, @owner, 'exposureCase', @exposureCaseId,
+        N'{"caseStatus":"open"}',
+        (SELECT caseStatus, closureReason, closedDate FROM dbo.exposureCase WHERE exposureCaseId = @exposureCaseId FOR JSON PATH, WITHOUT_ARRAY_WRAPPER));
 
 SET @Comments = N'Case closed.';
 """,
@@ -1249,6 +1303,17 @@ VALUES ({NEWID},
                       CASE WHEN @shared > 0 THEN CONCAT (N'; ', @shared, N' investigations shared with other cases stay with their owner') ELSE N'' END, N'.'), 2000));
 
 EXEC dbo.uspRefreshPersonAccess @personId = @person;
+
+{AUDIT_SESSION_VARS}
+INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, clientAddress, owningTenantId,
+                        sessionReference, traceId, actingTenantId, viewAsUserId)
+VALUES (auth.udfSessionUserId (), @root, 'update', 'exposureCase', @exposureCaseId, @auditClientAddress, @toTenantId,
+        @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs);
+DECLARE @transferAuditId BIGINT = SCOPE_IDENTITY ();
+INSERT logs.auditEventChange (auditEventChangeId, auditEventId, rootTenantId, owningTenantId, entityType, entityId, beforeJson, afterJson)
+VALUES ({NEWID}, @transferAuditId, @root, @toTenantId, 'exposureCase', @exposureCaseId,
+        (SELECT @from AS owningTenantId FOR JSON PATH, WITHOUT_ARRAY_WRAPPER),
+        (SELECT @toTenantId AS owningTenantId, @reason AS transferReason FOR JSON PATH, WITHOUT_ARRAY_WRAPPER));
 
 SET @Comments = CONCAT (N'Case transferred; related rows moved=', @moved, N', investigations moved=', @investigations, N', shared kept=', @shared, N'.');
 """,

@@ -229,6 +229,7 @@ public static class DataServiceCollectionExtensions
         services.AddScoped<IContactCorrectionData, ContactCorrectionData>();
         services.AddScoped<IWorkData, WorkData>();
         services.AddScoped<IScreenUsageData, ScreenUsageData>();
+        services.AddScoped<ISecurityMonitoringData, SecurityMonitoringData>();
         services.AddScoped<IIntakeData, IntakeData>();
         services.AddScoped<IExtractData, ExtractData>();
         services.AddScoped<IReviewData, ReviewData>();

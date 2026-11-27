@@ -13,7 +13,7 @@ CreateDate:   2026-10-24
 ========================================================================================================================
 Description:
 
-Scoped usage aggregates, five paths into manual result entry, back-and-forth loops, strict observed search/person/entry/saved elapsed flow and the latest 100 sessions. Counts cover the full period; only the displayed session list is capped. Predecessors outside the reader's scope are not exposed.
+Scoped usage aggregates, five paths into manual result entry, back-and-forth loops, strict observed search/person/entry/saved elapsed flow and the latest 100 sessions (optionally filtered to one user, #330). Counts cover the full period; only the displayed session list is capped. Predecessors outside the reader's scope are not exposed.
 
 ========================================================================================================================
 Requirements and Key Dependencies:
@@ -48,6 +48,7 @@ Description:	Initial version.
 ***********************************************************************************************************************/
 CREATE OR ALTER PROCEDURE logs.uspGetScreenUsage
       @days INT = 30
+      , @appUserId UNIQUEIDENTIFIER = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -68,7 +69,7 @@ BEGIN
           , @ErrorLine      INT            = NULL;
 
     -- Identifiers and counts ONLY. Never free-text search terms or patient data.
-    SET @KeyParameters = CONCAT (N'days=', @days);
+    SET @KeyParameters = CONCAT (N'days=', @days, N', appUserId=', @appUserId);
 
     SET @ContextMessage = N'Error-only instrumented read: no start row is opened, so @ExecutionLogId is NULL by design.';
 
@@ -88,14 +89,12 @@ BEGIN
             ;THROW 51422, N'Choose a period from 1 to 90 days.', 1;
         END;
         DECLARE @from DATETIME2 (3) = DATEADD (DAY, -@days, SYSUTCDATETIME ());
-        -- Issue 277: the tenants this session reviews usage for (administered, or holding usage.view, clipped by profile
-        -- and view-as), matched on the visit's working tenant at the time. A security officer has no record or administered
-        -- tenants, so the session's own tenant lists left its county empty; this also reaches descendant data roots.
         DECLARE @review TABLE (tenantId UNIQUEIDENTIFIER PRIMARY KEY);
         INSERT @review SELECT tenantId FROM auth.tvfReviewTenants ('usage.view');
         SELECT v.* INTO #visits
           FROM logs.screenVisit AS v
          WHERE v.isDeleted = 0 AND v.eventUtc >= @from
+           AND (@appUserId IS NULL OR v.appUserId = @appUserId)
            AND EXISTS (SELECT 1 FROM @review AS r WHERE r.tenantId = v.actingTenantId);
         ALTER TABLE #visits ADD PRIMARY KEY CLUSTERED (screenVisitId);
         SELECT v.screenCode, CAST (NULL AS VARCHAR (1000)) AS roleCode, COUNT (*) AS visits,
@@ -174,7 +173,7 @@ EXEC util.uspSetObjectDescription
       @SchemaName  = N'logs'
     , @ObjectType  = N'PROCEDURE'
     , @ObjectName  = N'uspGetScreenUsage'
-    , @Description = N'Scoped usage aggregates, five paths into manual result entry, back-and-forth loops, strict observed search/person/entry/saved elapsed flow and the latest 100 sessions. Counts cover the full period; only the displayed session list is capped. Predecessors outside the reader''s scope are not exposed.';
+    , @Description = N'Scoped usage aggregates, five paths into manual result entry, back-and-forth loops, strict observed search/person/entry/saved elapsed flow and the latest 100 sessions (optionally filtered to one user, #330). Counts cover the full period; only the displayed session list is capped. Predecessors outside the reader''s scope are not exposed.';
 GO
 
 IF DATABASE_PRINCIPAL_ID (N'meritWebRole') IS NOT NULL

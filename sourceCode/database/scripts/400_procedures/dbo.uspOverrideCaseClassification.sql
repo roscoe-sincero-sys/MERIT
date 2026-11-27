@@ -108,8 +108,9 @@ BEGIN
         -- ===== The procedure's own work starts here. Everything above and below is boilerplate. ==
         -- =========================================================================================
 
-        DECLARE @root UNIQUEIDENTIFIER, @owner UNIQUEIDENTIFIER, @before VARCHAR (12), @beforePop VARCHAR (10);
-        SELECT @root = rootTenantId, @owner = owningTenantId, @before = classification, @beforePop = population
+        DECLARE @root UNIQUEIDENTIFIER, @owner UNIQUEIDENTIFIER, @before VARCHAR (12), @beforePop VARCHAR (10), @ovrBeforeJson NVARCHAR (MAX);
+        SELECT @root = rootTenantId, @owner = owningTenantId, @before = classification, @beforePop = population,
+               @ovrBeforeJson = (SELECT classification, population, overrideReason FROM dbo.exposureCase WHERE exposureCaseId = @exposureCaseId FOR JSON PATH, WITHOUT_ARRAY_WRAPPER)
           FROM dbo.exposureCase WHERE exposureCaseId = @exposureCaseId;
 
         UPDATE dbo.exposureCase
@@ -125,6 +126,22 @@ BEGIN
         VALUES (CAST (CAST (NEWID () AS BINARY (10)) + CAST (DATEDIFF_BIG (MILLISECOND, '19700101', SYSUTCDATETIME ()) AS BINARY (6)) AS UNIQUEIDENTIFIER), @root, @owner, @exposureCaseId, 'statusChange', auth.udfSessionToday (),
                 auth.udfSessionUserId (),
                 CONCAT (N'Override: ', @before, N'/', @beforePop, N' to ', @classification, N'/', @population, N'. Reason: ', @reason));
+
+        DECLARE @auditScope UNIQUEIDENTIFIER = TRY_CAST (SESSION_CONTEXT (N'scopeKey') AS UNIQUEIDENTIFIER);
+        DECLARE @auditSessionRef UNIQUEIDENTIFIER, @auditActingTenant UNIQUEIDENTIFIER, @auditViewAs UNIQUEIDENTIFIER;
+        SELECT @auditSessionRef = sessionReference, @auditActingTenant = actingTenantId, @auditViewAs = viewAsUserId
+          FROM auth.sessionScope
+         WHERE sessionScopeId = @auditScope AND revokedUtc IS NULL AND expiresUtc > SYSUTCDATETIME () AND isDeleted = 0;
+        DECLARE @auditClientAddress VARCHAR (45) = TRY_CAST (SESSION_CONTEXT (N'clientAddress') AS VARCHAR (45));
+        DECLARE @auditTraceId VARCHAR (64) = TRY_CAST (SESSION_CONTEXT (N'traceId') AS VARCHAR (64));
+        INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, clientAddress, owningTenantId,
+                                sessionReference, traceId, actingTenantId, viewAsUserId)
+        VALUES (auth.udfSessionUserId (), @root, 'update', 'exposureCase', @exposureCaseId, @auditClientAddress, @owner,
+                @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs);
+        DECLARE @ovrAuditId BIGINT = SCOPE_IDENTITY ();
+        INSERT logs.auditEventChange (auditEventChangeId, auditEventId, rootTenantId, owningTenantId, entityType, entityId, beforeJson, afterJson)
+        VALUES (CAST (CAST (NEWID () AS BINARY (10)) + CAST (DATEDIFF_BIG (MILLISECOND, '19700101', SYSUTCDATETIME ()) AS BINARY (6)) AS UNIQUEIDENTIFIER), @ovrAuditId, @root, @owner, 'exposureCase', @exposureCaseId, @ovrBeforeJson,
+                (SELECT classification, population, overrideReason FROM dbo.exposureCase WHERE exposureCaseId = @exposureCaseId FOR JSON PATH, WITHOUT_ARRAY_WRAPPER));
 
         SET @Comments = N'Classification overridden.';
 
@@ -147,8 +164,8 @@ BEGIN
                  , ElapsedMilliseconds = CAST (LEAST (DATEDIFF_BIG (MILLISECOND, @StartTimeUtc, @EndTimeUtc)
                                                     , CAST (2147483647 AS BIGINT)) AS INT)
                  , Successful          = 1
-                 , Comments            = @Comments
-                 , modifiedBy          = ORIGINAL_LOGIN ()
+                 , Comments            = LEFT (@Comments, 500)
+                 , modifiedBy          = COALESCE (NULLIF (CAST (SESSION_CONTEXT (N'AppUser') AS NVARCHAR (255)), N''), ORIGINAL_LOGIN ())
                  , modifiedDateUtc     = @EndTimeUtc
              WHERE ExecutionLogId = @ExecutionId;
         END;

@@ -209,10 +209,34 @@ BEGIN
          WHERE sessionScopeId = @auditScope AND revokedUtc IS NULL AND expiresUtc > SYSUTCDATETIME () AND isDeleted = 0;
         DECLARE @auditClientAddress VARCHAR (45) = TRY_CAST (SESSION_CONTEXT (N'clientAddress') AS VARCHAR (45));
         DECLARE @auditTraceId VARCHAR (64) = TRY_CAST (SESSION_CONTEXT (N'traceId') AS VARCHAR (64));
+        DECLARE @resultAuditOwner UNIQUEIDENTIFIER = dbo.udfPatientWorkOwner (@personId);
+        DECLARE @resultAfterJson NVARCHAR (MAX) = (
+            SELECT labResultId, personId, collectedDate, resultStatus, resultRowStatus, operator, valueReported, unitReported,
+                   valueCanonical, unitCanonical, sampleType, supersedesLabResultId, correctionReason
+              FROM dbo.labResult WHERE labResultId = @labResultId
+               FOR JSON PATH, WITHOUT_ARRAY_WRAPPER);
         INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, clientAddress, owningTenantId,
                                 sessionReference, traceId, actingTenantId, viewAsUserId)
         VALUES (auth.udfSessionUserId (), @root, 'create', 'labResult', @labResultId, @auditClientAddress,
-                dbo.udfPatientWorkOwner (@personId), @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs);
+                @resultAuditOwner, @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs);
+        DECLARE @resultAuditEventId BIGINT = SCOPE_IDENTITY ();
+        INSERT logs.auditEventChange (auditEventChangeId, auditEventId, rootTenantId, owningTenantId, entityType, entityId,
+                                      beforeJson, afterJson)
+        VALUES (CAST (CAST (NEWID () AS BINARY (10)) + CAST (DATEDIFF_BIG (MILLISECOND, '19700101', SYSUTCDATETIME ()) AS BINARY (6)) AS UNIQUEIDENTIFIER), @resultAuditEventId, @root, @resultAuditOwner, 'labResult', @labResultId, NULL, @resultAfterJson);
+
+        IF @supersedesLabResultId IS NOT NULL
+        BEGIN
+            INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, clientAddress, owningTenantId,
+                                    sessionReference, traceId, actingTenantId, viewAsUserId)
+            VALUES (auth.udfSessionUserId (), @root, 'update', 'labResult', @supersedesLabResultId, @auditClientAddress,
+                    @resultAuditOwner, @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs);
+            DECLARE @supAuditEventId BIGINT = SCOPE_IDENTITY ();
+            INSERT logs.auditEventChange (auditEventChangeId, auditEventId, rootTenantId, owningTenantId, entityType, entityId,
+                                          beforeJson, afterJson)
+            VALUES (CAST (CAST (NEWID () AS BINARY (10)) + CAST (DATEDIFF_BIG (MILLISECOND, '19700101', SYSUTCDATETIME ()) AS BINARY (6)) AS UNIQUEIDENTIFIER), @supAuditEventId, @root, @resultAuditOwner, 'labResult', @supersedesLabResultId,
+                    N'{"resultRowStatus":"valid"}',
+                    (SELECT resultRowStatus, correctionReason FROM dbo.labResult WHERE labResultId = @supersedesLabResultId FOR JSON PATH, WITHOUT_ARRAY_WRAPPER));
+        END;
 
         SELECT @labResultId AS labResultId, @intakeBatchId AS intakeBatchId;
 
@@ -237,8 +261,8 @@ BEGIN
                  , ElapsedMilliseconds = CAST (LEAST (DATEDIFF_BIG (MILLISECOND, @StartTimeUtc, @EndTimeUtc)
                                                     , CAST (2147483647 AS BIGINT)) AS INT)
                  , Successful          = 1
-                 , Comments            = @Comments
-                 , modifiedBy          = ORIGINAL_LOGIN ()
+                 , Comments            = LEFT (@Comments, 500)
+                 , modifiedBy          = COALESCE (NULLIF (CAST (SESSION_CONTEXT (N'AppUser') AS NVARCHAR (255)), N''), ORIGINAL_LOGIN ())
                  , modifiedDateUtc     = @EndTimeUtc
              WHERE ExecutionLogId = @ExecutionId;
         END;

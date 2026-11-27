@@ -7,7 +7,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace Merit.Web.Controllers;
 
-public sealed record UsagePage(int Days, ScreenUsageReport Report);
+public sealed record UsagePage(int Days, ScreenUsageReport Report, Guid? UserId = null);
 public sealed record UsageSessionPage(int Days, int Page, Guid Reference, ScreenSessionReport Report);
 
 [Route("admin/usage")]
@@ -23,13 +23,13 @@ public sealed class UsageController(ScreenUsageService usage, AuditService audit
     }
 
     [HttpGet("")]
-    public async Task<IActionResult> Index(int days = 30, CancellationToken ct = default)
-        => View(new UsagePage(Period(days), await usage.ReportAsync(Period(days), ct)));
+    public async Task<IActionResult> Index(int days = 30, Guid? userId = null, CancellationToken ct = default)
+        => View(new UsagePage(Period(days), await usage.ReportAsync(Period(days), userId, ct), userId));
 
     [HttpGet("summary.csv")]
-    public async Task<IActionResult> Csv(int days = 30, CancellationToken ct = default)
+    public async Task<IActionResult> Csv(int days = 30, Guid? userId = null, CancellationToken ct = default)
     {
-        var report = await usage.ReportAsync(Period(days), ct);
+        var report = await usage.ReportAsync(Period(days), userId, ct);
         var rows = report.Screens.Select(s => (IReadOnlyList<object?>)new object?[] {
             "screen", ScreenCatalog.Name(s.ScreenCode), ScreenCatalog.Route(s.ScreenCode), s.RoleCode,
             s.Visits, s.Sessions, s.TimedVisits, s.AverageVisibleMs, null }).ToList();

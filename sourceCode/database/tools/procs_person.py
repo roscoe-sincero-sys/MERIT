@@ -385,6 +385,7 @@ SELECT r.labResultId, r.analyteSpecimenId, a.analyteId, a.code AS analyteCode, a
 DECLARE @root UNIQUEIDENTIFIER = auth.udfSessionRootTenantId ();
 DECLARE @acting UNIQUEIDENTIFIER = auth.udfSessionActingTenantId ();
 DECLARE @isNew BIT = 0, @dobChanged BIT = 0, @deceasedChanged BIT = 0;
+DECLARE @beforeJson NVARCHAR (MAX) = NULL, @afterJson NVARCHAR (MAX) = NULL;
 
 IF @dob IS NOT NULL AND @dob > auth.udfSessionToday ()
 BEGIN
@@ -399,7 +400,11 @@ BEGIN
     END;
 
     SELECT @dobChanged      = IIF (dob IS DISTINCT FROM @dob, 1, 0),
-           @deceasedChanged = IIF (deceasedDate IS NULL AND @deceasedDate IS NOT NULL, 1, 0)
+           @deceasedChanged = IIF (deceasedDate IS NULL AND @deceasedDate IS NOT NULL, 1, 0),
+           @beforeJson      = (SELECT lastName, firstName, middleName, dob, dobVerified, sex, ethnicity,
+                                      preferredLanguage, deceasedDate
+                                 FROM dbo.person WHERE personId = @personId
+                                  FOR JSON PATH, WITHOUT_ARRAY_WRAPPER)
       FROM dbo.person WHERE personId = @personId;
 
     UPDATE dbo.person
@@ -454,6 +459,22 @@ WHEN MATCHED AND (t.lastNameKey <> @lastNameKey OR t.firstNameKey IS DISTINCT FR
 WHEN NOT MATCHED THEN
     INSERT (personMatchKeyId, rootTenantId, personId, lastNameKey, firstNameKey, dob)
     VALUES ({NEWID}, @root, @personId, @lastNameKey, @firstNameKey, @dob);
+
+SELECT @afterJson = (SELECT lastName, firstName, middleName, dob, dobVerified, sex, ethnicity,
+                            preferredLanguage, deceasedDate
+                       FROM dbo.person WHERE personId = @personId
+                        FOR JSON PATH, WITHOUT_ARRAY_WRAPPER);
+
+{AUDIT_SESSION_VARS}
+DECLARE @personAuditOwner UNIQUEIDENTIFIER = COALESCE (dbo.udfPatientWorkOwner (@personId), @acting, @root);
+INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, clientAddress, owningTenantId,
+                        sessionReference, traceId, actingTenantId, viewAsUserId)
+VALUES (auth.udfSessionUserId (), @root, IIF (@isNew = 1, 'create', 'update'), 'person', @personId, @auditClientAddress,
+        @personAuditOwner, @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs);
+DECLARE @personAuditEventId BIGINT = SCOPE_IDENTITY ();
+INSERT logs.auditEventChange (auditEventChangeId, auditEventId, rootTenantId, owningTenantId, entityType, entityId,
+                              beforeJson, afterJson)
+VALUES ({NEWID}, @personAuditEventId, @root, @personAuditOwner, 'person', @personId, @beforeJson, @afterJson);
 
 SELECT personId, rowVersion, @isNew AS isNew, @dobChanged AS dobChanged, @deceasedChanged AS deceasedChanged
   FROM dbo.person WHERE personId = @personId;

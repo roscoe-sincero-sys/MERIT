@@ -215,6 +215,22 @@ BEGIN
 
         EXEC dbo.uspRefreshPersonAccess @personId = @personId;
 
+        DECLARE @auditClientAddress VARCHAR (45) = NULLIF (CAST (SESSION_CONTEXT (N'clientAddress') AS VARCHAR (45)), '');
+        DECLARE @auditSessionRef UNIQUEIDENTIFIER = TRY_CAST (SESSION_CONTEXT (N'sessionReference') AS UNIQUEIDENTIFIER);
+        DECLARE @auditTraceId VARCHAR (64) = NULLIF (CAST (SESSION_CONTEXT (N'traceId') AS VARCHAR (64)), '');
+        DECLARE @auditActingTenant UNIQUEIDENTIFIER = TRY_CAST (SESSION_CONTEXT (N'actingTenantId') AS UNIQUEIDENTIFIER);
+        DECLARE @auditViewAs UNIQUEIDENTIFIER = TRY_CAST (SESSION_CONTEXT (N'viewAsUserId') AS UNIQUEIDENTIFIER);
+        INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, clientAddress, owningTenantId,
+                                sessionReference, traceId, actingTenantId, viewAsUserId)
+        VALUES (auth.udfSessionUserId (), @root, 'update', 'exposureCase', @exposureCaseId, @auditClientAddress, @owner,
+                @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs);
+        DECLARE @closeAuditId BIGINT = SCOPE_IDENTITY ();
+        INSERT logs.auditEventChange (auditEventChangeId, auditEventId, rootTenantId, owningTenantId, entityType, entityId, beforeJson, afterJson)
+        VALUES (CAST (CAST (NEWID () AS BINARY (10)) + CAST (DATEDIFF_BIG (MILLISECOND, '19700101', SYSUTCDATETIME ()) AS BINARY (6)) AS UNIQUEIDENTIFIER),
+                @closeAuditId, @root, @owner, 'exposureCase', @exposureCaseId,
+                N'{"caseStatus":"open"}',
+                (SELECT caseStatus, closureReason, closedDate FROM dbo.exposureCase WHERE exposureCaseId = @exposureCaseId FOR JSON PATH, WITHOUT_ARRAY_WRAPPER));
+
         SET @Comments = N'Case closed.';
 
         -- =========================================================================================
@@ -236,8 +252,8 @@ BEGIN
                  , ElapsedMilliseconds = CAST (LEAST (DATEDIFF_BIG (MILLISECOND, @StartTimeUtc, @EndTimeUtc)
                                                     , CAST (2147483647 AS BIGINT)) AS INT)
                  , Successful          = 1
-                 , Comments            = @Comments
-                 , modifiedBy          = ORIGINAL_LOGIN ()
+                 , Comments            = LEFT (@Comments, 500)
+                 , modifiedBy          = COALESCE (NULLIF (CAST (SESSION_CONTEXT (N'AppUser') AS NVARCHAR (255)), N''), ORIGINAL_LOGIN ())
                  , modifiedDateUtc     = @EndTimeUtc
              WHERE ExecutionLogId = @ExecutionId;
         END;

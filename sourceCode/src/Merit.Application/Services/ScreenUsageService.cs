@@ -5,11 +5,11 @@ namespace Merit.Application.Services;
 
 public sealed class ScreenUsageService(IScreenUsageData data, ICurrentSession session, AuditService audit)
 {
-    public async Task<ScreenUsageReport> ReportAsync(int days, CancellationToken ct = default)
+    public async Task<ScreenUsageReport> ReportAsync(int days, Guid? appUserId = null, CancellationToken ct = default)
     {
         session.Require(Permissions.UsageView);
-        var result = await data.ReportAsync(days, ct).ConfigureAwait(false);
-        await audit.ListedAsync("screenUsage", result.Screens.Count, ct).ConfigureAwait(false);
+        var result = await data.ReportAsync(days, appUserId, ct).ConfigureAwait(false);
+        await audit.ListedAsync("screenUsage", result.Screens.Count, ct, new { days, appUserId }).ConfigureAwait(false);
         return result;
     }
 

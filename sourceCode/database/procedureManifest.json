@@ -7913,6 +7913,182 @@
   ]
  },
  {
+  "name": "logs.uspCheckOperationalIntegrity",
+  "kind": "read",
+  "grants": [
+   "meritWorkerRole"
+  ],
+  "permission": null,
+  "params": [
+   {
+    "name": "minutes",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
+  "name": "logs.uspExportAuditEvents",
+  "kind": "read",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": "audit.view",
+  "params": [
+   {
+    "name": "fromUtc",
+    "type": "DATETIME2 (3)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "toUtc",
+    "type": "DATETIME2 (3)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "afterEventUtc",
+    "type": "DATETIME2 (3)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "afterAuditEventId",
+    "type": "BIGINT",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "batchSize",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
+  "name": "logs.uspExportScreenVisits",
+  "kind": "read",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": "usage.view",
+  "params": [
+   {
+    "name": "fromUtc",
+    "type": "DATETIME2 (3)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "toUtc",
+    "type": "DATETIME2 (3)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "afterEventUtc",
+    "type": "DATETIME2 (3)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "afterScreenVisitId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "batchSize",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
+  "name": "logs.uspExportSearchLogs",
+  "kind": "read",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": "security.review or audit.view",
+  "params": [
+   {
+    "name": "fromUtc",
+    "type": "DATETIME2 (3)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "toUtc",
+    "type": "DATETIME2 (3)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "afterSearchedUtc",
+    "type": "DATETIME2 (3)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "afterSearchLogId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "batchSize",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
+  "name": "logs.uspExportSignInEvents",
+  "kind": "read",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": "security.review or tenant.administer",
+  "params": [
+   {
+    "name": "fromUtc",
+    "type": "DATETIME2 (3)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "toUtc",
+    "type": "DATETIME2 (3)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "afterEventUtc",
+    "type": "DATETIME2 (3)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "afterSignInEventId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "batchSize",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
   "name": "logs.uspFindSignInAttemptsByName",
   "kind": "read",
   "grants": [
@@ -7935,6 +8111,22 @@
   ]
  },
  {
+  "name": "logs.uspGetAuditEventChanges",
+  "kind": "read",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": "audit.view or security.review",
+  "params": [
+   {
+    "name": "auditEventId",
+    "type": "BIGINT",
+    "hasDefault": false,
+    "isOutput": false
+   }
+  ]
+ },
+ {
   "name": "logs.uspGetAuditEventRecords",
   "kind": "read",
   "grants": [
@@ -7946,6 +8138,92 @@
     "name": "auditEventId",
     "type": "BIGINT",
     "hasDefault": false,
+    "isOutput": false
+   }
+  ]
+ },
+ {
+  "name": "logs.uspGetBehaviorAnomalies",
+  "kind": "read",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": "security.review or tenant.administer",
+  "params": [
+   {
+    "name": "hours",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "viewVelocityThreshold",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "exportSpikeThreshold",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "exportRowsThreshold",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "probingThreshold",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "searchVelocityThreshold",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "privBurstThreshold",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "mfaAbuseThreshold",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "distributedFailThreshold",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
+  "name": "logs.uspGetOperationalLogs",
+  "kind": "read",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": "security.investigate",
+  "params": [
+   {
+    "name": "hours",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "top",
+    "type": "INT",
+    "hasDefault": true,
     "isOutput": false
    }
   ]
@@ -7991,6 +8269,34 @@
     "type": "INT",
     "hasDefault": true,
     "isOutput": false
+   },
+   {
+    "name": "appUserId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
+  "name": "logs.uspGetSearchLogSummary",
+  "kind": "read",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": "security.review or audit.view",
+  "params": [
+   {
+    "name": "days",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "appUserId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": true,
+    "isOutput": false
    }
   ]
  },
@@ -8029,6 +8335,28 @@
   ]
  },
  {
+  "name": "logs.uspGetUserBehaviorSummary",
+  "kind": "read",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": "security.review or audit.view or tenant.administer",
+  "params": [
+   {
+    "name": "appUserId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "days",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
   "name": "logs.uspListAuditUsers",
   "kind": "read",
   "grants": [
@@ -8036,6 +8364,86 @@
   ],
   "permission": "audit.view",
   "params": []
+ },
+ {
+  "name": "logs.uspListSearchLogEvents",
+  "kind": "read",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": "security.review or audit.view",
+  "params": [
+   {
+    "name": "fromUtc",
+    "type": "DATETIME2 (3)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "toUtc",
+    "type": "DATETIME2 (3)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "appUserId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "includeSearchText",
+    "type": "BIT",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "top",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
+  "name": "logs.uspListSecurityFindings",
+  "kind": "read",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": "security.review or tenant.administer",
+  "params": [
+   {
+    "name": "days",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "status",
+    "type": "VARCHAR (20)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "severity",
+    "type": "VARCHAR (15)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "appUserId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "top",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   }
+  ]
  },
  {
   "name": "logs.uspListSignInEvents",
@@ -8082,6 +8490,22 @@
   ]
  },
  {
+  "name": "logs.uspPurgeAuditEventChanges",
+  "kind": "write",
+  "grants": [
+   "meritWorkerRole"
+  ],
+  "permission": null,
+  "params": [
+   {
+    "name": "retentionDays",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
   "name": "logs.uspPurgeAuditEventRecords",
   "kind": "write",
   "grants": [
@@ -8099,6 +8523,22 @@
  },
  {
   "name": "logs.uspPurgeScreenVisits",
+  "kind": "write",
+  "grants": [
+   "meritWorkerRole"
+  ],
+  "permission": null,
+  "params": [
+   {
+    "name": "retentionDays",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
+  "name": "logs.uspPurgeSearchLog",
   "kind": "write",
   "grants": [
    "meritWorkerRole"
@@ -8375,6 +8815,64 @@
   ]
  },
  {
+  "name": "logs.uspRunSecurityFindingScan",
+  "kind": "write",
+  "grants": [
+   "meritWorkerRole"
+  ],
+  "permission": null,
+  "params": [
+   {
+    "name": "hours",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "viewVelocityThreshold",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "exportSpikeThreshold",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "exportRowsThreshold",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "probingThreshold",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "searchVelocityThreshold",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "privBurstThreshold",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "mfaAbuseThreshold",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
   "name": "logs.uspSearchAuditEvents",
   "kind": "read",
   "grants": [
@@ -8455,6 +8953,28 @@
    {
     "name": "durationMs",
     "type": "INT",
+    "hasDefault": false,
+    "isOutput": false
+   }
+  ]
+ },
+ {
+  "name": "logs.uspUpdateSecurityFindingStatus",
+  "kind": "write",
+  "grants": [
+   "meritWebRole"
+  ],
+  "permission": "security.review or tenant.administer",
+  "params": [
+   {
+    "name": "securityFindingId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "status",
+    "type": "VARCHAR (20)",
     "hasDefault": false,
     "isOutput": false
    }

@@ -864,7 +864,7 @@ All tenants, including separate root tenants (different states), live in one sha
 - **No tenant-specific schema.** Jurisdiction differences live in configuration and custom-field rows, never in per-tenant tables or columns.
 - **Per-tenant export and removal.** Backups cover the whole database, so the project ships procedures to export one root tenant's complete data set and to purge it, including its rows in temporal history tables. This covers a state that leaves, or a records-retention request. The purge report states when the data will age out of backups.
 - **Fair use.** Batch jobs (intake, cluster detection, extracts) run in per-tenant queues with limits, so one state's large file cannot starve the others.
-- **Audit and history.** SQL Server temporal tables keep row history, and ledger tables make the audit log tamper-evident. Transparent data encryption protects data at rest. Ledger history [cannot be deleted](https://learn.microsoft.com/sql/relational-databases/security/ledger/ledger-limits), so the audit ledger holds only IDs, actions, users and times; names, dates of birth, addresses, result values and search text stay out of it.
+- **Audit and history.** Ledger tables make the audit log tamper-evident (`logs.auditEvent`), and a purgeable change-detail table (`logs.auditEventChange`) keyed by `auditEventId` keeps before-and-after snapshots of patient-data writes in the same transaction as the write and its ledger event (#332). System-versioned temporal tables are used for DDL tamper auditing (`logsData.DdlChange`), whereas patient-data row history lives in `logs.auditEventChange` so snapshots can be scrubbed and soft-deleted under MERIT's no-hard-delete records retention schedule without disabling system versioning or touching the immutable ledger. Transparent data encryption protects data at rest. Ledger history [cannot be deleted](https://learn.microsoft.com/sql/relational-databases/security/ledger/ledger-limits), so the audit ledger holds only IDs, actions, users and times; names, dates of birth, addresses, result values and search text stay out of it.
 
 ### Database support
 
@@ -875,7 +875,7 @@ SQL Server 2022 is the minimum version and the reference implementation: every f
 | Stored logic | T-SQL stored procedures | PL/pgSQL functions returning tables, with the same names and parameters |
 | Request context | `sp_set_session_context` with read-only values | `set_config(..., true)` scoped to the transaction |
 | Row-level security | Security policies with filter and block predicates, including on history tables | Row security policies; tables forced to apply them, and the application role never owns tables |
-| History and audit | Temporal tables, ledger tables | History tables kept by triggers; audit hashing in the application |
+| History and audit | Purgeable `logs.auditEventChange` snapshots + `logs.auditEvent` ledger table; temporal table for DDL tamper log | Change-detail table + audit hashing in the application |
 | Overlap rule for primary residence | Checked in the procedure with row locks | The same check; an exclusion constraint may be added |
 
 Rules that keep PostgreSQL from affecting SQL Server:

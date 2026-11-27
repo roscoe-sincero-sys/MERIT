@@ -74,6 +74,8 @@ public sealed class SignInAccountRow
 
     public int Lockouts { get; init; }
 
+    public DateTime FirstUtc { get; init; }
+
     public DateTime LastUtc { get; init; }
 }
 
@@ -104,6 +106,8 @@ public sealed class SignInStuffingRow
     public int Addresses { get; init; }
 
     public int Failures { get; init; }
+
+    public DateTime FirstUtc { get; init; }
 
     public DateTime LastUtc { get; init; }
 }

@@ -40,6 +40,9 @@
             (Text: "Users", Url: "/admin/users", Visible: CurrentSession.Has(Permissions.TenantAdminister) || CurrentSession.Has(Permissions.SecurityReview)),
             (Text: "Tenants", Url: "/admin/tenants", Visible: CurrentSession.Has(Permissions.TenantCreate)),
             (Text: "Sign-in activity", Url: "/admin/sign-in-activity", Visible: CurrentSession.Has(Permissions.TenantAdminister) || CurrentSession.Has(Permissions.SecurityReview)),
+            (Text: "Security alerts", Url: "/admin/security-alerts", Visible: CurrentSession.Has(Permissions.TenantAdminister) || CurrentSession.Has(Permissions.SecurityReview)),
+            (Text: "Log export", Url: "/admin/log-export", Visible: CurrentSession.Has(Permissions.AuditView) || CurrentSession.Has(Permissions.SecurityReview) || CurrentSession.Has(Permissions.TenantAdminister) || CurrentSession.Has(Permissions.UsageView)),
+            (Text: "Operational logs", Url: "/admin/operations-log", Visible: CurrentSession.Has(Permissions.SecurityInvestigate)),
             (Text: "Audit log", Url: "/admin/audit", Visible: CurrentSession.Has(Permissions.AuditView)) })
     };
 }

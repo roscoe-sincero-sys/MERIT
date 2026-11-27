@@ -115,35 +115,47 @@ SELECT TOP (CASE WHEN @top BETWEEN 1 AND 1000 THEN @top ELSE 100 END)
         "body": f"""
 {SCOPE}
 DECLARE @since DATETIME2 (3) = DATEADD (HOUR, -CASE WHEN @hours BETWEEN 1 AND 2160 THEN @hours ELSE 24 END, SYSUTCDATETIME ());
+-- #337: Load 1 hour of prior history before @since so Rule 5 (completed sign-in after failures within the preceding hour)
+-- evaluates accurately for sign-ins near the start of the reporting window.
+DECLARE @historySince DATETIME2 (3) = DATEADD (HOUR, -1, @since);
+
+DECLARE @history TABLE (eventUtc DATETIME2 (3), eventType VARCHAR (40), reason VARCHAR (60), appUserId UNIQUEIDENTIFIER,
+                        attemptedNameHash VARBINARY (32), clientAddress VARCHAR (45));
+INSERT @history
+SELECT e.eventUtc, e.eventType, e.reason, e.appUserId, e.attemptedNameHash, e.clientAddress
+  FROM logs.signInEvent AS e
+ WHERE e.eventUtc >= @historySince AND e.isDeleted = 0
+   AND (@all = 1 OR e.appUserId IN (SELECT appUserId FROM @accounts));
 
 DECLARE @e TABLE (eventUtc DATETIME2 (3), eventType VARCHAR (40), reason VARCHAR (60), appUserId UNIQUEIDENTIFIER,
                   attemptedNameHash VARBINARY (32), clientAddress VARCHAR (45));
 INSERT @e
-SELECT e.eventUtc, e.eventType, e.reason, e.appUserId, e.attemptedNameHash, e.clientAddress
-  FROM logs.signInEvent AS e
- WHERE e.eventUtc >= @since AND e.isDeleted = 0
-   AND (@all = 1 OR e.appUserId IN (SELECT appUserId FROM @accounts));
+SELECT eventUtc, eventType, reason, appUserId, attemptedNameHash, clientAddress
+  FROM @history
+ WHERE eventUtc >= @since;
 
--- 1. Failures by address.
+-- 1. Failures by address. Timestamps derive ONLY from matching failure/lockout/rate-limit events (#337).
 SELECT TOP (50) clientAddress
      , SUM (CASE WHEN eventType IN ({FAILURES}) THEN 1 ELSE 0 END)            AS failures
      , COUNT (DISTINCT CASE WHEN eventType IN ({FAILURES}) THEN appUserId END) AS distinctAccounts
      , COUNT (DISTINCT CASE WHEN eventType = 'unknownUser' THEN attemptedNameHash END) AS distinctUnknownNames
      , SUM (CASE WHEN eventType = 'accountLocked' THEN 1 ELSE 0 END)            AS lockouts
      , SUM (CASE WHEN eventType = 'rateLimited' THEN 1 ELSE 0 END)              AS rateLimited
-     , MIN (eventUtc) AS firstUtc, MAX (eventUtc) AS lastUtc
+     , MIN (CASE WHEN eventType IN ({FAILURES}, 'accountLocked', 'rateLimited') THEN eventUtc END) AS firstUtc
+     , MAX (CASE WHEN eventType IN ({FAILURES}, 'accountLocked', 'rateLimited') THEN eventUtc END) AS lastUtc
   FROM @e
  WHERE clientAddress IS NOT NULL
  GROUP BY clientAddress
 HAVING SUM (CASE WHEN eventType IN ({FAILURES}, 'accountLocked', 'rateLimited') THEN 1 ELSE 0 END) > 0
  ORDER BY failures DESC, lastUtc DESC;
 
--- 2. Failures by account.
+-- 2. Failures by account. Timestamps derive ONLY from matching failure/lockout events (#337).
 SELECT TOP (50) e.appUserId, u.userName, u.displayName
      , SUM (CASE WHEN e.eventType IN ({FAILURES}) THEN 1 ELSE 0 END)  AS failures
      , COUNT (DISTINCT CASE WHEN e.eventType IN ({FAILURES}) THEN e.clientAddress END) AS distinctAddresses
      , SUM (CASE WHEN e.eventType = 'accountLocked' THEN 1 ELSE 0 END) AS lockouts
-     , MAX (e.eventUtc) AS lastUtc
+     , MIN (CASE WHEN e.eventType IN ({FAILURES}, 'accountLocked') THEN e.eventUtc END) AS firstUtc
+     , MAX (CASE WHEN e.eventType IN ({FAILURES}, 'accountLocked') THEN e.eventUtc END) AS lastUtc
   FROM @e AS e
   JOIN auth.appUser AS u ON u.appUserId = e.appUserId
  GROUP BY e.appUserId, u.userName, u.displayName
@@ -162,7 +174,7 @@ HAVING COUNT (DISTINCT COALESCE (CONVERT (VARCHAR (36), appUserId), CONVERT (VAR
 
 -- 4. Stuffing: one account (or one unknown name) tried from many addresses.
 SELECT e.appUserId, u.userName, u.displayName, CONVERT (VARCHAR (64), e.attemptedNameHash, 2) AS attemptedNameHash
-     , COUNT (DISTINCT e.clientAddress) AS addresses, COUNT (*) AS failures, MAX (e.eventUtc) AS lastUtc
+     , COUNT (DISTINCT e.clientAddress) AS addresses, COUNT (*) AS failures, MIN (e.eventUtc) AS firstUtc, MAX (e.eventUtc) AS lastUtc
   FROM @e AS e
   LEFT JOIN auth.appUser AS u ON u.appUserId = e.appUserId
  WHERE e.eventType IN ({FAILURES})
@@ -170,13 +182,13 @@ SELECT e.appUserId, u.userName, u.displayName, CONVERT (VARCHAR (64), e.attempte
 HAVING COUNT (DISTINCT e.clientAddress) >= @stuffingThreshold
  ORDER BY addresses DESC;
 
--- 5. A full sign-in after repeated failures on the same account within the hour before it.
+-- 5. A full sign-in in the reporting window after repeated failures on the same account within the preceding hour (#337).
 SELECT s.appUserId, u.userName, u.displayName, s.eventUtc AS successUtc, s.clientAddress AS successAddress
      , f.failures, f.addresses
   FROM @e AS s
   JOIN auth.appUser AS u ON u.appUserId = s.appUserId
  CROSS APPLY (SELECT COUNT (*) AS failures, COUNT (DISTINCT x.clientAddress) AS addresses
-                FROM @e AS x
+                FROM @history AS x
                WHERE x.appUserId = s.appUserId AND x.eventType IN ({FAILURES})
                  AND x.eventUtc < s.eventUtc AND x.eventUtc >= DATEADD (HOUR, -1, s.eventUtc)) AS f
  WHERE s.eventType = 'sessionStarted' AND f.failures >= @failuresBefore

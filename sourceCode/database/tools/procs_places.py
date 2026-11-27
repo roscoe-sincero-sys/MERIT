@@ -243,6 +243,14 @@ SELECT personLocationId, locationId, organizationSiteId, role, COALESCE (isPrima
 
 -- Serialize every writer of this person's places (address rule 1: enforced under row locks, not only in the UI).
 DECLARE @lock INT = (SELECT COUNT (*) FROM dbo.personLocation WITH (UPDLOCK, HOLDLOCK) WHERE personId = @personId);
+DECLARE @beforePlacesJson NVARCHAR (MAX) = (
+    SELECT pl.personLocationId, pl.locationId, pl.role, pl.isPrimary, pl.startDate, pl.endDate, pl.verifiedDate,
+           l.addressLine1, l.city, l.state, l.zip5, l.countyFips
+      FROM dbo.personLocation AS pl
+      LEFT JOIN dbo.location AS l ON l.locationId = pl.locationId
+     WHERE pl.personId = @personId AND pl.isDeleted = 0
+     ORDER BY pl.startDate, pl.personLocationId
+       FOR JSON PATH);
 
 DECLARE @expected INT = (SELECT COUNT (*) FROM @changes AS c
                           WHERE EXISTS (SELECT 1 FROM dbo.personLocation AS pl WHERE pl.personLocationId = c.personLocationId));
@@ -321,11 +329,26 @@ IF @msg IS NOT NULL THROW 51422, @msg, 1;
 
 EXEC dbo.uspRefreshPersonAccess @personId = @personId;
 
+DECLARE @afterPlacesJson NVARCHAR (MAX) = (
+    SELECT pl.personLocationId, pl.locationId, pl.role, pl.isPrimary, pl.startDate, pl.endDate, pl.verifiedDate,
+           l.addressLine1, l.city, l.state, l.zip5, l.countyFips
+      FROM dbo.personLocation AS pl
+      LEFT JOIN dbo.location AS l ON l.locationId = pl.locationId
+     WHERE pl.personId = @personId AND pl.isDeleted = 0
+     ORDER BY pl.startDate, pl.personLocationId
+       FOR JSON PATH);
+
 {AUDIT_SESSION_VARS}
+DECLARE @placeAuditRoot UNIQUEIDENTIFIER = auth.udfSessionRootTenantId ();
+DECLARE @placeAuditOwner UNIQUEIDENTIFIER = dbo.udfPatientWorkOwner (@personId);
 INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, clientAddress, owningTenantId,
                         sessionReference, traceId, actingTenantId, viewAsUserId)
-VALUES (auth.udfSessionUserId (), auth.udfSessionRootTenantId (), 'update', 'person', @personId, @auditClientAddress,
-        dbo.udfPatientWorkOwner (@personId), @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs);
+VALUES (auth.udfSessionUserId (), @placeAuditRoot, 'update', 'person', @personId, @auditClientAddress,
+        @placeAuditOwner, @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs);
+DECLARE @placeAuditEventId BIGINT = SCOPE_IDENTITY ();
+INSERT logs.auditEventChange (auditEventChangeId, auditEventId, rootTenantId, owningTenantId, entityType, entityId,
+                              beforeJson, afterJson)
+VALUES ({NEWID}, @placeAuditEventId, @placeAuditRoot, @placeAuditOwner, 'person', @personId, @beforePlacesJson, @afterPlacesJson);
 
 SET @Comments = CONCAT ((SELECT COUNT (*) FROM @changes), N' place change(s) applied.');
 """,

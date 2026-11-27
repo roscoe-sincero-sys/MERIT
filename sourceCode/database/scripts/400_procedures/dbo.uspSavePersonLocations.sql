@@ -140,6 +140,14 @@ BEGIN
 
         -- Serialize every writer of this person's places (address rule 1: enforced under row locks, not only in the UI).
         DECLARE @lock INT = (SELECT COUNT (*) FROM dbo.personLocation WITH (UPDLOCK, HOLDLOCK) WHERE personId = @personId);
+        DECLARE @beforePlacesJson NVARCHAR (MAX) = (
+            SELECT pl.personLocationId, pl.locationId, pl.role, pl.isPrimary, pl.startDate, pl.endDate, pl.verifiedDate,
+                   l.addressLine1, l.city, l.state, l.zip5, l.countyFips
+              FROM dbo.personLocation AS pl
+              LEFT JOIN dbo.location AS l ON l.locationId = pl.locationId
+             WHERE pl.personId = @personId AND pl.isDeleted = 0
+             ORDER BY pl.startDate, pl.personLocationId
+               FOR JSON PATH);
 
         DECLARE @expected INT = (SELECT COUNT (*) FROM @changes AS c
                                   WHERE EXISTS (SELECT 1 FROM dbo.personLocation AS pl WHERE pl.personLocationId = c.personLocationId));
@@ -218,6 +226,15 @@ BEGIN
 
         EXEC dbo.uspRefreshPersonAccess @personId = @personId;
 
+        DECLARE @afterPlacesJson NVARCHAR (MAX) = (
+            SELECT pl.personLocationId, pl.locationId, pl.role, pl.isPrimary, pl.startDate, pl.endDate, pl.verifiedDate,
+                   l.addressLine1, l.city, l.state, l.zip5, l.countyFips
+              FROM dbo.personLocation AS pl
+              LEFT JOIN dbo.location AS l ON l.locationId = pl.locationId
+             WHERE pl.personId = @personId AND pl.isDeleted = 0
+             ORDER BY pl.startDate, pl.personLocationId
+               FOR JSON PATH);
+
         DECLARE @auditScope UNIQUEIDENTIFIER = TRY_CAST (SESSION_CONTEXT (N'scopeKey') AS UNIQUEIDENTIFIER);
         DECLARE @auditSessionRef UNIQUEIDENTIFIER, @auditActingTenant UNIQUEIDENTIFIER, @auditViewAs UNIQUEIDENTIFIER;
         SELECT @auditSessionRef = sessionReference, @auditActingTenant = actingTenantId, @auditViewAs = viewAsUserId
@@ -225,10 +242,16 @@ BEGIN
          WHERE sessionScopeId = @auditScope AND revokedUtc IS NULL AND expiresUtc > SYSUTCDATETIME () AND isDeleted = 0;
         DECLARE @auditClientAddress VARCHAR (45) = TRY_CAST (SESSION_CONTEXT (N'clientAddress') AS VARCHAR (45));
         DECLARE @auditTraceId VARCHAR (64) = TRY_CAST (SESSION_CONTEXT (N'traceId') AS VARCHAR (64));
+        DECLARE @placeAuditRoot UNIQUEIDENTIFIER = auth.udfSessionRootTenantId ();
+        DECLARE @placeAuditOwner UNIQUEIDENTIFIER = dbo.udfPatientWorkOwner (@personId);
         INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, clientAddress, owningTenantId,
                                 sessionReference, traceId, actingTenantId, viewAsUserId)
-        VALUES (auth.udfSessionUserId (), auth.udfSessionRootTenantId (), 'update', 'person', @personId, @auditClientAddress,
-                dbo.udfPatientWorkOwner (@personId), @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs);
+        VALUES (auth.udfSessionUserId (), @placeAuditRoot, 'update', 'person', @personId, @auditClientAddress,
+                @placeAuditOwner, @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs);
+        DECLARE @placeAuditEventId BIGINT = SCOPE_IDENTITY ();
+        INSERT logs.auditEventChange (auditEventChangeId, auditEventId, rootTenantId, owningTenantId, entityType, entityId,
+                                      beforeJson, afterJson)
+        VALUES (CAST (CAST (NEWID () AS BINARY (10)) + CAST (DATEDIFF_BIG (MILLISECOND, '19700101', SYSUTCDATETIME ()) AS BINARY (6)) AS UNIQUEIDENTIFIER), @placeAuditEventId, @placeAuditRoot, @placeAuditOwner, 'person', @personId, @beforePlacesJson, @afterPlacesJson);
 
         SET @Comments = CONCAT ((SELECT COUNT (*) FROM @changes), N' place change(s) applied.');
 
@@ -251,8 +274,8 @@ BEGIN
                  , ElapsedMilliseconds = CAST (LEAST (DATEDIFF_BIG (MILLISECOND, @StartTimeUtc, @EndTimeUtc)
                                                     , CAST (2147483647 AS BIGINT)) AS INT)
                  , Successful          = 1
-                 , Comments            = @Comments
-                 , modifiedBy          = ORIGINAL_LOGIN ()
+                 , Comments            = LEFT (@Comments, 500)
+                 , modifiedBy          = COALESCE (NULLIF (CAST (SESSION_CONTEXT (N'AppUser') AS NVARCHAR (255)), N''), ORIGINAL_LOGIN ())
                  , modifiedDateUtc     = @EndTimeUtc
              WHERE ExecutionLogId = @ExecutionId;
         END;

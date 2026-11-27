@@ -9,7 +9,7 @@ public interface IScreenUsageData
     // True requests one bounded retry of the same visit to reconcile an unresolved predecessor.
     Task<bool> RecordAsync(ScreenVisitInput visit, CancellationToken ct = default);
     Task DurationAsync(Guid visitId, int durationMs, CancellationToken ct = default);
-    Task<ScreenUsageReport> ReportAsync(int days, CancellationToken ct = default);
+    Task<ScreenUsageReport> ReportAsync(int days, Guid? appUserId = null, CancellationToken ct = default);
     Task<ScreenSessionReport> SessionAsync(Guid sessionReference, int days, int page, CancellationToken ct = default);
     Task<int> PurgeAsync(int retentionDays, CancellationToken ct = default);
 }

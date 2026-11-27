@@ -35,11 +35,11 @@ public sealed class SignInActivityController(SignInLogService log, ICurrentSessi
         rows.AddRange(r.ByAddress.Select(x => (IReadOnlyList<object?>)["Failures by address", x.ClientAddress, null, null, x.Failures,
             $"{x.DistinctAccounts} accounts, {x.DistinctUnknownNames} unknown names", x.Lockouts, x.RateLimited, U(x.FirstUtc), U(x.LastUtc)]));
         rows.AddRange(r.ByAccount.Select(x => (IReadOnlyList<object?>)["Failures by account", null, x.UserName, x.DisplayName, x.Failures,
-            $"{x.DistinctAddresses} addresses", x.Lockouts, null, null, U(x.LastUtc)]));
+            $"{x.DistinctAddresses} addresses", x.Lockouts, null, U(x.FirstUtc), U(x.LastUtc)]));
         rows.AddRange(r.Spraying.Select(x => (IReadOnlyList<object?>)["One address, many accounts", x.ClientAddress, null, null, x.Failures,
             $"{x.Targets} targets", null, null, U(x.FirstUtc), U(x.LastUtc)]));
         rows.AddRange(r.Stuffing.Select(x => (IReadOnlyList<object?>)["One account, many addresses", null, x.UserName ?? ("hash " + x.AttemptedNameHash), x.DisplayName,
-            x.Failures, $"{x.Addresses} addresses", null, null, null, U(x.LastUtc)]));
+            x.Failures, $"{x.Addresses} addresses", null, null, U(x.FirstUtc), U(x.LastUtc)]));
         rows.AddRange(r.SuccessAfterFailures.Select(x => (IReadOnlyList<object?>)["Signed in after failures", x.SuccessAddress, x.UserName, x.DisplayName,
             x.Failures, $"{x.Addresses} addresses", null, null, null, U(x.SuccessUtc)]));
         rows.AddRange(r.LockoutsAndLimits.Select(x => (IReadOnlyList<object?>)["Lockouts and rate limits", x.ClientAddress, x.UserName, null, null,

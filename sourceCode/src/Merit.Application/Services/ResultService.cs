@@ -179,11 +179,7 @@ public sealed class ResultService(
             ReportedSnapshotJson = snapshot,
             ResultRowStatus = isDuplicate ? "duplicate" : "valid",
         }, ct).ConfigureAwait(false);
-        // create labResult is audited inside dbo.uspSaveLabResult's transaction (#332).
-        if (input.CorrectsLabResultId is Guid supersededId)
-        {
-            await audit.ChangedAsync("labResult", supersededId, ct).ConfigureAwait(false);
-        }
+        // create labResult (and update on any superseded result) plus row-change snapshots are audited inside dbo.uspSaveLabResult's transaction (#332/#335).
 
         var analyte = refData.Analyte(specimen.AnalyteId)!;
         string valueDisplay = $"{normalized.Operator.ToCode().Replace("=", string.Empty, StringComparison.Ordinal)}{normalized.ValueReported} {input.Unit}";

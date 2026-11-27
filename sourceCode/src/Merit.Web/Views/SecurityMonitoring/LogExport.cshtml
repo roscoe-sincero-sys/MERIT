@@ -1,0 +1,24 @@
+@model Merit.Web.Controllers.LogExportPage
+@{
+    ViewData["Title"] = "Structured log export";
+}
+<h1>Structured log export</h1>
+<p>Download canonical, cursor-paginated logs in JSONL (NDJSON) or lossless CSV with ISO-8601 UTC timestamps, stable IDs, and correlation keys. Every export is audited.</p>
+<form class="usa-form" method="get" action="/admin/log-export/download">
+    <label class="usa-label" for="from">From date (UTC)</label>
+    <input class="usa-input" id="from" name="from" type="date" value="@Model.FromDate.ToString("yyyy-MM-dd")" required />
+    <label class="usa-label" for="to">To date (UTC)</label>
+    <input class="usa-input" id="to" name="to" type="date" value="@Model.ToDate.ToString("yyyy-MM-dd")" required />
+    <label class="usa-label" for="format">Format</label>
+    <select class="usa-select" id="format" name="format">
+        <option value="jsonl" selected>JSONL / NDJSON (AI-agent &amp; SIEM ready)</option>
+        <option value="csv">Canonical lossless CSV</option>
+    </select>
+    <label class="usa-label" for="streams">Streams (comma-separated: audit, signin, usage, search)</label>
+    <input class="usa-input" id="streams" name="streams" value="@string.Join(",", new[] { Model.CanAudit ? "audit" : null, Model.CanSecurity ? "signin" : null, Model.CanUsage ? "usage" : null, (Model.CanAudit || Model.CanSecurity) ? "search" : null }.Where(x => x is not null))" />
+    <div class="usa-checkbox">
+        <input class="usa-checkbox__input" id="pseudonymize" name="pseudonymize" type="checkbox" value="true" checked />
+        <label class="usa-checkbox__label" for="pseudonymize">Pseudonymized / AI-agent safe mode (keyed pseudonyms for users, masked IP prefixes, no free-text search terms)</label>
+    </div>
+    <button class="usa-button" type="submit">Download export</button>
+</form>
