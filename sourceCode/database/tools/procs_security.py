@@ -30,15 +30,16 @@ AUDIT_PREDICATE_270 = """(EXISTS (SELECT 1 FROM @wholeRoots AS w WHERE w.rootTen
 FAILURES = "'passwordFailed', 'unknownUser', 'mfaFailed', 'attemptWhileLocked', 'accountInactive'"
 MFA_ABUSE_EVENTS = "'mfaFailed', 'emailCodeSent', 'emailCodeRefused', 'passwordResetRequested', 'recoveryCodeUsed'"
 
-# Network-prefix expression (/24 for IPv4; first 3 colon-separated hextets for IPv6, handling variable-width/compressed addresses, Codex #7).
+# Network-prefix expression (/24 for IPv4; first 3 hextets for IPv6 with :: expansion so 2001:db8::1 == 2001:db8:0:5::1, Claude I11).
 IP_PREFIX_EXPR = """CASE
     WHEN CHARINDEX ('.', e.clientAddress) > 0
          THEN LEFT (e.clientAddress, LEN (e.clientAddress) - CHARINDEX ('.', REVERSE (e.clientAddress)))
     WHEN CHARINDEX (':', e.clientAddress) > 0
          THEN COALESCE (
-              LEFT (e.clientAddress, NULLIF (CHARINDEX (':', e.clientAddress,
-                    NULLIF (CHARINDEX (':', e.clientAddress,
-                    NULLIF (CHARINDEX (':', e.clientAddress), 0) + 1), 0) + 1), 0) - 1),
+              LEFT (REPLACE (CASE WHEN LEFT (e.clientAddress, 2) = '::' THEN '0' + e.clientAddress ELSE e.clientAddress END, '::', ':0:0:0:'),
+                    NULLIF (CHARINDEX (':', REPLACE (CASE WHEN LEFT (e.clientAddress, 2) = '::' THEN '0' + e.clientAddress ELSE e.clientAddress END, '::', ':0:0:0:'),
+                    NULLIF (CHARINDEX (':', REPLACE (CASE WHEN LEFT (e.clientAddress, 2) = '::' THEN '0' + e.clientAddress ELSE e.clientAddress END, '::', ':0:0:0:'),
+                    NULLIF (CHARINDEX (':', REPLACE (CASE WHEN LEFT (e.clientAddress, 2) = '::' THEN '0' + e.clientAddress ELSE e.clientAddress END, '::', ':0:0:0:')), 0) + 1), 0) + 1), 0) - 1),
               e.clientAddress)
     ELSE e.clientAddress
 END"""
@@ -273,21 +274,24 @@ SELECT 'bulkViewVelocity',
  GROUP BY e.appUserId, u.userName, u.displayName, e.sessionReference
 HAVING COUNT (DISTINCT e.entityId) >= @viewVelocityThreshold;
 
--- Rule 2: Bulk or unusual data exports
+-- Rule 2: Bulk or unusual data exports (count logical exports by entityId/auditEventId so started+completed pairs count once, Claude I12)
 INSERT @findings
 SELECT 'bulkExportSpike',
-       CASE WHEN SUM (COALESCE (e.recordCount, 1)) >= @exportRowsThreshold * 2 OR COUNT (*) >= @exportSpikeThreshold * 2 THEN 'high' ELSE 'medium' END,
+       CASE WHEN SUM (COALESCE (e.recordCount, 1)) >= @exportRowsThreshold * 2
+                 OR COUNT (DISTINCT COALESCE (CAST (e.entityId AS VARCHAR (36)), CAST (e.auditEventId AS VARCHAR (20)))) >= @exportSpikeThreshold * 2
+            THEN 'high' ELSE 'medium' END,
        e.appUserId, u.userName, u.displayName, NULL, NULL,
-       COUNT (*),
-       CONCAT (N'Bulk export spike (', COUNT (*), N' exports, ', SUM (COALESCE (e.recordCount, 0)), N' rows)'),
-       (SELECT COUNT (*) AS exportCount, SUM (COALESCE (e.recordCount, 0)) AS totalRows, @exportSpikeThreshold AS countThreshold, @exportRowsThreshold AS rowsThreshold FOR JSON PATH, WITHOUT_ARRAY_WRAPPER),
+       COUNT (DISTINCT COALESCE (CAST (e.entityId AS VARCHAR (36)), CAST (e.auditEventId AS VARCHAR (20)))),
+       CONCAT (N'Bulk export spike (', COUNT (DISTINCT COALESCE (CAST (e.entityId AS VARCHAR (36)), CAST (e.auditEventId AS VARCHAR (20)))), N' exports, ', SUM (COALESCE (e.recordCount, 0)), N' rows)'),
+       (SELECT COUNT (DISTINCT COALESCE (CAST (e.entityId AS VARCHAR (36)), CAST (e.auditEventId AS VARCHAR (20)))) AS exportCount, SUM (COALESCE (e.recordCount, 0)) AS totalRows, @exportSpikeThreshold AS countThreshold, @exportRowsThreshold AS rowsThreshold FOR JSON PATH, WITHOUT_ARRAY_WRAPPER),
        MIN (e.eventUtc), MAX (e.eventUtc)
   FROM logs.auditEvent AS e
   LEFT JOIN auth.appUser AS u ON u.appUserId = e.appUserId
  WHERE e.eventUtc >= @since AND e.eventAction = 'export'
    AND (@all = 1 OR e.appUserId IN (SELECT appUserId FROM @accounts))
  GROUP BY e.appUserId, u.userName, u.displayName
-HAVING COUNT (*) >= @exportSpikeThreshold OR SUM (COALESCE (e.recordCount, 0)) >= @exportRowsThreshold;
+HAVING COUNT (DISTINCT COALESCE (CAST (e.entityId AS VARCHAR (36)), CAST (e.auditEventId AS VARCHAR (20)))) >= @exportSpikeThreshold
+    OR SUM (COALESCE (e.recordCount, 0)) >= @exportRowsThreshold;
 
 -- Rule 3: Repeated permissionDenied or outside-scope probing
 INSERT @findings
@@ -489,19 +493,23 @@ SELECT COALESCE (e.rootTenantId, @platformRoot),
  GROUP BY COALESCE (e.rootTenantId, @platformRoot), e.appUserId, e.sessionReference
 HAVING COUNT (DISTINCT e.entityId) >= @viewVelocityThreshold;
 
--- Rule 2: bulkExportSpike
+-- Rule 2: bulkExportSpike (count logical exports so started+completed pairs count once, Claude I12)
 INSERT @candidates
 SELECT COALESCE (e.rootTenantId, @platformRoot),
        CASE WHEN COUNT (DISTINCT e.actingTenantId) = 1 THEN MAX (e.actingTenantId) END,
        e.appUserId, NULL, NULL,
-       'bulkExportSpike', CASE WHEN SUM (COALESCE (e.recordCount, 1)) >= @exportRowsThreshold * 2 OR COUNT (*) >= @exportSpikeThreshold * 2 THEN 'high' ELSE 'medium' END,
-       CONCAT (N'Bulk export spike (', COUNT (*), N' exports, ', SUM (COALESCE (e.recordCount, 0)), N' rows)'),
-       (SELECT COUNT (*) AS exportCount, SUM (COALESCE (e.recordCount, 0)) AS totalRows FOR JSON PATH, WITHOUT_ARRAY_WRAPPER),
+       'bulkExportSpike',
+       CASE WHEN SUM (COALESCE (e.recordCount, 1)) >= @exportRowsThreshold * 2
+                 OR COUNT (DISTINCT COALESCE (CAST (e.entityId AS VARCHAR (36)), CAST (e.auditEventId AS VARCHAR (20)))) >= @exportSpikeThreshold * 2
+            THEN 'high' ELSE 'medium' END,
+       CONCAT (N'Bulk export spike (', COUNT (DISTINCT COALESCE (CAST (e.entityId AS VARCHAR (36)), CAST (e.auditEventId AS VARCHAR (20)))), N' exports, ', SUM (COALESCE (e.recordCount, 0)), N' rows)'),
+       (SELECT COUNT (DISTINCT COALESCE (CAST (e.entityId AS VARCHAR (36)), CAST (e.auditEventId AS VARCHAR (20)))) AS exportCount, SUM (COALESCE (e.recordCount, 0)) AS totalRows FOR JSON PATH, WITHOUT_ARRAY_WRAPPER),
        CONCAT ('bulkExportSpike|', CONVERT (VARCHAR (36), COALESCE (e.rootTenantId, @platformRoot)), '|', COALESCE (CONVERT (VARCHAR (36), e.appUserId), 'none'), '|', @dayBucket)
   FROM logs.auditEvent AS e
  WHERE e.eventUtc >= @since AND e.eventAction = 'export'
  GROUP BY COALESCE (e.rootTenantId, @platformRoot), e.appUserId
-HAVING COUNT (*) >= @exportSpikeThreshold OR SUM (COALESCE (e.recordCount, 0)) >= @exportRowsThreshold;
+HAVING COUNT (DISTINCT COALESCE (CAST (e.entityId AS VARCHAR (36)), CAST (e.auditEventId AS VARCHAR (20)))) >= @exportSpikeThreshold
+    OR SUM (COALESCE (e.recordCount, 0)) >= @exportRowsThreshold;
 
 -- Rule 3: probingDeniedOrOutsideScope (handles NULL rootTenantId safely under platform-only scope, B1 / Codex #3)
 INSERT @candidates
@@ -643,19 +651,22 @@ DECLARE @inserted TABLE (
     detectedUtc       DATETIME2 (3)
 );
 
--- Codex #6: Persist upward severity escalations on existing active findings and emit them once for notification.
+-- Codex #6 / Claude S8: Persist upward severity escalations on active non-falsePositive findings, reopening resolved ones.
 UPDATE f
    SET f.severity     = c.severity
      , f.title        = c.title
      , f.detailJson   = c.detailJson
      , f.windowEndUtc = @now
+     , f.status       = CASE WHEN f.status = 'resolved' THEN 'open' ELSE f.status END
+     , f.acknowledgedByUserId = CASE WHEN f.status = 'resolved' THEN NULL ELSE f.acknowledgedByUserId END
+     , f.acknowledgedUtc      = CASE WHEN f.status = 'resolved' THEN NULL ELSE f.acknowledgedUtc END
      , f.owningTenantId = CASE WHEN f.owningTenantId = c.owningTenantId THEN f.owningTenantId ELSE NULL END
 OUTPUT INSERTED.securityFindingId, INSERTED.rootTenantId, INSERTED.appUserId, INSERTED.ruleCode,
        INSERTED.severity, INSERTED.title, INSERTED.detailJson, INSERTED.detectedUtc
   INTO @inserted
   FROM logs.securityFinding AS f
   JOIN @deduped AS c ON c.fingerprint = f.fingerprint
- WHERE f.isDeleted = 0
+ WHERE f.isDeleted = 0 AND f.status <> 'falsePositive'
    AND (CASE c.severity WHEN 'critical' THEN 4 WHEN 'high' THEN 3 WHEN 'medium' THEN 2 ELSE 1 END)
        > (CASE f.severity WHEN 'critical' THEN 4 WHEN 'high' THEN 3 WHEN 'medium' THEN 2 ELSE 1 END);
 
@@ -1005,7 +1016,7 @@ EXEC logs.uspDdlAuditVerify @ProblemsOnly = @ProblemsOnly;
 DECLARE @since DATETIME2 (3) = DATEADD (HOUR, -CASE WHEN @hours BETWEEN 1 AND 720 THEN @hours ELSE 24 END, SYSUTCDATETIME ());
 DECLARE @limit INT = CASE WHEN @top BETWEEN 1 AND 500 THEN @top ELSE 100 END;
 
--- 1. Allowlisted ExecutionLog failure diagnostics (#338, Claude I7): filter per token even on legacy rows.
+-- 1. Allowlisted ExecutionLog failure diagnostics (#338, Claude I10 / S9): deny-first per-token filtering with ordinal order.
 SELECT TOP (@limit)
        e.ExecutionLogId, e.ProcedureName, e.StartDateUtc, e.EndDateUtc, e.ElapsedMilliseconds,
        e.ReCreatedAfterRollback, e.ErrorNumber, e.ErrorLine, e.ErrorProcedure,
@@ -1013,22 +1024,26 @@ SELECT TOP (@limit)
            WHEN e.KeyParameters IS NULL OR CHARINDEX (N'=', e.KeyParameters) = 0 THEN LEFT (e.KeyParameters, 200)
            ELSE (SELECT LEFT (STRING_AGG (
                     CASE
-                        WHEN kv.k IS NOT NULL AND (
-                               kv.k LIKE N'%Id' OR kv.k LIKE N'%Count' OR kv.k LIKE N'%Number'
-                            OR kv.k LIKE N'%Days' OR kv.k LIKE N'%Hours' OR kv.k LIKE N'%Minutes'
-                            OR kv.k LIKE N'%Size' OR kv.k LIKE N'%Rows' OR kv.k LIKE N'%Code'
-                            OR kv.k LIKE N'%Type' OR kv.k LIKE N'%Action' OR kv.k LIKE N'%Kind'
-                            OR kv.k LIKE N'%Source' OR kv.k LIKE N'%Role' OR kv.k LIKE N'%By'
-                            OR kv.k LIKE N'%Only' OR kv.k LIKE N'%Fips' OR kv.k LIKE N'%Status'
-                            OR kv.k LIKE N'%Date' OR kv.k LIKE N'from%' OR kv.k LIKE N'to%'
-                            OR kv.k LIKE N'effective%' OR kv.k LIKE N'period%' OR kv.k LIKE N'is%'
-                            OR kv.k LIKE N'include%' OR kv.k LIKE N'has%'
-                            OR kv.k IN (N'top', N'page', N'assignedToMe', N'classification', N'closureReason', N'viewKind',
-                                        N'workerName', N'settingKey', N'decision', N'population', N'sort', N'status', N'step', N'method'))
+                        WHEN kv.k IS NOT NULL
+                             AND kv.k NOT IN (N'token', N'secret', N'ssn', N'firstName', N'lastName', N'middleName', N'searchText', N'attemptedName')
+                             AND kv.k NOT LIKE N'%password%' AND kv.k NOT LIKE N'%secret%' AND kv.k NOT LIKE N'%token%'
+                             AND kv.k NOT LIKE N'%birth%' AND kv.k NOT LIKE N'%phone%' AND kv.k NOT LIKE N'%email%'
+                             AND kv.k NOT LIKE N'%street%' AND kv.k NOT LIKE N'%zip%' AND kv.k NOT LIKE N'%ssn%'
+                             AND (   kv.k LIKE N'%Id' OR kv.k LIKE N'%Count' OR kv.k LIKE N'%Number'
+                                  OR kv.k LIKE N'%Days' OR kv.k LIKE N'%Hours' OR kv.k LIKE N'%Minutes'
+                                  OR kv.k LIKE N'%Size' OR kv.k LIKE N'%Rows' OR kv.k LIKE N'%Code'
+                                  OR kv.k LIKE N'%Type' OR kv.k LIKE N'%Action' OR kv.k LIKE N'%Kind'
+                                  OR kv.k LIKE N'%Source' OR kv.k LIKE N'%Role' OR kv.k LIKE N'%By'
+                                  OR kv.k LIKE N'%Only' OR kv.k LIKE N'%Fips' OR kv.k LIKE N'%Status'
+                                  OR kv.k IN (N'fromDate', N'toDate', N'fromUtc', N'toUtc', N'asOfDate', N'effectiveFrom', N'effectiveTo',
+                                              N'periodStart', N'periodEnd', N'isActive', N'isMember', N'isDeleted', N'includeHistory',
+                                              N'includeProtected', N'includeSearchText', N'hasDob', N'top', N'page', N'assignedToMe',
+                                              N'classification', N'closureReason', N'viewKind', N'workerName', N'settingKey',
+                                              N'decision', N'population', N'sort', N'status', N'step', N'method'))
                         THEN LTRIM (RTRIM (tok.value))
                         ELSE N'[redacted]'
-                    END, N', '), 500)
-                   FROM STRING_SPLIT (LEFT (e.KeyParameters, 500), N',') AS tok
+                    END, N', ') WITHIN GROUP (ORDER BY tok.ordinal), 500)
+                   FROM STRING_SPLIT (LEFT (e.KeyParameters, 500), N',', 1) AS tok
                   CROSS APPLY (SELECT LTRIM (RTRIM (LEFT (tok.value, NULLIF (CHARINDEX (N'=', tok.value), 0) - 1))) AS k) AS kv)
        END AS KeyParameters,
        e.createdBy

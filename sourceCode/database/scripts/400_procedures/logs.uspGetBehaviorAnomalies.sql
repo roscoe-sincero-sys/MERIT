@@ -129,21 +129,24 @@ BEGIN
          GROUP BY e.appUserId, u.userName, u.displayName, e.sessionReference
         HAVING COUNT (DISTINCT e.entityId) >= @viewVelocityThreshold;
 
-        -- Rule 2: Bulk or unusual data exports
+        -- Rule 2: Bulk or unusual data exports (count logical exports by entityId/auditEventId so started+completed pairs count once, Claude I12)
         INSERT @findings
         SELECT 'bulkExportSpike',
-               CASE WHEN SUM (COALESCE (e.recordCount, 1)) >= @exportRowsThreshold * 2 OR COUNT (*) >= @exportSpikeThreshold * 2 THEN 'high' ELSE 'medium' END,
+               CASE WHEN SUM (COALESCE (e.recordCount, 1)) >= @exportRowsThreshold * 2
+                         OR COUNT (DISTINCT COALESCE (CAST (e.entityId AS VARCHAR (36)), CAST (e.auditEventId AS VARCHAR (20)))) >= @exportSpikeThreshold * 2
+                    THEN 'high' ELSE 'medium' END,
                e.appUserId, u.userName, u.displayName, NULL, NULL,
-               COUNT (*),
-               CONCAT (N'Bulk export spike (', COUNT (*), N' exports, ', SUM (COALESCE (e.recordCount, 0)), N' rows)'),
-               (SELECT COUNT (*) AS exportCount, SUM (COALESCE (e.recordCount, 0)) AS totalRows, @exportSpikeThreshold AS countThreshold, @exportRowsThreshold AS rowsThreshold FOR JSON PATH, WITHOUT_ARRAY_WRAPPER),
+               COUNT (DISTINCT COALESCE (CAST (e.entityId AS VARCHAR (36)), CAST (e.auditEventId AS VARCHAR (20)))),
+               CONCAT (N'Bulk export spike (', COUNT (DISTINCT COALESCE (CAST (e.entityId AS VARCHAR (36)), CAST (e.auditEventId AS VARCHAR (20)))), N' exports, ', SUM (COALESCE (e.recordCount, 0)), N' rows)'),
+               (SELECT COUNT (DISTINCT COALESCE (CAST (e.entityId AS VARCHAR (36)), CAST (e.auditEventId AS VARCHAR (20)))) AS exportCount, SUM (COALESCE (e.recordCount, 0)) AS totalRows, @exportSpikeThreshold AS countThreshold, @exportRowsThreshold AS rowsThreshold FOR JSON PATH, WITHOUT_ARRAY_WRAPPER),
                MIN (e.eventUtc), MAX (e.eventUtc)
           FROM logs.auditEvent AS e
           LEFT JOIN auth.appUser AS u ON u.appUserId = e.appUserId
          WHERE e.eventUtc >= @since AND e.eventAction = 'export'
            AND (@all = 1 OR e.appUserId IN (SELECT appUserId FROM @accounts))
          GROUP BY e.appUserId, u.userName, u.displayName
-        HAVING COUNT (*) >= @exportSpikeThreshold OR SUM (COALESCE (e.recordCount, 0)) >= @exportRowsThreshold;
+        HAVING COUNT (DISTINCT COALESCE (CAST (e.entityId AS VARCHAR (36)), CAST (e.auditEventId AS VARCHAR (20)))) >= @exportSpikeThreshold
+            OR SUM (COALESCE (e.recordCount, 0)) >= @exportRowsThreshold;
 
         -- Rule 3: Repeated permissionDenied or outside-scope probing
         INSERT @findings
@@ -189,9 +192,10 @@ BEGIN
                  THEN LEFT (e.clientAddress, LEN (e.clientAddress) - CHARINDEX ('.', REVERSE (e.clientAddress)))
             WHEN CHARINDEX (':', e.clientAddress) > 0
                  THEN COALESCE (
-                      LEFT (e.clientAddress, NULLIF (CHARINDEX (':', e.clientAddress,
-                            NULLIF (CHARINDEX (':', e.clientAddress,
-                            NULLIF (CHARINDEX (':', e.clientAddress), 0) + 1), 0) + 1), 0) - 1),
+                      LEFT (REPLACE (CASE WHEN LEFT (e.clientAddress, 2) = '::' THEN '0' + e.clientAddress ELSE e.clientAddress END, '::', ':0:0:0:'),
+                            NULLIF (CHARINDEX (':', REPLACE (CASE WHEN LEFT (e.clientAddress, 2) = '::' THEN '0' + e.clientAddress ELSE e.clientAddress END, '::', ':0:0:0:'),
+                            NULLIF (CHARINDEX (':', REPLACE (CASE WHEN LEFT (e.clientAddress, 2) = '::' THEN '0' + e.clientAddress ELSE e.clientAddress END, '::', ':0:0:0:'),
+                            NULLIF (CHARINDEX (':', REPLACE (CASE WHEN LEFT (e.clientAddress, 2) = '::' THEN '0' + e.clientAddress ELSE e.clientAddress END, '::', ':0:0:0:')), 0) + 1), 0) + 1), 0) - 1),
                       e.clientAddress)
             ELSE e.clientAddress
         END) >= 3 THEN 'high' ELSE 'medium' END,
@@ -201,9 +205,10 @@ BEGIN
                  THEN LEFT (e.clientAddress, LEN (e.clientAddress) - CHARINDEX ('.', REVERSE (e.clientAddress)))
             WHEN CHARINDEX (':', e.clientAddress) > 0
                  THEN COALESCE (
-                      LEFT (e.clientAddress, NULLIF (CHARINDEX (':', e.clientAddress,
-                            NULLIF (CHARINDEX (':', e.clientAddress,
-                            NULLIF (CHARINDEX (':', e.clientAddress), 0) + 1), 0) + 1), 0) - 1),
+                      LEFT (REPLACE (CASE WHEN LEFT (e.clientAddress, 2) = '::' THEN '0' + e.clientAddress ELSE e.clientAddress END, '::', ':0:0:0:'),
+                            NULLIF (CHARINDEX (':', REPLACE (CASE WHEN LEFT (e.clientAddress, 2) = '::' THEN '0' + e.clientAddress ELSE e.clientAddress END, '::', ':0:0:0:'),
+                            NULLIF (CHARINDEX (':', REPLACE (CASE WHEN LEFT (e.clientAddress, 2) = '::' THEN '0' + e.clientAddress ELSE e.clientAddress END, '::', ':0:0:0:'),
+                            NULLIF (CHARINDEX (':', REPLACE (CASE WHEN LEFT (e.clientAddress, 2) = '::' THEN '0' + e.clientAddress ELSE e.clientAddress END, '::', ':0:0:0:')), 0) + 1), 0) + 1), 0) - 1),
                       e.clientAddress)
             ELSE e.clientAddress
         END),
@@ -212,9 +217,10 @@ BEGIN
                  THEN LEFT (e.clientAddress, LEN (e.clientAddress) - CHARINDEX ('.', REVERSE (e.clientAddress)))
             WHEN CHARINDEX (':', e.clientAddress) > 0
                  THEN COALESCE (
-                      LEFT (e.clientAddress, NULLIF (CHARINDEX (':', e.clientAddress,
-                            NULLIF (CHARINDEX (':', e.clientAddress,
-                            NULLIF (CHARINDEX (':', e.clientAddress), 0) + 1), 0) + 1), 0) - 1),
+                      LEFT (REPLACE (CASE WHEN LEFT (e.clientAddress, 2) = '::' THEN '0' + e.clientAddress ELSE e.clientAddress END, '::', ':0:0:0:'),
+                            NULLIF (CHARINDEX (':', REPLACE (CASE WHEN LEFT (e.clientAddress, 2) = '::' THEN '0' + e.clientAddress ELSE e.clientAddress END, '::', ':0:0:0:'),
+                            NULLIF (CHARINDEX (':', REPLACE (CASE WHEN LEFT (e.clientAddress, 2) = '::' THEN '0' + e.clientAddress ELSE e.clientAddress END, '::', ':0:0:0:'),
+                            NULLIF (CHARINDEX (':', REPLACE (CASE WHEN LEFT (e.clientAddress, 2) = '::' THEN '0' + e.clientAddress ELSE e.clientAddress END, '::', ':0:0:0:')), 0) + 1), 0) + 1), 0) - 1),
                       e.clientAddress)
             ELSE e.clientAddress
         END), N' distinct network prefixes in one session)'),
@@ -223,9 +229,10 @@ BEGIN
                  THEN LEFT (e.clientAddress, LEN (e.clientAddress) - CHARINDEX ('.', REVERSE (e.clientAddress)))
             WHEN CHARINDEX (':', e.clientAddress) > 0
                  THEN COALESCE (
-                      LEFT (e.clientAddress, NULLIF (CHARINDEX (':', e.clientAddress,
-                            NULLIF (CHARINDEX (':', e.clientAddress,
-                            NULLIF (CHARINDEX (':', e.clientAddress), 0) + 1), 0) + 1), 0) - 1),
+                      LEFT (REPLACE (CASE WHEN LEFT (e.clientAddress, 2) = '::' THEN '0' + e.clientAddress ELSE e.clientAddress END, '::', ':0:0:0:'),
+                            NULLIF (CHARINDEX (':', REPLACE (CASE WHEN LEFT (e.clientAddress, 2) = '::' THEN '0' + e.clientAddress ELSE e.clientAddress END, '::', ':0:0:0:'),
+                            NULLIF (CHARINDEX (':', REPLACE (CASE WHEN LEFT (e.clientAddress, 2) = '::' THEN '0' + e.clientAddress ELSE e.clientAddress END, '::', ':0:0:0:'),
+                            NULLIF (CHARINDEX (':', REPLACE (CASE WHEN LEFT (e.clientAddress, 2) = '::' THEN '0' + e.clientAddress ELSE e.clientAddress END, '::', ':0:0:0:')), 0) + 1), 0) + 1), 0) - 1),
                       e.clientAddress)
             ELSE e.clientAddress
         END) AS distinctPrefixes, COUNT (DISTINCT e.clientAddress) AS distinctAddresses, COUNT (*) AS events FOR JSON PATH, WITHOUT_ARRAY_WRAPPER),
@@ -240,9 +247,10 @@ BEGIN
                  THEN LEFT (e.clientAddress, LEN (e.clientAddress) - CHARINDEX ('.', REVERSE (e.clientAddress)))
             WHEN CHARINDEX (':', e.clientAddress) > 0
                  THEN COALESCE (
-                      LEFT (e.clientAddress, NULLIF (CHARINDEX (':', e.clientAddress,
-                            NULLIF (CHARINDEX (':', e.clientAddress,
-                            NULLIF (CHARINDEX (':', e.clientAddress), 0) + 1), 0) + 1), 0) - 1),
+                      LEFT (REPLACE (CASE WHEN LEFT (e.clientAddress, 2) = '::' THEN '0' + e.clientAddress ELSE e.clientAddress END, '::', ':0:0:0:'),
+                            NULLIF (CHARINDEX (':', REPLACE (CASE WHEN LEFT (e.clientAddress, 2) = '::' THEN '0' + e.clientAddress ELSE e.clientAddress END, '::', ':0:0:0:'),
+                            NULLIF (CHARINDEX (':', REPLACE (CASE WHEN LEFT (e.clientAddress, 2) = '::' THEN '0' + e.clientAddress ELSE e.clientAddress END, '::', ':0:0:0:'),
+                            NULLIF (CHARINDEX (':', REPLACE (CASE WHEN LEFT (e.clientAddress, 2) = '::' THEN '0' + e.clientAddress ELSE e.clientAddress END, '::', ':0:0:0:')), 0) + 1), 0) + 1), 0) - 1),
                       e.clientAddress)
             ELSE e.clientAddress
         END) > 1;

@@ -558,28 +558,31 @@ BEGIN
           , @Actor NVARCHAR (255) = COALESCE (NULLIF (CAST (SESSION_CONTEXT (N'AppUser') AS NVARCHAR (255)), N''), ORIGINAL_LOGIN ())
           , @SafeKeyParameters NVARCHAR (500) = LEFT (@KeyParameters, 500);
 
-    -- #338 allowlisted execution diagnostics (per-token filtering): keep approved identifier/count/status/date keys,
-    -- redact only non-allowlisted tokens so routine procedure diagnostics are never discarded wholesale.
+    -- #338 allowlisted execution diagnostics (per-token filtering, deny-first, ordinal-preserving, Claude I10 / S9).
     IF @SafeKeyParameters IS NOT NULL AND CHARINDEX (N'=', @SafeKeyParameters) > 0
     BEGIN
         SELECT @SafeKeyParameters = LEFT (STRING_AGG (
             CASE
-                WHEN kv.k IS NOT NULL AND (
-                       kv.k LIKE N'%Id' OR kv.k LIKE N'%Count' OR kv.k LIKE N'%Number'
-                    OR kv.k LIKE N'%Days' OR kv.k LIKE N'%Hours' OR kv.k LIKE N'%Minutes'
-                    OR kv.k LIKE N'%Size' OR kv.k LIKE N'%Rows' OR kv.k LIKE N'%Code'
-                    OR kv.k LIKE N'%Type' OR kv.k LIKE N'%Action' OR kv.k LIKE N'%Kind'
-                    OR kv.k LIKE N'%Source' OR kv.k LIKE N'%Role' OR kv.k LIKE N'%By'
-                    OR kv.k LIKE N'%Only' OR kv.k LIKE N'%Fips' OR kv.k LIKE N'%Status'
-                    OR kv.k LIKE N'%Date' OR kv.k LIKE N'from%' OR kv.k LIKE N'to%'
-                    OR kv.k LIKE N'effective%' OR kv.k LIKE N'period%' OR kv.k LIKE N'is%'
-                    OR kv.k LIKE N'include%' OR kv.k LIKE N'has%'
-                    OR kv.k IN (N'top', N'page', N'assignedToMe', N'classification', N'closureReason', N'viewKind',
-                                N'workerName', N'settingKey', N'decision', N'population', N'sort', N'status', N'step', N'method'))
+                WHEN kv.k IS NOT NULL
+                     AND kv.k NOT IN (N'token', N'secret', N'ssn', N'firstName', N'lastName', N'middleName', N'searchText', N'attemptedName')
+                     AND kv.k NOT LIKE N'%password%' AND kv.k NOT LIKE N'%secret%' AND kv.k NOT LIKE N'%token%'
+                     AND kv.k NOT LIKE N'%birth%' AND kv.k NOT LIKE N'%phone%' AND kv.k NOT LIKE N'%email%'
+                     AND kv.k NOT LIKE N'%street%' AND kv.k NOT LIKE N'%zip%' AND kv.k NOT LIKE N'%ssn%'
+                     AND (   kv.k LIKE N'%Id' OR kv.k LIKE N'%Count' OR kv.k LIKE N'%Number'
+                          OR kv.k LIKE N'%Days' OR kv.k LIKE N'%Hours' OR kv.k LIKE N'%Minutes'
+                          OR kv.k LIKE N'%Size' OR kv.k LIKE N'%Rows' OR kv.k LIKE N'%Code'
+                          OR kv.k LIKE N'%Type' OR kv.k LIKE N'%Action' OR kv.k LIKE N'%Kind'
+                          OR kv.k LIKE N'%Source' OR kv.k LIKE N'%Role' OR kv.k LIKE N'%By'
+                          OR kv.k LIKE N'%Only' OR kv.k LIKE N'%Fips' OR kv.k LIKE N'%Status'
+                          OR kv.k IN (N'fromDate', N'toDate', N'fromUtc', N'toUtc', N'asOfDate', N'effectiveFrom', N'effectiveTo',
+                                      N'periodStart', N'periodEnd', N'isActive', N'isMember', N'isDeleted', N'includeHistory',
+                                      N'includeProtected', N'includeSearchText', N'hasDob', N'top', N'page', N'assignedToMe',
+                                      N'classification', N'closureReason', N'viewKind', N'workerName', N'settingKey',
+                                      N'decision', N'population', N'sort', N'status', N'step', N'method'))
                 THEN LTRIM (RTRIM (tok.value))
                 ELSE N'[redacted]'
-            END, N', '), 500)
-          FROM STRING_SPLIT (@SafeKeyParameters, N',') AS tok
+            END, N', ') WITHIN GROUP (ORDER BY tok.ordinal), 500)
+          FROM STRING_SPLIT (@SafeKeyParameters, N',', 1) AS tok
          CROSS APPLY (SELECT LTRIM (RTRIM (LEFT (tok.value, NULLIF (CHARINDEX (N'=', tok.value), 0) - 1))) AS k) AS kv;
     END;
 
@@ -830,27 +833,31 @@ BEGIN
               , @SafeContext       NVARCHAR (500) = LEFT (@ContextMessage, 500)
               , @SafeDynamicSql    NVARCHAR (100) = CASE WHEN @DynamicSql IS NULL THEN NULL ELSE N'[omitted by diagnostic minimization]' END;
 
-        -- #338 allowlisted execution diagnostics (per-token filtering) in the shared error writer.
+        -- #338 allowlisted execution diagnostics (per-token filtering, deny-first, ordinal-preserving) in the shared error writer.
         IF @SafeKeyParameters IS NOT NULL AND CHARINDEX (N'=', @SafeKeyParameters) > 0
         BEGIN
             SELECT @SafeKeyParameters = LEFT (STRING_AGG (
                 CASE
-                    WHEN kv.k IS NOT NULL AND (
-                           kv.k LIKE N'%Id' OR kv.k LIKE N'%Count' OR kv.k LIKE N'%Number'
-                        OR kv.k LIKE N'%Days' OR kv.k LIKE N'%Hours' OR kv.k LIKE N'%Minutes'
-                        OR kv.k LIKE N'%Size' OR kv.k LIKE N'%Rows' OR kv.k LIKE N'%Code'
-                        OR kv.k LIKE N'%Type' OR kv.k LIKE N'%Action' OR kv.k LIKE N'%Kind'
-                        OR kv.k LIKE N'%Source' OR kv.k LIKE N'%Role' OR kv.k LIKE N'%By'
-                        OR kv.k LIKE N'%Only' OR kv.k LIKE N'%Fips' OR kv.k LIKE N'%Status'
-                        OR kv.k LIKE N'%Date' OR kv.k LIKE N'from%' OR kv.k LIKE N'to%'
-                        OR kv.k LIKE N'effective%' OR kv.k LIKE N'period%' OR kv.k LIKE N'is%'
-                        OR kv.k LIKE N'include%' OR kv.k LIKE N'has%'
-                        OR kv.k IN (N'top', N'page', N'assignedToMe', N'classification', N'closureReason', N'viewKind',
-                                    N'workerName', N'settingKey', N'decision', N'population', N'sort', N'status', N'step', N'method'))
+                    WHEN kv.k IS NOT NULL
+                         AND kv.k NOT IN (N'token', N'secret', N'ssn', N'firstName', N'lastName', N'middleName', N'searchText', N'attemptedName')
+                         AND kv.k NOT LIKE N'%password%' AND kv.k NOT LIKE N'%secret%' AND kv.k NOT LIKE N'%token%'
+                         AND kv.k NOT LIKE N'%birth%' AND kv.k NOT LIKE N'%phone%' AND kv.k NOT LIKE N'%email%'
+                         AND kv.k NOT LIKE N'%street%' AND kv.k NOT LIKE N'%zip%' AND kv.k NOT LIKE N'%ssn%'
+                         AND (   kv.k LIKE N'%Id' OR kv.k LIKE N'%Count' OR kv.k LIKE N'%Number'
+                              OR kv.k LIKE N'%Days' OR kv.k LIKE N'%Hours' OR kv.k LIKE N'%Minutes'
+                              OR kv.k LIKE N'%Size' OR kv.k LIKE N'%Rows' OR kv.k LIKE N'%Code'
+                              OR kv.k LIKE N'%Type' OR kv.k LIKE N'%Action' OR kv.k LIKE N'%Kind'
+                              OR kv.k LIKE N'%Source' OR kv.k LIKE N'%Role' OR kv.k LIKE N'%By'
+                              OR kv.k LIKE N'%Only' OR kv.k LIKE N'%Fips' OR kv.k LIKE N'%Status'
+                              OR kv.k IN (N'fromDate', N'toDate', N'fromUtc', N'toUtc', N'asOfDate', N'effectiveFrom', N'effectiveTo',
+                                          N'periodStart', N'periodEnd', N'isActive', N'isMember', N'isDeleted', N'includeHistory',
+                                          N'includeProtected', N'includeSearchText', N'hasDob', N'top', N'page', N'assignedToMe',
+                                          N'classification', N'closureReason', N'viewKind', N'workerName', N'settingKey',
+                                          N'decision', N'population', N'sort', N'status', N'step', N'method'))
                     THEN LTRIM (RTRIM (tok.value))
                     ELSE N'[redacted]'
-                END, N', '), 500)
-              FROM STRING_SPLIT (@SafeKeyParameters, N',') AS tok
+                END, N', ') WITHIN GROUP (ORDER BY tok.ordinal), 500)
+              FROM STRING_SPLIT (@SafeKeyParameters, N',', 1) AS tok
              CROSS APPLY (SELECT LTRIM (RTRIM (LEFT (tok.value, NULLIF (CHARINDEX (N'=', tok.value), 0) - 1))) AS k) AS kv;
         END;
 

@@ -269,18 +269,17 @@ public sealed class LoggingWave2IntegrationTests(MeritFixture fixture)
         using var usageFiltered = await admin.Http.GetAsync($"/admin/usage?days=30&userId={sup.appUserId}");
         Assert.Equal(HttpStatusCode.OK, usageFiltered.StatusCode);
 
-        // #338 (Claude I7 / Codex #8): Per-token allowlist preserves allowed keys and redacts only disallowed tokens.
+        // #338 (Claude I10 / S9): Deny-first per-token allowlist preserves order & allowed keys, redacts token/birthDate/phoneNumber/zipCode/lastName.
         var p = new DynamicParameters();
         p.Add("@ProcedureName", "[dbo].[uspSyntheticTest]");
-        p.Add("@KeyParameters", "exposureCaseId=123, lastName=SensitiveName, population=child");
+        p.Add("@KeyParameters", "exposureCaseId=123, birthDate=2019-04-02, token=abc123secret, phoneNumber=4105551212, zipCode=21201, lastName=SensitiveName, population=child");
         p.Add("@StartDateUtc", DateTime.UtcNow);
         p.Add("@ReCreatedAfterRollback", false);
         p.Add("@ExecutionLogId", dbType: DbType.Int64, direction: ParameterDirection.Output);
         await conn.ExecuteAsync("logs.uspStartExecutionLogging", p, commandType: CommandType.StoredProcedure);
         long execId = p.Get<long>("@ExecutionLogId");
         string? storedKey = await conn.ExecuteScalarAsync<string?>("SELECT KeyParameters FROM logs.ExecutionLog WHERE ExecutionLogId = @id", new { id = execId });
-        Assert.Equal("exposureCaseId=123, [redacted], population=child", storedKey);
-        Assert.DoesNotContain("SensitiveName", storedKey ?? string.Empty, StringComparison.Ordinal);
+        Assert.Equal("exposureCaseId=123, [redacted], [redacted], [redacted], [redacted], [redacted], population=child", storedKey);
         await conn.ExecuteAsync("UPDATE logs.ExecutionLog SET isDeleted = 1 WHERE ExecutionLogId = @id", new { id = execId });
 
         // Claude B3 / Codex #2: meritWeb with NO session context MUST get 51403 from logs.uspGetOperationalLogs!

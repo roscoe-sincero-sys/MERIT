@@ -139,19 +139,23 @@ BEGIN
          GROUP BY COALESCE (e.rootTenantId, @platformRoot), e.appUserId, e.sessionReference
         HAVING COUNT (DISTINCT e.entityId) >= @viewVelocityThreshold;
 
-        -- Rule 2: bulkExportSpike
+        -- Rule 2: bulkExportSpike (count logical exports so started+completed pairs count once, Claude I12)
         INSERT @candidates
         SELECT COALESCE (e.rootTenantId, @platformRoot),
                CASE WHEN COUNT (DISTINCT e.actingTenantId) = 1 THEN MAX (e.actingTenantId) END,
                e.appUserId, NULL, NULL,
-               'bulkExportSpike', CASE WHEN SUM (COALESCE (e.recordCount, 1)) >= @exportRowsThreshold * 2 OR COUNT (*) >= @exportSpikeThreshold * 2 THEN 'high' ELSE 'medium' END,
-               CONCAT (N'Bulk export spike (', COUNT (*), N' exports, ', SUM (COALESCE (e.recordCount, 0)), N' rows)'),
-               (SELECT COUNT (*) AS exportCount, SUM (COALESCE (e.recordCount, 0)) AS totalRows FOR JSON PATH, WITHOUT_ARRAY_WRAPPER),
+               'bulkExportSpike',
+               CASE WHEN SUM (COALESCE (e.recordCount, 1)) >= @exportRowsThreshold * 2
+                         OR COUNT (DISTINCT COALESCE (CAST (e.entityId AS VARCHAR (36)), CAST (e.auditEventId AS VARCHAR (20)))) >= @exportSpikeThreshold * 2
+                    THEN 'high' ELSE 'medium' END,
+               CONCAT (N'Bulk export spike (', COUNT (DISTINCT COALESCE (CAST (e.entityId AS VARCHAR (36)), CAST (e.auditEventId AS VARCHAR (20)))), N' exports, ', SUM (COALESCE (e.recordCount, 0)), N' rows)'),
+               (SELECT COUNT (DISTINCT COALESCE (CAST (e.entityId AS VARCHAR (36)), CAST (e.auditEventId AS VARCHAR (20)))) AS exportCount, SUM (COALESCE (e.recordCount, 0)) AS totalRows FOR JSON PATH, WITHOUT_ARRAY_WRAPPER),
                CONCAT ('bulkExportSpike|', CONVERT (VARCHAR (36), COALESCE (e.rootTenantId, @platformRoot)), '|', COALESCE (CONVERT (VARCHAR (36), e.appUserId), 'none'), '|', @dayBucket)
           FROM logs.auditEvent AS e
          WHERE e.eventUtc >= @since AND e.eventAction = 'export'
          GROUP BY COALESCE (e.rootTenantId, @platformRoot), e.appUserId
-        HAVING COUNT (*) >= @exportSpikeThreshold OR SUM (COALESCE (e.recordCount, 0)) >= @exportRowsThreshold;
+        HAVING COUNT (DISTINCT COALESCE (CAST (e.entityId AS VARCHAR (36)), CAST (e.auditEventId AS VARCHAR (20)))) >= @exportSpikeThreshold
+            OR SUM (COALESCE (e.recordCount, 0)) >= @exportRowsThreshold;
 
         -- Rule 3: probingDeniedOrOutsideScope (handles NULL rootTenantId safely under platform-only scope, B1 / Codex #3)
         INSERT @candidates
@@ -191,9 +195,10 @@ BEGIN
                  THEN LEFT (e.clientAddress, LEN (e.clientAddress) - CHARINDEX ('.', REVERSE (e.clientAddress)))
             WHEN CHARINDEX (':', e.clientAddress) > 0
                  THEN COALESCE (
-                      LEFT (e.clientAddress, NULLIF (CHARINDEX (':', e.clientAddress,
-                            NULLIF (CHARINDEX (':', e.clientAddress,
-                            NULLIF (CHARINDEX (':', e.clientAddress), 0) + 1), 0) + 1), 0) - 1),
+                      LEFT (REPLACE (CASE WHEN LEFT (e.clientAddress, 2) = '::' THEN '0' + e.clientAddress ELSE e.clientAddress END, '::', ':0:0:0:'),
+                            NULLIF (CHARINDEX (':', REPLACE (CASE WHEN LEFT (e.clientAddress, 2) = '::' THEN '0' + e.clientAddress ELSE e.clientAddress END, '::', ':0:0:0:'),
+                            NULLIF (CHARINDEX (':', REPLACE (CASE WHEN LEFT (e.clientAddress, 2) = '::' THEN '0' + e.clientAddress ELSE e.clientAddress END, '::', ':0:0:0:'),
+                            NULLIF (CHARINDEX (':', REPLACE (CASE WHEN LEFT (e.clientAddress, 2) = '::' THEN '0' + e.clientAddress ELSE e.clientAddress END, '::', ':0:0:0:')), 0) + 1), 0) + 1), 0) - 1),
                       e.clientAddress)
             ELSE e.clientAddress
         END) >= 3 THEN 'high' ELSE 'medium' END,
@@ -202,9 +207,10 @@ BEGIN
                  THEN LEFT (e.clientAddress, LEN (e.clientAddress) - CHARINDEX ('.', REVERSE (e.clientAddress)))
             WHEN CHARINDEX (':', e.clientAddress) > 0
                  THEN COALESCE (
-                      LEFT (e.clientAddress, NULLIF (CHARINDEX (':', e.clientAddress,
-                            NULLIF (CHARINDEX (':', e.clientAddress,
-                            NULLIF (CHARINDEX (':', e.clientAddress), 0) + 1), 0) + 1), 0) - 1),
+                      LEFT (REPLACE (CASE WHEN LEFT (e.clientAddress, 2) = '::' THEN '0' + e.clientAddress ELSE e.clientAddress END, '::', ':0:0:0:'),
+                            NULLIF (CHARINDEX (':', REPLACE (CASE WHEN LEFT (e.clientAddress, 2) = '::' THEN '0' + e.clientAddress ELSE e.clientAddress END, '::', ':0:0:0:'),
+                            NULLIF (CHARINDEX (':', REPLACE (CASE WHEN LEFT (e.clientAddress, 2) = '::' THEN '0' + e.clientAddress ELSE e.clientAddress END, '::', ':0:0:0:'),
+                            NULLIF (CHARINDEX (':', REPLACE (CASE WHEN LEFT (e.clientAddress, 2) = '::' THEN '0' + e.clientAddress ELSE e.clientAddress END, '::', ':0:0:0:')), 0) + 1), 0) + 1), 0) - 1),
                       e.clientAddress)
             ELSE e.clientAddress
         END), N' distinct network prefixes)'),
@@ -213,9 +219,10 @@ BEGIN
                  THEN LEFT (e.clientAddress, LEN (e.clientAddress) - CHARINDEX ('.', REVERSE (e.clientAddress)))
             WHEN CHARINDEX (':', e.clientAddress) > 0
                  THEN COALESCE (
-                      LEFT (e.clientAddress, NULLIF (CHARINDEX (':', e.clientAddress,
-                            NULLIF (CHARINDEX (':', e.clientAddress,
-                            NULLIF (CHARINDEX (':', e.clientAddress), 0) + 1), 0) + 1), 0) - 1),
+                      LEFT (REPLACE (CASE WHEN LEFT (e.clientAddress, 2) = '::' THEN '0' + e.clientAddress ELSE e.clientAddress END, '::', ':0:0:0:'),
+                            NULLIF (CHARINDEX (':', REPLACE (CASE WHEN LEFT (e.clientAddress, 2) = '::' THEN '0' + e.clientAddress ELSE e.clientAddress END, '::', ':0:0:0:'),
+                            NULLIF (CHARINDEX (':', REPLACE (CASE WHEN LEFT (e.clientAddress, 2) = '::' THEN '0' + e.clientAddress ELSE e.clientAddress END, '::', ':0:0:0:'),
+                            NULLIF (CHARINDEX (':', REPLACE (CASE WHEN LEFT (e.clientAddress, 2) = '::' THEN '0' + e.clientAddress ELSE e.clientAddress END, '::', ':0:0:0:')), 0) + 1), 0) + 1), 0) - 1),
                       e.clientAddress)
             ELSE e.clientAddress
         END) AS distinctPrefixes, COUNT (DISTINCT e.clientAddress) AS distinctAddresses, COUNT (*) AS events FOR JSON PATH, WITHOUT_ARRAY_WRAPPER),
@@ -228,9 +235,10 @@ BEGIN
                  THEN LEFT (e.clientAddress, LEN (e.clientAddress) - CHARINDEX ('.', REVERSE (e.clientAddress)))
             WHEN CHARINDEX (':', e.clientAddress) > 0
                  THEN COALESCE (
-                      LEFT (e.clientAddress, NULLIF (CHARINDEX (':', e.clientAddress,
-                            NULLIF (CHARINDEX (':', e.clientAddress,
-                            NULLIF (CHARINDEX (':', e.clientAddress), 0) + 1), 0) + 1), 0) - 1),
+                      LEFT (REPLACE (CASE WHEN LEFT (e.clientAddress, 2) = '::' THEN '0' + e.clientAddress ELSE e.clientAddress END, '::', ':0:0:0:'),
+                            NULLIF (CHARINDEX (':', REPLACE (CASE WHEN LEFT (e.clientAddress, 2) = '::' THEN '0' + e.clientAddress ELSE e.clientAddress END, '::', ':0:0:0:'),
+                            NULLIF (CHARINDEX (':', REPLACE (CASE WHEN LEFT (e.clientAddress, 2) = '::' THEN '0' + e.clientAddress ELSE e.clientAddress END, '::', ':0:0:0:'),
+                            NULLIF (CHARINDEX (':', REPLACE (CASE WHEN LEFT (e.clientAddress, 2) = '::' THEN '0' + e.clientAddress ELSE e.clientAddress END, '::', ':0:0:0:')), 0) + 1), 0) + 1), 0) - 1),
                       e.clientAddress)
             ELSE e.clientAddress
         END) > 1;
@@ -340,19 +348,22 @@ BEGIN
             detectedUtc       DATETIME2 (3)
         );
 
-        -- Codex #6: Persist upward severity escalations on existing active findings and emit them once for notification.
+        -- Codex #6 / Claude S8: Persist upward severity escalations on active non-falsePositive findings, reopening resolved ones.
         UPDATE f
            SET f.severity     = c.severity
              , f.title        = c.title
              , f.detailJson   = c.detailJson
              , f.windowEndUtc = @now
+             , f.status       = CASE WHEN f.status = 'resolved' THEN 'open' ELSE f.status END
+             , f.acknowledgedByUserId = CASE WHEN f.status = 'resolved' THEN NULL ELSE f.acknowledgedByUserId END
+             , f.acknowledgedUtc      = CASE WHEN f.status = 'resolved' THEN NULL ELSE f.acknowledgedUtc END
              , f.owningTenantId = CASE WHEN f.owningTenantId = c.owningTenantId THEN f.owningTenantId ELSE NULL END
         OUTPUT INSERTED.securityFindingId, INSERTED.rootTenantId, INSERTED.appUserId, INSERTED.ruleCode,
                INSERTED.severity, INSERTED.title, INSERTED.detailJson, INSERTED.detectedUtc
           INTO @inserted
           FROM logs.securityFinding AS f
           JOIN @deduped AS c ON c.fingerprint = f.fingerprint
-         WHERE f.isDeleted = 0
+         WHERE f.isDeleted = 0 AND f.status <> 'falsePositive'
            AND (CASE c.severity WHEN 'critical' THEN 4 WHEN 'high' THEN 3 WHEN 'medium' THEN 2 ELSE 1 END)
                > (CASE f.severity WHEN 'critical' THEN 4 WHEN 'high' THEN 3 WHEN 'medium' THEN 2 ELSE 1 END);
 
