@@ -126,6 +126,45 @@ public sealed partial class SecurityAlertWebhookNotifier : ISecurityAlertNotifie
         return false;
     }
 
+    /// <summary>
+    /// Drains open, undelivered <c>ledgerVerificationFailed</c> findings from the SQL outbox, marking each delivered
+    /// only after HTTP 2xx (#354). Shared by <see cref="AuditLedgerVerifier"/> and <see cref="SecurityFindingScanner"/>
+    /// so transient receiver outages retry on the 15-minute scan cadence instead of waiting for the next daily ledger cycle.
+    /// </summary>
+    internal static async Task DrainPendingLedgerAlertsAsync(
+        ISecurityMonitoringData data,
+        ISecurityAlertNotifier? notifier,
+        ILogger logger,
+        HashSet<Guid>? attemptedAlertIds,
+        CancellationToken ct)
+    {
+        if (notifier is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var pending = await data.GetPendingLedgerAlertsAsync(ct).ConfigureAwait(false);
+            foreach (var finding in pending)
+            {
+                if (attemptedAlertIds is not null && !attemptedAlertIds.Add(finding.SecurityFindingId))
+                {
+                    continue;
+                }
+
+                if (await notifier.NotifyAsync([finding], ct).ConfigureAwait(false))
+                {
+                    await data.MarkSecurityFindingWebhookDeliveredAsync(finding.SecurityFindingId, ct).ConfigureAwait(false);
+                }
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+        {
+            LedgerAlertOutboxError(logger, ex.GetType().Name);
+        }
+    }
+
     [LoggerMessage(Level = LogLevel.Warning, Message = "Security alert webhook skipped: URL must be absolute HTTPS")]
     private static partial void WebhookSkipped(ILogger logger);
 
@@ -134,4 +173,7 @@ public sealed partial class SecurityAlertWebhookNotifier : ISecurityAlertNotifie
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Security alert webhook delivery failed ({ExceptionType})")]
     private static partial void WebhookException(ILogger logger, string exceptionType);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Audit ledger alert outbox drain failed ({ExceptionType}); pending alerts will retry on the next cycle.")]
+    private static partial void LedgerAlertOutboxError(ILogger logger, string exceptionType);
 }

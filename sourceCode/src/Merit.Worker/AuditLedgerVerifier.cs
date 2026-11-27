@@ -171,35 +171,8 @@ public sealed partial class AuditLedgerVerifier(
         LedgerVerified(logger, fresh.LastVerifiedBlockId ?? -1, fresh.Detail);
     }
 
-    private async Task DrainPendingLedgerAlertsAsync(ISecurityMonitoringData data, HashSet<Guid> attemptedAlertIds, CancellationToken ct)
-    {
-        if (notifier is null)
-        {
-            return;
-        }
-
-        try
-        {
-            var pending = await data.GetPendingLedgerAlertsAsync(ct).ConfigureAwait(false);
-            foreach (var finding in pending)
-            {
-                if (!attemptedAlertIds.Add(finding.SecurityFindingId))
-                {
-                    continue;
-                }
-
-                bool delivered = await notifier.NotifyAsync([finding], ct).ConfigureAwait(false);
-                if (delivered)
-                {
-                    await data.MarkSecurityFindingWebhookDeliveredAsync(finding.SecurityFindingId, ct).ConfigureAwait(false);
-                }
-            }
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
-        {
-            LedgerAlertOutboxError(logger, ex.GetType().Name);
-        }
-    }
+    private Task DrainPendingLedgerAlertsAsync(ISecurityMonitoringData data, HashSet<Guid> attemptedAlertIds, CancellationToken ct)
+        => SecurityAlertWebhookNotifier.DrainPendingLedgerAlertsAsync(data, notifier, logger, attemptedAlertIds, ct);
 
     private async Task TryRecordFailureAndNotifyAsync(string anchorSource, string detail, HashSet<Guid> attemptedAlertIds, CancellationToken ct)
     {
@@ -279,7 +252,4 @@ public sealed partial class AuditLedgerVerifier(
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Audit ledger verification threw an unexpected exception ({ExceptionType})")]
     private static partial void LedgerVerificationError(ILogger logger, string exceptionType);
-
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Audit ledger alert outbox drain failed ({ExceptionType}); pending alerts will retry on the next cycle.")]
-    private static partial void LedgerAlertOutboxError(ILogger logger, string exceptionType);
 }

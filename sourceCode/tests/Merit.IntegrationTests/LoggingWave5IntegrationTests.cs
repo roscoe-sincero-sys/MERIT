@@ -70,6 +70,11 @@ public sealed class LoggingWave5IntegrationTests
         var recordedRunIds = new List<Guid>();
         Guid? createdFindingId = null;
 
+        // S28: clear any pre-existing live finding for today's UTC fingerprint (e.g. from an aborted prior run)
+        // so the daily-dedup assertion starts from a known clean state.
+        await adminConn.ExecuteAsync(
+            "UPDATE logs.securityFinding SET isDeleted = 1 WHERE ruleCode = 'ledgerVerificationFailed' AND isDeleted = 0 AND fingerprint = CONCAT ('ledgerVerificationFailed|', CONVERT (CHAR (10), SYSUTCDATETIME (), 126));");
+
         try
         {
             await using var workerConn = new SqlConnection(TestEnvironment.AdminConnectionString());
@@ -158,6 +163,9 @@ public sealed class LoggingWave5IntegrationTests
                     commandType: CommandType.StoredProcedure);
                 recordedRunIds.Add(repeatFail.ledgerVerificationRunId);
                 Assert.False(repeatFail.findingCreated);
+
+                // Ensure strictly newer DATETIME2(3) timestamp than the synthetic failure runs above.
+                await Task.Delay(15);
 
                 // Record success outcome as meritWorker using the engine's native verified block id.
                 var recorded = await workerConn.QuerySingleAsync<(Guid ledgerVerificationRunId, bool findingCreated, Guid? securityFindingId, Guid? rootTenantId, DateTime detectedUtc)>(

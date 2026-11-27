@@ -51,18 +51,24 @@ public sealed partial class SecurityFindingScanner : BackgroundService
         try
         {
             using var scope = _scopes.CreateScope();
+            var data = scope.ServiceProvider.GetRequiredService<ISecurityMonitoringData>();
             int windowHours = Math.Clamp(_configuration.GetValue("SecurityAlerts:WindowHours", 24), 1, 168);
-            var inserted = await scope.ServiceProvider.GetRequiredService<ISecurityMonitoringData>()
-                .RunSecurityFindingScanAsync(windowHours, stoppingToken).ConfigureAwait(false);
+            var inserted = await data.RunSecurityFindingScanAsync(windowHours, stoppingToken).ConfigureAwait(false);
             if (inserted.Count > 0)
             {
                 FindingsDetected(_logger, inserted.Count, windowHours);
                 var high = inserted.Where(f => f.Severity is "high" or "critical").ToList();
-                if (high.Count > 0)
+                if (high.Count > 0 && await _notifier.NotifyAsync(high, stoppingToken).ConfigureAwait(false))
                 {
-                    await _notifier.NotifyAsync(high, stoppingToken).ConfigureAwait(false);
+                    foreach (var finding in high)
+                    {
+                        await data.MarkSecurityFindingWebhookDeliveredAsync(finding.SecurityFindingId, stoppingToken).ConfigureAwait(false);
+                    }
                 }
             }
+
+            // #354 (I22): retry any undelivered ledger alerts on the scanner's 15-minute cadence instead of waiting 24h.
+            await SecurityAlertWebhookNotifier.DrainPendingLedgerAlertsAsync(data, _notifier, _logger, null, stoppingToken).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is not OperationCanceledException || !stoppingToken.IsCancellationRequested)
         {

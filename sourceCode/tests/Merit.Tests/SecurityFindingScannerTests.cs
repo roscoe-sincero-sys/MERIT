@@ -32,6 +32,8 @@ public sealed class SecurityFindingScannerTests
     public class StubSecurityMonitoringProxy : DispatchProxy
     {
         public IReadOnlyList<NewSecurityFindingRow> Rows { get; set; } = [];
+        public Func<IReadOnlyList<NewSecurityFindingRow>> OnGetPendingLedgerAlerts { get; set; } = () => [];
+        public Action<Guid> OnMarkDelivered { get; set; } = _ => { };
 
         protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
         {
@@ -39,20 +41,37 @@ public sealed class SecurityFindingScannerTests
             {
                 return Task.FromResult(Rows);
             }
+            if (targetMethod?.Name == nameof(ISecurityMonitoringData.GetPendingLedgerAlertsAsync))
+            {
+                return Task.FromResult(OnGetPendingLedgerAlerts());
+            }
+            if (targetMethod?.Name == nameof(ISecurityMonitoringData.MarkSecurityFindingWebhookDeliveredAsync))
+            {
+                OnMarkDelivered((Guid)args![0]!);
+                return Task.CompletedTask;
+            }
 
             throw new NotImplementedException(targetMethod?.Name);
         }
 
-        public static ISecurityMonitoringData Create(IReadOnlyList<NewSecurityFindingRow> rows)
+        public static ISecurityMonitoringData Create(
+            IReadOnlyList<NewSecurityFindingRow> rows,
+            Func<IReadOnlyList<NewSecurityFindingRow>>? onGetPendingLedgerAlerts = null,
+            Action<Guid>? onMarkDelivered = null)
         {
             var proxy = DispatchProxy.Create<ISecurityMonitoringData, StubSecurityMonitoringProxy>();
-            ((StubSecurityMonitoringProxy)(object)proxy).Rows = rows;
+            var impl = (StubSecurityMonitoringProxy)(object)proxy;
+            impl.Rows = rows;
+            if (onGetPendingLedgerAlerts is not null) impl.OnGetPendingLedgerAlerts = onGetPendingLedgerAlerts;
+            if (onMarkDelivered is not null) impl.OnMarkDelivered = onMarkDelivered;
             return proxy;
         }
     }
 
-    private static (SecurityFindingScanner scanner, CapturingLogger logger, IReadOnlyList<NewSecurityFindingRow> findings)
-        CreateScanner(Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> handler)
+    private static (SecurityFindingScanner scanner, CapturingLogger logger, IReadOnlyList<NewSecurityFindingRow> findings, List<Guid> deliveredIds)
+        CreateScanner(
+            Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> handler,
+            IReadOnlyList<NewSecurityFindingRow>? pendingLedgerAlerts = null)
     {
         var findings = new[]
         {
@@ -66,8 +85,13 @@ public sealed class SecurityFindingScannerTests
                 DetectedUtc = DateTime.UtcNow,
             },
         };
+        var deliveredIds = new List<Guid>();
+        var pending = pendingLedgerAlerts ?? [];
         var services = new ServiceCollection();
-        services.AddSingleton(StubSecurityMonitoringProxy.Create(findings));
+        services.AddSingleton(StubSecurityMonitoringProxy.Create(
+            findings,
+            () => pending.Where(p => !deliveredIds.Contains(p.SecurityFindingId)).ToList(),
+            id => deliveredIds.Add(id)));
         var provider = services.BuildServiceProvider();
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -83,14 +107,14 @@ public sealed class SecurityFindingScannerTests
             logger,
             httpClient,
             [TimeSpan.Zero, TimeSpan.Zero, TimeSpan.Zero]);
-        return (scanner, logger, findings);
+        return (scanner, logger, findings, deliveredIds);
     }
 
     [Fact]
     public async Task WebhookTimeout_RetriesAllAttempts_LogsTerminalFailure_AndKeepsScannerAlive()
     {
         int attempts = 0;
-        var (scanner, logger, _) = CreateScanner((_, _) =>
+        var (scanner, logger, _, deliveredIds) = CreateScanner((_, _) =>
         {
             attempts++;
             // Simulate HttpClient.Timeout firing while stoppingToken is NOT cancelled.
@@ -100,6 +124,7 @@ public sealed class SecurityFindingScannerTests
         await scanner.RunScanCycleAsync(CancellationToken.None);
 
         Assert.Equal(3, attempts);
+        Assert.Empty(deliveredIds);
         Assert.Contains(logger.Messages, m => m.Contains("Security alert webhook delivery failed (TaskCanceledException)", StringComparison.Ordinal));
     }
 
@@ -108,7 +133,7 @@ public sealed class SecurityFindingScannerTests
     {
         int attempts = 0;
         using var cts = new CancellationTokenSource();
-        var (scanner, _, _) = CreateScanner((_, ct) =>
+        var (scanner, _, _, _) = CreateScanner((_, ct) =>
         {
             attempts++;
             cts.Cancel();
@@ -118,5 +143,40 @@ public sealed class SecurityFindingScannerTests
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => scanner.RunScanCycleAsync(cts.Token));
         Assert.Equal(1, attempts);
+    }
+
+    [Fact]
+    public async Task ScanCycle_MarksDeliveredScannerFindings_AndDrainsPendingLedgerAlertsFromFailedCycle()
+    {
+        var pendingLedger = new NewSecurityFindingRow
+        {
+            SecurityFindingId = Guid.NewGuid(),
+            RootTenantId = Guid.NewGuid(),
+            RuleCode = "ledgerVerificationFailed",
+            Severity = "critical",
+            Title = "Audit ledger verification failed",
+            DetectedUtc = DateTime.UtcNow.AddMinutes(-10),
+        };
+
+        var postedBodies = new List<string>();
+        var (scanner, _, findings, deliveredIds) = CreateScanner(
+            async (req, ct) =>
+            {
+                postedBodies.Add(await req.Content!.ReadAsStringAsync(ct));
+                return new HttpResponseMessage(HttpStatusCode.OK);
+            },
+            pendingLedgerAlerts: [pendingLedger]);
+
+        // Scan cycle delivers both the new high scanner finding and the pending ledger alert left over from a failed cycle.
+        await scanner.RunScanCycleAsync(CancellationToken.None);
+
+        Assert.Equal(2, postedBodies.Count);
+        Assert.Contains(findings[0].SecurityFindingId, deliveredIds);
+        Assert.Contains(pendingLedger.SecurityFindingId, deliveredIds);
+        Assert.Contains(postedBodies, b => b.Contains("ledgerVerificationFailed", StringComparison.Ordinal));
+
+        // Next scan cycle: pending ledger alert was already marked delivered -> only the scanner finding is posted.
+        await scanner.RunScanCycleAsync(CancellationToken.None);
+        Assert.Equal(3, postedBodies.Count);
     }
 }
