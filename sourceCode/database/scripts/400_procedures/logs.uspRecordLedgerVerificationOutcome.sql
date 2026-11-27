@@ -102,26 +102,34 @@ BEGIN
 
         DECLARE @now DATETIME2 (3) = SYSUTCDATETIME ();
         DECLARE @runId UNIQUEIDENTIFIER = NEWID ();
+        DECLARE @findingCreated BIT = 0;
+        DECLARE @findingId UNIQUEIDENTIFIER = NULL;
+        DECLARE @platform UNIQUEIDENTIFIER = CAST (HASHBYTES ('MD5', N'tenant:PLATFORM') AS UNIQUEIDENTIFIER);
 
         INSERT logs.ledgerVerificationRun (ledgerVerificationRunId, verifiedUtc, anchorSource, verified, lastVerifiedBlockId, digestFileCount, detail)
         VALUES (@runId, @now, @anchorSource, @verified, @lastVerifiedBlockId, @digestFileCount, LEFT (COALESCE (@detail, N''), 500));
 
         IF @verified = 0
         BEGIN
-            DECLARE @platform UNIQUEIDENTIFIER = CAST (HASHBYTES ('MD5', N'tenant:PLATFORM') AS UNIQUEIDENTIFIER);
             DECLARE @fp VARCHAR (128) = CONCAT ('ledgerVerificationFailed|', CONVERT (VARCHAR (10), @now, 23));
             IF NOT EXISTS (SELECT 1 FROM logs.securityFinding WHERE fingerprint = @fp AND isDeleted = 0)
             BEGIN
+                SET @findingId = NEWID ();
                 INSERT logs.securityFinding (securityFindingId, rootTenantId, ruleCode, severity, title, detailJson,
                                              windowStartUtc, windowEndUtc, detectedUtc, status, fingerprint)
-                VALUES (NEWID (), @platform, 'ledgerVerificationFailed', 'critical',
+                VALUES (@findingId, @platform, 'ledgerVerificationFailed', 'critical',
                         N'Audit ledger verification failed',
                         (SELECT @anchorSource AS anchorSource, LEFT (COALESCE (@detail, N''), 500) AS detail FOR JSON PATH, WITHOUT_ARRAY_WRAPPER),
                         @now, @now, @now, 'open', @fp);
+                SET @findingCreated = 1;
             END;
         END;
 
-        SELECT @runId AS ledgerVerificationRunId;
+        SELECT @runId AS ledgerVerificationRunId,
+               @findingCreated AS findingCreated,
+               @findingId AS securityFindingId,
+               @platform AS rootTenantId,
+               @now AS detectedUtc;
         SET @Comments = CONCAT (N'Recorded ledger verification outcome: ', @anchorSource, N' verified=', @verified);
 
         -- =========================================================================================

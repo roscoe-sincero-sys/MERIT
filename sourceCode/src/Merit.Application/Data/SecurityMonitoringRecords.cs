@@ -36,7 +36,7 @@ public interface ISecurityMonitoringData
     Task<int> PurgeExecutionLogAsync(int retentionDays, CancellationToken ct = default);
     Task<LedgerVerificationStateRow> GetLedgerVerificationStateAsync(CancellationToken ct = default);
     Task<AuditLedgerVerificationRow> VerifyAuditLedgerAsync(string? digestJson = null, bool useAutomaticStorage = false, bool requireDigest = false, CancellationToken ct = default);
-    Task<Guid> RecordLedgerVerificationOutcomeAsync(string anchorSource, bool verified, long? lastVerifiedBlockId, int? digestFileCount, string detail, CancellationToken ct = default);
+    Task<LedgerVerificationOutcomeRow> RecordLedgerVerificationOutcomeAsync(string anchorSource, bool verified, long? lastVerifiedBlockId, int? digestFileCount, string detail, CancellationToken ct = default);
 }
 
 public sealed record BehaviorAnomalyQuery(
@@ -352,4 +352,16 @@ public sealed class AuditLedgerVerificationRow
     public DateTime VerifiedUtc { get; init; }
     public string Detail { get; init; } = string.Empty;
     public bool HasAutomaticDigestStorage { get; init; }
+    public bool FindingCreated { get; init; }
+    public Guid? SecurityFindingId { get; init; }
+    public Guid? RootTenantId { get; init; }
+}
+
+public sealed class LedgerVerificationOutcomeRow
+{
+    public Guid LedgerVerificationRunId { get; init; }
+    public bool FindingCreated { get; init; }
+    public Guid? SecurityFindingId { get; init; }
+    public Guid? RootTenantId { get; init; }
+    public DateTime DetectedUtc { get; init; }
 }

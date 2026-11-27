@@ -162,19 +162,24 @@ BEGIN
             SET @detail = CONCAT (N'Ledger verification failed (error ', ERROR_NUMBER (), N').');
         END CATCH;
 
-        -- I20: Surface SQL verification failures as a critical platform security finding so /admin/security-alerts shows tampering.
+        -- I20 / #354: Surface SQL verification failures as a critical platform security finding so /admin/security-alerts
+        -- and the outbound webhook receive tampering alerts once per UTC day.
+        DECLARE @findingCreated BIT = 0;
+        DECLARE @findingId UNIQUEIDENTIFIER = NULL;
+        DECLARE @platform UNIQUEIDENTIFIER = CAST (HASHBYTES ('MD5', N'tenant:PLATFORM') AS UNIQUEIDENTIFIER);
         IF @verified = 0
         BEGIN
-            DECLARE @platform UNIQUEIDENTIFIER = CAST (HASHBYTES ('MD5', N'tenant:PLATFORM') AS UNIQUEIDENTIFIER);
             DECLARE @fp VARCHAR (128) = CONCAT ('ledgerVerificationFailed|', CONVERT (VARCHAR (10), @now, 23));
             IF NOT EXISTS (SELECT 1 FROM logs.securityFinding WHERE fingerprint = @fp AND isDeleted = 0)
             BEGIN
+                SET @findingId = NEWID ();
                 INSERT logs.securityFinding (securityFindingId, rootTenantId, ruleCode, severity, title, detailJson,
                                              windowStartUtc, windowEndUtc, detectedUtc, status, fingerprint)
-                VALUES (NEWID (), @platform, 'ledgerVerificationFailed', 'critical',
+                VALUES (@findingId, @platform, 'ledgerVerificationFailed', 'critical',
                         N'Audit ledger verification failed',
                         (SELECT @detail AS detail FOR JSON PATH, WITHOUT_ARRAY_WRAPPER),
                         @now, @now, @now, 'open', @fp);
+                SET @findingCreated = 1;
             END;
         END;
 
@@ -183,7 +188,10 @@ BEGIN
                @effectiveDigest AS digestJson,
                @now AS verifiedUtc,
                @detail AS detail,
-               @hasAutoDigest AS hasAutomaticDigestStorage;
+               @hasAutoDigest AS hasAutomaticDigestStorage,
+               @findingCreated AS findingCreated,
+               @findingId AS securityFindingId,
+               @platform AS rootTenantId;
 
         -- =========================================================================================
         -- ===== End of the procedure's own work. ===================================================

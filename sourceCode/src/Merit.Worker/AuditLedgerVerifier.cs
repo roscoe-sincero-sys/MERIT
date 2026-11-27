@@ -19,6 +19,7 @@ public sealed partial class AuditLedgerVerifier(
     IServiceScopeFactory scopes,
     IConfiguration configuration,
     ILogger<AuditLedgerVerifier> logger,
+    ISecurityAlertNotifier? notifier = null,
     IHostEnvironment? environment = null) : BackgroundService
 {
     private int _lastDigestFileCount;
@@ -57,10 +58,11 @@ public sealed partial class AuditLedgerVerifier(
             {
                 anchorSource = "automaticStorage";
                 var autoResult = await data.VerifyAuditLedgerAsync(null, useAutomaticStorage: true, requireDigest: false, ct).ConfigureAwait(false);
-                await data.RecordLedgerVerificationOutcomeAsync(anchorSource, autoResult.Verified, autoResult.LastVerifiedBlockId, null, autoResult.Detail, ct).ConfigureAwait(false);
+                var outcome = await data.RecordLedgerVerificationOutcomeAsync(anchorSource, autoResult.Verified, autoResult.LastVerifiedBlockId, null, autoResult.Detail, ct).ConfigureAwait(false);
                 if (!autoResult.Verified)
                 {
                     LedgerVerificationFailed(logger, anchorSource, autoResult.Detail);
+                    await NotifyFailureIfCreatedAsync(autoResult, outcome, ct).ConfigureAwait(false);
                     return;
                 }
 
@@ -70,10 +72,11 @@ public sealed partial class AuditLedgerVerifier(
 
             // Unanchored (neither DigestDirectory nor active automatic digest storage configured).
             var unanchored = await data.VerifyAuditLedgerAsync(null, useAutomaticStorage: false, requireDigest: false, ct).ConfigureAwait(false);
-            await data.RecordLedgerVerificationOutcomeAsync("unanchored", unanchored.Verified, unanchored.LastVerifiedBlockId, null, unanchored.Detail, ct).ConfigureAwait(false);
+            var unanchoredOutcome = await data.RecordLedgerVerificationOutcomeAsync("unanchored", unanchored.Verified, unanchored.LastVerifiedBlockId, null, unanchored.Detail, ct).ConfigureAwait(false);
             if (!unanchored.Verified)
             {
                 LedgerVerificationFailed(logger, "unanchored", unanchored.Detail);
+                await NotifyFailureIfCreatedAsync(unanchored, unanchoredOutcome, ct).ConfigureAwait(false);
                 return;
             }
 
@@ -87,7 +90,7 @@ public sealed partial class AuditLedgerVerifier(
         catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
             LedgerVerificationError(logger, ex.GetType().Name);
-            await TryRecordFailureAsync(anchorSource, $"Verification threw {ex.GetType().Name}.", CancellationToken.None).ConfigureAwait(false);
+            await TryRecordFailureAndNotifyAsync(anchorSource, $"Verification threw {ex.GetType().Name}.", CancellationToken.None).ConfigureAwait(false);
         }
     }
 
@@ -98,7 +101,8 @@ public sealed partial class AuditLedgerVerifier(
         {
             const string msg = "Configured ledger digest directory is missing or unmounted.";
             LedgerVerificationFailed(logger, "digestDirectory", msg);
-            await data.RecordLedgerVerificationOutcomeAsync("digestDirectory", false, null, null, msg, ct).ConfigureAwait(false);
+            var outcome = await data.RecordLedgerVerificationOutcomeAsync("digestDirectory", false, null, null, msg, ct).ConfigureAwait(false);
+            await NotifyFailureIfCreatedAsync(null, outcome, ct).ConfigureAwait(false);
             return;
         }
 
@@ -112,7 +116,8 @@ public sealed partial class AuditLedgerVerifier(
         {
             string msg = $"Digest archive shrank from {expectedMinCount} to {priorFiles.Count} file(s); refusing to publish replacement digest.";
             DigestArchiveShrank(logger, expectedMinCount, priorFiles.Count);
-            await data.RecordLedgerVerificationOutcomeAsync("digestDirectory", false, null, priorFiles.Count, msg, ct).ConfigureAwait(false);
+            var outcome = await data.RecordLedgerVerificationOutcomeAsync("digestDirectory", false, null, priorFiles.Count, msg, ct).ConfigureAwait(false);
+            await NotifyFailureIfCreatedAsync(null, outcome, ct).ConfigureAwait(false);
             return;
         }
 
@@ -123,7 +128,8 @@ public sealed partial class AuditLedgerVerifier(
             {
                 string msg = $"Archived ledger digest '{Path.GetFileName(priorFile)}' is empty or malformed.";
                 LedgerVerificationFailed(logger, Path.GetFileName(priorFile), msg);
-                await data.RecordLedgerVerificationOutcomeAsync("digestDirectory", false, null, priorFiles.Count, msg, ct).ConfigureAwait(false);
+                var outcome = await data.RecordLedgerVerificationOutcomeAsync("digestDirectory", false, null, priorFiles.Count, msg, ct).ConfigureAwait(false);
+                await NotifyFailureIfCreatedAsync(null, outcome, ct).ConfigureAwait(false);
                 return;
             }
 
@@ -131,7 +137,8 @@ public sealed partial class AuditLedgerVerifier(
             if (!priorResult.Verified)
             {
                 LedgerVerificationFailed(logger, Path.GetFileName(priorFile), priorResult.Detail);
-                await data.RecordLedgerVerificationOutcomeAsync("digestDirectory", false, priorResult.LastVerifiedBlockId, priorFiles.Count, priorResult.Detail, ct).ConfigureAwait(false);
+                var outcome = await data.RecordLedgerVerificationOutcomeAsync("digestDirectory", false, priorResult.LastVerifiedBlockId, priorFiles.Count, priorResult.Detail, ct).ConfigureAwait(false);
+                await NotifyFailureIfCreatedAsync(priorResult, outcome, ct).ConfigureAwait(false);
                 return;
             }
         }
@@ -141,7 +148,8 @@ public sealed partial class AuditLedgerVerifier(
         {
             string detail = string.IsNullOrWhiteSpace(fresh.Detail) ? "Fresh ledger digest generation failed." : fresh.Detail;
             LedgerVerificationFailed(logger, "current", detail);
-            await data.RecordLedgerVerificationOutcomeAsync("digestDirectory", false, fresh.LastVerifiedBlockId, priorFiles.Count, detail, ct).ConfigureAwait(false);
+            var outcome = await data.RecordLedgerVerificationOutcomeAsync("digestDirectory", false, fresh.LastVerifiedBlockId, priorFiles.Count, detail, ct).ConfigureAwait(false);
+            await NotifyFailureIfCreatedAsync(fresh, outcome, ct).ConfigureAwait(false);
             return;
         }
 
@@ -151,6 +159,50 @@ public sealed partial class AuditLedgerVerifier(
         _lastDigestFileCount = Math.Max(newCount, expectedMinCount);
         await data.RecordLedgerVerificationOutcomeAsync("digestDirectory", true, fresh.LastVerifiedBlockId, newCount, fresh.Detail, ct).ConfigureAwait(false);
         LedgerVerified(logger, fresh.LastVerifiedBlockId ?? -1, fresh.Detail);
+    }
+
+    private Task NotifyFailureIfCreatedAsync(AuditLedgerVerificationRow? sqlResult, LedgerVerificationOutcomeRow outcome, CancellationToken ct)
+    {
+        if (notifier is null)
+        {
+            return Task.CompletedTask;
+        }
+
+        bool created = (sqlResult?.FindingCreated ?? false) || outcome.FindingCreated;
+        if (!created)
+        {
+            return Task.CompletedTask;
+        }
+
+        Guid findingId = (sqlResult?.FindingCreated == true ? sqlResult.SecurityFindingId : outcome.SecurityFindingId) ?? Guid.Empty;
+        Guid rootTenantId = (sqlResult?.FindingCreated == true ? sqlResult.RootTenantId : outcome.RootTenantId) ?? Guid.Empty;
+        DateTime detectedUtc = sqlResult?.FindingCreated == true ? sqlResult.VerifiedUtc : outcome.DetectedUtc;
+
+        var row = new NewSecurityFindingRow
+        {
+            SecurityFindingId = findingId,
+            RootTenantId = rootTenantId,
+            RuleCode = "ledgerVerificationFailed",
+            Severity = "critical",
+            Title = "Audit ledger verification failed",
+            DetectedUtc = detectedUtc,
+        };
+        return notifier.NotifyAsync([row], ct);
+    }
+
+    private async Task TryRecordFailureAndNotifyAsync(string anchorSource, string detail, CancellationToken ct)
+    {
+        try
+        {
+            using var scope = scopes.CreateScope();
+            var outcome = await scope.ServiceProvider.GetRequiredService<ISecurityMonitoringData>()
+                .RecordLedgerVerificationOutcomeAsync(anchorSource, false, null, null, detail, ct).ConfigureAwait(false);
+            await NotifyFailureIfCreatedAsync(null, outcome, ct).ConfigureAwait(false);
+        }
+        catch
+        {
+            // Already logged by caller.
+        }
     }
 
     internal static bool IsValidDigestJson(string? json)
@@ -199,20 +251,6 @@ public sealed partial class AuditLedgerVerifier(
                 // Best-effort cleanup of incomplete staging file.
             }
             throw;
-        }
-    }
-
-    private async Task TryRecordFailureAsync(string anchorSource, string detail, CancellationToken ct)
-    {
-        try
-        {
-            using var scope = scopes.CreateScope();
-            await scope.ServiceProvider.GetRequiredService<ISecurityMonitoringData>()
-                .RecordLedgerVerificationOutcomeAsync(anchorSource, false, null, null, detail, ct).ConfigureAwait(false);
-        }
-        catch
-        {
-            // Already logged by caller.
         }
     }
 

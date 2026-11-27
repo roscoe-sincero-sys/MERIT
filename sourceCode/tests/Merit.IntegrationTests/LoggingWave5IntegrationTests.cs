@@ -123,9 +123,12 @@ public sealed class LoggingWave5IntegrationTests
                 Assert.Null(emptyReq.nativeBlockId);
 
                 // Record outcome as meritWorker using the engine's native verified block id.
-                recordedRunId = await workerConn.QuerySingleAsync<Guid>("logs.uspRecordLedgerVerificationOutcome",
+                var recorded = await workerConn.QuerySingleAsync<(Guid ledgerVerificationRunId, bool findingCreated, Guid? securityFindingId, Guid rootTenantId, DateTime detectedUtc)>(
+                    "logs.uspRecordLedgerVerificationOutcome",
                     new { anchorSource = "digestDirectory", verified = true, lastVerifiedBlockId = fresh.nativeBlockId, digestFileCount = 1, detail = fresh.detail },
                     commandType: CommandType.StoredProcedure);
+                recordedRunId = recorded.ledgerVerificationRunId;
+                Assert.False(recorded.findingCreated);
             }
             finally
             {
