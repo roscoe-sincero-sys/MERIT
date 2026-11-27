@@ -1143,8 +1143,37 @@ SELECT TOP (@limit)
  WHERE RecordedUtc >= @since
  ORDER BY ChangeId DESC;
 
--- 3. DDL audit integrity posture (called in owner context ONLY after caller-context security.investigate check above)
+-- 3. DDL audit integrity posture + latest audit-ledger verification outcome (#330, #334)
+DECLARE @checks TABLE (
+    CheckName NVARCHAR (200) NOT NULL,
+    Status    NVARCHAR (40)  NOT NULL,
+    Detail    NVARCHAR (MAX) NULL
+);
+INSERT @checks (CheckName, Status, Detail)
 EXEC logs.uspDdlAuditVerifyInternal @ProblemsOnly = 0;
+
+INSERT @checks (CheckName, Status, Detail)
+SELECT TOP (1)
+       N'auditLedgerVerification',
+       CASE
+           WHEN r.verified = 0 THEN N'FAIL'
+           WHEN r.anchorSource = 'unanchored' THEN N'WARN'
+           ELSE N'OK'
+       END,
+       LEFT (CONCAT (CONVERT (VARCHAR (23), r.verifiedUtc, 126), N'Z [', r.anchorSource,
+                     CASE WHEN r.lastVerifiedBlockId IS NOT NULL THEN CONCAT (N', block ', r.lastVerifiedBlockId) ELSE N'' END,
+                     N']: ', r.detail), 500)
+  FROM logs.ledgerVerificationRun AS r
+ WHERE r.isDeleted = 0
+ ORDER BY r.verifiedUtc DESC;
+
+IF @@ROWCOUNT = 0
+BEGIN
+    INSERT @checks (CheckName, Status, Detail)
+    VALUES (N'auditLedgerVerification', N'WARN', N'No scheduled audit-ledger verification run has been recorded yet.');
+END;
+
+SELECT CheckName, Status, Detail FROM @checks;
 """,
     },
     {
@@ -1202,38 +1231,62 @@ SET @Comments = CONCAT (N'Purged ', @total, N' ExecutionLog rows older than ', @
     {
         "schema": "logs", "name": "uspVerifyAuditLedgerInternal", "kind": "read", "require_standalone": True, "grants": [], "ticket": "334",
         "execute_as_owner": True,
-        "desc": "Ungranted owner-context helper for logs.uspVerifyAuditLedger: generates a SQL Server ledger digest "
-                "(when @digestJson is NULL) and runs sys.sp_verify_database_ledger (#334).",
-        "params": "@digestJson NVARCHAR (MAX) = NULL",
-        "key": "N'verifyAuditLedger=1'",
+        "desc": "Ungranted owner-context helper for logs.uspVerifyAuditLedger: verifies automatic digest storage via "
+                "sys.sp_verify_database_ledger_from_digest_storage when @useAutomaticStorage = 1, verifies a required "
+                "external digest when @requireDigest = 1, or generates and verifies a fresh digest (#334).",
+        "params": """@digestJson          NVARCHAR (MAX) = NULL
+, @useAutomaticStorage BIT = 0
+, @requireDigest       BIT = 0""",
+        "key": "CONCAT (N'useAutomaticStorage=', @useAutomaticStorage, N', requireDigest=', @requireDigest)",
         "body": """
 DECLARE @effectiveDigest NVARCHAR (MAX) = NULLIF (LTRIM (RTRIM (@digestJson)), N'');
 DECLARE @verified BIT = 0;
 DECLARE @lastBlockId BIGINT = NULL;
 DECLARE @detail NVARCHAR (500) = N'OK';
 DECLARE @now DATETIME2 (3) = SYSUTCDATETIME ();
-DECLARE @hasAutoDigest BIT = CASE WHEN EXISTS (SELECT 1 FROM sys.database_ledger_digest_locations) THEN 1 ELSE 0 END;
+DECLARE @hasAutoDigest BIT = CASE WHEN EXISTS (SELECT 1 FROM sys.database_ledger_digest_locations WHERE is_current = 1) THEN 1 ELSE 0 END;
 
 BEGIN TRY
-    IF @effectiveDigest IS NULL
+    IF @useAutomaticStorage = 1
     BEGIN
-        DECLARE @gen TABLE (latest_digest NVARCHAR (MAX));
-        INSERT @gen (latest_digest)
-        EXEC sys.sp_generate_database_ledger_digest;
-        SELECT TOP (1) @effectiveDigest = latest_digest FROM @gen;
-    END;
-
-    IF @effectiveDigest IS NULL
+        IF @hasAutoDigest = 0
+        BEGIN
+            SET @detail = N'No active automatic ledger digest storage endpoint is configured.';
+        END
+        ELSE
+        BEGIN
+            EXEC sys.sp_verify_database_ledger_from_digest_storage @digest_locations = NULL;
+            SET @lastBlockId = (SELECT MAX (block_id) FROM sys.database_ledger_blocks);
+            SET @verified = 1;
+            SET @detail = CONCAT (N'Automatic digest storage verified up to block ', COALESCE (CAST (@lastBlockId AS NVARCHAR (30)), N'unknown'), N'.');
+        END;
+    END
+    ELSE IF @requireDigest = 1 AND @effectiveDigest IS NULL
     BEGIN
-        SET @detail = N'No database ledger digest was returned.';
+        SET @detail = N'A non-empty external digest JSON payload is required.';
     END
     ELSE
     BEGIN
-        -- sys.sp_verify_database_ledger cannot run inside INSERT ... EXEC (error 574); call directly.
-        EXEC sys.sp_verify_database_ledger @digest_locations = @effectiveDigest;
-        SET @lastBlockId = (SELECT MAX (block_id) FROM sys.database_ledger_blocks);
-        SET @verified = 1;
-        SET @detail = CONCAT (N'Ledger verified up to block ', COALESCE (CAST (@lastBlockId AS NVARCHAR (30)), N'unknown'), N'.');
+        IF @effectiveDigest IS NULL
+        BEGIN
+            DECLARE @gen TABLE (latest_digest NVARCHAR (MAX));
+            INSERT @gen (latest_digest)
+            EXEC sys.sp_generate_database_ledger_digest;
+            SELECT TOP (1) @effectiveDigest = latest_digest FROM @gen;
+        END;
+
+        IF @effectiveDigest IS NULL
+        BEGIN
+            SET @detail = N'No database ledger digest was returned.';
+        END
+        ELSE
+        BEGIN
+            -- sys.sp_verify_database_ledger cannot run inside INSERT ... EXEC (error 574); call directly.
+            EXEC sys.sp_verify_database_ledger @digest_locations = @effectiveDigest;
+            SET @lastBlockId = (SELECT MAX (block_id) FROM sys.database_ledger_blocks);
+            SET @verified = 1;
+            SET @detail = CONCAT (N'Ledger verified up to block ', COALESCE (CAST (@lastBlockId AS NVARCHAR (30)), N'unknown'), N'.');
+        END;
     END;
 END TRY
 BEGIN CATCH
@@ -1241,7 +1294,7 @@ BEGIN CATCH
     SET @detail = CONCAT (N'Ledger verification failed (error ', ERROR_NUMBER (), N').');
 END CATCH;
 
--- I20: Surface verification failures as a critical platform security finding so /admin/security-alerts shows tampering.
+-- I20: Surface SQL verification failures as a critical platform security finding so /admin/security-alerts shows tampering.
 IF @verified = 0
 BEGIN
     DECLARE @platform UNIQUEIDENTIFIER = CAST (HASHBYTES ('MD5', N'tenant:PLATFORM') AS UNIQUEIDENTIFIER);
@@ -1267,12 +1320,65 @@ SELECT @verified AS verified,
     },
     {
         "schema": "logs", "name": "uspVerifyAuditLedger", "kind": "read", "require_standalone": True, "grants": WORKER, "ticket": "334",
-        "desc": "Worker-only audit ledger digest generator and verifier (#334). Generates a fresh digest when "
-                "@digestJson is NULL or verifies a previously stored external digest against the database ledger.",
-        "params": "@digestJson NVARCHAR (MAX) = NULL",
-        "key": "N'verifyAuditLedger=1'",
+        "desc": "Worker-only audit ledger digest generator and verifier (#334). Supports automatic digest storage "
+                "(@useAutomaticStorage = 1), required external digest verification (@requireDigest = 1), or fresh generation.",
+        "params": """@digestJson          NVARCHAR (MAX) = NULL
+, @useAutomaticStorage BIT = 0
+, @requireDigest       BIT = 0""",
+        "key": "CONCAT (N'useAutomaticStorage=', @useAutomaticStorage, N', requireDigest=', @requireDigest)",
         "body": """
-EXEC logs.uspVerifyAuditLedgerInternal @digestJson = @digestJson;
+EXEC logs.uspVerifyAuditLedgerInternal @digestJson = @digestJson,
+     @useAutomaticStorage = @useAutomaticStorage, @requireDigest = @requireDigest;
+""",
+    },
+    {
+        "schema": "logs", "name": "uspRecordLedgerVerificationOutcome", "kind": "write", "grants": WORKER, "ticket": "334",
+        "desc": "Worker-only recorder for end-to-end audit-ledger verification runs (#334). Persists outcome in "
+                "logs.ledgerVerificationRun (surfaced in logs.uspGetOperationalLogs), returns the prior recorded "
+                "digestFileCount for cross-restart shrinkage checks, and raises a critical logs.securityFinding on failure.",
+        "params": """@anchorSource        VARCHAR (30)
+, @verified            BIT
+, @lastVerifiedBlockId BIGINT = NULL
+, @digestFileCount     INT = NULL
+, @detail              NVARCHAR (500)""",
+        "key": "CONCAT (N'anchorSource=', @anchorSource, N', verified=', @verified)",
+        "validate": """IF @anchorSource IS NULL OR @anchorSource NOT IN ('automaticStorage', 'digestDirectory', 'unanchored')
+BEGIN
+    ;THROW 51422, N'Invalid @anchorSource for ledger verification outcome.', 1;
+END;
+IF @verified IS NULL
+BEGIN
+    ;THROW 51422, N'@verified is required.', 1;
+END;""",
+        "body": """
+DECLARE @now DATETIME2 (3) = SYSUTCDATETIME ();
+DECLARE @prevCount INT = (
+    SELECT TOP (1) digestFileCount
+      FROM logs.ledgerVerificationRun
+     WHERE isDeleted = 0 AND anchorSource = 'digestDirectory' AND digestFileCount IS NOT NULL
+     ORDER BY verifiedUtc DESC
+);
+
+INSERT logs.ledgerVerificationRun (ledgerVerificationRunId, verifiedUtc, anchorSource, verified, lastVerifiedBlockId, digestFileCount, detail)
+VALUES (NEWID (), @now, @anchorSource, @verified, @lastVerifiedBlockId, @digestFileCount, LEFT (COALESCE (@detail, N''), 500));
+
+IF @verified = 0
+BEGIN
+    DECLARE @platform UNIQUEIDENTIFIER = CAST (HASHBYTES ('MD5', N'tenant:PLATFORM') AS UNIQUEIDENTIFIER);
+    DECLARE @fp VARCHAR (128) = CONCAT ('ledgerVerificationFailed|', CONVERT (VARCHAR (10), @now, 23));
+    IF NOT EXISTS (SELECT 1 FROM logs.securityFinding WHERE fingerprint = @fp AND isDeleted = 0)
+    BEGIN
+        INSERT logs.securityFinding (securityFindingId, rootTenantId, ruleCode, severity, title, detailJson,
+                                     windowStartUtc, windowEndUtc, detectedUtc, status, fingerprint)
+        VALUES (NEWID (), @platform, 'ledgerVerificationFailed', 'critical',
+                N'Audit ledger verification failed',
+                (SELECT @anchorSource AS anchorSource, LEFT (COALESCE (@detail, N''), 500) AS detail FOR JSON PATH, WITHOUT_ARRAY_WRAPPER),
+                @now, @now, @now, 'open', @fp);
+    END;
+END;
+
+SELECT @prevCount AS previousDigestFileCount;
+SET @Comments = CONCAT (N'Recorded ledger verification outcome: ', @anchorSource, N' verified=', @verified);
 """,
     },
 ]

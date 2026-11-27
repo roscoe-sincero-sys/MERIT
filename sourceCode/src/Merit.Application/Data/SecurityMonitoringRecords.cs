@@ -34,7 +34,8 @@ public interface ISecurityMonitoringData
 
     // #334 ExecutionLog retention & audit ledger digest verification
     Task<int> PurgeExecutionLogAsync(int retentionDays, CancellationToken ct = default);
-    Task<AuditLedgerVerificationRow> VerifyAuditLedgerAsync(string? digestJson = null, CancellationToken ct = default);
+    Task<AuditLedgerVerificationRow> VerifyAuditLedgerAsync(string? digestJson = null, bool useAutomaticStorage = false, bool requireDigest = false, CancellationToken ct = default);
+    Task<int?> RecordLedgerVerificationOutcomeAsync(string anchorSource, bool verified, long? lastVerifiedBlockId, int? digestFileCount, string detail, CancellationToken ct = default);
 }
 
 public sealed record BehaviorAnomalyQuery(

@@ -68,19 +68,19 @@ public sealed class LoggingWave5IntegrationTests
         await workerConn.ExecuteAsync("EXECUTE AS USER = 'meritWorker';");
         try
         {
-            static async Task<(bool verified, long? lastVerifiedBlockId, string? digestJson, DateTime verifiedUtc, string detail)>
-                RunVerifyAsync(SqlConnection c, string? digestJson)
+            static async Task<(bool verified, long? lastVerifiedBlockId, string? digestJson, DateTime verifiedUtc, string detail, bool hasAuto)>
+                RunVerifyAsync(SqlConnection c, string? digestJson, bool useAutomaticStorage = false, bool requireDigest = false)
             {
                 using var grid = await c.QueryMultipleAsync(
-                    "logs.uspVerifyAuditLedger", new { digestJson }, commandType: CommandType.StoredProcedure);
-                (bool verified, long? lastVerifiedBlockId, string? digestJson, DateTime verifiedUtc, string detail) last = default;
+                    "logs.uspVerifyAuditLedger", new { digestJson, useAutomaticStorage, requireDigest }, commandType: CommandType.StoredProcedure);
+                (bool verified, long? lastVerifiedBlockId, string? digestJson, DateTime verifiedUtc, string detail, bool hasAuto) last = default;
                 while (!grid.IsConsumed)
                 {
                     var rows = (await grid.ReadAsync<dynamic>()).ToList();
                     if (rows.Count > 0 && ((IDictionary<string, object>)rows[0]).ContainsKey("verified"))
                     {
                         var r = rows[0];
-                        last = ((bool)r.verified, (long?)r.lastVerifiedBlockId, (string?)r.digestJson, (DateTime)r.verifiedUtc, (string)r.detail);
+                        last = ((bool)r.verified, (long?)r.lastVerifiedBlockId, (string?)r.digestJson, (DateTime)r.verifiedUtc, (string)r.detail, (bool)r.hasAutomaticDigestStorage);
                     }
                 }
                 return last;
@@ -91,14 +91,37 @@ public sealed class LoggingWave5IntegrationTests
             Assert.NotNull(fresh.digestJson);
             Assert.Contains("MERIT_IT", fresh.digestJson, StringComparison.OrdinalIgnoreCase);
 
-            // Re-verify using the previously returned external digest JSON.
-            var recheck = await RunVerifyAsync(workerConn, fresh.digestJson);
+            // Re-verify using the previously returned external digest JSON with requireDigest=true.
+            var recheck = await RunVerifyAsync(workerConn, fresh.digestJson, requireDigest: true);
             Assert.True(recheck.verified, recheck.detail);
             Assert.Equal(fresh.lastVerifiedBlockId, recheck.lastVerifiedBlockId);
+
+            // Empty digest with requireDigest=true must fail rather than generating a fresh digest.
+            var emptyReq = await RunVerifyAsync(workerConn, "", requireDigest: true);
+            Assert.False(emptyReq.verified);
+
+            // Record outcome as meritWorker and confirm logs.uspGetOperationalLogs surfaces auditLedgerVerification.
+            await workerConn.ExecuteAsync("logs.uspRecordLedgerVerificationOutcome",
+                new { anchorSource = "digestDirectory", verified = true, lastVerifiedBlockId = fresh.lastVerifiedBlockId, digestFileCount = 1, detail = fresh.detail },
+                commandType: CommandType.StoredProcedure);
         }
         finally
         {
             await workerConn.ExecuteAsync("REVERT;");
         }
+
+        // Verify operational logs view exposes the recorded auditLedgerVerification outcome (#334).
+        await using var adminConn = new SqlConnection(TestEnvironment.AdminConnectionString());
+        await adminConn.OpenAsync();
+        using var opGrid = await adminConn.QueryMultipleAsync("logs.uspGetOperationalLogs", new { hours = 24, top = 10 }, commandType: CommandType.StoredProcedure);
+        _ = await opGrid.ReadAsync<dynamic>();
+        _ = await opGrid.ReadAsync<dynamic>();
+        var checks = (await opGrid.ReadAsync<(string CheckName, string Status, string? Detail)>()).ToList();
+        var ledgerCheck = Assert.Single(checks, c => c.CheckName == "auditLedgerVerification");
+        Assert.Equal("OK", ledgerCheck.Status);
+        Assert.Contains("digestDirectory", ledgerCheck.Detail ?? "", StringComparison.Ordinal);
+
+        // Clean up the synthetic failure finding created by the emptyReq negative probe above.
+        await adminConn.ExecuteAsync("UPDATE logs.securityFinding SET isDeleted = 1 WHERE ruleCode = 'ledgerVerificationFailed' AND isDeleted = 0;");
     }
 }

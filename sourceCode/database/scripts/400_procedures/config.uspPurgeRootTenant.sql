@@ -45,10 +45,11 @@ Description:	Initial version.
 
 ***********************************************************************************************************************/
 CREATE OR ALTER PROCEDURE config.uspPurgeRootTenant
-      @rootTenantId        UNIQUEIDENTIFIER
-      , @confirmationCode    NVARCHAR (60)
-      , @backupRetentionDays INT = 35
-      , @dryRun              BIT = 0
+      @rootTenantId                  UNIQUEIDENTIFIER
+      , @confirmationCode              NVARCHAR (60)
+      , @backupRetentionDays           INT = 35
+      , @dryRun                        BIT = 0
+      , @singlePassDedicatedConnection BIT = 0
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -161,7 +162,8 @@ BEGIN
             COMMIT TRANSACTION;
         END;
 
-        EXEC config.uspPurgeRootTenantInternal @rootTenantId = @rootTenantId, @backupRetentionDays = @backupRetentionDays, @dryRun = @dryRun;
+        EXEC config.uspPurgeRootTenantInternal @rootTenantId = @rootTenantId, @backupRetentionDays = @backupRetentionDays,
+             @dryRun = @dryRun, @singlePassDedicatedConnection = @singlePassDedicatedConnection;
         SET @Comments = CONCAT (CASE WHEN @dryRun = 1 THEN N'Dry-run purge completed for ' ELSE N'Root tenant purge completed for ' END, @rootTenantId);
 
         -- =========================================================================================

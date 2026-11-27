@@ -1633,6 +1633,12 @@
     "type": "BIT",
     "hasDefault": true,
     "isOutput": false
+   },
+   {
+    "name": "singlePassDedicatedConnection",
+    "type": "BIT",
+    "hasDefault": true,
+    "isOutput": false
    }
   ]
  },
@@ -1656,6 +1662,12 @@
    },
    {
     "name": "dryRun",
+    "type": "BIT",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "singlePassDedicatedConnection",
     "type": "BIT",
     "hasDefault": true,
     "isOutput": false
@@ -8823,6 +8835,46 @@
   ]
  },
  {
+  "name": "logs.uspRecordLedgerVerificationOutcome",
+  "kind": "write",
+  "grants": [
+   "meritWorkerRole"
+  ],
+  "permission": null,
+  "params": [
+   {
+    "name": "anchorSource",
+    "type": "VARCHAR (30)",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "verified",
+    "type": "BIT",
+    "hasDefault": false,
+    "isOutput": false
+   },
+   {
+    "name": "lastVerifiedBlockId",
+    "type": "BIGINT",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "digestFileCount",
+    "type": "INT",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "detail",
+    "type": "NVARCHAR (500)",
+    "hasDefault": false,
+    "isOutput": false
+   }
+  ]
+ },
+ {
   "name": "logs.uspRecordScreenVisit",
   "kind": "write",
   "grants": [
@@ -9187,6 +9239,18 @@
     "type": "NVARCHAR (MAX)",
     "hasDefault": true,
     "isOutput": false
+   },
+   {
+    "name": "useAutomaticStorage",
+    "type": "BIT",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "requireDigest",
+    "type": "BIT",
+    "hasDefault": true,
+    "isOutput": false
    }
   ]
  },
@@ -9199,6 +9263,18 @@
    {
     "name": "digestJson",
     "type": "NVARCHAR (MAX)",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "useAutomaticStorage",
+    "type": "BIT",
+    "hasDefault": true,
+    "isOutput": false
+   },
+   {
+    "name": "requireDigest",
+    "type": "BIT",
     "hasDefault": true,
     "isOutput": false
    }

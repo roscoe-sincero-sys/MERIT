@@ -13,7 +13,7 @@ CreateDate:   2026-10-24
 ========================================================================================================================
 Description:
 
-Ungranted owner-context helper for logs.uspVerifyAuditLedger: generates a SQL Server ledger digest (when @digestJson is NULL) and runs sys.sp_verify_database_ledger (#334).
+Ungranted owner-context helper for logs.uspVerifyAuditLedger: verifies automatic digest storage via sys.sp_verify_database_ledger_from_digest_storage when @useAutomaticStorage = 1, verifies a required external digest when @requireDigest = 1, or generates and verifies a fresh digest (#334).
 
 ========================================================================================================================
 Requirements and Key Dependencies:
@@ -45,7 +45,9 @@ Description:	Initial version.
 
 ***********************************************************************************************************************/
 CREATE OR ALTER PROCEDURE logs.uspVerifyAuditLedgerInternal
-      @digestJson NVARCHAR (MAX) = NULL
+      @digestJson          NVARCHAR (MAX) = NULL
+      , @useAutomaticStorage BIT = 0
+      , @requireDigest       BIT = 0
 WITH EXECUTE AS OWNER
 AS
 BEGIN
@@ -75,7 +77,7 @@ BEGIN
           , @ErrorLine      INT            = NULL;
 
     -- Identifiers and counts ONLY. Never free-text search terms or patient data.
-    SET @KeyParameters = N'verifyAuditLedger=1';
+    SET @KeyParameters = CONCAT (N'useAutomaticStorage=', @useAutomaticStorage, N', requireDigest=', @requireDigest);
 
     SET @ContextMessage = N'Error-only instrumented read: no start row is opened, so @ExecutionLogId is NULL by design.';
 
@@ -90,28 +92,49 @@ BEGIN
         DECLARE @lastBlockId BIGINT = NULL;
         DECLARE @detail NVARCHAR (500) = N'OK';
         DECLARE @now DATETIME2 (3) = SYSUTCDATETIME ();
-        DECLARE @hasAutoDigest BIT = CASE WHEN EXISTS (SELECT 1 FROM sys.database_ledger_digest_locations) THEN 1 ELSE 0 END;
+        DECLARE @hasAutoDigest BIT = CASE WHEN EXISTS (SELECT 1 FROM sys.database_ledger_digest_locations WHERE is_current = 1) THEN 1 ELSE 0 END;
 
         BEGIN TRY
-            IF @effectiveDigest IS NULL
+            IF @useAutomaticStorage = 1
             BEGIN
-                DECLARE @gen TABLE (latest_digest NVARCHAR (MAX));
-                INSERT @gen (latest_digest)
-                EXEC sys.sp_generate_database_ledger_digest;
-                SELECT TOP (1) @effectiveDigest = latest_digest FROM @gen;
-            END;
-
-            IF @effectiveDigest IS NULL
+                IF @hasAutoDigest = 0
+                BEGIN
+                    SET @detail = N'No active automatic ledger digest storage endpoint is configured.';
+                END
+                ELSE
+                BEGIN
+                    EXEC sys.sp_verify_database_ledger_from_digest_storage @digest_locations = NULL;
+                    SET @lastBlockId = (SELECT MAX (block_id) FROM sys.database_ledger_blocks);
+                    SET @verified = 1;
+                    SET @detail = CONCAT (N'Automatic digest storage verified up to block ', COALESCE (CAST (@lastBlockId AS NVARCHAR (30)), N'unknown'), N'.');
+                END;
+            END
+            ELSE IF @requireDigest = 1 AND @effectiveDigest IS NULL
             BEGIN
-                SET @detail = N'No database ledger digest was returned.';
+                SET @detail = N'A non-empty external digest JSON payload is required.';
             END
             ELSE
             BEGIN
-                -- sys.sp_verify_database_ledger cannot run inside INSERT ... EXEC (error 574); call directly.
-                EXEC sys.sp_verify_database_ledger @digest_locations = @effectiveDigest;
-                SET @lastBlockId = (SELECT MAX (block_id) FROM sys.database_ledger_blocks);
-                SET @verified = 1;
-                SET @detail = CONCAT (N'Ledger verified up to block ', COALESCE (CAST (@lastBlockId AS NVARCHAR (30)), N'unknown'), N'.');
+                IF @effectiveDigest IS NULL
+                BEGIN
+                    DECLARE @gen TABLE (latest_digest NVARCHAR (MAX));
+                    INSERT @gen (latest_digest)
+                    EXEC sys.sp_generate_database_ledger_digest;
+                    SELECT TOP (1) @effectiveDigest = latest_digest FROM @gen;
+                END;
+
+                IF @effectiveDigest IS NULL
+                BEGIN
+                    SET @detail = N'No database ledger digest was returned.';
+                END
+                ELSE
+                BEGIN
+                    -- sys.sp_verify_database_ledger cannot run inside INSERT ... EXEC (error 574); call directly.
+                    EXEC sys.sp_verify_database_ledger @digest_locations = @effectiveDigest;
+                    SET @lastBlockId = (SELECT MAX (block_id) FROM sys.database_ledger_blocks);
+                    SET @verified = 1;
+                    SET @detail = CONCAT (N'Ledger verified up to block ', COALESCE (CAST (@lastBlockId AS NVARCHAR (30)), N'unknown'), N'.');
+                END;
             END;
         END TRY
         BEGIN CATCH
@@ -119,7 +142,7 @@ BEGIN
             SET @detail = CONCAT (N'Ledger verification failed (error ', ERROR_NUMBER (), N').');
         END CATCH;
 
-        -- I20: Surface verification failures as a critical platform security finding so /admin/security-alerts shows tampering.
+        -- I20: Surface SQL verification failures as a critical platform security finding so /admin/security-alerts shows tampering.
         IF @verified = 0
         BEGIN
             DECLARE @platform UNIQUEIDENTIFIER = CAST (HASHBYTES ('MD5', N'tenant:PLATFORM') AS UNIQUEIDENTIFIER);
@@ -179,5 +202,5 @@ EXEC util.uspSetObjectDescription
       @SchemaName  = N'logs'
     , @ObjectType  = N'PROCEDURE'
     , @ObjectName  = N'uspVerifyAuditLedgerInternal'
-    , @Description = N'Ungranted owner-context helper for logs.uspVerifyAuditLedger: generates a SQL Server ledger digest (when @digestJson is NULL) and runs sys.sp_verify_database_ledger (#334).';
+    , @Description = N'Ungranted owner-context helper for logs.uspVerifyAuditLedger: verifies automatic digest storage via sys.sp_verify_database_ledger_from_digest_storage when @useAutomaticStorage = 1, verifies a required external digest when @requireDigest = 1, or generates and verifies a fresh digest (#334).';
 GO

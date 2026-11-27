@@ -13,7 +13,7 @@ CreateDate:   2026-10-24
 ========================================================================================================================
 Description:
 
-Worker-only audit ledger digest generator and verifier (#334). Generates a fresh digest when @digestJson is NULL or verifies a previously stored external digest against the database ledger.
+Worker-only audit ledger digest generator and verifier (#334). Supports automatic digest storage (@useAutomaticStorage = 1), required external digest verification (@requireDigest = 1), or fresh generation.
 
 ========================================================================================================================
 Requirements and Key Dependencies:
@@ -45,7 +45,9 @@ Description:	Initial version.
 
 ***********************************************************************************************************************/
 CREATE OR ALTER PROCEDURE logs.uspVerifyAuditLedger
-      @digestJson NVARCHAR (MAX) = NULL
+      @digestJson          NVARCHAR (MAX) = NULL
+      , @useAutomaticStorage BIT = 0
+      , @requireDigest       BIT = 0
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -74,7 +76,7 @@ BEGIN
           , @ErrorLine      INT            = NULL;
 
     -- Identifiers and counts ONLY. Never free-text search terms or patient data.
-    SET @KeyParameters = N'verifyAuditLedger=1';
+    SET @KeyParameters = CONCAT (N'useAutomaticStorage=', @useAutomaticStorage, N', requireDigest=', @requireDigest);
 
     SET @ContextMessage = N'Error-only instrumented read: no start row is opened, so @ExecutionLogId is NULL by design.';
 
@@ -84,7 +86,8 @@ BEGIN
         -- ===== The procedure's own work starts here. Everything above and below is boilerplate. ==
         -- =========================================================================================
 
-        EXEC logs.uspVerifyAuditLedgerInternal @digestJson = @digestJson;
+        EXEC logs.uspVerifyAuditLedgerInternal @digestJson = @digestJson,
+             @useAutomaticStorage = @useAutomaticStorage, @requireDigest = @requireDigest;
 
         -- =========================================================================================
         -- ===== End of the procedure's own work. ===================================================
@@ -123,7 +126,7 @@ EXEC util.uspSetObjectDescription
       @SchemaName  = N'logs'
     , @ObjectType  = N'PROCEDURE'
     , @ObjectName  = N'uspVerifyAuditLedger'
-    , @Description = N'Worker-only audit ledger digest generator and verifier (#334). Generates a fresh digest when @digestJson is NULL or verifies a previously stored external digest against the database ledger.';
+    , @Description = N'Worker-only audit ledger digest generator and verifier (#334). Supports automatic digest storage (@useAutomaticStorage = 1), required external digest verification (@requireDigest = 1), or fresh generation.';
 GO
 
 IF DATABASE_PRINCIPAL_ID (N'meritWorkerRole') IS NOT NULL

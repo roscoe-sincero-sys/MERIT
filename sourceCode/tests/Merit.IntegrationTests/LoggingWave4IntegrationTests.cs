@@ -538,12 +538,15 @@ public sealed class LoggingWave4IntegrationTests(MeritFixture fixture)
             var mdManifest = (await conn.QueryAsync<(string tableName, int activeRows, int deletedRows, int totalRows, string disposition, long? maxAuditEventId)>(
                 "config.uspExportRootTenant", new { rootTenantId = mdRoot.tenantId }, commandType: CommandType.StoredProcedure)).ToList();
             long mdScrubbableRows = mdManifest.Where(m => m.disposition != "ledgerReadOnly").Sum(m => (long)m.totalRows);
-            using (var dryGrid = await conn.QueryMultipleAsync(
-                "config.uspPurgeRootTenant",
-                new { rootTenantId = mdRoot.tenantId, confirmationCode = $"PURGE:{mdRoot.tenantCode}", backupRetentionDays = 35, dryRun = true },
-                commandTimeout: 180,
-                commandType: CommandType.StoredProcedure))
+            // #352 / Codex #3: Run single-pass optimization on a dedicated one-shot connection disposed immediately afterward.
+            await using (var dedicatedPurgeConn = new SqlConnection(TestEnvironment.AdminConnectionString()))
             {
+                await dedicatedPurgeConn.OpenAsync();
+                using var dryGrid = await dedicatedPurgeConn.QueryMultipleAsync(
+                    "config.uspPurgeRootTenant",
+                    new { rootTenantId = mdRoot.tenantId, confirmationCode = $"PURGE:{mdRoot.tenantCode}", backupRetentionDays = 35, dryRun = true, singlePassDedicatedConnection = true },
+                    commandTimeout: 180,
+                    commandType: CommandType.StoredProcedure);
                 var dryTableReport = (await dryGrid.ReadAsync<(string tableName, int rowsAffected, int remainingUnscrubbed, string disposition)>()).ToList();
                 var drySummary = await dryGrid.ReadSingleAsync<(Guid rootTenantId, string tenantCode, bool isDryRun, int totalRowsPurged, int totalRemainingUnscrubbed, int ledgerRowsRetained, DateTime backupAgeOutUtc)>();
                 Assert.Equal(71, dryTableReport.Count);
@@ -554,6 +557,8 @@ public sealed class LoggingWave4IntegrationTests(MeritFixture fixture)
                 Assert.True(drySummary.totalRowsPurged <= mdScrubbableRows * 1.05,
                     $"Expected single-pass purge count (<= {mdScrubbableRows * 1.05:0} for {mdScrubbableRows} scrubbable rows), got {drySummary.totalRowsPurged}");
             }
+            // Dedicated connection disposal guarantees no residual SESSION_CONTEXT('AppUser') leaks onto other connections.
+            Assert.Null(await conn.ExecuteScalarAsync<string?>("SELECT CAST (SESSION_CONTEXT (N'AppUser') AS NVARCHAR (255))"));
             int mdLiveAfterDryRun = await conn.ExecuteScalarAsync<int>(
                 "SELECT COUNT (*) FROM dbo.person WHERE rootTenantId = @r AND isDeleted = 0", new { r = mdRoot.tenantId });
             Assert.Equal(mdLiveBeforeDryRun, mdLiveAfterDryRun);

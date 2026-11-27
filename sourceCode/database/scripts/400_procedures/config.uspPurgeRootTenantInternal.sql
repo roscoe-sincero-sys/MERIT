@@ -45,9 +45,10 @@ Description:	Initial version.
 
 ***********************************************************************************************************************/
 CREATE OR ALTER PROCEDURE config.uspPurgeRootTenantInternal
-      @rootTenantId        UNIQUEIDENTIFIER
-      , @backupRetentionDays INT = 35
-      , @dryRun              BIT = 0
+      @rootTenantId                  UNIQUEIDENTIFIER
+      , @backupRetentionDays           INT = 35
+      , @dryRun                        BIT = 0
+      , @singlePassDedicatedConnection BIT = 0
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -164,10 +165,11 @@ BEGIN
         UPDATE dbo.jobQueue SET jobStatus = 'failed', modifiedBy = N'MERIT tenant fence' WHERE rootTenantId = @rootTenantId AND jobStatus IN ('queued', 'running');
         COMMIT TRANSACTION;
 
-        -- #352: When SESSION_CONTEXT (N'AppUser') is unset (operator runbook), set it to the purge marker for Step 2
-        -- so trg_au_updt_* stamps deletedBy = N'MERIT tenant purge' in a single pass instead of updating live rows twice.
+        -- #352 / Codex #3: Only set SESSION_CONTEXT (N'AppUser') = N'MERIT tenant purge' when the caller explicitly
+        -- opts in via @singlePassDedicatedConnection = 1 on a dedicated connection that is closed on timeout/attention.
+        -- Otherwise keep the safe two-pass path that never mutates session-wide AppUser.
         DECLARE @setPurgeAppUser BIT = 0;
-        IF SESSION_CONTEXT (N'AppUser') IS NULL
+        IF @singlePassDedicatedConnection = 1 AND SESSION_CONTEXT (N'AppUser') IS NULL
         BEGIN
             EXEC sys.sp_set_session_context @key = N'AppUser', @value = N'MERIT tenant purge', @read_only = 0;
             SET @setPurgeAppUser = 1;

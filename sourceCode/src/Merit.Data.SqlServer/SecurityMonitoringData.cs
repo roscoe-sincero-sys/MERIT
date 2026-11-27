@@ -105,10 +105,10 @@ public sealed class SecurityMonitoringData(Db db) : ISecurityMonitoringData
     public Task<int> PurgeExecutionLogAsync(int retentionDays, CancellationToken ct = default)
         => db.QuerySingleAsync<int>("logs.uspPurgeExecutionLog", new { retentionDays }, ct)!;
 
-    public Task<AuditLedgerVerificationRow> VerifyAuditLedgerAsync(string? digestJson = null, CancellationToken ct = default)
-        => db.MultipleAsync("logs.uspVerifyAuditLedger", new { digestJson }, async g =>
+    public Task<AuditLedgerVerificationRow> VerifyAuditLedgerAsync(string? digestJson = null, bool useAutomaticStorage = false, bool requireDigest = false, CancellationToken ct = default)
+        => db.MultipleAsync("logs.uspVerifyAuditLedger", new { digestJson, useAutomaticStorage, requireDigest }, async g =>
         {
-            // sys.sp_verify_database_ledger emits a first result set (last_verified_block_id) on success before our summary row.
+            // sys.sp_verify_database_ledger(_from_digest_storage) emits a first result set (last_verified_block_id) on success before our summary row.
             AuditLedgerVerificationRow? summary = null;
             while (!g.IsConsumed)
             {
@@ -120,4 +120,8 @@ public sealed class SecurityMonitoringData(Db db) : ISecurityMonitoringData
             }
             return summary ?? new AuditLedgerVerificationRow { Verified = false, Detail = "No verification result returned." };
         }, ct);
+
+    public Task<int?> RecordLedgerVerificationOutcomeAsync(string anchorSource, bool verified, long? lastVerifiedBlockId, int? digestFileCount, string detail, CancellationToken ct = default)
+        => db.QuerySingleAsync<int?>("logs.uspRecordLedgerVerificationOutcome",
+            new { anchorSource, verified, lastVerifiedBlockId, digestFileCount, detail }, ct);
 }
