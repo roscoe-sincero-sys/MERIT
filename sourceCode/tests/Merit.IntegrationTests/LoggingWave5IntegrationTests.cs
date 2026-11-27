@@ -1,5 +1,6 @@
 using System.Data;
 using Dapper;
+using Merit.Application.Data;
 using Microsoft.Data.SqlClient;
 
 namespace Merit.IntegrationTests;
@@ -66,7 +67,8 @@ public sealed class LoggingWave5IntegrationTests
         await using var adminConn = new SqlConnection(TestEnvironment.AdminConnectionString());
         await adminConn.OpenAsync();
         DateTime testStartUtc = await adminConn.ExecuteScalarAsync<DateTime>("SELECT SYSUTCDATETIME ()");
-        Guid? recordedRunId = null;
+        var recordedRunIds = new List<Guid>();
+        Guid? createdFindingId = null;
 
         try
         {
@@ -122,12 +124,47 @@ public sealed class LoggingWave5IntegrationTests
                 Assert.False(emptyReq.verified);
                 Assert.Null(emptyReq.nativeBlockId);
 
-                // Record outcome as meritWorker using the engine's native verified block id.
-                var recorded = await workerConn.QuerySingleAsync<(Guid ledgerVerificationRunId, bool findingCreated, Guid? securityFindingId, Guid rootTenantId, DateTime detectedUtc)>(
+                // #354: Record failure outcome as meritWorker -> creates critical finding, surfaces in pending outbox,
+                // clears outbox once marked delivered, and deduplicates repeat same-day failures.
+                var failOutcome = await workerConn.QuerySingleAsync<(Guid ledgerVerificationRunId, bool findingCreated, Guid? securityFindingId, Guid? rootTenantId, DateTime detectedUtc)>(
+                    "logs.uspRecordLedgerVerificationOutcome",
+                    new { anchorSource = "digestDirectory", verified = false, lastVerifiedBlockId = (long?)null, digestFileCount = 1, detail = "Synthetic #354 failure for outbox test." },
+                    commandType: CommandType.StoredProcedure);
+                recordedRunIds.Add(failOutcome.ledgerVerificationRunId);
+                Assert.True(failOutcome.findingCreated);
+                Assert.NotNull(failOutcome.securityFindingId);
+                Assert.NotEqual(Guid.Empty, failOutcome.securityFindingId.Value);
+                Assert.NotNull(failOutcome.rootTenantId);
+                Assert.NotEqual(Guid.Empty, failOutcome.rootTenantId.Value);
+                createdFindingId = failOutcome.securityFindingId;
+
+                var pendingBefore = (await workerConn.QueryAsync<NewSecurityFindingRow>(
+                    "logs.uspGetPendingLedgerAlerts", commandType: CommandType.StoredProcedure)).ToList();
+                Assert.Contains(pendingBefore, p => p.SecurityFindingId == createdFindingId && p.RuleCode == "ledgerVerificationFailed" && p.Severity == "critical");
+
+                await workerConn.ExecuteAsync(
+                    "logs.uspMarkSecurityFindingWebhookDelivered",
+                    new { securityFindingId = createdFindingId.Value },
+                    commandType: CommandType.StoredProcedure);
+
+                var pendingAfter = (await workerConn.QueryAsync<NewSecurityFindingRow>(
+                    "logs.uspGetPendingLedgerAlerts", commandType: CommandType.StoredProcedure)).ToList();
+                Assert.DoesNotContain(pendingAfter, p => p.SecurityFindingId == createdFindingId);
+
+                // Second failure on the same UTC day deduplicates cleanly (no second finding created).
+                var repeatFail = await workerConn.QuerySingleAsync<(Guid ledgerVerificationRunId, bool findingCreated, Guid? securityFindingId, Guid? rootTenantId, DateTime detectedUtc)>(
+                    "logs.uspRecordLedgerVerificationOutcome",
+                    new { anchorSource = "digestDirectory", verified = false, lastVerifiedBlockId = (long?)null, digestFileCount = 1, detail = "Synthetic #354 repeat failure." },
+                    commandType: CommandType.StoredProcedure);
+                recordedRunIds.Add(repeatFail.ledgerVerificationRunId);
+                Assert.False(repeatFail.findingCreated);
+
+                // Record success outcome as meritWorker using the engine's native verified block id.
+                var recorded = await workerConn.QuerySingleAsync<(Guid ledgerVerificationRunId, bool findingCreated, Guid? securityFindingId, Guid? rootTenantId, DateTime detectedUtc)>(
                     "logs.uspRecordLedgerVerificationOutcome",
                     new { anchorSource = "digestDirectory", verified = true, lastVerifiedBlockId = fresh.nativeBlockId, digestFileCount = 1, detail = fresh.detail },
                     commandType: CommandType.StoredProcedure);
-                recordedRunId = recorded.ledgerVerificationRunId;
+                recordedRunIds.Add(recorded.ledgerVerificationRunId);
                 Assert.False(recorded.findingCreated);
             }
             finally
@@ -147,13 +184,17 @@ public sealed class LoggingWave5IntegrationTests
         }
         finally
         {
-            // Scope cleanup strictly to the synthetic run and synthetic empty-digest failure created by this test.
-            if (recordedRunId is { } rid)
+            // Scope cleanup strictly to the synthetic runs and finding created by this test.
+            foreach (Guid rid in recordedRunIds)
             {
                 await adminConn.ExecuteAsync("UPDATE logs.ledgerVerificationRun SET isDeleted = 1 WHERE ledgerVerificationRunId = @id;", new { id = rid });
             }
+            if (createdFindingId is { } fid)
+            {
+                await adminConn.ExecuteAsync("UPDATE logs.securityFinding SET isDeleted = 1 WHERE securityFindingId = @id;", new { id = fid });
+            }
             await adminConn.ExecuteAsync(
-                "UPDATE logs.securityFinding SET isDeleted = 1 WHERE ruleCode = 'ledgerVerificationFailed' AND isDeleted = 0 AND detectedUtc >= @since AND detailJson LIKE N'%non-empty external digest JSON payload is required%';",
+                "UPDATE logs.securityFinding SET isDeleted = 1 WHERE ruleCode = 'ledgerVerificationFailed' AND isDeleted = 0 AND detectedUtc >= @since AND detailJson LIKE N'%Synthetic #354%';",
                 new { since = testStartUtc });
         }
     }

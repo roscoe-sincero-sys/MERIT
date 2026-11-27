@@ -1912,6 +1912,7 @@ TABLES += [{
           check="status IN ('open', 'acknowledged', 'resolved', 'falsePositive')"),
         c("acknowledgedByUserId", UUID, "User who last updated the finding status."),
         c("acknowledgedUtc", "DATETIME2 (3)", "UTC timestamp of the last status update."),
+        c("webhookDeliveredUtc", "DATETIME2 (3)", "UTC timestamp when an outbound webhook alert was delivered for this finding; NULL while pending (#354)."),
         c("fingerprint", "VARCHAR (128)", "Deterministic deduplication key for the finding within a scan window.", null=False),
     ],
     "fks": [],

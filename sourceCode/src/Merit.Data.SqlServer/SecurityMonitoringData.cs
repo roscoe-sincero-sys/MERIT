@@ -135,9 +135,6 @@ public sealed class SecurityMonitoringData(Db db) : ISecurityMonitoringData
                             VerifiedUtc = dict.TryGetValue("verifiedUtc", out object? vu) && vu is not null ? Convert.ToDateTime(vu) : DateTime.UtcNow,
                             Detail = dict.TryGetValue("detail", out object? dt) ? dt as string ?? string.Empty : string.Empty,
                             HasAutomaticDigestStorage = dict.TryGetValue("hasAutomaticDigestStorage", out object? ha) && ha is not null && Convert.ToBoolean(ha),
-                            FindingCreated = dict.TryGetValue("findingCreated", out object? fc) && fc is not null && Convert.ToBoolean(fc),
-                            SecurityFindingId = dict.TryGetValue("securityFindingId", out object? sf) && sf is Guid sfId ? sfId : null,
-                            RootTenantId = dict.TryGetValue("rootTenantId", out object? rt) && rt is Guid rtId ? rtId : null,
                         };
                     }
                 }
@@ -155,9 +152,6 @@ public sealed class SecurityMonitoringData(Db db) : ISecurityMonitoringData
                     VerifiedUtc = summary.VerifiedUtc,
                     Detail = $"{summary.Detail.TrimEnd('.')} (block {nativeVerifiedBlockId}).",
                     HasAutomaticDigestStorage = summary.HasAutomaticDigestStorage,
-                    FindingCreated = summary.FindingCreated,
-                    SecurityFindingId = summary.SecurityFindingId,
-                    RootTenantId = summary.RootTenantId,
                 }
                 : summary;
         }, ct);
@@ -165,4 +159,10 @@ public sealed class SecurityMonitoringData(Db db) : ISecurityMonitoringData
     public Task<LedgerVerificationOutcomeRow> RecordLedgerVerificationOutcomeAsync(string anchorSource, bool verified, long? lastVerifiedBlockId, int? digestFileCount, string detail, CancellationToken ct = default)
         => db.QuerySingleAsync<LedgerVerificationOutcomeRow>("logs.uspRecordLedgerVerificationOutcome",
             new { anchorSource, verified, lastVerifiedBlockId, digestFileCount, detail }, ct)!;
+
+    public Task<IReadOnlyList<NewSecurityFindingRow>> GetPendingLedgerAlertsAsync(CancellationToken ct = default)
+        => db.QueryAsync<NewSecurityFindingRow>("logs.uspGetPendingLedgerAlerts", null, ct);
+
+    public Task MarkSecurityFindingWebhookDeliveredAsync(Guid securityFindingId, CancellationToken ct = default)
+        => db.ExecuteAsync("logs.uspMarkSecurityFindingWebhookDelivered", new { securityFindingId }, ct);
 }

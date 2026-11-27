@@ -8429,6 +8429,15 @@
   ]
  },
  {
+  "name": "logs.uspGetPendingLedgerAlerts",
+  "kind": "read",
+  "grants": [
+   "meritWorkerRole"
+  ],
+  "permission": null,
+  "params": []
+ },
+ {
   "name": "logs.uspGetScreenSession",
   "kind": "read",
   "grants": [
@@ -8685,6 +8694,22 @@
     "name": "includeProtected",
     "type": "BIT",
     "hasDefault": true,
+    "isOutput": false
+   }
+  ]
+ },
+ {
+  "name": "logs.uspMarkSecurityFindingWebhookDelivered",
+  "kind": "write",
+  "grants": [
+   "meritWorkerRole"
+  ],
+  "permission": null,
+  "params": [
+   {
+    "name": "securityFindingId",
+    "type": "UNIQUEIDENTIFIER",
+    "hasDefault": false,
     "isOutput": false
    }
   ]

@@ -10,7 +10,8 @@ namespace Merit.Worker;
 /// </summary>
 public interface ISecurityAlertNotifier
 {
-    Task NotifyAsync(IReadOnlyList<NewSecurityFindingRow> findings, CancellationToken ct);
+    /// <summary>Posts findings to the configured HTTPS webhook. Returns <c>true</c> only on an HTTP 2xx response.</summary>
+    Task<bool> NotifyAsync(IReadOnlyList<NewSecurityFindingRow> findings, CancellationToken ct);
 }
 
 public sealed partial class SecurityAlertWebhookNotifier : ISecurityAlertNotifier
@@ -40,17 +41,17 @@ public sealed partial class SecurityAlertWebhookNotifier : ISecurityAlertNotifie
         _retryDelays = retryDelays;
     }
 
-    public async Task NotifyAsync(IReadOnlyList<NewSecurityFindingRow> findings, CancellationToken ct)
+    public async Task<bool> NotifyAsync(IReadOnlyList<NewSecurityFindingRow> findings, CancellationToken ct)
     {
         if (findings.Count == 0)
         {
-            return;
+            return false;
         }
 
         string? webhookUrl = _configuration["SecurityAlerts:WebhookUrl"];
         if (string.IsNullOrWhiteSpace(webhookUrl))
         {
-            return;
+            return false;
         }
 
         try
@@ -58,13 +59,18 @@ public sealed partial class SecurityAlertWebhookNotifier : ISecurityAlertNotifie
             if (!Uri.TryCreate(webhookUrl, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps)
             {
                 WebhookSkipped(_logger);
-                return;
+                return false;
             }
+
+            string deliveryKey = findings.Count == 1
+                ? findings[0].SecurityFindingId.ToString("D")
+                : string.Join(",", findings.Select(f => f.SecurityFindingId.ToString("D")));
 
             object payload = new
             {
                 source = "MERIT",
                 eventType = "securityFinding.detected",
+                deliveryKey,
                 count = findings.Count,
                 findings = findings.Select(f => new
                 {
@@ -87,10 +93,15 @@ public sealed partial class SecurityAlertWebhookNotifier : ISecurityAlertNotifie
 
                 try
                 {
-                    using var resp = await _webhookClient.PostAsJsonAsync(uri, payload, ct).ConfigureAwait(false);
+                    using var req = new HttpRequestMessage(HttpMethod.Post, uri)
+                    {
+                        Content = JsonContent.Create(payload),
+                    };
+                    req.Headers.TryAddWithoutValidation("X-MERIT-Delivery-Key", deliveryKey);
+                    using var resp = await _webhookClient.SendAsync(req, ct).ConfigureAwait(false);
                     if (resp.IsSuccessStatusCode)
                     {
-                        return;
+                        return true;
                     }
 
                     int code = (int)resp.StatusCode;
@@ -98,7 +109,7 @@ public sealed partial class SecurityAlertWebhookNotifier : ISecurityAlertNotifie
                     if (!transient || attempt == _retryDelays.Length - 1)
                     {
                         WebhookFailed(_logger, code);
-                        return;
+                        return false;
                     }
                 }
                 catch (Exception ex) when ((ex is not OperationCanceledException || !ct.IsCancellationRequested) && attempt < _retryDelays.Length - 1)
@@ -111,6 +122,8 @@ public sealed partial class SecurityAlertWebhookNotifier : ISecurityAlertNotifie
         {
             WebhookException(_logger, ex.GetType().Name);
         }
+
+        return false;
     }
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Security alert webhook skipped: URL must be absolute HTTPS")]

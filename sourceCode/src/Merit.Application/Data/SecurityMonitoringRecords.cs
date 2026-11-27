@@ -32,11 +32,13 @@ public interface ISecurityMonitoringData
     Task<OperationalLogsReport> GetOperationalLogsAsync(int hours = 24, int top = 100, CancellationToken ct = default);
     Task<OperationalIntegrityCheck> CheckOperationalIntegrityAsync(int minutes = 15, CancellationToken ct = default);
 
-    // #334 ExecutionLog retention & audit ledger digest verification
+    // #334 / #354 ExecutionLog retention, audit ledger digest verification, and durable webhook outbox
     Task<int> PurgeExecutionLogAsync(int retentionDays, CancellationToken ct = default);
     Task<LedgerVerificationStateRow> GetLedgerVerificationStateAsync(CancellationToken ct = default);
     Task<AuditLedgerVerificationRow> VerifyAuditLedgerAsync(string? digestJson = null, bool useAutomaticStorage = false, bool requireDigest = false, CancellationToken ct = default);
     Task<LedgerVerificationOutcomeRow> RecordLedgerVerificationOutcomeAsync(string anchorSource, bool verified, long? lastVerifiedBlockId, int? digestFileCount, string detail, CancellationToken ct = default);
+    Task<IReadOnlyList<NewSecurityFindingRow>> GetPendingLedgerAlertsAsync(CancellationToken ct = default);
+    Task MarkSecurityFindingWebhookDeliveredAsync(Guid securityFindingId, CancellationToken ct = default);
 }
 
 public sealed record BehaviorAnomalyQuery(
@@ -352,9 +354,6 @@ public sealed class AuditLedgerVerificationRow
     public DateTime VerifiedUtc { get; init; }
     public string Detail { get; init; } = string.Empty;
     public bool HasAutomaticDigestStorage { get; init; }
-    public bool FindingCreated { get; init; }
-    public Guid? SecurityFindingId { get; init; }
-    public Guid? RootTenantId { get; init; }
 }
 
 public sealed class LedgerVerificationOutcomeRow

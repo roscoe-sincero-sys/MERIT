@@ -39,6 +39,8 @@ public sealed class AuditLedgerVerifierTests
         public Func<LedgerVerificationStateRow> OnGetState { get; set; } = () => new LedgerVerificationStateRow();
         public Func<VerifyCall, AuditLedgerVerificationRow> OnVerify { get; set; } = _ => new AuditLedgerVerificationRow();
         public Func<OutcomeRecord, LedgerVerificationOutcomeRow> OnRecord { get; set; } = _ => new LedgerVerificationOutcomeRow { LedgerVerificationRunId = Guid.NewGuid() };
+        public Func<IReadOnlyList<NewSecurityFindingRow>> OnGetPendingAlerts { get; set; } = () => [];
+        public Action<Guid> OnMarkDelivered { get; set; } = _ => { };
 
         protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
         {
@@ -56,6 +58,15 @@ public sealed class AuditLedgerVerifierTests
                 var rec = new OutcomeRecord((string)args![0]!, (bool)args[1]!, (long?)args[2], (int?)args[3], (string)args[4]!);
                 return Task.FromResult(OnRecord(rec));
             }
+            if (targetMethod?.Name == nameof(ISecurityMonitoringData.GetPendingLedgerAlertsAsync))
+            {
+                return Task.FromResult(OnGetPendingAlerts());
+            }
+            if (targetMethod?.Name == nameof(ISecurityMonitoringData.MarkSecurityFindingWebhookDeliveredAsync))
+            {
+                OnMarkDelivered((Guid)args![0]!);
+                return Task.CompletedTask;
+            }
 
             throw new NotImplementedException(targetMethod?.Name);
         }
@@ -63,67 +74,73 @@ public sealed class AuditLedgerVerifierTests
         public static ISecurityMonitoringData Create(
             Func<LedgerVerificationStateRow> onGetState,
             Func<VerifyCall, AuditLedgerVerificationRow> onVerify,
-            Func<OutcomeRecord, LedgerVerificationOutcomeRow> onRecord)
+            Func<OutcomeRecord, LedgerVerificationOutcomeRow> onRecord,
+            Func<IReadOnlyList<NewSecurityFindingRow>>? onGetPendingAlerts = null,
+            Action<Guid>? onMarkDelivered = null)
         {
             var proxy = DispatchProxy.Create<ISecurityMonitoringData, StubLedgerMonitoringProxy>();
             var impl = (StubLedgerMonitoringProxy)(object)proxy;
             impl.OnGetState = onGetState;
             impl.OnVerify = onVerify;
             impl.OnRecord = onRecord;
+            if (onGetPendingAlerts is not null) impl.OnGetPendingAlerts = onGetPendingAlerts;
+            if (onMarkDelivered is not null) impl.OnMarkDelivered = onMarkDelivered;
             return proxy;
         }
+    }
+
+    private sealed class InMemoryLedgerStore
+    {
+        public int? DurableLastGoodCount { get; set; }
+        public bool FindingCreatedToday { get; set; }
+        public List<NewSecurityFindingRow> PendingAlerts { get; } = [];
+        public HashSet<Guid> DeliveredFindingIds { get; } = [];
     }
 
     private static (AuditLedgerVerifier verifier, CapturingLogger logger, List<VerifyCall> verifyCalls, List<OutcomeRecord> outcomes)
         CreateVerifier(string? digestDir, Func<VerifyCall, AuditLedgerVerificationRow> onVerify,
                        bool hasAutomaticStorage = false, int? initialGoodCount = null,
-                       string? webhookUrl = null, HttpClient? webhookClient = null)
+                       string? webhookUrl = null, HttpClient? webhookClient = null,
+                       InMemoryLedgerStore? store = null)
     {
         var verifyCalls = new List<VerifyCall>();
         var outcomes = new List<OutcomeRecord>();
-        int? durableLastGoodCount = initialGoodCount;
-        bool findingCreatedToday = false;
+        store ??= new InMemoryLedgerStore { DurableLastGoodCount = initialGoodCount };
         var services = new ServiceCollection();
         services.AddSingleton(StubLedgerMonitoringProxy.Create(
-            () => new LedgerVerificationStateRow { HasAutomaticDigestStorage = hasAutomaticStorage, LastGoodDigestFileCount = durableLastGoodCount },
+            () => new LedgerVerificationStateRow { HasAutomaticDigestStorage = hasAutomaticStorage, LastGoodDigestFileCount = store.DurableLastGoodCount },
             call =>
             {
                 verifyCalls.Add(call);
-                var r = onVerify(call);
-                if (!r.Verified && !findingCreatedToday)
-                {
-                    findingCreatedToday = true;
-                    return new AuditLedgerVerificationRow
-                    {
-                        Verified = false,
-                        LastVerifiedBlockId = r.LastVerifiedBlockId,
-                        DigestJson = r.DigestJson,
-                        VerifiedUtc = r.VerifiedUtc == default ? DateTime.UtcNow : r.VerifiedUtc,
-                        Detail = r.Detail,
-                        HasAutomaticDigestStorage = r.HasAutomaticDigestStorage,
-                        FindingCreated = true,
-                        SecurityFindingId = Guid.NewGuid(),
-                        RootTenantId = Guid.NewGuid(),
-                    };
-                }
-                return r;
+                return onVerify(call);
             },
             rec =>
             {
                 outcomes.Add(rec);
                 if (rec.AnchorSource == "digestDirectory" && rec.Verified && rec.FileCount is not null)
                 {
-                    durableLastGoodCount = Math.Max(durableLastGoodCount ?? 0, rec.FileCount.Value);
+                    store.DurableLastGoodCount = Math.Max(store.DurableLastGoodCount ?? 0, rec.FileCount.Value);
                 }
                 bool created = false;
                 Guid? fid = null;
                 Guid? rid = null;
-                if (!rec.Verified && !findingCreatedToday)
+                DateTime now = DateTime.UtcNow;
+                if (!rec.Verified && !store.FindingCreatedToday)
                 {
-                    findingCreatedToday = true;
+                    store.FindingCreatedToday = true;
                     created = true;
                     fid = Guid.NewGuid();
                     rid = Guid.NewGuid();
+                    store.PendingAlerts.Add(new NewSecurityFindingRow
+                    {
+                        SecurityFindingId = fid.Value,
+                        RootTenantId = rid.Value,
+                        RuleCode = "ledgerVerificationFailed",
+                        Severity = "critical",
+                        Title = "Audit ledger verification failed",
+                        DetailJson = rec.Detail,
+                        DetectedUtc = now,
+                    });
                 }
                 return new LedgerVerificationOutcomeRow
                 {
@@ -131,9 +148,11 @@ public sealed class AuditLedgerVerifierTests
                     FindingCreated = created,
                     SecurityFindingId = fid,
                     RootTenantId = rid,
-                    DetectedUtc = DateTime.UtcNow,
+                    DetectedUtc = now,
                 };
-            }));
+            },
+            () => store.PendingAlerts.Where(a => !store.DeliveredFindingIds.Contains(a.SecurityFindingId)).ToList(),
+            id => store.DeliveredFindingIds.Add(id)));
         var provider = services.BuildServiceProvider();
         var dict = new Dictionary<string, string?>();
         if (digestDir is not null) dict["LedgerVerification:DigestDirectory"] = digestDir;
@@ -360,20 +379,24 @@ public sealed class AuditLedgerVerifierTests
     {
         int httpPosts = 0;
         string? lastBody = null;
+        string? deliveryKeyHeader = null;
         var client = new HttpClient(new StubHttpMessageHandler(async (req, ct) =>
         {
             httpPosts++;
             lastBody = await req.Content!.ReadAsStringAsync(ct);
+            deliveryKeyHeader = req.Headers.TryGetValues("X-MERIT-Delivery-Key", out var vals) ? vals.FirstOrDefault() : null;
             // First attempt returns 503 (transient), second attempt succeeds -> proves shared retry policy.
             return new HttpResponseMessage(httpPosts == 1 ? HttpStatusCode.ServiceUnavailable : HttpStatusCode.OK);
         }));
 
         string missingDir = Path.Combine(Path.GetTempPath(), "merit-ledger-webhook-" + Guid.NewGuid().ToString("N"));
+        var store = new InMemoryLedgerStore();
         var (verifier, _, _, _) = CreateVerifier(
             missingDir,
             _ => new AuditLedgerVerificationRow { Verified = false, Detail = "Hash mismatch" },
             webhookUrl: "https://alerts.example.test/merit",
-            webhookClient: client);
+            webhookClient: client,
+            store: store);
 
         // First failure of the day: posts critical finding (1 transient 503 + 1 retry 200 = 2 HTTP calls).
         await verifier.RunVerificationCycleAsync(CancellationToken.None);
@@ -382,9 +405,65 @@ public sealed class AuditLedgerVerifierTests
         Assert.Contains("securityFinding.detected", lastBody, StringComparison.Ordinal);
         Assert.Contains("ledgerVerificationFailed", lastBody, StringComparison.Ordinal);
         Assert.Contains("critical", lastBody, StringComparison.Ordinal);
+        Assert.Single(store.PendingAlerts);
+        Assert.Equal(store.PendingAlerts[0].SecurityFindingId.ToString("D"), deliveryKeyHeader);
+        Assert.Contains($"\"deliveryKey\":\"{deliveryKeyHeader}\"", lastBody, StringComparison.Ordinal);
+        Assert.Contains(store.PendingAlerts[0].SecurityFindingId, store.DeliveredFindingIds);
 
-        // Repeat failure on the same UTC day: SQL daily fingerprint deduplicates -> ZERO additional webhook posts.
+        // Repeat failure on the same UTC day: finding already marked delivered -> ZERO additional webhook posts.
         await verifier.RunVerificationCycleAsync(CancellationToken.None);
         Assert.Equal(2, httpPosts);
+    }
+
+    [Fact]
+    public async Task ExhaustedWebhookRetries_RemainPendingAcrossRestart_AndDeliverOnceReceiverRecovers()
+    {
+        int httpPosts = 0;
+        bool receiverHealthy = false;
+        var deliveryKeys = new List<string>();
+        var client = new HttpClient(new StubHttpMessageHandler((req, _) =>
+        {
+            httpPosts++;
+            if (req.Headers.TryGetValues("X-MERIT-Delivery-Key", out var vals))
+            {
+                deliveryKeys.Add(vals.First());
+            }
+            return Task.FromResult(new HttpResponseMessage(receiverHealthy ? HttpStatusCode.OK : HttpStatusCode.ServiceUnavailable));
+        }));
+
+        string missingDir = Path.Combine(Path.GetTempPath(), "merit-ledger-outbox-" + Guid.NewGuid().ToString("N"));
+        var store = new InMemoryLedgerStore();
+
+        // Cycle 1: webhook receiver is completely down (3x 503). Finding stays pending (NOT marked delivered).
+        var (verifier1, _, _, _) = CreateVerifier(
+            missingDir,
+            _ => new AuditLedgerVerificationRow { Verified = false, Detail = "Hash mismatch" },
+            webhookUrl: "https://alerts.example.test/merit",
+            webhookClient: client,
+            store: store);
+
+        await verifier1.RunVerificationCycleAsync(CancellationToken.None);
+        Assert.Equal(3, httpPosts);
+        Assert.Single(store.PendingAlerts);
+        Assert.Empty(store.DeliveredFindingIds);
+
+        // Simulate worker restart after receiver recovers: next cycle drains the pending finding with the SAME deliveryKey!
+        receiverHealthy = true;
+        var (verifier2, _, _, _) = CreateVerifier(
+            missingDir,
+            _ => new AuditLedgerVerificationRow { Verified = false, Detail = "Hash mismatch" },
+            webhookUrl: "https://alerts.example.test/merit",
+            webhookClient: client,
+            store: store);
+
+        await verifier2.RunVerificationCycleAsync(CancellationToken.None);
+        Assert.Equal(4, httpPosts);
+        Assert.Single(store.DeliveredFindingIds);
+        Assert.Contains(store.PendingAlerts[0].SecurityFindingId, store.DeliveredFindingIds);
+        Assert.All(deliveryKeys, k => Assert.Equal(store.PendingAlerts[0].SecurityFindingId.ToString("D"), k));
+
+        // Subsequent same-day cycle: already delivered -> ZERO additional posts.
+        await verifier2.RunVerificationCycleAsync(CancellationToken.None);
+        Assert.Equal(4, httpPosts);
     }
 }
