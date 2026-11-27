@@ -535,6 +535,9 @@ public sealed class LoggingWave4IntegrationTests(MeritFixture fixture)
                 "SELECT TOP (1) tenantId, tenantCode FROM auth.tenant WHERE tenantId = rootTenantId AND tenantCode LIKE 'MD%' AND isDeleted = 0 ORDER BY tenantCode");
             int mdLiveBeforeDryRun = await conn.ExecuteScalarAsync<int>(
                 "SELECT COUNT (*) FROM dbo.person WHERE rootTenantId = @r AND isDeleted = 0", new { r = mdRoot.tenantId });
+            var mdManifest = (await conn.QueryAsync<(string tableName, int activeRows, int deletedRows, int totalRows, string disposition, long? maxAuditEventId)>(
+                "config.uspExportRootTenant", new { rootTenantId = mdRoot.tenantId }, commandType: CommandType.StoredProcedure)).ToList();
+            long mdScrubbableRows = mdManifest.Where(m => m.disposition != "ledgerReadOnly").Sum(m => (long)m.totalRows);
             using (var dryGrid = await conn.QueryMultipleAsync(
                 "config.uspPurgeRootTenant",
                 new { rootTenantId = mdRoot.tenantId, confirmationCode = $"PURGE:{mdRoot.tenantCode}", backupRetentionDays = 35, dryRun = true },
@@ -547,8 +550,9 @@ public sealed class LoggingWave4IntegrationTests(MeritFixture fixture)
                 Assert.True(drySummary.isDryRun);
                 Assert.Equal(0, drySummary.totalRemainingUnscrubbed);
                 Assert.True(drySummary.totalRowsPurged > 0);
-                // #352: Single-pass live-row scrub (SESSION_CONTEXT AppUser = 'MERIT tenant purge') avoids double-updating ~430k live rows.
-                Assert.True(drySummary.totalRowsPurged < 550000, $"Expected single-pass purge count (<550k), got {drySummary.totalRowsPurged}");
+                // #352 / B7: Single-pass live-row scrub updates each scrubbable row once (never ~2x), regardless of MERIT_IT growth.
+                Assert.True(drySummary.totalRowsPurged <= mdScrubbableRows * 1.05,
+                    $"Expected single-pass purge count (<= {mdScrubbableRows * 1.05:0} for {mdScrubbableRows} scrubbable rows), got {drySummary.totalRowsPurged}");
             }
             int mdLiveAfterDryRun = await conn.ExecuteScalarAsync<int>(
                 "SELECT COUNT (*) FROM dbo.person WHERE rootTenantId = @r AND isDeleted = 0", new { r = mdRoot.tenantId });
