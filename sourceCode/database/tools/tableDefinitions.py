@@ -1435,7 +1435,10 @@ TABLES = [
             c("searchSource", "VARCHAR (30)", "Where the search ran: global, casePicker, or caseList (#331)."),
         ],
         "fks": [],
-        "indexes": [{"name": "IX_logs_searchLog_sessionReference_searchedUtc", "cols": "sessionReference, searchedUtc"}],
+        "indexes": [
+            {"name": "IX_logs_searchLog_sessionReference_searchedUtc", "cols": "sessionReference, searchedUtc"},
+            {"name": "IX_logs_searchLog_searchedUtc_searchLogId", "cols": "searchedUtc, searchLogId", "filter": "isDeleted = 0"},
+        ],
     },
     # ------------------------------------------------------------------------------------------------ matching review
     {

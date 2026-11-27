@@ -336,4 +336,92 @@ public sealed class LoggingWave2IntegrationTests(MeritFixture fixture)
         Assert.Contains("DDL audit integrity", opsHtml, StringComparison.Ordinal);
         Assert.Contains("SYSTEM_VERSIONING", opsHtml, StringComparison.Ordinal);
     }
+
+    [SqlFact]
+    public async Task Issue327_SecurityFindingIdentityIsolatesRootsAndCountyToRootTransitions()
+    {
+        await using var conn = new SqlConnection(TestEnvironment.AdminConnectionString());
+        await conn.OpenAsync();
+
+        var sup = await conn.QuerySingleAsync<(Guid appUserId, Guid rootTenantId)>(
+            "SELECT TOP (1) appUserId, rootTenantId FROM auth.appUser WHERE userName = 'supervisor' AND isDeleted = 0");
+        var roots = (await conn.QueryAsync<Guid>(
+            "SELECT TOP (2) tenantId FROM auth.tenant WHERE tenantId = rootTenantId AND isDeleted = 0 ORDER BY tenantId")).ToList();
+        Guid rootA = roots[0];
+        Guid rootB = roots.Count > 1 ? roots[1] : TimeOrderedId.New();
+
+        var counties = (await conn.QueryAsync<Guid>(
+            "SELECT TOP (2) tenantId FROM auth.tenant WHERE rootTenantId = @r AND tenantId <> rootTenantId AND isDeleted = 0 ORDER BY tenantId",
+            new { r = sup.rootTenantId })).ToList();
+        Assert.NotEmpty(counties);
+        Guid countyA = counties[0];
+        Guid countyB = counties.Count > 1 ? counties[1] : TimeOrderedId.New();
+
+        // 1. Two distinct data roots sharing the same sessionReference produce two independent findings;
+        // escalating one root updates only that root's finding.
+        Guid sharedSession = TimeOrderedId.New();
+        await conn.ExecuteAsync(
+            """
+            INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, clientAddress, sessionReference)
+            VALUES (@u, @rA, 'view', 'person', '203.0.113.10', @s),
+                   (@u, @rA, 'view', 'person', '198.51.100.20', @s),
+                   (@u, @rB, 'view', 'person', '203.0.113.11', @s),
+                   (@u, @rB, 'view', 'person', '198.51.100.21', @s);
+            """, new { u = sup.appUserId, rA = rootA, rB = rootB, s = sharedSession });
+
+        var initial = (await conn.QueryAsync<dynamic>("logs.uspRunSecurityFindingScan", new { hours = 24 }, commandType: CommandType.StoredProcedure)).ToList();
+        var rootRows = (await conn.QueryAsync<(Guid securityFindingId, Guid rootTenantId, string severity)>(
+            "SELECT securityFindingId, rootTenantId, severity FROM logs.securityFinding WHERE ruleCode = 'midSessionIpDrift' AND sessionReference = @s AND isDeleted = 0",
+            new { s = sharedSession })).ToList();
+        Assert.Equal(2, rootRows.Count);
+        var findingA = Assert.Single(rootRows, r => r.rootTenantId == rootA);
+        var findingB = Assert.Single(rootRows, r => r.rootTenantId == rootB);
+        Assert.Contains(initial, r => (Guid)r.securityFindingId == findingA.securityFindingId);
+        Assert.Contains(initial, r => (Guid)r.securityFindingId == findingB.securityFindingId);
+
+        // Escalate only rootA; rootB must remain medium and untouched.
+        await conn.ExecuteAsync(
+            "INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, clientAddress, sessionReference) VALUES (@u, @rA, 'view', 'person', '192.0.2.30', @s);",
+            new { u = sup.appUserId, rA = rootA, s = sharedSession });
+        var afterEscalation = (await conn.QueryAsync<dynamic>("logs.uspRunSecurityFindingScan", new { hours = 24 }, commandType: CommandType.StoredProcedure)).ToList();
+        Assert.Contains(afterEscalation, r => (Guid)r.securityFindingId == findingA.securityFindingId && (string)r.severity == "high");
+        Assert.DoesNotContain(afterEscalation, r => (Guid)r.securityFindingId == findingB.securityFindingId);
+        string rootBSeverity = await conn.ExecuteScalarAsync<string>("SELECT severity FROM logs.securityFinding WHERE securityFindingId = @id", new { id = findingB.securityFindingId }) ?? "";
+        Assert.Equal("medium", rootBSeverity);
+
+        // 2. County-to-root transition: marking a county-owned finding falsePositive must NOT suppress a newly root-scoped finding.
+        Guid transitionSession = TimeOrderedId.New();
+        await conn.ExecuteAsync(
+            """
+            INSERT logs.auditEvent (appUserId, rootTenantId, owningTenantId, actingTenantId, eventAction, entityType, clientAddress, sessionReference)
+            VALUES (@u, @r, @cA, @cA, 'view', 'person', '203.0.113.40', @s),
+                   (@u, @r, @cA, @cA, 'view', 'person', '198.51.100.40', @s);
+            """, new { u = sup.appUserId, r = sup.rootTenantId, cA = countyA, s = transitionSession });
+
+        _ = (await conn.QueryAsync<dynamic>("logs.uspRunSecurityFindingScan", new { hours = 24 }, commandType: CommandType.StoredProcedure)).ToList();
+        var countyFinding = await conn.QuerySingleAsync<(Guid securityFindingId, Guid? owningTenantId)>(
+            "SELECT securityFindingId, owningTenantId FROM logs.securityFinding WHERE ruleCode = 'midSessionIpDrift' AND sessionReference = @s AND isDeleted = 0",
+            new { s = transitionSession });
+        Assert.Equal(countyA, countyFinding.owningTenantId);
+
+        await conn.ExecuteAsync(
+            "UPDATE logs.securityFinding SET status = 'falsePositive' WHERE securityFindingId = @id",
+            new { id = countyFinding.securityFindingId });
+
+        // Adding an event in a second county widens the session to root-scoped; a new open root finding must be emitted.
+        await conn.ExecuteAsync(
+            "INSERT logs.auditEvent (appUserId, rootTenantId, owningTenantId, actingTenantId, eventAction, entityType, clientAddress, sessionReference) VALUES (@u, @r, @cB, @cB, 'view', 'person', '192.0.2.40', @s);",
+            new { u = sup.appUserId, r = sup.rootTenantId, cB = countyB, s = transitionSession });
+
+        var widened = (await conn.QueryAsync<dynamic>("logs.uspRunSecurityFindingScan", new { hours = 24 }, commandType: CommandType.StoredProcedure)).ToList();
+        var transitionFindings = (await conn.QueryAsync<(Guid securityFindingId, Guid? owningTenantId, string status, string severity)>(
+            "SELECT securityFindingId, owningTenantId, status, severity FROM logs.securityFinding WHERE ruleCode = 'midSessionIpDrift' AND sessionReference = @s AND isDeleted = 0",
+            new { s = transitionSession })).ToList();
+        Assert.Equal(2, transitionFindings.Count);
+        var rootFinding = Assert.Single(transitionFindings, f => f.owningTenantId is null);
+        Assert.Equal("open", rootFinding.status);
+        Assert.Equal("high", rootFinding.severity);
+        Assert.Contains(widened, r => (Guid)r.securityFindingId == rootFinding.securityFindingId);
+        Assert.Equal("falsePositive", transitionFindings.Single(f => f.securityFindingId == countyFinding.securityFindingId).status);
+    }
 }

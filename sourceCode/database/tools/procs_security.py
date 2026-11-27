@@ -499,7 +499,7 @@ DECLARE @candidates TABLE (
     severity         VARCHAR (15) NOT NULL,
     title            NVARCHAR (200) NOT NULL,
     detailJson       NVARCHAR (2000) NULL,
-    fingerprint      VARCHAR (128) NOT NULL
+    fingerprint      VARCHAR (300) NOT NULL
 );
 
 -- Rule 1: bulkViewVelocity (owningTenantId derived from source event ownership + acting tenant, NULL when mixed, Codex #2)
@@ -510,7 +510,7 @@ SELECT COALESCE (e.rootTenantId, @platformRoot),
        'bulkViewVelocity', CASE WHEN COUNT (DISTINCT e.entityId) >= @viewVelocityThreshold * 2 THEN 'high' ELSE 'medium' END,
        CONCAT (N'High distinct record view velocity (', COUNT (DISTINCT e.entityId), N' records in ', @winHours, N'h)'),
        (SELECT COUNT (DISTINCT e.entityId) AS distinctEntities, COUNT (*) AS totalViews FOR JSON PATH, WITHOUT_ARRAY_WRAPPER),
-       CONCAT ('bulkViewVelocity|', COALESCE (CONVERT (VARCHAR (36), e.appUserId), 'none'), '|', COALESCE (CONVERT (VARCHAR (36), e.sessionReference), @dayBucket))
+       CONCAT ('bulkViewVelocity|', CONVERT (VARCHAR (36), COALESCE (e.rootTenantId, @platformRoot)), '|', COALESCE (CONVERT (VARCHAR (36), e.appUserId), 'none'), '|', COALESCE (CONVERT (VARCHAR (36), e.sessionReference), @dayBucket))
   FROM logs.auditEvent AS e
  WHERE e.eventUtc >= @since AND e.eventAction = 'view' AND e.entityId IS NOT NULL
  GROUP BY COALESCE (e.rootTenantId, @platformRoot), e.appUserId, e.sessionReference
@@ -570,7 +570,7 @@ SELECT COALESCE (e.rootTenantId, @platformRoot),
        'midSessionIpDrift', CASE WHEN COUNT (DISTINCT {IP_PREFIX_EXPR}) >= 3 THEN 'high' ELSE 'medium' END,
        CONCAT (N'Mid-session network change (', COUNT (DISTINCT {IP_PREFIX_EXPR}), N' distinct network prefixes)'),
        (SELECT COUNT (DISTINCT {IP_PREFIX_EXPR}) AS distinctPrefixes, COUNT (DISTINCT e.clientAddress) AS distinctAddresses, COUNT (*) AS events FOR JSON PATH, WITHOUT_ARRAY_WRAPPER),
-       CONCAT ('midSessionIpDrift|', CONVERT (VARCHAR (36), e.sessionReference))
+       CONCAT ('midSessionIpDrift|', CONVERT (VARCHAR (36), COALESCE (e.rootTenantId, @platformRoot)), '|', COALESCE (CONVERT (VARCHAR (36), e.appUserId), 'none'), '|', CONVERT (VARCHAR (36), e.sessionReference))
   FROM logs.auditEvent AS e
  WHERE e.eventUtc >= @since AND e.sessionReference IS NOT NULL AND e.clientAddress IS NOT NULL
  GROUP BY COALESCE (e.rootTenantId, @platformRoot), e.appUserId, e.sessionReference
@@ -636,7 +636,7 @@ SELECT COALESCE (e.rootTenantId, @platformRoot),
        'apiOnlyNoScreenVisits', 'medium',
        CONCAT (N'Data-access session with zero UI screen visits (', COUNT (DISTINCT {LOGICAL_EVENT_KEY}), N' reads)'),
        (SELECT COUNT (DISTINCT {LOGICAL_EVENT_KEY}) AS readEvents, COUNT (DISTINCT e.entityId) AS distinctEntities FOR JSON PATH, WITHOUT_ARRAY_WRAPPER),
-       CONCAT ('apiOnlyNoScreenVisits|', CONVERT (VARCHAR (36), e.sessionReference))
+       CONCAT ('apiOnlyNoScreenVisits|', CONVERT (VARCHAR (36), COALESCE (e.rootTenantId, @platformRoot)), '|', COALESCE (CONVERT (VARCHAR (36), e.appUserId), 'none'), '|', CONVERT (VARCHAR (36), e.sessionReference))
   FROM logs.auditEvent AS e
  WHERE e.eventUtc >= @since AND e.sessionReference IS NOT NULL
    AND e.eventAction IN ('view', 'list', 'export')
@@ -658,13 +658,14 @@ DECLARE @deduped TABLE (
     detailJson       NVARCHAR (2000) NULL,
     fingerprint      VARCHAR (128) NOT NULL PRIMARY KEY
 );
--- Codex #2: Include effective ownership scope ('root' vs county GUID) in the deduplication fingerprint so a prior
--- county-level disposition (including falsePositive) can never suppress a newly root-scoped finding.
+-- Codex #1/#2: Hash the complete canonical key (ruleCode|rootTenantId|groupingIdentity|effectiveOwner) with SHA-256
+-- so neither cross-root sessions nor long county-scoped keys can collide or truncate, and a prior county-level
+-- disposition (including falsePositive) can never suppress a newly root-scoped finding.
 INSERT @deduped
 SELECT rootTenantId, owningTenantId, appUserId, clientAddress, sessionReference, ruleCode, severity, title, detailJson, scopedFingerprint
   FROM (SELECT *,
-               LEFT (CONCAT (fingerprint, '|', COALESCE (CONVERT (VARCHAR (36), owningTenantId), 'root')), 128) AS scopedFingerprint,
-               ROW_NUMBER () OVER (PARTITION BY LEFT (CONCAT (fingerprint, '|', COALESCE (CONVERT (VARCHAR (36), owningTenantId), 'root')), 128)
+               CONVERT (VARCHAR (64), HASHBYTES ('SHA2_256', CAST (CONCAT (fingerprint, '|', COALESCE (CONVERT (VARCHAR (36), owningTenantId), 'root')) AS VARCHAR (400))), 2) AS scopedFingerprint,
+               ROW_NUMBER () OVER (PARTITION BY CONVERT (VARCHAR (64), HASHBYTES ('SHA2_256', CAST (CONCAT (fingerprint, '|', COALESCE (CONVERT (VARCHAR (36), owningTenantId), 'root')) AS VARCHAR (400))), 2)
                                        ORDER BY CASE severity WHEN 'critical' THEN 1 WHEN 'high' THEN 2 WHEN 'medium' THEN 3 ELSE 4 END) AS rn
           FROM @candidates) AS x
  WHERE rn = 1;
