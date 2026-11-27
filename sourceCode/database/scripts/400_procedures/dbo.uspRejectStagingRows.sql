@@ -127,10 +127,10 @@ BEGIN
             DECLARE @auditRoot UNIQUEIDENTIFIER = auth.udfSessionRootTenantId ();
             DECLARE @singleOwner UNIQUEIDENTIFIER = (SELECT CASE WHEN COUNT (DISTINCT owningTenantId) = 1 THEN MAX (owningTenantId) END FROM @rejected);
             INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, recordCount, clientAddress, owningTenantId,
-                                    sessionReference, traceId, actingTenantId, viewAsUserId)
+                                    sessionReference, traceId, actingTenantId, viewAsUserId, userAgentHash)
             VALUES (auth.udfSessionUserId (), @auditRoot, 'update', 'stagingRow',
                     CASE WHEN @rejectedCount = 1 THEN (SELECT TOP (1) stagingRowId FROM @rejected) END,
-                    @rejectedCount, @auditClientAddress, @singleOwner, @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs);
+                    @rejectedCount, @auditClientAddress, @singleOwner, @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs, @auditUserAgentHash);
             DECLARE @auditEventId BIGINT = SCOPE_IDENTITY ();
             IF @auditRoot IS NOT NULL
                 INSERT logs.auditEventRecord (auditEventRecordId, auditEventId, rootTenantId, entityType, entityId, owningTenantId)

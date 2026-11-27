@@ -146,7 +146,7 @@ from procs_common import AUDIT_SESSION_VARS
 # entry atomically inside the same SQL transaction. Keyed by (schema, name) -> (eventAction, entityType, entityIdExpr, ownerExpr).
 TX_AUDIT_SPECS: dict[tuple[str, str], tuple[str, str, str, str]] = {
     ("dbo", "uspRecordPatientActivity"):        ("create", "patientActivity", "@personActivityId", "dbo.udfPatientWorkOwner (@personId)"),
-    ("dbo", "uspLinkPatientRecord"):            ("update", "patientActivity", "@recordId", "dbo.udfPatientWorkOwner (@personId)"),
+    ("dbo", "uspLinkPatientRecord"):            ("update", "CASE @recordKind WHEN 'activity' THEN 'patientActivity' ELSE 'patientDocument' END", "@recordId", "dbo.udfPatientWorkOwner (@personId)"),
     ("dbo", "uspSavePatientDocument"):          ("create", "patientDocument", "@personDocumentId", "dbo.udfPatientWorkOwner (@personId)"),
     ("dbo", "uspReviewNotificationObligation"): ("update", "notificationObligation", "@notificationObligationId", "(SELECT owningTenantId FROM dbo.notificationObligation WHERE notificationObligationId = @notificationObligationId)"),
     ("dbo", "uspWithdrawNotificationEvidence"): ("update", "notificationObligation", "@notificationObligationId", "(SELECT owningTenantId FROM dbo.notificationObligation WHERE notificationObligationId = @notificationObligationId)"),
@@ -185,11 +185,12 @@ def tx_audit_block(p: dict, pad: int) -> str:
     if not spec:
         return ""
     action, entity_type, entity_id_expr, owner_expr = spec
+    entity_type_sql = entity_type if entity_type.upper().startswith("CASE ") else f"'{entity_type}'"
     sql = f"""-- In-transaction audit event (#335): commits or rolls back atomically with the data change.
 {AUDIT_SESSION_VARS}
 INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, clientAddress, owningTenantId,
                         sessionReference, traceId, actingTenantId, viewAsUserId, userAgentHash)
-VALUES (auth.udfSessionUserId (), auth.udfSessionRootTenantId (), '{action}', '{entity_type}', {entity_id_expr},
+VALUES (auth.udfSessionUserId (), auth.udfSessionRootTenantId (), '{action}', {entity_type_sql}, {entity_id_expr},
         @auditClientAddress, {owner_expr}, @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs, @auditUserAgentHash);"""
     return "\n" + indent(sql, pad) + "\n"
 

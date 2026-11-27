@@ -219,9 +219,9 @@ BEGIN
               FROM dbo.labResult WHERE labResultId = @labResultId
                FOR JSON PATH, WITHOUT_ARRAY_WRAPPER);
         INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, clientAddress, owningTenantId,
-                                sessionReference, traceId, actingTenantId, viewAsUserId)
+                                sessionReference, traceId, actingTenantId, viewAsUserId, userAgentHash)
         VALUES (auth.udfSessionUserId (), @root, 'create', 'labResult', @labResultId, @auditClientAddress,
-                @resultAuditOwner, @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs);
+                @resultAuditOwner, @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs, @auditUserAgentHash);
         DECLARE @resultAuditEventId BIGINT = SCOPE_IDENTITY ();
         INSERT logs.auditEventChange (auditEventChangeId, auditEventId, rootTenantId, owningTenantId, entityType, entityId,
                                       beforeJson, afterJson)
@@ -230,9 +230,9 @@ BEGIN
         IF @supersedesLabResultId IS NOT NULL
         BEGIN
             INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, clientAddress, owningTenantId,
-                                    sessionReference, traceId, actingTenantId, viewAsUserId)
+                                    sessionReference, traceId, actingTenantId, viewAsUserId, userAgentHash)
             VALUES (auth.udfSessionUserId (), @root, 'update', 'labResult', @supersedesLabResultId, @auditClientAddress,
-                    @resultAuditOwner, @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs);
+                    @resultAuditOwner, @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs, @auditUserAgentHash);
             DECLARE @supAuditEventId BIGINT = SCOPE_IDENTITY ();
             INSERT logs.auditEventChange (auditEventChangeId, auditEventId, rootTenantId, owningTenantId, entityType, entityId,
                                           beforeJson, afterJson)

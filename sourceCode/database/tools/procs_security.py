@@ -850,9 +850,9 @@ SELECT TOP (1) @root = rootTenantId, @owner = owningTenantId FROM @updated;
 
 {AUDIT_SESSION_VARS}
 INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, clientAddress, owningTenantId,
-                        sessionReference, traceId, actingTenantId, viewAsUserId)
+                        sessionReference, traceId, actingTenantId, viewAsUserId, userAgentHash)
 VALUES (auth.udfSessionUserId (), @root, 'update', 'securityFinding', @securityFindingId, @auditClientAddress,
-        @owner, @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs);
+        @owner, @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs, @auditUserAgentHash);
 
 SET @Comments = CONCAT (N'Finding status updated to ', @status, N'.');
 """,

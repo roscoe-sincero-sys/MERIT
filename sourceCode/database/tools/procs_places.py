@@ -342,9 +342,9 @@ DECLARE @afterPlacesJson NVARCHAR (MAX) = (
 DECLARE @placeAuditRoot UNIQUEIDENTIFIER = auth.udfSessionRootTenantId ();
 DECLARE @placeAuditOwner UNIQUEIDENTIFIER = dbo.udfPatientWorkOwner (@personId);
 INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, clientAddress, owningTenantId,
-                        sessionReference, traceId, actingTenantId, viewAsUserId)
+                        sessionReference, traceId, actingTenantId, viewAsUserId, userAgentHash)
 VALUES (auth.udfSessionUserId (), @placeAuditRoot, 'update', 'person', @personId, @auditClientAddress,
-        @placeAuditOwner, @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs);
+        @placeAuditOwner, @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs, @auditUserAgentHash);
 DECLARE @placeAuditEventId BIGINT = SCOPE_IDENTITY ();
 INSERT logs.auditEventChange (auditEventChangeId, auditEventId, rootTenantId, owningTenantId, entityType, entityId,
                               beforeJson, afterJson)

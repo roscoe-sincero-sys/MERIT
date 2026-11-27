@@ -107,5 +107,19 @@ class ManifestTests(unittest.TestCase):
         self.assertEqual([], violations, f"Disallowed diagnostic parameters in @KeyParameters: {violations}")
 
 
+    def test_audit_session_inserts_include_user_agent_hash(self):
+        # #327 (I15): Every procedure that declares @auditUserAgentHash and writes to logs.auditEvent must persist userAgentHash.
+        missing = []
+        for mod_name in gp.MODULES:
+            for p in importlib.import_module(mod_name).PROCS:
+                rendered = gp.write_proc(p) if p["kind"] == "write" else gp.read_proc(p)
+                if "INSERT logs.auditEvent" in rendered and "@auditUserAgentHash" in rendered:
+                    for stmt in re.findall(r"INSERT logs\.auditEvent\s*\([^)]+\)", rendered, flags=re.IGNORECASE | re.S):
+                        if "userAgentHash" not in stmt:
+                            missing.append(f"{p['schema']}.{p['name']}")
+                            break
+        self.assertEqual([], missing, f"Procedures declaring @auditUserAgentHash but omitting userAgentHash in INSERT logs.auditEvent: {missing}")
+
+
 if __name__ == "__main__":
     unittest.main()

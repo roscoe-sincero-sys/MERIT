@@ -213,9 +213,9 @@ BEGIN
         DECLARE @auditTraceId VARCHAR (64) = TRY_CAST (SESSION_CONTEXT (N'traceId') AS VARCHAR (64));
         DECLARE @auditUserAgentHash CHAR (16) = TRY_CAST (SESSION_CONTEXT (N'userAgentHash') AS CHAR (16));
         INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, clientAddress, owningTenantId,
-                                sessionReference, traceId, actingTenantId, viewAsUserId)
+                                sessionReference, traceId, actingTenantId, viewAsUserId, userAgentHash)
         VALUES (auth.udfSessionUserId (), @root, 'update', 'exposureCase', @exposureCaseId, @auditClientAddress, @toTenantId,
-                @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs);
+                @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs, @auditUserAgentHash);
         DECLARE @transferAuditId BIGINT = SCOPE_IDENTITY ();
         INSERT logs.auditEventChange (auditEventChangeId, auditEventId, rootTenantId, owningTenantId, entityType, entityId, beforeJson, afterJson)
         VALUES (CAST (CAST (NEWID () AS BINARY (10)) + CAST (DATEDIFF_BIG (MILLISECOND, '19700101', SYSUTCDATETIME ()) AS BINARY (6)) AS UNIQUEIDENTIFIER), @transferAuditId, @root, @toTenantId, 'exposureCase', @exposureCaseId,

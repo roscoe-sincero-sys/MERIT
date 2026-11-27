@@ -126,9 +126,9 @@ BEGIN
         DECLARE @auditUserAgentHash CHAR (16) = TRY_CAST (SESSION_CONTEXT (N'userAgentHash') AS CHAR (16));
             DECLARE @owner UNIQUEIDENTIFIER = (SELECT owningTenantId FROM dbo.stagingRow WHERE stagingRowId = @stagingRowId);
             INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, clientAddress, owningTenantId,
-                                    sessionReference, traceId, actingTenantId, viewAsUserId)
+                                    sessionReference, traceId, actingTenantId, viewAsUserId, userAgentHash)
             VALUES (auth.udfSessionUserId (), auth.udfSessionRootTenantId (), 'update', 'stagingRow', @stagingRowId,
-                    @auditClientAddress, @owner, @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs);
+                    @auditClientAddress, @owner, @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs, @auditUserAgentHash);
         END;
 
         SET @Comments = CONCAT (@updated, N' row(s) corrected.');

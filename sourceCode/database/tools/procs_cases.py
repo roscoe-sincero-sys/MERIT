@@ -29,9 +29,9 @@ INSERT dbo.workTask (workTaskId, rootTenantId, owningTenantId, queueCode, title,
 VALUES ({NEWID}, @root, @owner, 'caseFollowUp', N'Review reopened case', @exposureCaseId, @person);
 {AUDIT_SESSION_VARS}
 INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, clientAddress, owningTenantId,
-                        sessionReference, traceId, actingTenantId, viewAsUserId)
+                        sessionReference, traceId, actingTenantId, viewAsUserId, userAgentHash)
 VALUES (auth.udfSessionUserId (), @root, 'update', 'exposureCase', @exposureCaseId, @auditClientAddress, @owner,
-        @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs);
+        @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs, @auditUserAgentHash);
 DECLARE @reopenAuditId BIGINT = SCOPE_IDENTITY ();
 INSERT logs.auditEventChange (auditEventChangeId, auditEventId, rootTenantId, owningTenantId, entityType, entityId, beforeJson, afterJson)
 VALUES ({NEWID}, @reopenAuditId, @root, @owner, 'exposureCase', @exposureCaseId, @beforeReopenJson,
@@ -128,9 +128,9 @@ EXEC dbo.uspRefreshPersonAccess @personId = @personId;
 
 {AUDIT_SESSION_VARS}
 INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, clientAddress, owningTenantId,
-                        sessionReference, traceId, actingTenantId, viewAsUserId)
+                        sessionReference, traceId, actingTenantId, viewAsUserId, userAgentHash)
 VALUES (auth.udfSessionUserId (), @root, 'create', 'exposureCase', @exposureCaseId, @auditClientAddress, @owner,
-        @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs);
+        @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs, @auditUserAgentHash);
 
 SELECT @number AS caseNumber, @owner AS owningTenantId, t.tenantName AS owningTenantName
   FROM auth.tenant AS t WHERE t.tenantId = @owner;
@@ -190,9 +190,9 @@ BEGIN
 END;
 {AUDIT_SESSION_VARS}
 INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, clientAddress, owningTenantId,
-                        sessionReference, traceId, actingTenantId, viewAsUserId)
+                        sessionReference, traceId, actingTenantId, viewAsUserId, userAgentHash)
 VALUES (auth.udfSessionUserId (), @root, 'update', 'exposureCase', @exposureCaseId, @auditClientAddress, @owner,
-        @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs);
+        @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs, @auditUserAgentHash);
 
 SELECT @before AS classificationBefore, @after AS classificationAfter;
 
@@ -430,9 +430,9 @@ UPDATE dbo.exposureCase
 
 {AUDIT_SESSION_VARS}
 INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, clientAddress, owningTenantId,
-                        sessionReference, traceId, actingTenantId, viewAsUserId)
+                        sessionReference, traceId, actingTenantId, viewAsUserId, userAgentHash)
 VALUES (auth.udfSessionUserId (), @updRoot, 'update', 'exposureCase', @exposureCaseId, @auditClientAddress, @updOwner,
-        @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs);
+        @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs, @auditUserAgentHash);
 DECLARE @updAuditId BIGINT = SCOPE_IDENTITY ();
 INSERT logs.auditEventChange (auditEventChangeId, auditEventId, rootTenantId, owningTenantId, entityType, entityId, beforeJson, afterJson)
 VALUES ({NEWID}, @updAuditId, @updRoot, @updOwner, 'exposureCase', @exposureCaseId, @updBeforeJson,
@@ -477,9 +477,9 @@ VALUES ({NEWID}, @root, @owner, @exposureCaseId, 'statusChange', auth.udfSession
 
 {AUDIT_SESSION_VARS}
 INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, clientAddress, owningTenantId,
-                        sessionReference, traceId, actingTenantId, viewAsUserId)
+                        sessionReference, traceId, actingTenantId, viewAsUserId, userAgentHash)
 VALUES (auth.udfSessionUserId (), @root, 'update', 'exposureCase', @exposureCaseId, @auditClientAddress, @owner,
-        @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs);
+        @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs, @auditUserAgentHash);
 DECLARE @ovrAuditId BIGINT = SCOPE_IDENTITY ();
 INSERT logs.auditEventChange (auditEventChangeId, auditEventId, rootTenantId, owningTenantId, entityType, entityId, beforeJson, afterJson)
 VALUES ({NEWID}, @ovrAuditId, @root, @owner, 'exposureCase', @exposureCaseId, @ovrBeforeJson,
@@ -657,9 +657,9 @@ EXEC dbo.uspRefreshPersonAccess @personId = @personId;
 
 {AUDIT_SESSION_VARS}
 INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, clientAddress, owningTenantId,
-                        sessionReference, traceId, actingTenantId, viewAsUserId)
+                        sessionReference, traceId, actingTenantId, viewAsUserId, userAgentHash)
 VALUES (auth.udfSessionUserId (), @root, 'update', 'exposureCase', @exposureCaseId, @auditClientAddress, @owner,
-        @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs);
+        @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs, @auditUserAgentHash);
 DECLARE @closeAuditId BIGINT = SCOPE_IDENTITY ();
 INSERT logs.auditEventChange (auditEventChangeId, auditEventId, rootTenantId, owningTenantId, entityType, entityId, beforeJson, afterJson)
 VALUES ({NEWID},
@@ -1303,9 +1303,9 @@ EXEC dbo.uspRefreshPersonAccess @personId = @person;
 
 {AUDIT_SESSION_VARS}
 INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, clientAddress, owningTenantId,
-                        sessionReference, traceId, actingTenantId, viewAsUserId)
+                        sessionReference, traceId, actingTenantId, viewAsUserId, userAgentHash)
 VALUES (auth.udfSessionUserId (), @root, 'update', 'exposureCase', @exposureCaseId, @auditClientAddress, @toTenantId,
-        @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs);
+        @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs, @auditUserAgentHash);
 DECLARE @transferAuditId BIGINT = SCOPE_IDENTITY ();
 INSERT logs.auditEventChange (auditEventChangeId, auditEventId, rootTenantId, owningTenantId, entityType, entityId, beforeJson, afterJson)
 VALUES ({NEWID}, @transferAuditId, @root, @toTenantId, 'exposureCase', @exposureCaseId,

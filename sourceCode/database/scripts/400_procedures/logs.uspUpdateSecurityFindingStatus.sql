@@ -136,9 +136,9 @@ BEGIN
         DECLARE @auditTraceId VARCHAR (64) = TRY_CAST (SESSION_CONTEXT (N'traceId') AS VARCHAR (64));
         DECLARE @auditUserAgentHash CHAR (16) = TRY_CAST (SESSION_CONTEXT (N'userAgentHash') AS CHAR (16));
         INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, clientAddress, owningTenantId,
-                                sessionReference, traceId, actingTenantId, viewAsUserId)
+                                sessionReference, traceId, actingTenantId, viewAsUserId, userAgentHash)
         VALUES (auth.udfSessionUserId (), @root, 'update', 'securityFinding', @securityFindingId, @auditClientAddress,
-                @owner, @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs);
+                @owner, @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs, @auditUserAgentHash);
 
         SET @Comments = CONCAT (N'Finding status updated to ', @status, N'.');
 

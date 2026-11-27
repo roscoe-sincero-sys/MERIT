@@ -148,10 +148,10 @@ BEGIN
             DECLARE @singleOwner UNIQUEIDENTIFIER = (SELECT CASE WHEN COUNT (DISTINCT s.owningTenantId) = 1 THEN MAX (s.owningTenantId) END
                                                        FROM dbo.stagingRow AS s JOIN @released AS r ON r.stagingRowId = s.stagingRowId);
             INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, recordCount, clientAddress, owningTenantId,
-                                    sessionReference, traceId, actingTenantId, viewAsUserId)
+                                    sessionReference, traceId, actingTenantId, viewAsUserId, userAgentHash)
             VALUES (auth.udfSessionUserId (), @auditRoot, 'update', 'stagingRow',
                     CASE WHEN @releasedCount = 1 THEN (SELECT TOP (1) stagingRowId FROM @released) END,
-                    @releasedCount, @auditClientAddress, @singleOwner, @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs);
+                    @releasedCount, @auditClientAddress, @singleOwner, @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs, @auditUserAgentHash);
             DECLARE @auditEventId BIGINT = SCOPE_IDENTITY ();
             IF @auditRoot IS NOT NULL
                 INSERT logs.auditEventRecord (auditEventRecordId, auditEventId, rootTenantId, entityType, entityId, owningTenantId)

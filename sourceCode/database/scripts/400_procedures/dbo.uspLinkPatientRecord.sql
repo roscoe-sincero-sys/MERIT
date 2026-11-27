@@ -141,7 +141,7 @@ BEGIN
         DECLARE @auditUserAgentHash CHAR (16) = TRY_CAST (SESSION_CONTEXT (N'userAgentHash') AS CHAR (16));
         INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, clientAddress, owningTenantId,
                                 sessionReference, traceId, actingTenantId, viewAsUserId, userAgentHash)
-        VALUES (auth.udfSessionUserId (), auth.udfSessionRootTenantId (), 'update', 'patientActivity', @recordId,
+        VALUES (auth.udfSessionUserId (), auth.udfSessionRootTenantId (), 'update', CASE @recordKind WHEN 'activity' THEN 'patientActivity' ELSE 'patientDocument' END, @recordId,
                 @auditClientAddress, dbo.udfPatientWorkOwner (@personId), @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs, @auditUserAgentHash);
 
 

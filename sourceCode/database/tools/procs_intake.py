@@ -454,9 +454,9 @@ BEGIN
     DECLARE @root UNIQUEIDENTIFIER = auth.udfSessionRootTenantId ();
     DECLARE @singleOwner UNIQUEIDENTIFIER = (SELECT CASE WHEN COUNT (DISTINCT owningTenantId) = 1 THEN MAX (owningTenantId) END FROM @corrected);
     INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, recordCount, clientAddress, owningTenantId,
-                            sessionReference, traceId, actingTenantId, viewAsUserId)
+                            sessionReference, traceId, actingTenantId, viewAsUserId, userAgentHash)
     VALUES (auth.udfSessionUserId (), @root, 'update', 'stagingRow', NULL, @count, @auditClientAddress, @singleOwner,
-            @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs);
+            @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs, @auditUserAgentHash);
     DECLARE @auditEventId BIGINT = SCOPE_IDENTITY ();
     IF @root IS NOT NULL
         INSERT logs.auditEventRecord (auditEventRecordId, auditEventId, rootTenantId, entityType, entityId, owningTenantId)
@@ -501,9 +501,9 @@ BEGIN
     {AUDIT_SESSION_VARS}
     DECLARE @owner UNIQUEIDENTIFIER = (SELECT owningTenantId FROM dbo.stagingRow WHERE stagingRowId = @stagingRowId);
     INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, clientAddress, owningTenantId,
-                            sessionReference, traceId, actingTenantId, viewAsUserId)
+                            sessionReference, traceId, actingTenantId, viewAsUserId, userAgentHash)
     VALUES (auth.udfSessionUserId (), auth.udfSessionRootTenantId (), 'update', 'stagingRow', @stagingRowId,
-            @auditClientAddress, @owner, @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs);
+            @auditClientAddress, @owner, @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs, @auditUserAgentHash);
 END;
 
 SET @Comments = CONCAT (@updated, N' row(s) corrected.');
@@ -559,10 +559,10 @@ BEGIN
     DECLARE @singleOwner UNIQUEIDENTIFIER = (SELECT CASE WHEN COUNT (DISTINCT s.owningTenantId) = 1 THEN MAX (s.owningTenantId) END
                                                FROM dbo.stagingRow AS s JOIN @released AS r ON r.stagingRowId = s.stagingRowId);
     INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, recordCount, clientAddress, owningTenantId,
-                            sessionReference, traceId, actingTenantId, viewAsUserId)
+                            sessionReference, traceId, actingTenantId, viewAsUserId, userAgentHash)
     VALUES (auth.udfSessionUserId (), @auditRoot, 'update', 'stagingRow',
             CASE WHEN @releasedCount = 1 THEN (SELECT TOP (1) stagingRowId FROM @released) END,
-            @releasedCount, @auditClientAddress, @singleOwner, @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs);
+            @releasedCount, @auditClientAddress, @singleOwner, @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs, @auditUserAgentHash);
     DECLARE @auditEventId BIGINT = SCOPE_IDENTITY ();
     IF @auditRoot IS NOT NULL
         INSERT logs.auditEventRecord (auditEventRecordId, auditEventId, rootTenantId, entityType, entityId, owningTenantId)
@@ -609,10 +609,10 @@ BEGIN
     DECLARE @auditRoot UNIQUEIDENTIFIER = auth.udfSessionRootTenantId ();
     DECLARE @singleOwner UNIQUEIDENTIFIER = (SELECT CASE WHEN COUNT (DISTINCT owningTenantId) = 1 THEN MAX (owningTenantId) END FROM @rejected);
     INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, recordCount, clientAddress, owningTenantId,
-                            sessionReference, traceId, actingTenantId, viewAsUserId)
+                            sessionReference, traceId, actingTenantId, viewAsUserId, userAgentHash)
     VALUES (auth.udfSessionUserId (), @auditRoot, 'update', 'stagingRow',
             CASE WHEN @rejectedCount = 1 THEN (SELECT TOP (1) stagingRowId FROM @rejected) END,
-            @rejectedCount, @auditClientAddress, @singleOwner, @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs);
+            @rejectedCount, @auditClientAddress, @singleOwner, @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs, @auditUserAgentHash);
     DECLARE @auditEventId BIGINT = SCOPE_IDENTITY ();
     IF @auditRoot IS NOT NULL
         INSERT logs.auditEventRecord (auditEventRecordId, auditEventId, rootTenantId, entityType, entityId, owningTenantId)

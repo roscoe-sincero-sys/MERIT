@@ -214,9 +214,9 @@ BEGIN
         BEGIN
             SET @elsewhere = 1;
             INSERT logs.auditEvent (appUserId, rootTenantId, eventAction, entityType, entityId, recordCount, clientAddress,
-                                    sessionReference, traceId, actingTenantId, viewAsUserId)
+                                    sessionReference, traceId, actingTenantId, viewAsUserId, userAgentHash)
             VALUES (auth.udfSessionUserId (), auth.udfSessionRootTenantId (), 'search', 'personOutsideScope', NULL, 1,
-                    @auditClientAddress, @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs);
+                    @auditClientAddress, @auditSessionRef, @auditTraceId, @auditActingTenant, @auditViewAs, @auditUserAgentHash);
         END;
 
         SELECT @elsewhere AS existsElsewhere;
