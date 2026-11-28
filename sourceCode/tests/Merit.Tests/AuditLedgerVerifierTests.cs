@@ -619,7 +619,7 @@ public sealed class AuditLedgerVerifierTests
     }
 
     [Fact]
-    public async Task ExpiredClaimBeforeSend_DoesNotStartNewHttpPost()
+    public async Task ExpiredClaimBeforeSend_DoesNotStartNewHttpPost_AndLogsWarning()
     {
         int httpPosts = 0;
         var client = new HttpClient(new StubHttpMessageHandler((_, _) =>
@@ -634,7 +634,9 @@ public sealed class AuditLedgerVerifierTests
         var logger = new CapturingLogger();
         var notifier = new SecurityAlertWebhookNotifier(config, logger, client, [TimeSpan.Zero, TimeSpan.Zero, TimeSpan.Zero]);
         bool claimed = false;
-        var expiredTime = new DateTime(2026, 11, 27, 12, 0, 0, DateTimeKind.Utc);
+        var baseTime = new DateTime(2026, 11, 27, 12, 0, 0, DateTimeKind.Utc);
+        var findingId = Guid.NewGuid();
+        int clockReads = 0;
         var data = StubLedgerMonitoringProxy.Create(
             () => new LedgerVerificationStateRow(),
             _ => new AuditLedgerVerificationRow { Verified = true },
@@ -647,24 +649,147 @@ public sealed class AuditLedgerVerifierTests
                 [
                     new NewSecurityFindingRow
                     {
-                        SecurityFindingId = Guid.NewGuid(),
+                        SecurityFindingId = findingId,
                         RootTenantId = Guid.NewGuid(),
                         RuleCode = "ledgerVerificationFailed",
                         Severity = "critical",
                         Title = "Audit ledger verification failed",
-                        DetectedUtc = expiredTime.AddMinutes(-10),
+                        DetectedUtc = baseTime.AddMinutes(-10),
                         ClaimToken = Guid.NewGuid(),
-                        LeaseUntilUtc = expiredTime,
+                        LeaseUntilUtc = baseTime.AddSeconds(300),
                     },
                 ];
             });
 
-        // Clock is past LeaseUntilUtc before NotifyAsync runs -> stale claim must NOT start a new HTTP POST.
+        // Simulate a 301s stall between starting the claim (t0) and starting the HTTP send (t0 + 301s).
         int delivered = await SecurityAlertWebhookNotifier.DrainPendingLedgerAlertsAsync(
-            data, notifier, logger, batchSize: 10, leaseSeconds: 300, ct: CancellationToken.None, utcNow: () => expiredTime.AddSeconds(1));
+            data, notifier, logger, batchSize: 10, leaseSeconds: 300, ct: CancellationToken.None,
+            utcNow: () => clockReads++ == 0 ? baseTime : baseTime.AddSeconds(301));
 
         Assert.Equal(0, delivered);
         Assert.Equal(0, httpPosts);
+        Assert.Contains(logger.Entries, e => e.Level == LogLevel.Warning && e.Message.Contains(findingId.ToString(), StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task WorkerClockAheadOfSqlServer_StillDeliversPendingAlerts()
+    {
+        // #356 (S31): Worker host clock is 10 minutes ahead of SQL Server's SYSUTCDATETIME().
+        var sqlNow = new DateTime(2026, 11, 27, 12, 0, 0, DateTimeKind.Utc);
+        var workerNow = sqlNow.AddMinutes(10);
+        var findingId = Guid.NewGuid();
+        var claimToken = Guid.NewGuid();
+        int httpPosts = 0;
+        bool claimed = false;
+        Guid? markedId = null;
+
+        var client = new HttpClient(new StubHttpMessageHandler((_, _) =>
+        {
+            httpPosts++;
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK));
+        }));
+
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["SecurityAlerts:WebhookUrl"] = "https://alerts.example.test/merit" })
+            .Build();
+        var logger = new CapturingLogger();
+        var notifier = new SecurityAlertWebhookNotifier(config, logger, client, [TimeSpan.Zero, TimeSpan.Zero, TimeSpan.Zero]);
+        var data = StubLedgerMonitoringProxy.Create(
+            () => new LedgerVerificationStateRow(),
+            _ => new AuditLedgerVerificationRow { Verified = true },
+            _ => new LedgerVerificationOutcomeRow { LedgerVerificationRunId = Guid.NewGuid() },
+            (_, _) =>
+            {
+                if (claimed) return [];
+                claimed = true;
+                return
+                [
+                    new NewSecurityFindingRow
+                    {
+                        SecurityFindingId = findingId,
+                        RootTenantId = Guid.NewGuid(),
+                        RuleCode = "ledgerVerificationFailed",
+                        Severity = "critical",
+                        Title = "Audit ledger verification failed",
+                        DetectedUtc = sqlNow.AddMinutes(-1),
+                        ClaimToken = claimToken,
+                        // SQL computed leaseUntilUtc = sqlNow + 300s (which is 5 minutes BEHIND workerNow!).
+                        LeaseUntilUtc = sqlNow.AddSeconds(300),
+                    },
+                ];
+            },
+            (id, token) => { markedId = id; return token == claimToken; });
+
+        int delivered = await SecurityAlertWebhookNotifier.DrainPendingLedgerAlertsAsync(
+            data, notifier, logger, batchSize: 10, leaseSeconds: 300, ct: CancellationToken.None, utcNow: () => workerNow);
+
+        Assert.Equal(1, delivered);
+        Assert.Equal(1, httpPosts);
+        Assert.Equal(findingId, markedId);
+    }
+
+    [Fact]
+    public async Task UnsetWebhookUrl_ClaimsNothing_RecordsNoFailures_AndDeliversOnceConfigured()
+    {
+        // #356 (S30): With SecurityAlerts:WebhookUrl unset (or non-HTTPS), drain must not claim or record failures.
+        var store = new InMemoryLedgerStore();
+        var findingId = Guid.NewGuid();
+        store.PendingAlerts.Add(new NewSecurityFindingRow
+        {
+            SecurityFindingId = findingId,
+            RootTenantId = Guid.NewGuid(),
+            RuleCode = "ledgerVerificationFailed",
+            Severity = "critical",
+            Title = "Audit ledger verification failed",
+            DetectedUtc = DateTime.UtcNow,
+        });
+
+        int claimCalls = 0;
+        int failureCalls = 0;
+        int httpPosts = 0;
+        var client = new HttpClient(new StubHttpMessageHandler((_, _) =>
+        {
+            httpPosts++;
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK));
+        }));
+
+        var settings = new Dictionary<string, string?>();
+        var config = new ConfigurationBuilder().AddInMemoryCollection(settings).Build();
+        var logger = new CapturingLogger();
+        var notifier = new SecurityAlertWebhookNotifier(config, logger, client, [TimeSpan.Zero, TimeSpan.Zero, TimeSpan.Zero]);
+        var data = StubLedgerMonitoringProxy.Create(
+            () => new LedgerVerificationStateRow(),
+            _ => new AuditLedgerVerificationRow { Verified = true },
+            _ => new LedgerVerificationOutcomeRow { LedgerVerificationRunId = Guid.NewGuid() },
+            (batchSize, leaseSeconds) => { claimCalls++; return store.Claim(batchSize, leaseSeconds); },
+            (id, claimToken) => store.MarkDelivered(id, claimToken),
+            (id, claimToken, backoff, err) => { failureCalls++; store.RecordFailure(id, claimToken, backoff, err); });
+
+        // 1. Unset URL -> claims nothing, records no failures, posts nothing.
+        Assert.False(notifier.IsConfigured);
+        int deliveredUnset = await SecurityAlertWebhookNotifier.DrainPendingLedgerAlertsAsync(data, notifier, logger);
+        Assert.Equal(0, deliveredUnset);
+        Assert.Equal(0, claimCalls);
+        Assert.Equal(0, failureCalls);
+        Assert.Equal(0, httpPosts);
+        Assert.Empty(store.AttemptCounts);
+
+        // 2. Non-HTTPS URL -> still claims nothing and records no failures.
+        config["SecurityAlerts:WebhookUrl"] = "http://insecure.example.test/merit";
+        Assert.False(notifier.IsConfigured);
+        int deliveredHttp = await SecurityAlertWebhookNotifier.DrainPendingLedgerAlertsAsync(data, notifier, logger);
+        Assert.Equal(0, deliveredHttp);
+        Assert.Equal(0, claimCalls);
+        Assert.Equal(0, failureCalls);
+
+        // 3. Valid HTTPS URL configured -> next drain cycle claims and delivers immediately.
+        config["SecurityAlerts:WebhookUrl"] = "https://alerts.example.test/merit";
+        Assert.True(notifier.IsConfigured);
+        int deliveredHttps = await SecurityAlertWebhookNotifier.DrainPendingLedgerAlertsAsync(data, notifier, logger);
+        Assert.Equal(1, deliveredHttps);
+        Assert.Equal(1, httpPosts);
+        Assert.Equal(0, failureCalls);
+        Assert.Contains(findingId, store.DeliveredFindingIds);
     }
 
     [Fact]
