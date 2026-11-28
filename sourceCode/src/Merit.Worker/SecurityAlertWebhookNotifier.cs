@@ -10,6 +10,9 @@ namespace Merit.Worker;
 /// </summary>
 public interface ISecurityAlertNotifier
 {
+    /// <summary>True when a valid absolute HTTPS <c>SecurityAlerts:WebhookUrl</c> is configured (#356).</summary>
+    bool IsConfigured { get; }
+
     /// <summary>Posts findings to the configured HTTPS webhook. Returns <c>true</c> only on an HTTP 2xx response.</summary>
     Task<bool> NotifyAsync(IReadOnlyList<NewSecurityFindingRow> findings, CancellationToken ct);
 }
@@ -39,6 +42,17 @@ public sealed partial class SecurityAlertWebhookNotifier : ISecurityAlertNotifie
         _logger = logger;
         _webhookClient = webhookClient;
         _retryDelays = retryDelays;
+    }
+
+    public bool IsConfigured
+    {
+        get
+        {
+            string? webhookUrl = _configuration["SecurityAlerts:WebhookUrl"];
+            return !string.IsNullOrWhiteSpace(webhookUrl)
+                && Uri.TryCreate(webhookUrl, UriKind.Absolute, out var uri)
+                && uri.Scheme == Uri.UriSchemeHttps;
+        }
     }
 
     public async Task<bool> NotifyAsync(IReadOnlyList<NewSecurityFindingRow> findings, CancellationToken ct)
@@ -142,7 +156,7 @@ public sealed partial class SecurityAlertWebhookNotifier : ISecurityAlertNotifie
         CancellationToken ct = default,
         Func<DateTime>? utcNow = null)
     {
-        if (notifier is null)
+        if (notifier is null || !notifier.IsConfigured)
         {
             return 0;
         }
@@ -158,6 +172,7 @@ public sealed partial class SecurityAlertWebhookNotifier : ISecurityAlertNotifie
             for (int i = 0; i < maxItems; i++)
             {
                 ct.ThrowIfCancellationRequested();
+                DateTime claimedAtUtc = clock();
                 var claimed = await data.ClaimPendingLedgerAlertsAsync(batchSize: 1, leaseSeconds: effectiveLeaseSeconds, ct: ct).ConfigureAwait(false);
                 if (claimed.Count == 0)
                 {
@@ -165,9 +180,12 @@ public sealed partial class SecurityAlertWebhookNotifier : ISecurityAlertNotifie
                 }
 
                 var finding = claimed[0];
-                // Never start a new HTTP POST if the claim lease has already expired (e.g. process pause / clock skew).
-                if (finding.LeaseUntilUtc is { } leaseUntil && clock() >= leaseUntil.AddSeconds(-5))
+                // Compute the lease deadline on the worker's own clock (claimedAt + leaseSeconds - 5s safety margin)
+                // so worker-vs-SQL clock skew can never silently skip claimed alerts (#356).
+                DateTime localDeadlineUtc = claimedAtUtc.AddSeconds(effectiveLeaseSeconds - 5);
+                if (clock() >= localDeadlineUtc)
                 {
+                    LedgerAlertLeaseExpired(logger, finding.SecurityFindingId);
                     continue;
                 }
 
@@ -208,4 +226,7 @@ public sealed partial class SecurityAlertWebhookNotifier : ISecurityAlertNotifie
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Audit ledger alert outbox drain failed ({ExceptionType}); pending alerts will retry on the next cycle.")]
     private static partial void LedgerAlertOutboxError(ILogger logger, string exceptionType);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Audit ledger alert {SecurityFindingId} skipped because its delivery lease expired before send; it will be reclaimed on a later cycle.")]
+    private static partial void LedgerAlertLeaseExpired(ILogger logger, Guid securityFindingId);
 }
