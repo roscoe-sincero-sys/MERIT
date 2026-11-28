@@ -48,6 +48,8 @@ CREATE OR ALTER PROCEDURE logs.uspVerifyAuditLedgerInternal
       @digestJson          NVARCHAR (MAX) = NULL
       , @useAutomaticStorage BIT = 0
       , @requireDigest       BIT = 0
+      , @anchorSource        VARCHAR (30) = NULL
+      , @digestFileCount     INT = NULL
 WITH EXECUTE AS OWNER
 AS
 BEGIN
@@ -162,20 +164,22 @@ BEGIN
             SET @detail = CONCAT (N'Ledger verification failed (error ', ERROR_NUMBER (), N').');
         END CATCH;
 
-        -- I20: Surface SQL verification failures as a critical platform security finding so /admin/security-alerts shows tampering.
+        DECLARE @outcomeRecorded BIT = 0;
         IF @verified = 0
         BEGIN
-            DECLARE @platform UNIQUEIDENTIFIER = CAST (HASHBYTES ('MD5', N'tenant:PLATFORM') AS UNIQUEIDENTIFIER);
-            DECLARE @fp VARCHAR (128) = CONCAT ('ledgerVerificationFailed|', CONVERT (VARCHAR (10), @now, 23));
-            IF NOT EXISTS (SELECT 1 FROM logs.securityFinding WHERE fingerprint = @fp AND isDeleted = 0)
-            BEGIN
-                INSERT logs.securityFinding (securityFindingId, rootTenantId, ruleCode, severity, title, detailJson,
-                                             windowStartUtc, windowEndUtc, detectedUtc, status, fingerprint)
-                VALUES (NEWID (), @platform, 'ledgerVerificationFailed', 'critical',
-                        N'Audit ledger verification failed',
-                        (SELECT @detail AS detail FOR JSON PATH, WITHOUT_ARRAY_WRAPPER),
-                        @now, @now, @now, 'open', @fp);
+            DECLARE @effectiveAnchor VARCHAR (30) = CASE
+                WHEN @anchorSource IN ('automaticStorage', 'digestDirectory', 'unanchored') THEN @anchorSource
+                WHEN @useAutomaticStorage = 1 THEN 'automaticStorage'
+                WHEN @requireDigest = 1 THEN 'digestDirectory'
+                ELSE 'unanchored'
             END;
+            EXEC logs.uspRecordLedgerVerificationOutcome
+                 @anchorSource        = @effectiveAnchor,
+                 @verified            = 0,
+                 @lastVerifiedBlockId = @lastBlockId,
+                 @digestFileCount     = @digestFileCount,
+                 @detail              = @detail;
+            SET @outcomeRecorded = 1;
         END;
 
         SELECT @verified AS verified,
@@ -183,7 +187,8 @@ BEGIN
                @effectiveDigest AS digestJson,
                @now AS verifiedUtc,
                @detail AS detail,
-               @hasAutoDigest AS hasAutomaticDigestStorage;
+               @hasAutoDigest AS hasAutomaticDigestStorage,
+               @outcomeRecorded AS outcomeRecorded;
 
         -- =========================================================================================
         -- ===== End of the procedure's own work. ===================================================

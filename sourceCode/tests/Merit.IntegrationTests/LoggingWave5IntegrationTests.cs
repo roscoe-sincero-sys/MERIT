@@ -1,5 +1,6 @@
 using System.Data;
 using Dapper;
+using Merit.Application.Data;
 using Microsoft.Data.SqlClient;
 
 namespace Merit.IntegrationTests;
@@ -66,7 +67,25 @@ public sealed class LoggingWave5IntegrationTests
         await using var adminConn = new SqlConnection(TestEnvironment.AdminConnectionString());
         await adminConn.OpenAsync();
         DateTime testStartUtc = await adminConn.ExecuteScalarAsync<DateTime>("SELECT SYSUTCDATETIME ()");
-        Guid? recordedRunId = null;
+        var recordedRunIds = new List<Guid>();
+        Guid? createdFindingId = null;
+
+        // Clean up ONLY stale synthetic findings from an aborted prior test run; fail safely if ANY real
+        // open, undelivered ledgerVerificationFailed finding exists so claim calls never lease unrelated rows.
+        var existingOpen = (await adminConn.QueryAsync<(Guid securityFindingId, string? detailJson)>(
+            "SELECT securityFindingId, detailJson FROM logs.securityFinding WHERE ruleCode = 'ledgerVerificationFailed' AND isDeleted = 0 AND (status = 'open' AND webhookDeliveredUtc IS NULL OR fingerprint = CONCAT ('ledgerVerificationFailed|', CONVERT (CHAR (10), SYSUTCDATETIME (), 126)));")).ToList();
+        foreach (var existing in existingOpen)
+        {
+            if (existing.detailJson?.Contains("Synthetic #354", StringComparison.Ordinal) == true
+                || existing.detailJson?.Contains("non-empty external digest JSON payload is required", StringComparison.Ordinal) == true)
+            {
+                await adminConn.ExecuteAsync("UPDATE logs.securityFinding SET isDeleted = 1 WHERE securityFindingId = @id;", new { id = existing.securityFindingId });
+            }
+            else
+            {
+                Assert.Fail($"Pre-existing non-synthetic ledgerVerificationFailed finding {existing.securityFindingId} exists in the outbox or today's fingerprint; refusing to delete or lease it.");
+            }
+        }
 
         try
         {
@@ -75,13 +94,13 @@ public sealed class LoggingWave5IntegrationTests
             await workerConn.ExecuteAsync("EXECUTE AS USER = 'meritWorker';");
             try
             {
-                static async Task<(bool verified, long? nativeBlockId, string? digestJson, DateTime verifiedUtc, string detail, bool hasAuto)>
-                    RunVerifyAsync(SqlConnection c, string? digestJson, bool useAutomaticStorage = false, bool requireDigest = false)
+                static async Task<(bool verified, long? nativeBlockId, string? digestJson, DateTime verifiedUtc, string detail, bool hasAuto, bool outcomeRecorded)>
+                    RunVerifyAsync(SqlConnection c, string? digestJson, bool useAutomaticStorage = false, bool requireDigest = false, string? anchorSource = null)
                 {
                     using var grid = await c.QueryMultipleAsync(
-                        "logs.uspVerifyAuditLedger", new { digestJson, useAutomaticStorage, requireDigest }, commandType: CommandType.StoredProcedure);
+                        "logs.uspVerifyAuditLedger", new { digestJson, useAutomaticStorage, requireDigest, anchorSource }, commandType: CommandType.StoredProcedure);
                     long? nativeBlockId = null;
-                    (bool verified, long? nativeBlockId, string? digestJson, DateTime verifiedUtc, string detail, bool hasAuto) last = default;
+                    (bool verified, long? nativeBlockId, string? digestJson, DateTime verifiedUtc, string detail, bool hasAuto, bool outcomeRecorded) last = default;
                     while (!grid.IsConsumed)
                     {
                         var rows = (await grid.ReadAsync<dynamic>()).ToList();
@@ -94,7 +113,7 @@ public sealed class LoggingWave5IntegrationTests
                             else if (dict.ContainsKey("verified"))
                             {
                                 var r = rows[0];
-                                last = ((bool)r.verified, nativeBlockId, (string?)r.digestJson, (DateTime)r.verifiedUtc, (string)r.detail, (bool)r.hasAutomaticDigestStorage);
+                                last = ((bool)r.verified, nativeBlockId, (string?)r.digestJson, (DateTime)r.verifiedUtc, (string)r.detail, (bool)r.hasAutomaticDigestStorage, (bool)r.outcomeRecorded);
                             }
                         }
                     }
@@ -113,24 +132,79 @@ public sealed class LoggingWave5IntegrationTests
                 Assert.Contains("MERIT_IT", fresh.digestJson, StringComparison.OrdinalIgnoreCase);
 
                 // Re-verify using the previously returned external digest JSON with requireDigest=true.
-                var recheck = await RunVerifyAsync(workerConn, fresh.digestJson, requireDigest: true);
+                var recheck = await RunVerifyAsync(workerConn, fresh.digestJson, requireDigest: true, anchorSource: "digestDirectory");
                 Assert.True(recheck.verified, recheck.detail);
                 Assert.Equal(fresh.nativeBlockId, recheck.nativeBlockId);
 
-                // Empty digest with requireDigest=true must fail rather than generating a fresh digest, with no native block.
-                var emptyReq = await RunVerifyAsync(workerConn, "", requireDigest: true);
+                // Empty digest with requireDigest=true must fail AND atomically persist the failure run + critical finding in SQL (#354).
+                var emptyReq = await RunVerifyAsync(workerConn, "", requireDigest: true, anchorSource: "digestDirectory");
                 Assert.False(emptyReq.verified);
                 Assert.Null(emptyReq.nativeBlockId);
+                Assert.True(emptyReq.outcomeRecorded);
 
-                // Record outcome as meritWorker using the engine's native verified block id.
-                recordedRunId = await workerConn.QuerySingleAsync<Guid>("logs.uspRecordLedgerVerificationOutcome",
+                // #354: Claim pending ledger alert atomically (batchSize=1) as meritWorker, verify second immediate claim
+                // gets nothing, verify wrong claimToken returns 0, and matching claimToken returns 1.
+                var claimed1 = (await workerConn.QueryAsync<NewSecurityFindingRow>(
+                    "logs.uspClaimPendingLedgerAlerts", new { batchSize = 1, leaseSeconds = 300 }, commandType: CommandType.StoredProcedure)).ToList();
+                var claimedFinding = Assert.Single(claimed1);
+                Assert.Equal("ledgerVerificationFailed", claimedFinding.RuleCode);
+                Assert.Equal("critical", claimedFinding.Severity);
+                Assert.Contains("non-empty external digest JSON payload is required", claimedFinding.DetailJson ?? "", StringComparison.Ordinal);
+                Assert.NotEqual(Guid.Empty, claimedFinding.SecurityFindingId);
+                Assert.NotEqual(Guid.Empty, claimedFinding.RootTenantId);
+                Assert.NotNull(claimedFinding.ClaimToken);
+                Assert.NotNull(claimedFinding.LeaseUntilUtc);
+                createdFindingId = claimedFinding.SecurityFindingId;
+
+                var claimed2 = (await workerConn.QueryAsync<NewSecurityFindingRow>(
+                    "logs.uspClaimPendingLedgerAlerts", new { batchSize = 1, leaseSeconds = 300 }, commandType: CommandType.StoredProcedure)).ToList();
+                Assert.Empty(claimed2);
+
+                // Wrong claimToken must NOT mark delivered (returns 0 updated rows).
+                int wrongUpdated = await workerConn.QuerySingleAsync<int>(
+                    "logs.uspMarkSecurityFindingWebhookDelivered",
+                    new { securityFindingId = createdFindingId.Value, claimToken = Guid.NewGuid() },
+                    commandType: CommandType.StoredProcedure);
+                Assert.Equal(0, wrongUpdated);
+
+                // Matching claimToken marks delivered (returns 1) and clears the lease.
+                int matchedUpdated = await workerConn.QuerySingleAsync<int>(
+                    "logs.uspMarkSecurityFindingWebhookDelivered",
+                    new { securityFindingId = createdFindingId.Value, claimToken = claimedFinding.ClaimToken },
+                    commandType: CommandType.StoredProcedure);
+                Assert.Equal(1, matchedUpdated);
+
+                // Second failure on the same UTC day deduplicates cleanly (no second finding created).
+                var repeatFail = await workerConn.QuerySingleAsync<(Guid ledgerVerificationRunId, bool findingCreated, Guid? securityFindingId, Guid? rootTenantId, DateTime detectedUtc)>(
+                    "logs.uspRecordLedgerVerificationOutcome",
+                    new { anchorSource = "digestDirectory", verified = false, lastVerifiedBlockId = (long?)null, digestFileCount = 1, detail = "Synthetic #354 repeat failure." },
+                    commandType: CommandType.StoredProcedure);
+                recordedRunIds.Add(repeatFail.ledgerVerificationRunId);
+                Assert.False(repeatFail.findingCreated);
+
+                // Ensure strictly newer DATETIME2(3) timestamp than the synthetic failure runs above.
+                await Task.Delay(15);
+
+                // Record success outcome as meritWorker using the engine's native verified block id.
+                var recorded = await workerConn.QuerySingleAsync<(Guid ledgerVerificationRunId, bool findingCreated, Guid? securityFindingId, Guid? rootTenantId, DateTime detectedUtc)>(
+                    "logs.uspRecordLedgerVerificationOutcome",
                     new { anchorSource = "digestDirectory", verified = true, lastVerifiedBlockId = fresh.nativeBlockId, digestFileCount = 1, detail = fresh.detail },
                     commandType: CommandType.StoredProcedure);
+                recordedRunIds.Add(recorded.ledgerVerificationRunId);
+                Assert.False(recorded.findingCreated);
             }
             finally
             {
                 await workerConn.ExecuteAsync("REVERT;");
             }
+
+            // Confirm webhookDeliveredUtc is stamped and claim columns are cleared.
+            var deliveredState = await adminConn.QuerySingleAsync<(DateTime? webhookDeliveredUtc, Guid? webhookClaimToken, DateTime? webhookLeaseUntilUtc)>(
+                "SELECT webhookDeliveredUtc, webhookClaimToken, webhookLeaseUntilUtc FROM logs.securityFinding WHERE securityFindingId = @id;",
+                new { id = createdFindingId });
+            Assert.NotNull(deliveredState.webhookDeliveredUtc);
+            Assert.Null(deliveredState.webhookClaimToken);
+            Assert.Null(deliveredState.webhookLeaseUntilUtc);
 
             // Verify operational logs returns DDL checks (result set 3) separately from LedgerVerification (result set 4).
             using var opGrid = await adminConn.QueryMultipleAsync("logs.uspGetOperationalLogs", new { hours = 24, top = 10 }, commandType: CommandType.StoredProcedure);
@@ -144,14 +218,18 @@ public sealed class LoggingWave5IntegrationTests
         }
         finally
         {
-            // Scope cleanup strictly to the synthetic run and synthetic empty-digest failure created by this test.
-            if (recordedRunId is { } rid)
+            // Scope cleanup strictly to the synthetic runs and finding created by this test.
+            foreach (Guid rid in recordedRunIds)
             {
                 await adminConn.ExecuteAsync("UPDATE logs.ledgerVerificationRun SET isDeleted = 1 WHERE ledgerVerificationRunId = @id;", new { id = rid });
             }
             await adminConn.ExecuteAsync(
-                "UPDATE logs.securityFinding SET isDeleted = 1 WHERE ruleCode = 'ledgerVerificationFailed' AND isDeleted = 0 AND detectedUtc >= @since AND detailJson LIKE N'%non-empty external digest JSON payload is required%';",
+                "UPDATE logs.ledgerVerificationRun SET isDeleted = 1 WHERE isDeleted = 0 AND verifiedUtc >= @since AND detail LIKE N'%non-empty external digest JSON payload is required%';",
                 new { since = testStartUtc });
+            if (createdFindingId is { } fid)
+            {
+                await adminConn.ExecuteAsync("UPDATE logs.securityFinding SET isDeleted = 1 WHERE securityFindingId = @id;", new { id = fid });
+            }
         }
     }
 }

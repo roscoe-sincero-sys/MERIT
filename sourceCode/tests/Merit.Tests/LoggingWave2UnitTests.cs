@@ -271,9 +271,15 @@ public sealed class LoggingWave2UnitTests
         public Task<int> PurgeExecutionLogAsync(int retentionDays, CancellationToken ct = default) => Task.FromResult(0);
         public Task<LedgerVerificationStateRow> GetLedgerVerificationStateAsync(CancellationToken ct = default)
             => Task.FromResult(new LedgerVerificationStateRow());
-        public Task<AuditLedgerVerificationRow> VerifyAuditLedgerAsync(string? digestJson = null, bool useAutomaticStorage = false, bool requireDigest = false, CancellationToken ct = default)
+        public Task<AuditLedgerVerificationRow> VerifyAuditLedgerAsync(string? digestJson = null, bool useAutomaticStorage = false, bool requireDigest = false, string? anchorSource = null, int? digestFileCount = null, CancellationToken ct = default)
             => Task.FromResult(new AuditLedgerVerificationRow { Verified = true });
-        public Task<Guid> RecordLedgerVerificationOutcomeAsync(string anchorSource, bool verified, long? lastVerifiedBlockId, int? digestFileCount, string detail, CancellationToken ct = default)
-            => Task.FromResult(Guid.NewGuid());
+        public Task<LedgerVerificationOutcomeRow> RecordLedgerVerificationOutcomeAsync(string anchorSource, bool verified, long? lastVerifiedBlockId, int? digestFileCount, string detail, CancellationToken ct = default)
+            => Task.FromResult(new LedgerVerificationOutcomeRow { LedgerVerificationRunId = Guid.NewGuid() });
+        public Task<IReadOnlyList<NewSecurityFindingRow>> ClaimPendingLedgerAlertsAsync(int batchSize = 1, int leaseSeconds = 300, CancellationToken ct = default)
+            => Task.FromResult<IReadOnlyList<NewSecurityFindingRow>>([]);
+        public Task<bool> MarkSecurityFindingWebhookDeliveredAsync(Guid securityFindingId, Guid? claimToken = null, CancellationToken ct = default)
+            => Task.FromResult(true);
+        public Task RecordSecurityFindingWebhookFailureAsync(Guid securityFindingId, Guid claimToken, int backoffSeconds = 900, string? lastError = null, CancellationToken ct = default)
+            => Task.CompletedTask;
     }
 }

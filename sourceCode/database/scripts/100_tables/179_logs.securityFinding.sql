@@ -36,6 +36,11 @@ BEGIN
         status                     VARCHAR (20)      NOT NULL CONSTRAINT DF_logs_securityFinding_status DEFAULT ('open'),
         acknowledgedByUserId       UNIQUEIDENTIFIER  NULL,
         acknowledgedUtc            DATETIME2 (3)     NULL,
+        webhookDeliveredUtc        DATETIME2 (3)     NULL,
+        webhookClaimToken          UNIQUEIDENTIFIER  NULL,
+        webhookLeaseUntilUtc       DATETIME2 (3)     NULL,
+        webhookAttemptCount        INT               NOT NULL CONSTRAINT DF_logs_securityFinding_webhookAttemptCount DEFAULT (0),
+        webhookLastError           NVARCHAR (200)    NULL,
         fingerprint                VARCHAR (128)     NOT NULL,
 
         -- Standard audit columns. Soft delete only. Convention: DF_<schema>_<tableName>_<fieldName>.
@@ -74,6 +79,16 @@ IF COL_LENGTH (N'logs.securityFinding', N'acknowledgedByUserId') IS NULL
     ALTER TABLE logs.securityFinding ADD acknowledgedByUserId       UNIQUEIDENTIFIER  NULL;
 IF COL_LENGTH (N'logs.securityFinding', N'acknowledgedUtc') IS NULL
     ALTER TABLE logs.securityFinding ADD acknowledgedUtc            DATETIME2 (3)     NULL;
+IF COL_LENGTH (N'logs.securityFinding', N'webhookDeliveredUtc') IS NULL
+    ALTER TABLE logs.securityFinding ADD webhookDeliveredUtc        DATETIME2 (3)     NULL;
+IF COL_LENGTH (N'logs.securityFinding', N'webhookClaimToken') IS NULL
+    ALTER TABLE logs.securityFinding ADD webhookClaimToken          UNIQUEIDENTIFIER  NULL;
+IF COL_LENGTH (N'logs.securityFinding', N'webhookLeaseUntilUtc') IS NULL
+    ALTER TABLE logs.securityFinding ADD webhookLeaseUntilUtc       DATETIME2 (3)     NULL;
+IF COL_LENGTH (N'logs.securityFinding', N'webhookAttemptCount') IS NULL
+    ALTER TABLE logs.securityFinding ADD webhookAttemptCount        INT               NOT NULL CONSTRAINT DF_logs_securityFinding_webhookAttemptCount DEFAULT (0);
+IF COL_LENGTH (N'logs.securityFinding', N'webhookLastError') IS NULL
+    ALTER TABLE logs.securityFinding ADD webhookLastError           NVARCHAR (200)    NULL;
 GO
 
 -- -------------------------------------------------------------------------------------------
@@ -149,6 +164,16 @@ BEGIN
     CREATE INDEX IX_logs_securityFinding_appUserId_detectedUtc
         ON logs.securityFinding (appUserId, detectedUtc)
         WHERE isDeleted = 0;
+END;
+GO
+IF NOT EXISTS (SELECT 1
+                 FROM sys.indexes
+                WHERE name      = N'IX_logs_securityFinding_pendingWebhook'
+                  AND object_id = OBJECT_ID (N'logs.securityFinding'))
+BEGIN
+    CREATE INDEX IX_logs_securityFinding_pendingWebhook
+        ON logs.securityFinding (ruleCode, status, webhookAttemptCount, webhookLeaseUntilUtc, detectedUtc)
+        WHERE isDeleted = 0 AND webhookDeliveredUtc IS NULL;
 END;
 GO
 
@@ -252,6 +277,11 @@ EXEC util.uspSetObjectDescription @SchemaName = N'logs', @ObjectType = N'TABLE',
 EXEC util.uspSetObjectDescription @SchemaName = N'logs', @ObjectType = N'TABLE', @ObjectName = N'securityFinding', @ColumnName = N'status', @Description = N'open, acknowledged, resolved or falsePositive.';
 EXEC util.uspSetObjectDescription @SchemaName = N'logs', @ObjectType = N'TABLE', @ObjectName = N'securityFinding', @ColumnName = N'acknowledgedByUserId', @Description = N'User who last updated the finding status.';
 EXEC util.uspSetObjectDescription @SchemaName = N'logs', @ObjectType = N'TABLE', @ObjectName = N'securityFinding', @ColumnName = N'acknowledgedUtc', @Description = N'UTC timestamp of the last status update.';
+EXEC util.uspSetObjectDescription @SchemaName = N'logs', @ObjectType = N'TABLE', @ObjectName = N'securityFinding', @ColumnName = N'webhookDeliveredUtc', @Description = N'UTC timestamp when an outbound webhook alert was delivered for this finding; NULL while pending (#354).';
+EXEC util.uspSetObjectDescription @SchemaName = N'logs', @ObjectType = N'TABLE', @ObjectName = N'securityFinding', @ColumnName = N'webhookClaimToken', @Description = N'Opaque lease token held by the worker currently delivering this alert; NULL when unclaimed (#354).';
+EXEC util.uspSetObjectDescription @SchemaName = N'logs', @ObjectType = N'TABLE', @ObjectName = N'securityFinding', @ColumnName = N'webhookLeaseUntilUtc', @Description = N'UTC lease expiry or retry backoff time for webhook delivery; NULL when immediately eligible (#354).';
+EXEC util.uspSetObjectDescription @SchemaName = N'logs', @ObjectType = N'TABLE', @ObjectName = N'securityFinding', @ColumnName = N'webhookAttemptCount', @Description = N'Number of failed outbound webhook delivery cycles recorded for this finding (#354).';
+EXEC util.uspSetObjectDescription @SchemaName = N'logs', @ObjectType = N'TABLE', @ObjectName = N'securityFinding', @ColumnName = N'webhookLastError', @Description = N'Sanitized summary of the most recent failed outbound webhook delivery attempt (#354).';
 EXEC util.uspSetObjectDescription @SchemaName = N'logs', @ObjectType = N'TABLE', @ObjectName = N'securityFinding', @ColumnName = N'fingerprint', @Description = N'Deterministic deduplication key for the finding within a scan window.';
 EXEC util.uspSetObjectDescription @SchemaName = N'logs', @ObjectType = N'TABLE', @ObjectName = N'securityFinding', @ColumnName = N'isDeleted', @Description = N'Soft-delete flag. 1 = deleted, 0 = active. This database performs no hard deletes; all reads must filter isDeleted = 0.';
 EXEC util.uspSetObjectDescription @SchemaName = N'logs', @ObjectType = N'TABLE', @ObjectName = N'securityFinding', @ColumnName = N'deletedBy', @Description = N'Login or application user that soft-deleted the row. Stamped by trg_au_updt_securityFinding when isDeleted transitions 0 -> 1. Meaningful only when isDeleted = 1.';

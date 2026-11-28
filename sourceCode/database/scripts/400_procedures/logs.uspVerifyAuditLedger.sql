@@ -48,6 +48,8 @@ CREATE OR ALTER PROCEDURE logs.uspVerifyAuditLedger
       @digestJson          NVARCHAR (MAX) = NULL
       , @useAutomaticStorage BIT = 0
       , @requireDigest       BIT = 0
+      , @anchorSource        VARCHAR (30) = NULL
+      , @digestFileCount     INT = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -87,7 +89,8 @@ BEGIN
         -- =========================================================================================
 
         EXEC logs.uspVerifyAuditLedgerInternal @digestJson = @digestJson,
-             @useAutomaticStorage = @useAutomaticStorage, @requireDigest = @requireDigest;
+             @useAutomaticStorage = @useAutomaticStorage, @requireDigest = @requireDigest,
+             @anchorSource = @anchorSource, @digestFileCount = @digestFileCount;
 
         -- =========================================================================================
         -- ===== End of the procedure's own work. ===================================================

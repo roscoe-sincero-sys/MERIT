@@ -109,8 +109,8 @@ public sealed class SecurityMonitoringData(Db db) : ISecurityMonitoringData
     public Task<LedgerVerificationStateRow> GetLedgerVerificationStateAsync(CancellationToken ct = default)
         => db.QuerySingleAsync<LedgerVerificationStateRow>("logs.uspGetLedgerVerificationState", null, ct)!;
 
-    public Task<AuditLedgerVerificationRow> VerifyAuditLedgerAsync(string? digestJson = null, bool useAutomaticStorage = false, bool requireDigest = false, CancellationToken ct = default)
-        => db.MultipleAsync("logs.uspVerifyAuditLedger", new { digestJson, useAutomaticStorage, requireDigest }, async g =>
+    public Task<AuditLedgerVerificationRow> VerifyAuditLedgerAsync(string? digestJson = null, bool useAutomaticStorage = false, bool requireDigest = false, string? anchorSource = null, int? digestFileCount = null, CancellationToken ct = default)
+        => db.MultipleAsync("logs.uspVerifyAuditLedger", new { digestJson, useAutomaticStorage, requireDigest, anchorSource, digestFileCount }, async g =>
         {
             // sys.sp_verify_database_ledger(_from_digest_storage) emits a native result set containing
             // last_verified_block_id before our summary row. Carry the engine's native block id directly.
@@ -135,6 +135,7 @@ public sealed class SecurityMonitoringData(Db db) : ISecurityMonitoringData
                             VerifiedUtc = dict.TryGetValue("verifiedUtc", out object? vu) && vu is not null ? Convert.ToDateTime(vu) : DateTime.UtcNow,
                             Detail = dict.TryGetValue("detail", out object? dt) ? dt as string ?? string.Empty : string.Empty,
                             HasAutomaticDigestStorage = dict.TryGetValue("hasAutomaticDigestStorage", out object? ha) && ha is not null && Convert.ToBoolean(ha),
+                            OutcomeRecorded = dict.TryGetValue("outcomeRecorded", out object? orObj) && orObj is not null && Convert.ToBoolean(orObj),
                         };
                     }
                 }
@@ -152,11 +153,21 @@ public sealed class SecurityMonitoringData(Db db) : ISecurityMonitoringData
                     VerifiedUtc = summary.VerifiedUtc,
                     Detail = $"{summary.Detail.TrimEnd('.')} (block {nativeVerifiedBlockId}).",
                     HasAutomaticDigestStorage = summary.HasAutomaticDigestStorage,
+                    OutcomeRecorded = summary.OutcomeRecorded,
                 }
                 : summary;
         }, ct);
 
-    public Task<Guid> RecordLedgerVerificationOutcomeAsync(string anchorSource, bool verified, long? lastVerifiedBlockId, int? digestFileCount, string detail, CancellationToken ct = default)
-        => db.QuerySingleAsync<Guid>("logs.uspRecordLedgerVerificationOutcome",
+    public Task<LedgerVerificationOutcomeRow> RecordLedgerVerificationOutcomeAsync(string anchorSource, bool verified, long? lastVerifiedBlockId, int? digestFileCount, string detail, CancellationToken ct = default)
+        => db.QuerySingleAsync<LedgerVerificationOutcomeRow>("logs.uspRecordLedgerVerificationOutcome",
             new { anchorSource, verified, lastVerifiedBlockId, digestFileCount, detail }, ct)!;
+
+    public Task<IReadOnlyList<NewSecurityFindingRow>> ClaimPendingLedgerAlertsAsync(int batchSize = 1, int leaseSeconds = 300, CancellationToken ct = default)
+        => db.QueryAsync<NewSecurityFindingRow>("logs.uspClaimPendingLedgerAlerts", new { batchSize, leaseSeconds }, ct);
+
+    public async Task<bool> MarkSecurityFindingWebhookDeliveredAsync(Guid securityFindingId, Guid? claimToken = null, CancellationToken ct = default)
+        => await db.QuerySingleAsync<int>("logs.uspMarkSecurityFindingWebhookDelivered", new { securityFindingId, claimToken }, ct).ConfigureAwait(false) > 0;
+
+    public Task RecordSecurityFindingWebhookFailureAsync(Guid securityFindingId, Guid claimToken, int backoffSeconds = 900, string? lastError = null, CancellationToken ct = default)
+        => db.ExecuteAsync("logs.uspRecordSecurityFindingWebhookFailure", new { securityFindingId, claimToken, backoffSeconds, lastError }, ct);
 }

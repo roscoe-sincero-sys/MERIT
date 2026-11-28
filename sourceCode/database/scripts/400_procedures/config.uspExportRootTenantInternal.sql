@@ -636,7 +636,7 @@ BEGIN
         END
         ELSE IF @tableName = N'logs.securityFinding'
         BEGIN
-            SELECT securityFindingId, rootTenantId, owningTenantId, appUserId, clientAddress, sessionReference, ruleCode, severity, title, detailJson, windowStartUtc, windowEndUtc, detectedUtc, status, acknowledgedByUserId, acknowledgedUtc, fingerprint, isDeleted, createdBy, createdDateUtc, modifiedBy, modifiedDateUtc, deletedBy, deletedDateUtc
+            SELECT securityFindingId, rootTenantId, owningTenantId, appUserId, clientAddress, sessionReference, ruleCode, severity, title, detailJson, windowStartUtc, windowEndUtc, detectedUtc, status, acknowledgedByUserId, acknowledgedUtc, webhookDeliveredUtc, webhookClaimToken, webhookLeaseUntilUtc, webhookAttemptCount, webhookLastError, fingerprint, isDeleted, createdBy, createdDateUtc, modifiedBy, modifiedDateUtc, deletedBy, deletedDateUtc
               FROM logs.securityFinding
              WHERE rootTenantId = @rootTenantId
              ORDER BY securityFindingId
